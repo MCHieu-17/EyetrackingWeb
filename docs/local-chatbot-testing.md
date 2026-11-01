@@ -238,18 +238,18 @@ tới lần ingest đầu tiên mới báo lỗi.
 
 Các lệnh kiểm tra code:
 
-```powershell
-Set-Location backend
-python -m pytest tests/test_assignments.py tests/test_chat.py -vv
+```bash
+cd backend
+.venv/bin/python -m pytest tests/test_assignments.py tests/test_chat.py -vv
 
-Set-Location ..\services\chatbot
+cd ../services/chatbot
 python -m pytest -q
 
-Set-Location ..\frontend
-npm.cmd run lint
-npm.cmd run typecheck
-npm.cmd test -- --run
-npm.cmd run build
+cd ../../frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
 ## 5. Checklist production
