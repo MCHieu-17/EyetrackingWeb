@@ -45,8 +45,8 @@ CI build từ `services/gaze/Dockerfile`. Cả hai service AI (gaze + chatbot) b
 `FROM` một **image nền dùng chung** `docker/ai-base` (`ghcr.io/.../eyelearning-ai-base`)
 chứa `python:3.12-slim` + torch/torchvision CUDA 12.4 — nhờ đó layer nặng chỉ lưu
 một bản. CUDA/cuDNN lấy từ wheel pip `cu124`, không cần base image NVIDIA; host chỉ
-cần driver + nvidia-container-toolkit. Frontend kết nối trực tiếp
-WS `/session/{sid}/stream` của service này — khi nó tắt, frontend tự fallback mock
+cần driver + nvidia-container-toolkit. Frontend kết nối WS `/gaze/session/{sid}/stream`
+(nginx proxy sang gaze service) — khi service tắt, frontend tự fallback mock
 (backend chỉ dùng `AI_HTTP_URL` để probe `/ai/health`).
 
 ## Ranh giới giữa các service
