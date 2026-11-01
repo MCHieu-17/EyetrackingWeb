@@ -31,8 +31,8 @@ FROM users u JOIN roles r ON r.code = 'admin'
 WHERE u.email = 'admin@school.edu.vn'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, email, gender_id)
-SELECT u.id, 'Quản Trị Viên Hệ Thống', u.email, g.id
+INSERT INTO user_profiles (user_id, full_name, gender_id)
+SELECT u.id, 'Quản Trị Viên Hệ Thống', g.id
 FROM users u JOIN genders g ON g.code = 'male'
 WHERE u.email = 'admin@school.edu.vn'
 ON CONFLICT (user_id) DO NOTHING;
@@ -54,8 +54,8 @@ FROM users u JOIN roles r ON r.code = 'teacher'
 WHERE u.email = 'teacher@school.edu.vn'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, email, gender_id)
-SELECT u.id, 'Giáo Viên Mẫu', u.email, g.id
+INSERT INTO user_profiles (user_id, full_name, gender_id)
+SELECT u.id, 'Giáo Viên Mẫu', g.id
 FROM users u JOIN genders g ON g.code = 'female'
 WHERE u.email = 'teacher@school.edu.vn'
 ON CONFLICT (user_id) DO NOTHING;
@@ -83,8 +83,8 @@ FROM users u JOIN roles r ON r.code = 'student'
 WHERE u.email = 'student@school.edu.vn'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, email, gender_id)
-SELECT u.id, 'Sinh Viên Mẫu', u.email, g.id
+INSERT INTO user_profiles (user_id, full_name, gender_id)
+SELECT u.id, 'Sinh Viên Mẫu', g.id
 FROM users u JOIN genders g ON g.code = 'male'
 WHERE u.email = 'student@school.edu.vn'
 ON CONFLICT (user_id) DO NOTHING;
