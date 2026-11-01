@@ -304,7 +304,9 @@ services:
     # Next.js standalone (node server.js); rewrites server-side trỏ
     # /api,/media -> backend và /gaze -> gaze qua tên service docker.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
+      # 127.0.0.1 thay vì localhost: trong container localhost có thể resolve ::1
+      # còn Next.js chỉ listen IPv4 -> healthcheck fail dù web vẫn chạy.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
