@@ -58,10 +58,6 @@ export function setMemoryAccessToken(token: string | null): void {
   memoryAccessToken = token;
 }
 
-export function getMemoryAccessToken(): string | null {
-  return memoryAccessToken;
-}
-
 export function clearMemoryToken(): void {
   memoryAccessToken = null;
 }
@@ -263,28 +259,4 @@ export async function apiFetchMultipart<T>(
   return res.json() as Promise<T>;
 }
 
-export async function apiFetchBlob(
-  path: string,
-  params?: ApiRequestOptions["params"],
-): Promise<Blob> {
-  const doFetch = (): Promise<Response> =>
-    fetch(buildUrl(path, params), {
-      credentials: "include",
-      headers: { ...getAuthHeader(), ...getCsrfHeader() },
-    });
 
-  let res = await doFetch();
-
-  if (res.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      res = await doFetch();
-    } else {
-      clearMemoryToken();
-      notifyAuthChange();
-    }
-  }
-
-  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
-  return res.blob();
-}

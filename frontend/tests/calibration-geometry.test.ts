@@ -6,7 +6,7 @@ import {
   DEFAULT_CALIBRATION_MARGIN,
   getContainedImageRect,
   screenGazeToSlide,
-} from "@/lib/api/calibration";
+} from "@/lib/calibration-geometry";
 
 describe("buildCalibrationPoints", () => {
   it("tạo đúng 16 điểm cho lưới 4×4", () => {

@@ -237,7 +237,6 @@ export function demoResponse(path: string, method: string, body?: unknown): unkn
   // Profile
   if (clean === "/api/me/profile") return demoProfile(getDemoEmail());
   if (clean === "/api/me/enrollments") return ENROLLMENTS;
-  if (clean === "/api/me/stats") return { streakDays: 5, weekStudyMinutes: 200 };
 
   // Student course
   if (clean.startsWith("/api/courses/")) return OUTLINE;
@@ -276,19 +275,6 @@ export function demoResponse(path: string, method: string, body?: unknown): unkn
   }
   if (/^\/api\/teacher\/lessons\/[^/]+\/heatmap$/.test(clean)) return HEATMAP_STATS;
   if (/^\/api\/teacher\/lessons\/[^/]+\/slides$/.test(clean)) return [];
-  if (/^\/api\/teacher\/lessons\/[^/]+\/mastery$/.test(clean)) {
-    return {
-      lessonId: "lesson-1",
-      score: 80,
-      keyScore: 80,
-      normalScore: 80,
-      keyDone: 1,
-      keyTotal: 1,
-      slidesDone: 3,
-      slidesTotal: 3,
-      slides: [],
-    };
-  }
   if (/^\/api\/teacher\/modules\/[^/]+\/quizzes$/.test(clean) && method === "POST") {
     return {
       id: "lesson-quiz-new",

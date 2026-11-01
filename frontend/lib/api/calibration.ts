@@ -5,19 +5,15 @@
 import { buildCalibrationPoints, calibrationMargins } from "@/lib/calibration-geometry";
 import type { CalPoint } from "@/lib/calibration-geometry";
 
-// Hình học thuần (CalPoint/buildCalibrationPoints/calibrationMargins/
-// getContainedImageRect/screenGazeToSlide/SlideRect) đã tách sang
-// lib/calibration-geometry.ts — re-export để các import cũ
-// `@/lib/api/calibration` tiếp tục hoạt động.
+// Hình học thuần đã tách sang lib/calibration-geometry.ts; re-export các
+// symbol còn được import qua `@/lib/api/calibration`.
 export {
   buildCalibrationPoints,
   calibrationMargins,
-  CALIBRATION_EDGE_INSET_PX,
-  DEFAULT_CALIBRATION_MARGIN,
   getContainedImageRect,
   screenGazeToSlide,
 } from "@/lib/calibration-geometry";
-export type { CalPoint, CalibrationMargins, SlideRect } from "@/lib/calibration-geometry";
+export type { CalPoint } from "@/lib/calibration-geometry";
 
 const SESSION_KEY = "gaze_session_id";
 const CALIBRATED_AT_KEY = "gaze_calibrated_at";
@@ -87,7 +83,6 @@ export interface TrainResult {
 }
 
 export const MAX_TRAIN_MAE = 0.12;
-export const DEFAULT_MAX_TRAIN_MAE = 0.12;
 
 export function formatMaePercent(mae: number): string {
   return `${(mae * 100).toFixed(1)}%`;
@@ -342,16 +337,6 @@ export interface CalibrationSettings {
   updatedAt?: string | null;
 }
 
-export async function fetchCalibrationConfig(): Promise<CalibrationSettings> {
-  try {
-    const { apiFetch } = await import("./client");
-    const data = await apiFetch<{ enabled: boolean; threshold: number }>("/api/calibrations/config");
-    return { enabled: data.enabled, threshold: data.threshold };
-  } catch {
-    return { enabled: true, threshold: DEFAULT_MAX_TRAIN_MAE };
-  }
-}
-
 export async function fetchAdminCalibrationSettings(): Promise<CalibrationSettings> {
   const { apiFetch } = await import("./client");
   return apiFetch<CalibrationSettings>("/api/admin/calibration-settings");
@@ -401,8 +386,6 @@ function getGazeWsOrigin(): string {
   }
   return origin.replace(/:8443(?=\/|$)/, "");
 }
-
-export const GAZE_WS_ORIGIN = getGazeWsOrigin();
 
 export function gazeStreamUrl(sessionId: string): string {
   return `${getGazeWsOrigin()}/session/${sessionId}/stream`;
