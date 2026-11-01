@@ -9,7 +9,7 @@ import { heatColor } from '@/lib/heatmap-colors';
 export const HEATMAP_DEFAULT_OPACITY = 0.6;
 // Bán kính splat nhỏ: tâm đỏ chỉ nhỉnh hơn chấm điểm nhìn (2px) một chút,
 // vòng xanh ngoài gọn để vẫn đọc được nội dung slide bên dưới.
-export const HEATMAP_POINT_RADIUS_FACTOR = 0.035;
+const HEATMAP_POINT_RADIUS_FACTOR = 0.035;
 const HEATMAP_BASE_ALPHA = 50;
 const HEATMAP_ALPHA_RANGE = 150;
 const HEATMAP_MIN_ALPHA = 0.02;

@@ -50,7 +50,3 @@ export function useAuthState(): AuthState {
     },
   };
 }
-
-export function useStoredUser(): AuthUser | null {
-  return useAuthState().user;
-}

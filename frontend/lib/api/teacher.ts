@@ -8,7 +8,6 @@ import type {
   StudentRow,
   SlideStat,
   SlideAdmin,
-  LessonMastery,
 } from "@/lib/types/domain";
 import { formatShortDate } from "@/lib/utils";
 
@@ -73,7 +72,6 @@ export function removeCourseStudent(
 
 export function fetchHeatmap(
   lessonId: string,
-  _slideCount: number,
   scope: "class" | string = "class",
 ): Promise<SlideStat[]> {
   return apiFetch<SlideStat[]>(`/api/teacher/lessons/${lessonId}/heatmap`, {
@@ -217,15 +215,4 @@ export function deleteSlide(slideId: string): Promise<{ ok: boolean }> {
   });
 }
 
-export function setSlideKeys(lessonId: string, orderIndexes: number[]): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>(`/api/teacher/lessons/${lessonId}/slides/key`, {
-    method: "POST",
-    body: { orderIndexes },
-  });
-}
 
-export function fetchLessonMastery(lessonId: string, studentId: string): Promise<LessonMastery> {
-  return apiFetch<LessonMastery>(`/api/teacher/lessons/${lessonId}/mastery`, {
-    params: { student_id: studentId },
-  });
-}

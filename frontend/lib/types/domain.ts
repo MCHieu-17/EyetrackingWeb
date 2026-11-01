@@ -1,7 +1,7 @@
-// lib/types/domain.ts — Nguồn duy nhất cho các type domain của GazeEdu.
+// lib/types/domain.ts — Type domain dùng chung phía frontend.
 // Khớp với schema DB (db/migrations/*.sql): courses / modules / lessons /
 // lesson_contents / enrollments / learning_sessions / gaze_events.
-// Khi nối backend, các type này được dùng làm contract — không sửa tên để UI ổn định.
+// Chỉ khai báo type đang được dùng; xóa type chết thay vì giữ lại.
 
 export type CourseStatus = 'draft' | 'published' | 'archived';
 export type EnrollStatus = 'active' | 'completed' | 'dropped';
@@ -82,58 +82,6 @@ export interface SlideStat {
   aois: HeatmapAoi[];         // vùng nội dung chuẩn hóa [0,1], độc lập với scope heatmap
 }
 
-// Dashboard mở rộng (teacher)
-
-export interface WeekDelta { value: number; delta: number | null; note: string }
-
-export interface ActivityPoint { day: string; sessions: number; attention: number }
-
-export interface CourseHealthRow {
-  id: string;
-  title: string;
-  gradient: string;
-  students: number;
-  attention: number | null;
-  active7d: number;         // học viên hoạt động 7 ngày qua
-  bottleneck: string | null; // bài có attention thấp nhất
-  bottleneckScore: number | null;
-}
-
-export interface LessonAlert {
-  courseId: string;
-  courseTitle: string;
-  gradient: string;
-  lessonTitle: string;
-  attention: number;
-  onSlide: number;      // on-slide ratio TB của bài
-  affected: number;     // số học viên đã học bài này
-  total: number;
-}
-
-export interface StudentAlert {
-  id: string;
-  name: string;
-  code: string;
-  color: string;
-  courseId: string;
-  courseTitle: string;
-  progress: number;
-  attention: number | null;
-  lastActive: string;
-  reason: 'stuck' | 'low_attention' | 'inactive'; // tụt tiến độ | mất tập trung | lâu không vào
-}
-
-export interface RecentSession {
-  id: string;
-  studentName: string;
-  color: string;
-  courseTitle: string;
-  lessonTitle: string;
-  durationMin: number;
-  attention: number | null;
-  when: string;
-}
-
 // Student (my-courses)
 
 export interface EnrolledCourse {
@@ -169,44 +117,6 @@ export interface SlideAdmin {
   isKey: boolean;
   aoiCount: number;
   aoiSource: string;
-}
-
-export interface Aoi {
-  id: string;
-  name: string;
-  xMin: number;
-  yMin: number;
-  xMax: number;
-  yMax: number;
-  weight: number;
-  charCount: number;
-  source: string;
-  covered: boolean;
-  dwellMs: number;
-}
-
-export interface SlideCoverage {
-  contentId: string;
-  orderIndex: number;
-  isKey: boolean;
-  coverage: number;          // 0..1
-  dwellMs: number;
-  isComplete: boolean;
-  aoiCount: number;
-  aoiSource: string;
-  aois: Aoi[];
-}
-
-export interface LessonMastery {
-  lessonId: string;
-  score: number;             // 0..100 (85% trọng tâm / 15% thường)
-  keyScore: number;
-  normalScore: number;
-  keyDone: number;
-  keyTotal: number;
-  slidesDone: number;
-  slidesTotal: number;
-  slides: SlideCoverage[];
 }
 
 export interface LessonItem {

@@ -7,8 +7,6 @@ import { RiCloseLine } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 
 export const Sheet = DialogPrimitive.Root;
-export const SheetTrigger = DialogPrimitive.Trigger;
-export const SheetClose = DialogPrimitive.Close;
 
 const sheetVariants = cva(
   "fixed z-50 flex flex-col gap-0 border-border/80 bg-[#fdfdfa] shadow-xl transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-300",
@@ -59,15 +57,6 @@ export function SheetHeader({ className, ...props }: React.HTMLAttributes<HTMLDi
 
 export function SheetBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("flex-1 overflow-y-auto p-5 pt-0", className)} {...props} />;
-}
-
-export function SheetFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("mt-auto flex flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row sm:justify-end", className)}
-      {...props}
-    />
-  );
 }
 
 export const SheetTitle = React.forwardRef<

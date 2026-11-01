@@ -62,7 +62,6 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
 
   const { data: stats = [], isLoading: statsLoading, isError: statsError, refetch } = useHeatmap(
     lesson.id,
-    lesson.slides,
     scope === "class" ? "class" : scope,
   );
   const { data: slides = [] } = useLessonSlides(lesson.id);

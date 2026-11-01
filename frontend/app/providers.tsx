@@ -3,7 +3,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { subscribeAuthChange } from "@/lib/api/auth";
 
 const PASSWORD_CHANGE_PATH = "/account/change-password";
@@ -46,7 +45,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <AuthCacheSync client={client} />
-      <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+      {children}
     </QueryClientProvider>
   );
 }

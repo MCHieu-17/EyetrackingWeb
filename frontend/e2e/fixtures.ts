@@ -268,7 +268,6 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
 
   // Student
   await page.route("**/api/me/enrollments", (r) => json(r, ENROLLMENTS));
-  await page.route("**/api/me/stats", (r) => json(r, { streakDays: 5, weekStudyMinutes: 200 }));
   await page.route("**/api/courses/**", (r) => json(r, OUTLINE));
   await page.route("**/api/lessons/**/contents", (r) => json(r, SLIDES));
   await page.route("**/api/learning-sessions**", (r) => {
@@ -408,9 +407,6 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/teacher/lessons/*", (r) => json(r, { ok: true }));
   await page.route("**/api/teacher/lessons/*/heatmap**", (r) => json(r, HEATMAP_STATS));
   await page.route("**/api/teacher/lessons/*/slides", (r) => json(r, []));
-  await page.route("**/api/teacher/lessons/*/mastery**", (r) =>
-    json(r, { lessonId: "lesson-1", score: 80, keyScore: 80, normalScore: 80, keyDone: 1, keyTotal: 1, slidesDone: 3, slidesTotal: 3, slides: [] }),
-  );
 
   // Admin
   await page.route("**/api/admin/teachers", (r) => json(r, TEACHER_DIRECTORY));

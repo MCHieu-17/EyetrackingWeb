@@ -6,8 +6,6 @@ import { cn } from "@/lib/utils";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
-export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
-export const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 
 export const DropdownMenuContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Content>,

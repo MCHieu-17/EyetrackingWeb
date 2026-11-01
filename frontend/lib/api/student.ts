@@ -1,11 +1,6 @@
 import { apiFetch } from "./client";
 import type { EnrolledCourse, CourseOutline, Slide } from "@/lib/types/domain";
 
-export interface LearningStats {
-  streakDays: number;
-  weekStudyMinutes: number;
-}
-
 export interface LearningSession {
   id: string;
   enrollmentId: string;
@@ -51,10 +46,6 @@ export interface GazeSample {
 
 export function fetchMyEnrollments(): Promise<EnrolledCourse[]> {
   return apiFetch<EnrolledCourse[]>("/api/me/enrollments");
-}
-
-export function fetchMyLearningStats(): Promise<LearningStats> {
-  return apiFetch<LearningStats>("/api/me/stats");
 }
 
 export function fetchCourseOutline(courseId: string): Promise<CourseOutline> {
