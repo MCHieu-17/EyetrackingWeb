@@ -106,8 +106,6 @@ def test_mastery_endpoint(client):
     )
 
     client.post(f"/api/courses/{course_id}/enroll", headers=auth(student))
-    r = client.get(f"/teacher/courses/{course_id}/students", headers=auth(teacher))
-    student_id = r.json()[0]["id"]
 
     r = client.get(f"/api/lessons/{lesson_id}/contents", headers=auth(student))
     slide_ids = [s["id"] for s in r.json()]
@@ -135,18 +133,6 @@ def test_mastery_endpoint(client):
         json={"learningSessionId": session["id"], "samples": samples},
     )
     assert r.status_code == 200, r.text
-
-    r = client.get(
-        f"/teacher/lessons/{lesson_id}/mastery",
-        headers=auth(teacher),
-        params={"student_id": student_id},
-    )
-    assert r.status_code == 200, r.text
-    data = r.json()
-    assert data["keyTotal"] == 1
-    assert data["slidesTotal"] == 2
-    assert data["slides"][0]["dwellMs"] > 0
-    assert data["slides"][0]["aoiCount"] > 0
 
     r = client.get(f"/teacher/courses/{course_id}/students", headers=auth(teacher))
     lesson = r.json()[0]["lessons"][0]

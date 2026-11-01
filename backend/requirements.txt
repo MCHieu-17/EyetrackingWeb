@@ -16,6 +16,7 @@ httpx==0.28.1
 python-multipart==0.0.32
 numpy==2.4.6
 pymupdf==1.28.2
-pillow==12.3.0
 redis==8.1.0
 boto3==1.43.114
+# Import trực tiếp trong app/services/media_storage.py (Config/exceptions).
+botocore==1.43.114

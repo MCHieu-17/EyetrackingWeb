@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 
 from app.schemas.common import CamelModel
 
@@ -119,26 +120,20 @@ def _coerce_answers(value: object) -> object:
     }
 
 
+# Dùng chung cho input và output: dữ liệu cũ có thể lưu đáp án dạng chuỗi.
+Answers = Annotated[dict[str, list[str]], BeforeValidator(_coerce_answers)]
+
+
 class QuizAttemptCreate(CamelModel):
     # Mỗi câu: danh sách id lựa chọn đã chọn (câu một đáp án → list 1 phần tử).
-    answers: dict[str, list[str]] = Field(default_factory=dict)
-
-    @field_validator("answers", mode="before")
-    @classmethod
-    def normalize_answers(cls, value: object) -> object:
-        return _coerce_answers(value)
+    answers: Answers = Field(default_factory=dict)
 
 
 class QuizAttemptOut(CamelModel):
     id: str
     assignment_id: str
-    answers: dict[str, list[str]]
+    answers: Answers
     submitted_at: datetime
     score: int
     max_score: int
-
-    @field_validator("answers", mode="before")
-    @classmethod
-    def normalize_answers(cls, value: object) -> object:
-        return _coerce_answers(value)
 

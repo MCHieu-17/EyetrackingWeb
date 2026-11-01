@@ -236,12 +236,12 @@ async def make_user(
         await session.execute(
             text(
                 """
-                INSERT INTO user_profiles (user_id, full_name, email)
-                VALUES (:uid, :name, :email)
+                INSERT INTO user_profiles (user_id, full_name)
+                VALUES (:uid, :name)
                 ON CONFLICT (user_id) DO UPDATE SET full_name = EXCLUDED.full_name
                 """
             ),
-            {"uid": user_id, "name": full_name, "email": email},
+            {"uid": user_id, "name": full_name},
         )
         if role == "teacher":
             await session.execute(

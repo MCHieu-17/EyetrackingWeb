@@ -1,8 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, SmallInteger, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -28,11 +27,12 @@ class UserProfile(Base):
     full_name: Mapped[str] = mapped_column(String(150))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     gender_id: Mapped[int | None] = mapped_column(ForeignKey("genders.id"))
-    email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(20))
     avatar_url: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     user: Mapped["User"] = relationship(back_populates="profile")  # noqa: F821
@@ -47,7 +47,6 @@ class StudentProfile(Base):
     )
     student_code: Mapped[str] = mapped_column(String(30), unique=True)
     program: Mapped[str | None] = mapped_column(String(200))
-    extra: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
     user: Mapped["User"] = relationship(back_populates="student_profile")  # noqa: F821
 
@@ -60,6 +59,5 @@ class TeacherProfile(Base):
     )
     teacher_code: Mapped[str] = mapped_column(String(30), unique=True)
     department: Mapped[str | None] = mapped_column(String(150))
-    extra: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
     user: Mapped["User"] = relationship(back_populates="teacher_profile")  # noqa: F821

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -27,14 +27,18 @@ class QuizAssignment(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(255))
     instructions: Mapped[str] = mapped_column(Text, server_default=text("''"))
-    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duration_minutes: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'draft'"))
     # Giáo viên cho phép học viên làm lại (ghi đè lượt làm cũ).
     allow_retry: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     questions: Mapped[list[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class QuizAttempt(Base):

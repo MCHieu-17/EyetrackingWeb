@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import get_course_or_404
 from app.api.deps import require_roles
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
@@ -30,13 +31,6 @@ from app.services.study_chat import answer_in_session, purge_thread
 router = APIRouter(tags=["chat"])
 
 NEW_TITLE = "Phiên mới"
-
-
-async def _course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    return course
 
 
 async def _require_enrolled(db: AsyncSession, course_id: str, user: User) -> None:
@@ -124,7 +118,7 @@ async def list_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """Danh sách phiên chat của sinh viên trong một môn (mới nhất trước)."""
-    course = await _course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
     await _require_enrolled(db, course.id, user)
 
     counts = (
@@ -170,7 +164,7 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
 ):
     """Gửi một câu hỏi. Không có `session_id` thì tạo phiên mới."""
-    course = await _course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
     await _require_enrolled(db, course.id, user)
 
     lesson = await _resolve_lesson(db, course, str(body.lesson_id) if body.lesson_id else None)

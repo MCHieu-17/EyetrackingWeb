@@ -39,30 +39,6 @@ def test_heatmap_requires_teacher_role(client):
     assert ok.json() == []
 
 
-def test_mastery_requires_owner(client):
-    teacher, _, _, lesson_id = _setup(client)
-    asyncio.run(make_user("an-outsider@test.vn", "teacher"))
-    outsider = login(client, "an-outsider@test.vn")
-    unknown_student = "00000000-0000-0000-0000-000000000000"
-
-    # Giáo viên không sở hữu/không được phân công -> 403.
-    assert (
-        client.get(
-            f"/teacher/lessons/{lesson_id}/mastery?student_id={unknown_student}",
-            headers=auth(outsider),
-        ).status_code
-        == 403
-    )
-    # Chủ bài học qua được kiểm tra quyền, nhưng học viên chưa đăng ký -> 404.
-    assert (
-        client.get(
-            f"/teacher/lessons/{lesson_id}/mastery?student_id={unknown_student}",
-            headers=auth(teacher),
-        ).status_code
-        == 404
-    )
-
-
 def test_recompute_course_analytics(client):
     teacher, _, course_id, _ = _setup(client)
 

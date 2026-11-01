@@ -1,5 +1,4 @@
 import re
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,7 +6,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.access import get_lesson_or_404
+from app.api.deps import can_access_course, get_current_user
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import User
@@ -29,6 +29,36 @@ def _ensure_media_in_root(path: Path) -> Path:
     return path
 
 
+async def _lesson_course_or_404(
+    db: AsyncSession, lesson_id: str
+) -> tuple[Lesson, Course]:
+    lesson = await get_lesson_or_404(db, lesson_id)
+    module = await db.get(Module, lesson.module_id)
+    if module is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
+    course = await db.get(Course, module.course_id)
+    if course is None or course.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    return lesson, course
+
+
+async def _ensure_course_access(db: AsyncSession, course: Course, user: User) -> None:
+    """Owner/assigned hoặc đã enroll (giống get_lesson_contents)."""
+    if await can_access_course(db, course, user):
+        return
+    enrolled = (
+        await db.execute(
+            select(Enrollment).where(
+                Enrollment.course_id == course.id,
+                Enrollment.student_id == user.id,
+                Enrollment.status != "dropped",
+            )
+        )
+    ).scalar_one_or_none()
+    if enrolled is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
+
+
 @router.get("/media/lessons/{lesson_id}/{version}/{filename}")
 async def get_lesson_slide(
     lesson_id: str,
@@ -38,38 +68,11 @@ async def get_lesson_slide(
     db: AsyncSession = Depends(get_db),
 ):
     # Validate UUID và format để tránh traversal
-    try:
-        uuid.UUID(lesson_id)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
     if not _VERSION_RE.match(version) or not _SLIDE_RE.match(filename):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
 
-    lesson = await db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    module = await db.get(Module, lesson.module_id)
-    if module is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    course = await db.get(Course, module.course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-
-    # Quyền: giống get_lesson_contents — owner/assigned hoặc đã enroll
-    from app.api.deps import can_access_course
-
-    is_owner = await can_access_course(db, course, user)
-    enrolled = None
-    if not is_owner:
-        enrolled = (
-            await db.execute(
-                select(Enrollment).where(
-                    Enrollment.course_id == course.id, Enrollment.student_id == user.id, Enrollment.status != "dropped"
-                )
-            )
-        ).scalar_one_or_none()
-        if enrolled is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
+    _, course = await _lesson_course_or_404(db, lesson_id)
+    await _ensure_course_access(db, course, user)
 
     file_path = settings.media_path / "lessons" / lesson_id / version / filename
     file_path = _ensure_media_in_root(file_path)
@@ -87,36 +90,11 @@ async def get_lesson_slide_legacy(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        uuid.UUID(lesson_id)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
     if not _SLIDE_RE.match(filename):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
 
-    lesson = await db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    module = await db.get(Module, lesson.module_id)
-    if module is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    course = await db.get(Course, module.course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-
-    from app.api.deps import can_access_course
-
-    is_owner = await can_access_course(db, course, user)
-    if not is_owner:
-        enrolled = (
-            await db.execute(
-                select(Enrollment).where(
-                    Enrollment.course_id == course.id, Enrollment.student_id == user.id, Enrollment.status != "dropped"
-                )
-            )
-        ).scalar_one_or_none()
-        if enrolled is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
+    _, course = await _lesson_course_or_404(db, lesson_id)
+    await _ensure_course_access(db, course, user)
 
     # 1. Thử file legacy trực tiếp: media/lessons/{id}/slide_*.jpg
     legacy_path = settings.media_path / "lessons" / lesson_id / filename

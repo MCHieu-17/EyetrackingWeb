@@ -3,7 +3,7 @@
 from app.core.config import settings
 from app.services import study_chat as study_chat_mod
 from tests.conftest import auth
-from tests.test_assignments import _assignment_body, _setup, _submit
+from tests.test_assignments import _create_assignment, _setup, _submit
 
 
 class _FakeChatbotResponse:
@@ -129,12 +129,8 @@ def test_chat_session_lifecycle_and_history(client, monkeypatch):
 
 def test_chat_assignment_context_requires_submission(client, monkeypatch):
     captured = _patch_chatbot(monkeypatch)
-    teacher, student, _, course_id, _, lesson_id = _setup(client)
-    created = client.post(
-        "/api/assignments",
-        headers=auth(teacher),
-        json=_assignment_body(course_id, lesson_id),
-    )
+    teacher, student, _, course_id, module_id, _ = _setup(client)
+    created = _create_assignment(client, teacher, module_id)
     assignment_id = created.json()["id"]
     # Mở bài tập để bắt đầu lượt làm (tạo session) rồi mới nộp được.
     client.get(f"/api/assignments/{assignment_id}", headers=auth(student))
@@ -160,8 +156,8 @@ def test_chat_assignment_context_requires_submission(client, monkeypatch):
     assert payload["support_mode"] == "review"
     assert "Đáp án đúng: b" in payload["assignment_context"]
     assert payload["assignment_id"] == assignment_id
-    assert payload["lesson_id"] == lesson_id
-    assert payload["lesson_title"] == "Lesson"
+    assert payload["lesson_id"] == created.json()["lessonId"]
+    assert payload["lesson_title"] == "Bài kiểm tra"
     assert payload["module_title"] == "Module"
 
 

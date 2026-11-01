@@ -2,83 +2,33 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import can_access_course, can_manage_course, require_roles
+from app.api.access import get_lesson_viewable
+from app.api.deps import can_manage_course, require_roles
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, Enrollment, Lesson, LessonContent, Module
-from app.schemas.analytics import LessonMasteryOut, SlideStatOut
+from app.models.course import Course, Lesson, Module
+from app.schemas.analytics import SlideStatOut
 from app.services import analytics, mastery
 
 router = APIRouter(tags=["analytics"])
-
-
-async def _lesson_with_owner_check(
-    db: AsyncSession, lesson_id: str, user: User
-) -> Lesson:
-    lesson = await db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    module = await db.get(Module, lesson.module_id)
-    course = await db.get(Course, module.course_id) if module else None
-    if course is None or not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return lesson
 
 
 @router.get("/teacher/lessons/{lesson_id}/heatmap", response_model=list[SlideStatOut])
 async def get_lesson_heatmap(
     lesson_id: str,
     student_id: str | None = Query(default=None),
-    content_id: str | None = Query(default=None),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    await _lesson_with_owner_check(db, lesson_id, user)
+    await get_lesson_viewable(db, lesson_id, user)
     cached = await analytics.get_cached_slide_stats(lesson_id, student_id)
     if cached is not None:
         stats = [SlideStatOut.model_validate(item) for item in cached]
     else:
         stats = await analytics.compute_slide_stats(db, lesson_id, student_id)
         await analytics.cache_slide_stats(lesson_id, student_id, stats)
-    if content_id:
-        slides = (
-            await db.execute(
-                select(LessonContent.id, LessonContent.order_index)
-                .where(LessonContent.lesson_id == lesson_id)
-                .order_by(LessonContent.order_index)
-            )
-        ).all()
-        for i, (sid, _) in enumerate(slides):
-            if sid == content_id and i < len(stats):
-                return [stats[i]]
     return stats
-
-
-@router.get("/teacher/lessons/{lesson_id}/mastery", response_model=LessonMasteryOut)
-async def get_lesson_mastery(
-    lesson_id: str,
-    student_id: str = Query(...),
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    """Điểm hoàn thành bài học (độ bao phủ nội dung) của một học viên."""
-    lesson = await _lesson_with_owner_check(db, lesson_id, user)
-    module = await db.get(Module, lesson.module_id)
-    enrollment = (
-        await db.execute(
-            select(Enrollment).where(
-                Enrollment.course_id == module.course_id,
-                Enrollment.student_id == student_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if enrollment is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Học viên chưa đăng ký khóa học")
-    out = await mastery.get_lesson_mastery(db, lesson_id, enrollment.id)
-    if out is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Bài học chưa có slide")
-    return out
 
 
 @router.post("/teacher/courses/{course_id}/recompute", dependencies=[Depends(rate_limit(5, 60, "recompute"))])

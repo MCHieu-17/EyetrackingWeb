@@ -2,28 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import escape_like, get_course_or_404
 from app.api.deps import require_roles
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.calibration import CalibrationSettings
-from app.models.course import Course, CourseTeacher
+from app.models.course import CourseTeacher
 from app.models.profile import TeacherProfile, UserProfile
 from app.schemas.calibration import CalibrationSettingsIn, CalibrationSettingsOut
 from app.schemas.course import CourseTeacherOut, TeacherAssignIn, TeacherDirectoryOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-async def _course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    return course
-
-
-def _escape_like(q: str) -> str:
-    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 async def _teacher_or_404(db: AsyncSession, teacher_id: str) -> TeacherProfile:
@@ -51,7 +41,7 @@ async def list_teachers(
         .limit(500)
     )
     if q and q.strip():
-        esc = _escape_like(q.strip())
+        esc = escape_like(q.strip())
         like = f"%{esc}%"
         stmt = stmt.where(
             UserProfile.full_name.ilike(like, escape="\\") | User.email.ilike(like, escape="\\")
@@ -75,7 +65,7 @@ async def list_course_teachers(
     _: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
 
     assigned_ids_stmt = select(CourseTeacher.teacher_id).where(
         CourseTeacher.course_id == course_id
@@ -131,7 +121,7 @@ async def assign_teachers(
     user: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
     ids = list(dict.fromkeys(body.teacher_ids))
     if not ids:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Chưa chọn giáo viên")
@@ -160,7 +150,7 @@ async def unassign_teacher(
     _: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
     if teacher_id == course.teacher_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -190,6 +180,7 @@ async def _get_or_init_settings(db: AsyncSession) -> CalibrationSettings:
         row = CalibrationSettings(id=1, enabled=True, threshold=0.12)
         db.add(row)
         await db.flush()
+        await db.commit()
     return row
 
 

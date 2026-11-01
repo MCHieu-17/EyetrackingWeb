@@ -1,7 +1,6 @@
-from datetime import date, datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -10,20 +9,14 @@ from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import Course, Enrollment, Lesson, Module
-from app.models.gaze import LearningSession
 from app.models.profile import UserProfile
-from app.schemas.course import (
-    CourseSummaryOut,
-    EnrolledCourseOut,
-    LearningStatsOut,
-)
+from app.schemas.course import CourseSummaryOut, EnrolledCourseOut
 
 router = APIRouter(tags=["enrollments"])
 
 
 @router.get("/api/me/enrollments", response_model=list[EnrolledCourseOut])
 async def my_enrollments(
-    include: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -114,69 +107,10 @@ async def enroll(
     db.add(enrollment)
     try:
         await db.commit()
-    except Exception as exc:  # race condition: unique violation
+    except IntegrityError as exc:  # race condition: unique violation
         await db.rollback()
-        from sqlalchemy.exc import IntegrityError
-
-        if isinstance(exc, IntegrityError) or "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Đã đăng ký khóa học này") from exc
-        raise
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Đã đăng ký khóa học này"
+        ) from exc
     await db.refresh(enrollment)
     return {"ok": True, "enrollmentId": enrollment.id}
-
-
-@router.get("/api/me/stats", response_model=LearningStatsOut)
-async def my_stats(
-    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
-    now = datetime.now(timezone.utc)
-    week_ago = now - timedelta(days=7)
-
-    enrollment_ids = list(
-        (
-            await db.execute(
-                select(Enrollment.id).where(Enrollment.student_id == user.id)
-            )
-        ).scalars().all()
-    )
-    if not enrollment_ids:
-        return LearningStatsOut(streak_days=0, week_study_minutes=0)
-
-    minutes_stmt = select(
-        func.coalesce(
-            func.sum(
-                func.extract(
-                    "epoch",
-                    func.coalesce(LearningSession.ended_at, now)
-                    - LearningSession.started_at,
-                )
-            ),
-            0,
-        )
-    ).where(
-        LearningSession.enrollment_id.in_(enrollment_ids),
-        LearningSession.started_at >= week_ago,
-    )
-    week_seconds = float((await db.execute(minutes_stmt)).scalar_one())
-
-    dates_stmt = (
-        select(func.date(LearningSession.started_at))
-        .where(
-            LearningSession.enrollment_id.in_(enrollment_ids),
-            LearningSession.started_at >= now - timedelta(days=365),
-        )
-        .group_by(func.date(LearningSession.started_at))
-    )
-    study_dates: set[date] = {r[0] for r in await db.execute(dates_stmt)}
-
-    streak = 0
-    day = now.date()
-    if day not in study_dates:
-        day = day - timedelta(days=1)
-    while day in study_dates:
-        streak += 1
-        day -= timedelta(days=1)
-
-    return LearningStatsOut(
-        streak_days=streak, week_study_minutes=int(week_seconds // 60)
-    )

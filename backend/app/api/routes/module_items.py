@@ -2,25 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import can_manage_course, require_roles
+from app.api.access import get_module_owned
+from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, Lesson, Module
+from app.models.course import Lesson
 from app.models.quiz import QuizAssignment
 from app.schemas.course import LessonNodeOut, ModuleItemsReorderIn
 from app.schemas.quiz import QuizItemCreate
 
 router = APIRouter(tags=["module-items"])
-
-
-async def _module_owned(db: AsyncSession, module_id: str, user: User) -> Module:
-    module = await db.get(Module, module_id)
-    if module is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy chương")
-    course = await db.get(Course, module.course_id)
-    if course is None or not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return module
 
 
 async def _module_lessons(db: AsyncSession, module_id: str) -> list[Lesson]:
@@ -78,7 +69,7 @@ async def create_quiz_item(
     db: AsyncSession = Depends(get_db),
 ):
     """Tạo một item bài tập trắc nghiệm (nháp) trong chương — soạn câu hỏi sau."""
-    module = await _module_owned(db, module_id, user)
+    module = await get_module_owned(db, module_id, user)
     lessons = await _module_lessons(db, module_id)
 
     position = len(lessons)
@@ -132,7 +123,7 @@ async def reorder_module_items(
     db: AsyncSession = Depends(get_db),
 ):
     """Sắp xếp lại toàn bộ item (bài học + bài tập) trong một chương."""
-    await _module_owned(db, module_id, user)
+    await get_module_owned(db, module_id, user)
     lessons = await _module_lessons(db, module_id)
     by_id = {lesson.id: lesson for lesson in lessons}
 

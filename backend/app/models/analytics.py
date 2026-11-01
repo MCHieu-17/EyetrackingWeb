@@ -44,7 +44,6 @@ class AoiRegion(Base):
     weight: Mapped[float] = mapped_column(REAL, server_default=text("1"))
     char_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     block_index: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

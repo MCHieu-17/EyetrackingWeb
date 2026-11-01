@@ -34,27 +34,54 @@ def _setup(client):
     return teacher, student, outsider, course["id"], module["id"], lesson["id"]
 
 
-def _assignment_body(course_id, lesson_id, due_at=None, allow_retry=False):
-    return {
-        "courseId": course_id,
-        "lessonId": lesson_id,
-        "title": "Bài kiểm tra",
-        "instructions": "Chọn đáp án đúng",
-        "dueAt": (due_at or datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
-        "durationMinutes": 15,
-        "status": "published",
-        "allowRetry": allow_retry,
-        "questions": [
-            {
-                "id": "q1",
-                "prompt": "2 + 2 bằng bao nhiêu?",
-                "options": [{"id": "a", "text": "3"}, {"id": "b", "text": "4"}],
-                "correctOptionIds": ["b"],
-                "explanation": "Hai cộng hai bằng bốn.",
-                "points": 2,
-            }
-        ],
-    }
+def _questions():
+    return [
+        {
+            "id": "q1",
+            "prompt": "2 + 2 bằng bao nhiêu?",
+            "options": [{"id": "a", "text": "3"}, {"id": "b", "text": "4"}],
+            "correctOptionIds": ["b"],
+            "explanation": "Hai cộng hai bằng bốn.",
+            "points": 2,
+        }
+    ]
+
+
+def _create_assignment(
+    client,
+    teacher,
+    module_id,
+    *,
+    due_at=None,
+    allow_retry=False,
+    duration=15,
+    title="Bài kiểm tra",
+    questions=None,
+):
+    """Tạo bài tập qua luồng UI: item nháp trong chương + PATCH nội dung."""
+    item = client.post(
+        f"/teacher/modules/{module_id}/quizzes",
+        headers=auth(teacher),
+        json={
+            "title": title,
+            "durationMinutes": duration,
+            "dueAt": (due_at or datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert item.status_code == 201, item.text
+    quiz_id = item.json()["quizId"]
+    patched = client.patch(
+        f"/api/assignments/{quiz_id}",
+        headers=auth(teacher),
+        json={
+            "instructions": "Chọn đáp án đúng",
+            "status": "published",
+            "allowRetry": allow_retry,
+            "questions": questions or _questions(),
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    return patched
 
 
 def _create_quiz_item(client, teacher, module_id, title="Bài tập", duration=15):
@@ -88,12 +115,7 @@ async def _expire_session(assignment_id: str):
 
 def test_assignment_scoring_and_answer_visibility(client):
     teacher, student, outsider, course_id, module_id, lesson_id = _setup(client)
-    created = client.post(
-        "/api/assignments",
-        headers=auth(teacher),
-        json=_assignment_body(course_id, lesson_id),
-    )
-    assert created.status_code == 201, created.text
+    created = _create_assignment(client, teacher, module_id)
     assignment_id = created.json()["id"]
     assert created.json()["questions"][0]["correctOptionIds"] == ["b"]
 
@@ -128,10 +150,11 @@ def test_assignment_scoring_and_answer_visibility(client):
 
 def test_rejects_late_submission(client):
     teacher, student, _, course_id, module_id, lesson_id = _setup(client)
-    created = client.post(
-        "/api/assignments",
-        headers=auth(teacher),
-        json=_assignment_body(course_id, lesson_id, datetime.now(timezone.utc) - timedelta(minutes=1)),
+    created = _create_assignment(
+        client,
+        teacher,
+        module_id,
+        due_at=datetime.now(timezone.utc) - timedelta(minutes=1),
     )
     assignment_id = created.json()["id"]
     submitted = client.post(
@@ -144,9 +167,7 @@ def test_rejects_late_submission(client):
 
 def test_rejects_submission_after_duration(client):
     teacher, student, _, course_id, module_id, lesson_id = _setup(client)
-    body = _assignment_body(course_id, lesson_id)
-    body["durationMinutes"] = 1
-    created = client.post("/api/assignments", headers=auth(teacher), json=body)
+    created = _create_assignment(client, teacher, module_id, duration=1)
     assignment_id = created.json()["id"]
     started = client.get(f"/api/assignments/{assignment_id}", headers=auth(student))
     assert started.status_code == 200
@@ -208,8 +229,8 @@ def test_deleting_quiz_lesson_removes_assignment(client):
     deleted = client.delete(f"/teacher/lessons/{lesson_id}", headers=auth(teacher))
     assert deleted.status_code == 200, deleted.text
 
-    listing = client.get("/api/assignments", headers=auth(teacher)).json()
-    assert all(item["id"] != quiz_id for item in listing)
+    gone = client.get(f"/api/assignments/{quiz_id}", headers=auth(teacher))
+    assert gone.status_code == 404
 
 
 def test_multi_answer_all_or_nothing(client):
@@ -268,10 +289,7 @@ def test_multi_answer_all_or_nothing(client):
 
 def test_retry_resets_attempt_and_timer(client):
     teacher, student, _, course_id, module_id, lesson_id = _setup(client)
-    body = _assignment_body(course_id, lesson_id, allow_retry=True)
-    body["durationMinutes"] = 1
-    created = client.post("/api/assignments", headers=auth(teacher), json=body)
-    assert created.status_code == 201, created.text
+    created = _create_assignment(client, teacher, module_id, allow_retry=True, duration=1)
     assignment_id = created.json()["id"]
     assert created.json()["allowRetry"] is True
 
@@ -323,11 +341,7 @@ def test_retry_resets_attempt_and_timer(client):
 def test_retry_requires_teacher_flag_and_open_assignment(client):
     teacher, student, _, course_id, module_id, lesson_id = _setup(client)
     # Giáo viên không bật cờ -> không được làm lại.
-    created = client.post(
-        "/api/assignments",
-        headers=auth(teacher),
-        json=_assignment_body(course_id, lesson_id),
-    )
+    created = _create_assignment(client, teacher, module_id)
     assignment_id = created.json()["id"]
     assert created.json()["allowRetry"] is False
     client.get(f"/api/assignments/{assignment_id}", headers=auth(student))
@@ -336,15 +350,13 @@ def test_retry_requires_teacher_flag_and_open_assignment(client):
     assert denied.status_code == 403
     assert denied.json()["detail"] == "Giáo viên chưa cho phép làm lại bài này"
 
-    # Bật cờ nhưng bài đã đóng -> vẫn không làm lại được (bài không gắn bài học
-    # để tránh ràng buộc mỗi bài học chỉ có 1 bài tập).
-    closed = client.post(
-        "/api/assignments",
-        headers=auth(teacher),
-        json=_assignment_body(
-            course_id, None, due_at=datetime.now(timezone.utc) - timedelta(minutes=1),
-            allow_retry=True,
-        ),
+    # Bật cờ nhưng bài đã đóng -> vẫn không làm lại được.
+    closed = _create_assignment(
+        client,
+        teacher,
+        module_id,
+        due_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        allow_retry=True,
     )
     closed_id = closed.json()["id"]
     client.get(f"/api/assignments/{closed_id}", headers=auth(student))

@@ -26,7 +26,6 @@ class User(Base):
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
     email: Mapped[str] = mapped_column(String(255), unique=True)
-    phone: Mapped[str | None] = mapped_column(String(20), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     status_id: Mapped[int] = mapped_column(ForeignKey("user_statuses.id"))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -73,25 +72,6 @@ class Role(Base):
     label: Mapped[str | None] = mapped_column(String(100))
 
 
-class Permission(Base):
-    __tablename__ = "permissions"
-
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(60), unique=True)
-    label: Mapped[str | None] = mapped_column(String(100))
-
-
-class RolePermission(Base):
-    __tablename__ = "role_permissions"
-
-    role_id: Mapped[int] = mapped_column(
-        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    )
-    permission_id: Mapped[int] = mapped_column(
-        ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True
-    )
-
-
 class UserRole(Base):
     __tablename__ = "user_roles"
 
@@ -102,20 +82,6 @@ class UserRole(Base):
         ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
     )
     granted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
-
-
-class OAuthAccount(Base):
-    __tablename__ = "oauth_accounts"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
-    )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    provider: Mapped[str] = mapped_column(String(30))
-    provider_uid: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
 

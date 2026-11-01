@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import active_calibration_param, upsert_device
 from app.api.deps import get_current_user
-from app.api.routes.gaze import _upsert_device
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.calibration import CalibrationParam, CalibrationSession, CalibrationSettings, Device
@@ -33,17 +33,6 @@ MAPPING_MODEL_VERSION = "ubj-linreg-v2-b16"
 
 # Chặn trên kích thước model .ubj nhận từ client (model thật ~1-3KB).
 MAX_MODEL_UBJ_BYTES = 256 * 1024
-
-
-async def _active_param(
-    db: AsyncSession, user_id: str, device_id: str
-) -> CalibrationParam | None:
-    stmt = select(CalibrationParam).where(
-        CalibrationParam.user_id == user_id,
-        CalibrationParam.device_id == device_id,
-        CalibrationParam.is_active.is_(True),
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def _latest_param(
@@ -111,7 +100,7 @@ async def save_calibration_params(
     """
     model_ubj = _decode_model(body.model_ubj_base64)
 
-    device = await _upsert_device(
+    device = await upsert_device(
         db,
         user_id=user.id,
         fingerprint=body.device_fingerprint,
@@ -181,7 +170,7 @@ async def get_active_calibration(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
         )
-    param = await _active_param(db, user.id, device.id)
+    param = await active_calibration_param(db, user.id, device.id)
     if param is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
@@ -207,7 +196,7 @@ async def get_active_calibration_model(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
         )
-    param = await _active_param(db, user.id, device.id)
+    param = await active_calibration_param(db, user.id, device.id)
     if param is None or not param.has_model:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,

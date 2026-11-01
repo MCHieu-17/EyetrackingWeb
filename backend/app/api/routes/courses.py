@@ -2,9 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import (
+    course_lesson_counts,
+    escape_like,
+    get_course_or_404,
+    get_owned_course,
+    get_viewable_course,
+)
 from app.api.deps import (
-    can_access_course,
-    can_manage_course,
     get_current_user,
     require_roles,
 )
@@ -50,54 +55,6 @@ async def _course_status_id(db: AsyncSession, code: str) -> int:
     return result
 
 
-async def _get_course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    return course
-
-
-def _escape_like(q: str) -> str:
-    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-async def _get_owned_course(db: AsyncSession, course_id: str, user: User) -> Course:
-    """Khóa học mà user quản lý được (admin hoặc chủ khóa)."""
-    course = await _get_course_or_404(db, course_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return course
-
-
-async def _get_viewable_course(db: AsyncSession, course_id: str, user: User) -> Course:
-    """Khóa học mà user xem được (admin / chủ khóa / GV được phân công)."""
-    course = await _get_course_or_404(db, course_id)
-    if not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return course
-
-
-async def _course_lesson_counts(
-    db: AsyncSession, course_ids: list[str]
-) -> dict[str, int]:
-    """Số bài giảng (item bất kỳ) của mỗi khóa."""
-    counts: dict[str, int] = {}
-    if not course_ids:
-        return counts
-    rows = await db.execute(
-        select(
-            Module.course_id,
-            func.count(Lesson.id),
-        )
-        .join(Lesson, Lesson.module_id == Module.id)
-        .where(Module.course_id.in_(course_ids))
-        .group_by(Module.course_id)
-    )
-    for course_id, total in rows:
-        counts[course_id] = total
-    return counts
-
-
 @router.get("/teacher/courses", response_model=list[TeacherCourseOut])
 async def list_teacher_courses(
     status_filter: str | None = Query(default=None, alias="status"),
@@ -125,7 +82,7 @@ async def list_teacher_courses(
         status_id = await _course_status_id(db, status_filter)
         stmt = stmt.where(Course.status_id == status_id)
     if q:
-        esc = _escape_like(q)
+        esc = escape_like(q)
         stmt = stmt.where(Course.title.ilike(f"%{esc}%", escape="\\"))
     stmt = stmt.order_by(Course.updated_at.desc())
     courses = list((await db.execute(stmt)).scalars().all())
@@ -134,7 +91,7 @@ async def list_teacher_courses(
     enroll_counts = await course_stats.enrollment_counts(db, ids)
     attention = await course_stats.attention_avg_by_course(db, ids)
     sessions = await course_stats.session_counts_by_course(db, ids)
-    lesson_counts = await _course_lesson_counts(db, ids)
+    lesson_counts = await course_lesson_counts(db, ids)
 
     return [
         TeacherCourseOut(
@@ -210,24 +167,25 @@ async def update_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_owned_course(db, course_id, user)
-    if body.title is not None:
-        course.title = body.title
-    if body.description is not None:
-        course.description = body.description
-    if body.thumbnail_url is not None:
-        course.thumbnail_url = body.thumbnail_url
-    if body.status is not None:
-        course.status_id = await _course_status_id(db, body.status)
-    if body.show_gaze_dot is not None:
-        course.show_gaze_dot = body.show_gaze_dot
+    course = await get_owned_course(db, course_id, user)
+    data = body.model_dump(exclude_unset=True)
+    if data.get("title") is not None:
+        course.title = data["title"]
+    if "description" in data:
+        course.description = data["description"]
+    if "thumbnail_url" in data:
+        course.thumbnail_url = data["thumbnail_url"]
+    if data.get("status") is not None:
+        course.status_id = await _course_status_id(db, data["status"])
+    if data.get("show_gaze_dot") is not None:
+        course.show_gaze_dot = data["show_gaze_dot"]
     await db.commit()
     await db.refresh(course)
     ids = [course.id]
     enroll_counts = await course_stats.enrollment_counts(db, ids)
     attention = await course_stats.attention_avg_by_course(db, ids)
     sessions = await course_stats.session_counts_by_course(db, ids)
-    lesson_counts = await _course_lesson_counts(db, ids)
+    lesson_counts = await course_lesson_counts(db, ids)
     return TeacherCourseOut(
         id=course.id,
         title=course.title,
@@ -255,7 +213,7 @@ async def set_course_gaze_dot(
     Nguồn sự thật duy nhất là `courses.show_gaze_dot` — áp cho MỌI bài giảng và
     bài tập của khóa (không còn cờ theo từng bài).
     """
-    course = await _get_owned_course(db, course_id, user)
+    course = await get_owned_course(db, course_id, user)
     course.show_gaze_dot = body.show_gaze_dot
     await db.commit()
     return {"ok": True, "showGazeDot": course.show_gaze_dot}
@@ -269,7 +227,7 @@ async def delete_course(
 ):
     from datetime import datetime, timezone
 
-    course = await _get_owned_course(db, course_id, user)
+    course = await get_owned_course(db, course_id, user)
     course.deleted_at = datetime.now(timezone.utc)
     await db.commit()
     return {"ok": True}
@@ -281,7 +239,7 @@ async def get_course_tree(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_viewable_course(db, course_id, user)
+    course = await get_viewable_course(db, course_id, user)
 
     attention_stmt = (
         select(EngagementScore.lesson_id, func.avg(EngagementScore.score))
@@ -338,7 +296,7 @@ async def get_course_students(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_viewable_course(db, course_id, user)
+    course = await get_viewable_course(db, course_id, user)
 
     lessons = list(
         (
@@ -441,7 +399,7 @@ async def list_student_directory(
         .limit(200)
     )
     if q and q.strip():
-        esc = _escape_like(q.strip())
+        esc = escape_like(q.strip())
         like = f"%{esc}%"
         stmt = stmt.where(
             or_(
@@ -470,7 +428,7 @@ async def add_course_students(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_owned_course(db, course_id, user)
+    course = await get_owned_course(db, course_id, user)
     ids = list(dict.fromkeys(body.student_ids))
     if not ids:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Chưa chọn học viên nào")
@@ -478,6 +436,7 @@ async def add_course_students(
     valid_stmt = select(User.id).where(
         User.id.in_(ids),
         User.deleted_at.is_(None),
+        User.status.has(code="active"),
         User.roles.any(code="student"),
     )
     valid_ids = set((await db.execute(valid_stmt)).scalars().all())
@@ -508,7 +467,7 @@ async def remove_course_student(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_viewable_course(db, course_id, user)
+    course = await get_viewable_course(db, course_id, user)
     enrollment = (
         await db.execute(
             select(Enrollment).where(
@@ -528,11 +487,10 @@ async def remove_course_student(
 @router.get("/api/courses/{course_id}", response_model=CourseOutlineOut)
 async def get_course_outline(
     course_id: str,
-    include: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await _get_course_or_404(db, course_id)
+    course = await get_course_or_404(db, course_id)
     enrolled = (
         await db.execute(
             select(Enrollment).where(

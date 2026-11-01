@@ -119,10 +119,6 @@ def test_full_learning_flow(client):
     assert r.status_code == 200
     assert r.json()["status"] == "completed"
 
-    r = client.get("/api/me/stats", headers=auth(student))
-    assert r.status_code == 200
-    assert r.json()["weekStudyMinutes"] >= 0
-
     r = client.get(f"/teacher/lessons/{lesson_id}/heatmap", headers=auth(teacher))
     assert r.status_code == 200, r.text
     stats = r.json()

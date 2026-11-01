@@ -2,17 +2,17 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import get_course_or_404
 from app.api.deps import can_access_course, get_current_user, require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, CourseTeacher, Enrollment, Lesson, Module
+from app.models.course import Course, Enrollment, Lesson
 from app.models.quiz import QuizAssignment, QuizAttempt, QuizAttemptSession
 from app.schemas.quiz import (
-    QuizAssignmentCreate,
     QuizAssignmentOut,
     QuizAssignmentUpdate,
     QuizAttemptCreate,
@@ -30,13 +30,6 @@ async def _assignment_or_404(db: AsyncSession, assignment_id: str) -> QuizAssign
     return assignment
 
 
-async def _course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    return course
-
-
 async def _is_enrolled(db: AsyncSession, course_id: str, student_id: str) -> bool:
     stmt = select(Enrollment.id).where(
         Enrollment.course_id == course_id,
@@ -49,7 +42,7 @@ async def _is_enrolled(db: AsyncSession, course_id: str, student_id: str) -> boo
 async def _require_assignment_access(
     db: AsyncSession, assignment: QuizAssignment, user: User
 ) -> tuple[Course, QuizAttempt | None]:
-    course = await _course_or_404(db, assignment.course_id)
+    course = await get_course_or_404(db, assignment.course_id)
     if "admin" in user.role_codes or "teacher" in user.role_codes:
         if not await can_access_course(db, course, user):
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
@@ -129,90 +122,6 @@ def _deadline(assignment: QuizAssignment, session: QuizAttemptSession) -> dateti
     return deadline
 
 
-@router.get("", response_model=list[QuizAssignmentOut])
-async def list_assignments(
-    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
-    if "admin" in user.role_codes:
-        stmt = select(QuizAssignment)
-        reveal = True
-    elif "teacher" in user.role_codes:
-        stmt = (
-            select(QuizAssignment)
-            .join(Course, Course.id == QuizAssignment.course_id)
-            .outerjoin(
-                CourseTeacher,
-                (CourseTeacher.course_id == Course.id) & (CourseTeacher.teacher_id == user.id),
-            )
-            .where(
-                or_(Course.teacher_id == user.id, CourseTeacher.teacher_id == user.id),
-                Course.deleted_at.is_(None),
-            )
-        )
-        reveal = True
-    elif "student" in user.role_codes:
-        stmt = (
-            select(QuizAssignment)
-            .join(Enrollment, Enrollment.course_id == QuizAssignment.course_id)
-            .where(
-                Enrollment.student_id == user.id,
-                Enrollment.status == "active",
-                QuizAssignment.status != "draft",
-            )
-        )
-        reveal = False
-    else:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    assignments = list(
-        (
-            await db.execute(
-                stmt.order_by(
-                    QuizAssignment.due_at.asc().nullslast(),
-                    QuizAssignment.created_at.desc(),
-                )
-            )
-        ).scalars().all()
-    )
-    return [await _assignment_out(db, item, reveal) for item in assignments]
-
-
-@router.post("", response_model=QuizAssignmentOut, status_code=201)
-async def create_assignment(
-    body: QuizAssignmentCreate,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course_id = str(body.course_id)
-    lesson_id = str(body.lesson_id) if body.lesson_id else None
-    course = await _course_or_404(db, course_id)
-    if not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    if lesson_id:
-        lesson_course_id = (
-            await db.execute(
-                select(Module.course_id).join(Lesson, Lesson.module_id == Module.id).where(Lesson.id == lesson_id)
-            )
-        ).scalar_one_or_none()
-        if lesson_course_id != course.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Bài học không thuộc khóa học")
-    assignment = QuizAssignment(
-        course_id=course.id,
-        lesson_id=lesson_id,
-        created_by=user.id,
-        title=body.title.strip(),
-        instructions=body.instructions.strip(),
-        due_at=body.due_at,
-        duration_minutes=body.duration_minutes,
-        status=body.status,
-        allow_retry=body.allow_retry,
-        questions=[question.model_dump(by_alias=True) for question in body.questions],
-    )
-    db.add(assignment)
-    await db.commit()
-    await db.refresh(assignment)
-    return await _assignment_out(db, assignment, True)
-
-
 @router.patch("/{assignment_id}", response_model=QuizAssignmentOut)
 async def update_assignment(
     assignment_id: UUID,
@@ -222,28 +131,29 @@ async def update_assignment(
 ):
     """Sửa hoặc publish/close bài tập (dùng để giao bài nháp đã tạo)."""
     assignment = await _assignment_or_404(db, str(assignment_id))
-    course = await _course_or_404(db, assignment.course_id)
+    course = await get_course_or_404(db, assignment.course_id)
     if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    if body.title is not None:
-        assignment.title = body.title.strip()
+    data = body.model_dump(exclude_unset=True)
+    if data.get("title") is not None:
+        assignment.title = data["title"].strip()
         if assignment.lesson_id:
             lesson = await db.get(Lesson, assignment.lesson_id)
             if lesson is not None and lesson.kind == "quiz":
                 lesson.title = assignment.title
-    if body.instructions is not None:
-        assignment.instructions = body.instructions.strip()
-    if body.due_at is not None:
-        assignment.due_at = body.due_at
-    if body.duration_minutes is not None:
-        assignment.duration_minutes = body.duration_minutes
-    if body.status is not None:
-        assignment.status = body.status
-    if body.allow_retry is not None:
-        assignment.allow_retry = body.allow_retry
-    if body.questions is not None:
+    if data.get("instructions") is not None:
+        assignment.instructions = data["instructions"].strip()
+    if "due_at" in data:
+        assignment.due_at = data["due_at"]
+    if data.get("duration_minutes") is not None:
+        assignment.duration_minutes = data["duration_minutes"]
+    if data.get("status") is not None:
+        assignment.status = data["status"]
+    if data.get("allow_retry") is not None:
+        assignment.allow_retry = data["allow_retry"]
+    if data.get("questions") is not None:
         assignment.questions = [
-            question.model_dump(by_alias=True) for question in body.questions
+            question.model_dump(by_alias=True) for question in body.questions or []
         ]
     if assignment.status == "published" and not assignment.questions:
         raise HTTPException(

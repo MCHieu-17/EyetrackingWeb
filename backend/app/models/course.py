@@ -120,10 +120,6 @@ class Lesson(Base):
     title: Mapped[str] = mapped_column(String(255))
     order_index: Mapped[int] = mapped_column(Integer)
     kind: Mapped[str] = mapped_column(String(10), server_default=text("'lesson'"))
-    content_url: Mapped[str | None] = mapped_column(Text)
-    metadata_: Mapped[dict] = mapped_column(
-        "metadata", JSONB, server_default=text("'{}'::jsonb")
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

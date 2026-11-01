@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import course_of_lesson, get_lesson_or_404
 from app.api.deps import (
     can_access_course,
     can_manage_course,
@@ -48,33 +49,16 @@ async def _embed_slides(slide_ids: list[str]) -> None:
     await embedding.sync_slides(slide_ids)
 
 
-def _validate_uuid(value: str) -> None:
-    try:
-        uuid.UUID(value)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-
-
-async def _get_lesson_or_404(db: AsyncSession, lesson_id: str) -> Lesson:
-    _validate_uuid(lesson_id)
-    lesson = await db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    return lesson
-
-
 async def _check_course_owner(db: AsyncSession, lesson: Lesson, user: User) -> None:
     """Chỉ admin hoặc chủ khóa học mới sửa/xóa bài học, chương, slide."""
-    module = await db.get(Module, lesson.module_id)
-    course = await db.get(Course, module.course_id) if module else None
+    course = await course_of_lesson(db, lesson)
     if course is None or not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
 
 async def _check_course_access(db: AsyncSession, lesson: Lesson, user: User) -> None:
     """Admin / chủ khóa / GV được phân công: xem và thêm slide."""
-    module = await db.get(Module, lesson.module_id)
-    course = await db.get(Course, module.course_id) if module else None
+    course = await course_of_lesson(db, lesson)
     if course is None or not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
@@ -117,7 +101,6 @@ async def create_lesson(
         module_id=module_id,
         title=body.title,
         order_index=next_index,
-        content_url=body.content_url,
     )
     db.add(lesson)
     await db.commit()
@@ -132,12 +115,11 @@ async def update_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_owner(db, lesson, user)
-    if body.title is not None:
-        lesson.title = body.title
-    if body.content_url is not None:
-        lesson.content_url = body.content_url
+    data = body.model_dump(exclude_unset=True)
+    if data.get("title") is not None:
+        lesson.title = data["title"]
     await db.commit()
     return {"ok": True}
 
@@ -148,7 +130,7 @@ async def delete_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_owner(db, lesson, user)
     await db.delete(lesson)
     await db.commit()
@@ -167,7 +149,7 @@ async def add_slide(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
     next_index = (
         await db.execute(
@@ -300,7 +282,7 @@ async def upload_lesson_pdf(
     """Upload PDF → render từng trang ra JPEG → tạo LessonContent cho mỗi trang.
     Thay thế toàn bộ slide cũ của bài. Nếu bài đã có dữ liệu gaze (kéo theo
     ràng buộc khóa ngoại), việc thay thế sẽ bị chặn để không phá dữ liệu phân tích."""
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
 
     data = await _read_pdf_limited(pdf)
@@ -436,7 +418,7 @@ async def list_lesson_slides(
     db: AsyncSession = Depends(get_db),
 ):
     """Danh sách slide của bài để GV đánh dấu trọng tâm (kèm isKey, số AOI)."""
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
 
     rows = (
@@ -488,7 +470,7 @@ async def set_slide_keys(
     db: AsyncSession = Depends(get_db),
 ):
     """Đặt danh sách trang trọng tâm (theo order_index), các trang khác bỏ đánh dấu."""
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
     key_set = set(body.order_indexes)
     slides = (
@@ -513,7 +495,7 @@ async def rebuild_lesson_aois(
     db: AsyncSession = Depends(get_db),
 ):
     """Trích lại AOI từ source.pdf đã lưu (dùng khi muốn sửa vùng đo độ bao phủ)."""
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
     try:
         updated = await aoi.rebuild_lesson_aois(db, lesson_id)
@@ -533,7 +515,7 @@ async def get_lesson_contents(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     enrollment = await _get_enrollment_for_lesson(db, lesson, user)
     module = await db.get(Module, lesson.module_id)
     course = await db.get(Course, module.course_id) if module else None
@@ -567,7 +549,7 @@ async def reindex_lesson(
     db: AsyncSession = Depends(get_db),
 ):
     """Embedding lại các slide còn thiếu/lỗi của một bài học (đồng bộ)."""
-    lesson = await _get_lesson_or_404(db, lesson_id)
+    lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
     stats = await embedding.reindex_lesson(lesson_id)
     return EmbeddingSyncOut(**stats)

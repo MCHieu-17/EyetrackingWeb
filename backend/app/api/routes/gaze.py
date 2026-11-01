@@ -5,13 +5,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import active_calibration_param, upsert_device
 from app.api.deps import get_current_user
 from app.core import rediscache
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.calibration import CalibrationParam, Device
 from app.models.course import Enrollment, Lesson, LessonContent, Module
 from app.models.gaze import GazeEvent, GazeSessionStat, GazeSlideStat, LearningSession
 from app.schemas.gaze import (
@@ -29,48 +29,6 @@ router = APIRouter(tags=["gaze"])
 DEFAULT_FINGERPRINT = "web-default"
 
 
-async def _upsert_device(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    fingerprint: str,
-    screen_width_px: int | None,
-    screen_height_px: int | None,
-) -> Device:
-    stmt = (
-        select(Device)
-        .where(Device.user_id == user_id, Device.device_fingerprint == fingerprint)
-        .with_for_update()
-    )
-    device = (await db.execute(stmt)).scalar_one_or_none()
-    if device is None:
-        device = Device(
-            user_id=user_id,
-            device_fingerprint=fingerprint,
-            screen_width_px=screen_width_px,
-            screen_height_px=screen_height_px,
-        )
-        db.add(device)
-        await db.flush()
-    else:
-        if screen_width_px:
-            device.screen_width_px = screen_width_px
-        if screen_height_px:
-            device.screen_height_px = screen_height_px
-    return device
-
-
-async def _active_param(
-    db: AsyncSession, user_id: str, device_id: str
-) -> CalibrationParam | None:
-    stmt = select(CalibrationParam).where(
-        CalibrationParam.user_id == user_id,
-        CalibrationParam.device_id == device_id,
-        CalibrationParam.is_active.is_(True),
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
 @router.post("/api/learning-sessions", response_model=LearningSessionOut, status_code=201)
 async def create_learning_session(
     body: LearningSessionCreateIn,
@@ -84,14 +42,14 @@ async def create_learning_session(
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
 
-    device = await _upsert_device(
+    device = await upsert_device(
         db,
         user_id=user.id,
         fingerprint=body.device_fingerprint,
         screen_width_px=body.screen_width_px,
         screen_height_px=body.screen_height_px,
     )
-    params = await _active_param(db, user.id, device.id)
+    params = await active_calibration_param(db, user.id, device.id)
 
     # Xác định chế độ học dựa trên các phiên trước.
     # - Chưa từng học bài này → "first" (tracking gaze).
@@ -313,7 +271,7 @@ async def post_gaze_samples(
                 raise HTTPException(
                     status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học"
                 )
-            device = await _upsert_device(
+            device = await upsert_device(
                 db,
                 user_id=user.id,
                 fingerprint=DEFAULT_FINGERPRINT,

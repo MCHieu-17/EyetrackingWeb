@@ -37,12 +37,10 @@ class ModuleItemsReorderIn(CamelModel):
 
 class LessonCreateIn(CamelModel):
     title: str = Field(min_length=1, max_length=255)
-    content_url: str | None = None
 
 
 class LessonUpdateIn(CamelModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
-    content_url: str | None = None
 
 
 class CourseGazeDotIn(CamelModel):
@@ -215,6 +213,4 @@ class StudentRowOut(CamelModel):
     lessons: list[StudentLessonOut]
 
 
-class LearningStatsOut(CamelModel):
-    streak_days: int
-    week_study_minutes: int
+
