@@ -11,11 +11,15 @@ ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build-time public vars (được inlay vào client bundle + dùng cho rewrites).
-# Production: trỏ về tên service nội bộ trong mạng docker.
-ARG NEXT_PUBLIC_API_URL=http://backend:8001
-ARG NEXT_PUBLIC_GAZE_URL=http://gaze:8000
+# URL nội bộ cho rewrite phía server (không inlay vào client bundle).
+ARG API_INTERNAL_URL=http://backend:8001
+ARG GAZE_INTERNAL_URL=http://gaze:8000
+# Origin công khai cho browser. Để trống = same-origin qua rewrite.
+ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_GAZE_URL=
 ARG NEXT_PUBLIC_DEMO=0
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ENV GAZE_INTERNAL_URL=$GAZE_INTERNAL_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_GAZE_URL=$NEXT_PUBLIC_GAZE_URL
 ENV NEXT_PUBLIC_DEMO=$NEXT_PUBLIC_DEMO

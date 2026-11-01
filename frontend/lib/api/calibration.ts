@@ -354,37 +354,25 @@ export async function updateAdminCalibrationSettings(patch: {
 }
 
 function getGazeWsOrigin(): string {
-  let raw = (
-    process.env.NEXT_PUBLIC_GAZE_URL?.trim() ||
-    (process.env as Record<string, string | undefined>).NEXT_PUBLIC_EYE_TRACKING_WS_URL?.trim() ||
-    "http://localhost:8000"
-  ).replace(/\/+$/, "");
+  const raw = (process.env.NEXT_PUBLIC_GAZE_URL?.trim() || "").replace(/\/+$/, "");
 
-  raw = raw.replace(/:8443(?=\/|$)/, "");
-
-  let origin: string;
-  if (/^wss?:\/\//i.test(raw)) {
-    origin = raw.replace(/:8443(?=\/|$)/, "");
-  } else if (/^https:\/\//i.test(raw)) {
-    origin = raw.replace(/^https:/i, "wss:").replace(/:8443(?=\/|$)/, "");
-  } else if (/^http:\/\//i.test(raw)) {
-    origin = raw.replace(/^http:/i, "ws:").replace(/:8443(?=\/|$)/, "");
-  } else {
-    const isHttps =
-      typeof window !== "undefined"
-        ? window.location.protocol === "https:"
-        : raw.includes("eyelearning.id.vn") || raw.includes("api.nmhieu.online");
-    origin = `${isHttps ? "wss" : "ws"}://${raw.replace(/^\/+/, "").replace(/:8443(?=\/|$)/, "")}`;
+  // Same-origin: để trống hoặc "/gaze" -> nối qua rewrite của Next.js.
+  if (!raw || raw === "/gaze") {
+    if (typeof window === "undefined") return "";
+    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${scheme}://${window.location.host}/gaze`;
   }
 
-  if (
-    typeof window !== "undefined" &&
-    window.location.protocol === "https:" &&
-    origin.startsWith("ws://")
-  ) {
-    origin = origin.replace(/^ws:/, "wss:");
+  // URL tuyệt đối: đổi http(s) -> ws(s).
+  if (/^wss?:\/\//i.test(raw)) return raw;
+  if (/^https?:\/\//i.test(raw)) {
+    return raw.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
   }
-  return origin.replace(/:8443(?=\/|$)/, "");
+
+  // Giá trị tương đối khác (vd "gaze.example.com") -> coi là host.
+  if (typeof window === "undefined") return "";
+  const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${raw.replace(/^\/+/, "")}`;
 }
 
 export function gazeStreamUrl(sessionId: string): string {

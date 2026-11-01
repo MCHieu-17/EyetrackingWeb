@@ -1,12 +1,13 @@
 function normalizeApiUrl(url: string): string {
-  if (url.startsWith("/")) return url;
-  if (url.startsWith("http")) return url;
-  return `https://${url}`;
+  const trimmed = url.trim();
+  // Rỗng = same-origin (gọi qua rewrite của Next.js).
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("http")) return trimmed;
+  return `https://${trimmed}`;
 }
 
-export const API_BASE_URL = normalizeApiUrl(
-  process.env.NEXT_PUBLIC_API_URL?.trim() || "https://server.nmhieu.online",
-);
+export const API_BASE_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL ?? "");
 
 export function resolveMediaUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;

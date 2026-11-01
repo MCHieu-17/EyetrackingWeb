@@ -5,3 +5,19 @@ node_modules
 npm-debug.log*
 Dockerfile
 .dockerignore
+
+# Test & tooling — không cần trong image production.
+tests
+e2e
+playwright.config.ts
+playwright.demo.config.ts
+vitest.config.ts
+coverage
+test-results
+playwright-report
+tsconfig.tsbuildinfo
+
+# Tài liệu / hướng dẫn agent.
+README.md
+AGENTS.md
+CLAUDE.md
