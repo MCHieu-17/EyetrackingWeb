@@ -4,6 +4,7 @@ Chạy: entrypoint.sh gọi `python -m scripts.download_weights`; khi dev có th
 chạy trực tiếp `python scripts/download_weights.py`.
 """
 
+import hashlib
 import os
 import re
 import sys
@@ -34,6 +35,8 @@ FILES = [
             ("url", "https://huggingface.co/UniGaze/UniGaze-models/resolve/main/unigaze_b16_joint.safetensors"),
         ],
         "min_size": 340_000_000,
+        # Pin SHA256 để build/khởi động reproducible (file HF cố định theo revision).
+        "sha256": "2580d707b1395840ecabe7906e2cb35705f38c4ddb0be9c3c38ebb2d5546ffb8",
     },
 ]
 
@@ -78,11 +81,22 @@ def download_drive(file_id, dest):
         stream_to_file(resp, dest)
 
 
-def ensure(name, sources, min_size):
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def ensure(name, sources, min_size, sha256=None):
     dest = os.path.join(WEIGHTS_DIR, name)
     if os.path.isfile(dest) and os.path.getsize(dest) >= min_size:
-        print(f"[weights] {name}: co san ({os.path.getsize(dest):,} bytes)")
-        return True
+        if sha256 is None or sha256_of(dest) == sha256:
+            print(f"[weights] {name}: co san ({os.path.getsize(dest):,} bytes)")
+            return True
+        print(f"[weights] {name}: checksum khong khop, tai lai")
+        os.remove(dest)
     for kind, value in sources:
         try:
             if kind == "drive":
@@ -92,10 +106,13 @@ def ensure(name, sources, min_size):
                 print(f"[weights] {name}: dang tai tu {value} ...")
                 download_url(value, dest)
             size = os.path.getsize(dest)
-            if size >= min_size:
+            if size >= min_size and (sha256 is None or sha256_of(dest) == sha256):
                 print(f"[weights] {name}: xong ({size:,} bytes)")
                 return True
-            print(f"[weights] {name}: file qua nho ({size:,} bytes), thu nguon khac")
+            if size < min_size:
+                print(f"[weights] {name}: file qua nho ({size:,} bytes), thu nguon khac")
+            else:
+                print(f"[weights] {name}: checksum khong khop, thu nguon khac")
         except Exception as e:
             print(f"[weights] {name}: loi tai ({kind}): {e}")
         finally:

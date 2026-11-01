@@ -69,6 +69,14 @@ def test_create_requires_points(client):
     assert client.post("/session", json={"points": []}).status_code == 422
 
 
+def test_create_rejects_duplicate_point_ids(client):
+    points = [
+        {"id": "a", "x": 0.1, "y": 0.1},
+        {"id": "a", "x": 0.9, "y": 0.9},
+    ]
+    assert client.post("/session", json={"points": points}).status_code == 422
+
+
 def test_create_and_status_and_delete(client):
     sid = _create(client)
 
