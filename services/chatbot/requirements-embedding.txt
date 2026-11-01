@@ -7,3 +7,5 @@
 # Host cần NVIDIA driver + nvidia-container-toolkit (docker-compose đặt `gpus: all`).
 sentence-transformers==6.1.0
 langchain-huggingface==1.2.3
+# Import trực tiếp trong scripts/download_embedding.py (snapshot_download).
+huggingface-hub==1.33.0

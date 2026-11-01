@@ -106,10 +106,8 @@ async def chat(request: Request, payload: ChatRequest):
     inputs = {
         "messages": [HumanMessage(content=payload.message)],
         "course_id": payload.course_id,
-        # `lesson_id` được dùng để ưu tiên truy hồi slide của đúng bài học;
-        # `resource_id` là bài tập đang mở (nếu có).
+        # `lesson_id` được dùng để ưu tiên truy hồi slide của đúng bài học.
         "lesson_id": payload.lesson_id,
-        "resource_id": payload.assignment_id,
         "assignment_title": payload.assignment_title,
         "lesson_title": payload.lesson_title,
         "module_title": payload.module_title,

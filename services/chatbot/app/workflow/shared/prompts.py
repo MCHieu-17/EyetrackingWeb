@@ -6,8 +6,6 @@ Choose one intent based on the student's main goal:
 - qa: Find or explain knowledge and concepts.
 - hints: Get exercise guidance or feedback on an attempted solution.
   Requests for complete exercise solutions also belong here.
-- summary: Summarize or organize learning content.
-- planning: Create or revise a study plan.
 - fallback: Requests outside these categories.
 
 Distinguish conceptual explanations (qa) from solving a specific exercise (hints).

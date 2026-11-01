@@ -20,7 +20,8 @@ langgraph-checkpoint-postgres==3.2.0
 # LangChain + provider model (River AI OpenAI-compatible cho LLM + VLM)
 langchain-core==1.6.12
 langchain-openai==1.7.2
-langsmith==0.14.11
+# Import trực tiếp trong app/services/ingest.py (client OpenAI-compatible).
+openai==3.35.1
 
 # Tiện ích
 httpx==0.28.1

@@ -4,8 +4,7 @@
 
 - `router` phân loại intent từ câu hỏi mới nhất (kèm lịch sử hội thoại).
 - Mỗi intent là một subgraph đã đóng gói (truy hồi + trả lời + kiểm duyệt).
-- Hiện chỉ hiện thực qa/hints/fallback; summary/planning sẽ thêm sau bằng cách
-  gắn thêm subgraph và một nhánh trong `route_by_intent`.
+- Ba intent được hỗ trợ: qa / hints / fallback.
 """
 
 from langgraph.graph import END, START, StateGraph
@@ -16,10 +15,7 @@ from .subgraph import fallback_subgraph, hints_subgraph, qa_subgraph
 
 
 def route_by_intent(state: GraphState) -> str:
-    """Ánh xạ intent sang tên node tương ứng.
-
-    summary/planning chưa hiện thực nên tạm đưa về fallback.
-    """
+    """Ánh xạ intent sang tên node tương ứng."""
     intent = state.get("intent")
     if intent in ("qa", "hints"):
         return intent

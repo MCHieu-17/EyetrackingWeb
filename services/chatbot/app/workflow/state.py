@@ -5,13 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class RouterOutput(BaseModel):
-    intent: Literal[
-        "qa",
-        "hints",
-        "summary",
-        "planning",
-        "fallback"
-    ] = Field(
+    intent: Literal["qa", "hints", "fallback"] = Field(
         description="Intent phù hợp nhất với yêu cầu của sinh viên."
     )
 
@@ -47,7 +41,6 @@ class GraphState(MessagesState):
     # 1. LMS Context
     course_id: str
     lesson_id: str | None
-    resource_id: str | None
     assignment_title: str
     lesson_title: str
     module_title: str
