@@ -20,6 +20,11 @@ docker-compose.override.yml
 services/gaze/weights/
 services/gaze/my_database.db
 
+# Media upload local + weights chatbot tải runtime
+backend/media/
+services/chatbot/weights/
+services/chatbot/app/workflow/weights/
+
 # Next.js
 frontend/.next
 

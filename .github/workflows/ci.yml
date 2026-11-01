@@ -65,7 +65,7 @@ jobs:
             || { echo "::error::Lần chạy thứ hai vẫn áp dụng migration — kiểm tra schema_migrations/idempotent"; exit 1; }
       - name: Install backend deps
         run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Run tests
+      - name: Run tests (coverage)
         working-directory: backend
         env:
           TESTING: "1"
@@ -73,7 +73,7 @@ jobs:
           JWT_SECRET: ci-test-secret
           CORS_ORIGINS: http://localhost:3000
           AI_HTTP_URL: http://localhost:8000
-        run: python -m pytest tests -v
+        run: python -m pytest tests -v --cov=app --cov-report=term-missing
 
   # Bắt lỗi migration TRƯỚC khi deploy, gồm 2 nhóm:
   #   a) File migration đã ship mà bị sửa nội dung (so với db/migrations.checksums.txt)
@@ -221,12 +221,32 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
-      - name: Unit tests
+      - name: Unit tests (coverage)
         working-directory: frontend
-        run: npm test
+        run: npm run test:coverage
       - name: Build
         working-directory: frontend
         run: npm run build
+
+  e2e-demo:
+    name: E2E demo (no backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run demo e2e
+        working-directory: frontend
+        run: npm run test:e2e:demo
 
   chatbot:
     name: Chatbot tests + image
@@ -265,10 +285,7 @@ jobs:
           cache: pip
           cache-dependency-path: services/gaze/requirements-dev.txt
       - name: Install light test deps
-        run: |
-          pip install \
-            "fastapi==0.115.12" "python-multipart==0.0.20" "py-ubjson==0.16.1" \
-            "numpy==1.26.4" "httpx==0.28.1" "pytest==8.3.4"
+        run: pip install -r services/gaze/requirements-test.txt
       - name: Unit tests
         working-directory: services/gaze
         run: python -m pytest tests -q
@@ -285,3 +302,44 @@ jobs:
         run: pip install "ruff==0.17.1"
       - name: Ruff check
         run: ruff check backend services/gaze services/chatbot
+      - name: Check .env.example
+        run: python scripts/check_env_example.py
+
+  docker-build:
+    name: Docker build (backend/frontend/nginx/migrations)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend
+        run: docker build -t eyelearning-backend:ci ./backend
+      - name: Build frontend
+        run: docker build -t eyelearning-frontend:ci ./frontend
+      - name: Build nginx
+        run: docker build -t eyelearning-nginx:ci ./nginx
+      - name: Build migrations
+        run: docker build -f Dockerfile.migrations -t eyelearning-migrations:ci .
+
+  dead-code:
+    name: Dead code (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Vulture (Python)
+        run: |
+          pip install "vulture==2.14"
+          vulture backend/app services/gaze/app services/chatbot/app --min-confidence 80 || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Knip (frontend)
+        working-directory: frontend
+        run: |
+          npm ci
+          npx --yes knip@5 || true

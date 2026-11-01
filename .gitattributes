@@ -1,0 +1,14 @@
+# Script shell luôn dùng LF để chạy được trong container Linux.
+*.sh text eol=lf
+
+# SQL/migration giữ nguyên nội dung (checksum CI phụ thuộc byte).
+*.sql text eol=lf
+
+# Ảnh/binary không xử lý text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.safetensors binary
+*.tflite binary
+*.ubj binary
