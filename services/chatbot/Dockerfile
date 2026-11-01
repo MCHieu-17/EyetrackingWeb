@@ -23,7 +23,9 @@ RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /app/weights \
     && chown appuser:appuser /app/weights
 
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser scripts ./scripts
+COPY --chown=appuser:appuser entrypoint.sh ./
 
 RUN chmod +x entrypoint.sh
 
@@ -31,7 +33,8 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+# Thống nhất với docker-compose: /ready kiểm tra DB (503 khi chưa sẵn sàng).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8000/ready || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]

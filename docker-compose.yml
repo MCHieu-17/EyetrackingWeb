@@ -33,6 +33,9 @@ services:
   # hãy thêm file mới (xem db/README.md mục "Quy tắc migration").
   # Có `build` để `docker compose up --build` luôn dùng migrations local,
   # còn khi deploy qua GHCR thì image đã được CI build/push sẵn.
+  # `pull_policy: always` giữ cho deploy production (luôn lấy image CI mới);
+  # khi cần build local, dùng `docker compose build migrate` rồi `up` với
+  # `--pull never` hoặc `docker compose run --rm migrate`.
   migrate:
     build:
       context: .
@@ -96,6 +99,10 @@ services:
           sleep 86400
         done
 
+  # Image backend/frontend/nginx do CI build & push lên GHCR (xem
+  # .github/workflows/build.yml). Không khai báo `build:` ở đây để deploy
+  # production luôn pull image đã kiểm thử; muốn build local thì dùng
+  # `docker build -f backend/Dockerfile -t ghcr.io/.../eyelearning-backend:latest backend`.
   backend:
     image: ghcr.io/manh1504/eyelearning-backend:${IMAGE_TAG:-latest}
     container_name: eyetracking-backend
@@ -119,10 +126,6 @@ services:
       # Frontend production phục vụ cả apex và www; proxy giữ nguyên Origin.
       # Giá trị thật (gồm domain production) khai báo trong .env.
       CORS_ORIGINS: ${CORS_ORIGINS}
-      CLOUDINARY_URL: ${CLOUDINARY_URL:-}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
@@ -269,7 +272,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment:
-      - DEVICE=cuda
+      - DEVICE=${DEVICE:-cuda}
       # Làm mượt One-Euro cho POG (xem services/gaze/app/services/smoothing.py).
       # `beta` cao hơn -> bám nhanh khi lia mắt, bớt trễ.
       - ONEEURO_BETA=${ONEEURO_BETA:-0.5}

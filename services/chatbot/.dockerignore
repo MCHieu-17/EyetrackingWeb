@@ -1,12 +1,18 @@
 .env
 .env.*
+.git
 **/.venv/
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
 tests/
+README.md
+*.md
+requirements-dev.txt
 # Weights embedding local: tải lúc runtime vào volume (entrypoint) — không nhúng
-# vào image qua `COPY . .`.
+# vào image qua COPY.
 weights/
 *.safetensors
 *.bin

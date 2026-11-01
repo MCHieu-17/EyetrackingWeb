@@ -30,12 +30,20 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip check \
     && python -c "import cv2, mediapipe, ubjson, unigaze.loader as l; l.build_unigaze_model('unigaze_b16_joint')"
 
-COPY app ./app
-COPY scripts ./scripts
-COPY entrypoint.sh ./
+# Chạy bằng user không phải root. Tạo sẵn /app/weights thuộc appuser để volume
+# `gaze-weights` (mount đè lên đây) ghi được weights lúc runtime.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/weights \
+    && chown appuser:appuser /app/weights
+
+COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser scripts ./scripts
+COPY --chown=appuser:appuser entrypoint.sh ./
 RUN chmod +x entrypoint.sh \
     && python -c "from app.main import app; paths={r.path for r in app.routes}; assert {'/health','/ready','/session','/session/{sid}'} <= paths, paths" \
     && python -c "from app.services.pipeline import UNIGAZE_WEIGHTS; import unigaze.loader as l; assert UNIGAZE_WEIGHTS.stem in l.MODEL_INDEX, (UNIGAZE_WEIGHTS.name, sorted(l.MODEL_INDEX))"
+
+USER appuser
 
 EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh"]

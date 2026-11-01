@@ -16,5 +16,7 @@ ENV PGHOST=postgres \
 
 COPY db/migrations /migrations
 COPY db/migrate.sh /migrate.sh
+# Cần cho MIGRATE_UPDATE_CHECKSUMS=1 (ghi lại checksums trong container).
+COPY db/migrations.checksums.txt /migrations.checksums.txt
 
 CMD ["bash", "/migrate.sh", "/migrations"]
