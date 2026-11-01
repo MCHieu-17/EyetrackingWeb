@@ -48,7 +48,6 @@ async def _embed_slides(slide_ids: list[str]) -> None:
     await embedding.sync_slides(slide_ids)
 
 
-
 def _validate_uuid(value: str) -> None:
     try:
         uuid.UUID(value)

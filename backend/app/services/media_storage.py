@@ -125,25 +125,6 @@ def cleanup_version(lesson_id: str, version: str) -> None:
     delete_prefix(f"lessons/{lesson_id}/{version}/")
 
 
-def prune_lesson_versions(lesson_id: str, keep_version: str) -> None:
-    prefix = f"lessons/{lesson_id}/"
-    keep_prefix = f"{prefix}{keep_version}/"
-    if settings.r2_enabled:
-        stale = [item["Key"] for item in _r2_keys(prefix) if not item["Key"].startswith(keep_prefix)]
-        _delete_r2_keys(stale)
-
-    lesson_dir = _safe_local_path(prefix)
-    if lesson_dir.is_dir():
-        from shutil import rmtree
-
-        try:
-            for child in lesson_dir.iterdir():
-                if child.is_dir() and child.name != keep_version:
-                    rmtree(child)
-        except OSError as exc:
-            raise StorageError("Không thể dọn version cũ khỏi volume") from exc
-
-
 def _get_r2_bytes(key: str) -> bytes | None:
     try:
         response = _r2_client().get_object(Bucket=settings.r2_bucket_name, Key=key)

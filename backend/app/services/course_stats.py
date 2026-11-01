@@ -2,15 +2,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.analytics import EngagementScore
-from app.models.course import Course, Enrollment, Lesson, Module
+from app.models.course import Enrollment, Lesson, Module
 from app.models.gaze import LearningSession
-
-
-async def course_ids_of_teacher(db: AsyncSession, teacher_id: str) -> list[str]:
-    stmt = select(Course.id).where(
-        Course.teacher_id == teacher_id, Course.deleted_at.is_(None)
-    )
-    return list((await db.execute(stmt)).scalars().all())
 
 
 async def enrollment_counts(db: AsyncSession, course_ids: list[str]) -> dict[str, int]:
@@ -20,18 +13,6 @@ async def enrollment_counts(db: AsyncSession, course_ids: list[str]) -> dict[str
         select(Enrollment.course_id, func.count(Enrollment.id))
         .where(Enrollment.course_id.in_(course_ids), Enrollment.status != "dropped")
         .group_by(Enrollment.course_id)
-    )
-    return {row[0]: row[1] for row in await db.execute(stmt)}
-
-
-async def lesson_counts(db: AsyncSession, course_ids: list[str]) -> dict[str, int]:
-    if not course_ids:
-        return {}
-    stmt = (
-        select(Module.course_id, func.count(Lesson.id))
-        .join(Lesson, Lesson.module_id == Module.id)
-        .where(Module.course_id.in_(course_ids))
-        .group_by(Module.course_id)
     )
     return {row[0]: row[1] for row in await db.execute(stmt)}
 

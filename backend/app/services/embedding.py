@@ -30,9 +30,6 @@ logger = logging.getLogger(__name__)
 PENDING = "pending"
 READY = "ready"
 FAILED = "failed"
-NONE = "none"
-
-PENDING_STATUSES = (NONE, PENDING, FAILED)
 
 # Số lần thử và thời gian chờ (giây) giữa các lần khi gọi chatbot. Lỗi 5xx /
 # lỗi kết nối (vd chatbot đang cold-start tải model) là tạm thời nên retry;
@@ -59,8 +56,6 @@ def job_status() -> dict:
 
 
 async def _mark(session, slide_id: str, status: str, error: str | None = None) -> None:
-    from datetime import datetime, timezone
-
     slide = await session.get(LessonContent, slide_id)
     if slide is None:
         return
@@ -145,15 +140,6 @@ async def reindex_lesson(lesson_id: str) -> dict[str, int]:
 
 async def reindex_course(course_id: str) -> dict[str, int]:
     return await sync_slides(await _pending_slide_ids(None, course_id))
-
-
-async def reindex_all() -> dict[str, int]:
-    """Backfill toàn bộ slide còn thiếu/lỗi trên mọi khóa học (đồng bộ).
-
-    Dùng cho pipeline deploy (không cần JWT user). Chạy tuần tự theo từng slide
-    để tránh làm quá tải VLM. Trả về thống kê ready/failed.
-    """
-    return await sync_slides(await all_pending_slide_ids())
 
 
 async def all_pending_slide_ids() -> list[str]:

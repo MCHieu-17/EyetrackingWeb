@@ -86,8 +86,7 @@ def test_r2_version_lifecycle(monkeypatch, tmp_path):
     assert media_storage.load_source_pdf(lesson_id, "bbbbbbbbbbbb") == b"new"
     assert media_storage.load_source_pdf(lesson_id, "cccccccccccc") is None
 
-    media_storage.prune_lesson_versions(lesson_id, "bbbbbbbbbbbb")
-    assert old_source not in fake.objects
+    assert old_source in fake.objects
     assert new_source in fake.objects
     assert new_slide in fake.objects
 
