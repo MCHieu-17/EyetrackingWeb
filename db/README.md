@@ -8,6 +8,10 @@ Nguồn schema duy nhất là các file trong [`migrations/`](migrations/) — b
 
 - **PostgreSQL 13+** (dùng `gen_random_uuid()` và native partitioning)
 - Kiểm tra: `psql --version`
+- **Linux/GNU coreutils** nếu chạy `db/migrate.sh` trực tiếp trên host: script dùng
+  `find -printf`, `sort -V`, `date +%s%3N`, `sha256sum` (không có fallback cho
+  macOS/BSD). Trên macOS/Windows hãy chạy migration qua Docker
+  (`docker compose run --rm migrate`) hoặc WSL.
 
 ## Cấu trúc
 
@@ -33,7 +37,8 @@ db/
     ├── 018_calibration_keep_latest.sql # chỉ giữ 1 bản ghi calibration / (user, device)
     ├── 019_quiz_allow_retry.sql  # cờ quiz_assignments.allow_retry (GV cho học viên làm lại)
     ├── 020_chat_sessions.sql     # chat_sessions/chat_messages: phiên + lịch sử trợ lý học tập
-    └── 021_course_show_gaze_dot.sql # cờ cấp KHÓA (courses.show_gaze_dot, thay 017) + gaze cho bài tập
+    ├── 021_course_show_gaze_dot.sql # cờ cấp KHÓA (courses.show_gaze_dot, thay 017) + gaze cho bài tập
+    └── 022_drop_dead_schema.sql  # bỏ bảng/cột không còn code dùng (oauth, permissions, email/phone/extra…)
 ```
 
 > **Cờ điểm nhìn thuộc KHÓA HỌC**: `courses.show_gaze_dot` quyết định sinh viên có
@@ -68,7 +73,7 @@ DB cũ (chưa có bảng tracking) chạy được trọn bộ một lần rồi
 ## Quy tắc migration
 
 1. **Không sửa file migration đã ship.** Muốn đổi schema → thêm file mới
-   (`021_ten_moi.sql`). Runner từ chối chạy nếu file đã áp bị đổi nội dung, và CI
+   (`022_ten_moi.sql`). Runner từ chối chạy nếu file đã áp bị đổi nội dung, và CI
    cũng chặn qua `db/migrations.checksums.txt`. Nếu thật sự cố ý sửa thì phải chạy
    lại `MIGRATE_UPDATE_CHECKSUMS=1 bash db/migrate.sh` (thay đổi sẽ lộ rõ trong review).
 2. **Mọi file phải idempotent** — chạy lại nhiều lần không lỗi, không nhân đôi dữ liệu.

@@ -20,6 +20,7 @@ backend/app/
 ├── services/            # course_stats (aggregate), analytics (heatmap/fixation/hotspot)
 └── api/
     ├── deps.py          # get_current_user, require_roles (RBAC)
+    ├── access.py        # helper dùng chung: course/module/lesson + calibration
     └── routes/          # auth, users, courses, modules, lessons, enrollments,
                          # gaze, calibration, analytics, proxy (AI service)
 ```
@@ -29,7 +30,7 @@ backend/app/
 ### Cách 1: Docker Compose (khuyến nghị)
 
 ```bash
-docker compose up -d            # postgres (5435) + backend (8001)
+docker compose up -d            # cả stack (postgres, migrate, backend, frontend, nginx, ...)
 ```
 
 ### Cách 2: Chạy trực tiếp (dev)
@@ -37,9 +38,9 @@ docker compose up -d            # postgres (5435) + backend (8001)
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt   # Windows
-# Se dùng MỘT file env duy nhất ở gốc repo: copy .env.example .env (gốc repo)
-.venv\Scripts\python -m uvicorn app.main:app --port 8001 --reload
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+# Dùng MỘT file env duy nhất ở gốc repo: copy .env.example .env (gốc repo)
+.venv/bin/python -m uvicorn app.main:app --port 8001 --reload
 ```
 
 Yêu cầu PostgreSQL đang chạy (`docker compose up -d postgres` từ gốc repo).
@@ -59,7 +60,7 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Không | Hạn JWT access (mặc định 60) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Không | Hạn refresh token (mặc định 30) |
 | `CORS_ORIGINS` | Có | Phân tách bằng dấu phẩy |
-| `AI_HTTP_URL` | Có | ML service (`gaze-api`) HTTP — dùng cho `/ai/health` |
+| `AI_HTTP_URL` | Có | Gaze service (`http://gaze:8000` trong Docker) — dùng cho `/ai/health` |
 | `GAZE_DOWNSAMPLE_HZ` | Không | Downsample gaze trước khi ghi DB (mặc định 4.0) |
 | `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
@@ -104,9 +105,9 @@ Bài tập là một `lessons.kind='quiz'`; mọi item trong chương dùng chun
 Backend là nguồn sự thật cho lịch sử hiển thị (`chat_sessions`/`chat_messages`, migration 020); chatbot LangGraph giữ bộ nhớ hội thoại theo `thread_id` = id phiên.
 
 ### Học tập (sinh viên — `/api`)
-- `GET /api/me/enrollments`, `GET /api/me/stats` (streak + phút học tuần)
+- `GET /api/me/enrollments`
 - `POST /api/courses/{id}/enroll`
-- `GET /api/courses/{id}?include=modules.lessons` — outline
+- `GET /api/courses/{id}` — outline
 - `GET /api/lessons/{id}/contents` — slides
 - `POST /api/learning-sessions` / `PATCH /api/learning-sessions/{id}` — phiên học của cả bài giảng và bài tập
 - `POST /api/lessons/{id}/gaze-samples` — batch `{lessonContentId, x, y, ts}`; clamp [0,1], downsample, cập nhật `gaze_slide_stats` (bài giảng) hoặc `gaze_session_stats` (bài tập: `lessonContentId = null`, toạ độ theo viewport, `gaze_events.surface = 'quiz'`)
@@ -133,7 +134,7 @@ docker compose run --rm -e PGDATABASE=eyetracking_test migrate
 
 ```bash
 cd backend
-.venv\Scripts\python -m pytest tests -v
+.venv/bin/python -m pytest tests -v
 ```
 
 ## Thiết kế đáng chú ý

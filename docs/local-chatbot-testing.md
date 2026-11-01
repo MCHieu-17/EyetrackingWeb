@@ -13,7 +13,7 @@ CHATBOT_INGEST_TIMEOUT_SECONDS=600
 CHATBOT_INGEST_ATTEMPTS=3
 CHATBOT_INGEST_BACKOFF_SECONDS=5
 CHATBOT_INTERNAL_TOKEN=<chuoi-ngau-nhien-dai>
-CHATBOT_DATABASE_URL=postgresql://postgres:<password>@localhost:5435/eyetracking
+# Compose map biến này vào DATABASE_URL của container chatbot.
 CHATBOT_DATABASE_URL_DOCKER=postgresql://postgres:<password>@postgres:5432/eyetracking
 
 # Embedding local Qwen3-Embedding-0.6B (1024 chiều, chạy GPU). Deps + torch cu124
@@ -37,9 +37,11 @@ Chú ý về LLM/VLM: cả LLM (sinh câu trả lời) và VLM (mô tả slide l
 
 Chú ý khác: `RAG_SCORE_THRESHOLD` phải đủ thấp (mặc định `0.3`). Nếu đặt quá cao (ví dụ `0.7`), retrieval sẽ rỗng nên chatbot không có tài liệu và dễ trả lời sai, thiếu citation.
 
-Khi chạy chatbot trực tiếp ngoài Docker, dùng `CHATBOT_DATABASE_URL` và đặt `DATABASE_URL` cho tiến trình chatbot (chatbot đọc `DATABASE_URL`): `$env:DATABASE_URL = $env:CHATBOT_DATABASE_URL`.
+Khi chạy chatbot trực tiếp ngoài Docker, đặt `DATABASE_URL` trỏ tới Postgres trên host
+(chatbot đọc `DATABASE_URL`, không dùng `CHATBOT_DATABASE_URL`):
 
-```powershell
+```bash
+export DATABASE_URL="postgresql://postgres:<password>@localhost:5435/eyetracking"
 docker compose up -d postgres redis
 docker compose run --rm --build migrate
 ```
@@ -50,30 +52,30 @@ Migration `011_quiz_and_embeddings.sql` tạo bảng vector; `012_embedding_inde
 
 Chạy chatbot local:
 
-```powershell
-Set-Location services\chatbot
+```bash
+cd services/chatbot
 python -m venv .venv
 # Embedding local cần thêm stack torch/sentence-transformers (requirements-embedding.txt).
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-embedding.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8002
+.venv/bin/pip install -r requirements.txt -r requirements-embedding.txt
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
 Chạy backend và frontend ở hai terminal khác:
 
-```powershell
-Set-Location backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```bash
+cd backend
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-```powershell
-Set-Location frontend
-npm.cmd ci
-npm.cmd run dev
+```bash
+cd frontend
+npm ci
+npm run dev
 ```
 
 Nếu dùng toàn bộ Docker stack, đặt `CHATBOT_URL=http://chatbot:8000` cho backend và chạy:
 
-```powershell
+```bash
 docker compose up -d --build postgres migrate redis chatbot backend frontend
 ```
 
@@ -81,7 +83,7 @@ Lần đầu chatbot tải weights embedding (~vài trăm MB) vào volume `chatb
 
 Lưu ý image cũ: `docker-compose.yml` đặt `pull_policy: always` cho chatbot (đúng cho production). Ở local, `docker-compose.override.yml` đã hạ xuống `pull_policy: missing` để `--build` dùng bản build tại chỗ thay vì bị image GHCR cũ ghi đè. Nếu vẫn nghi ngờ, rebuild tường minh:
 
-```powershell
+```bash
 docker compose build --no-cache chatbot
 docker compose up -d --force-recreate chatbot ingest-bootstrap
 ```
@@ -90,18 +92,11 @@ docker compose up -d --force-recreate chatbot ingest-bootstrap
 
 Kiểm tra nhanh VLM River AI (OpenAI-compatible):
 
-```powershell
-$body = @{
-  model = $env:RIVER_VLM_MODEL
-  messages = @(@{ role = "user"; content = "Say hello in one short sentence." })
-  max_tokens = 64
-} | ConvertTo-Json -Depth 6
-
-Invoke-RestMethod -Method Post `
-  -Uri "$env:RIVER_BASE_URL/chat/completions" `
-  -Headers @{ Authorization = "Bearer $env:RIVER_API_KEY" } `
-  -ContentType "application/json" `
-  -Body $body
+```bash
+curl -fsS "$RIVER_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $RIVER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"model\":\"$RIVER_VLM_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"max_tokens\":64}"
 ```
 
 Embedding local (`EMBEDDING_NAME=local`) chạy trong tiến trình chatbot; kiểm tra gián tiếp qua ingest slide bên dưới — vector phải có đúng **1024 chiều** (khớp `EMBEDDING_DIM` và cột `vector(1024)`).
@@ -142,9 +137,11 @@ curl "$CHATBOT_API_URL/internal/embeddings/status" -H "X-Chatbot-Token: $CHATBOT
 Nếu chưa đặt biến, pipeline bỏ qua (không fail).
 
 Cách 2 — thủ công qua API (JWT giáo viên/admin):
-```powershell
-Invoke-RestMethod -Method Post -Uri "https://<domain>/api/teacher/courses/<courseId>/reindex" -Headers @{ Authorization = "Bearer <teacherAccessToken>" }
-Invoke-RestMethod -Method Post -Uri "https://<domain>/api/teacher/lessons/<lessonId>/reindex" -Headers @{ Authorization = "Bearer <teacherAccessToken>" }
+```bash
+curl -fsS -X POST "https://<domain>/api/teacher/courses/<courseId>/reindex" \
+  -H "Authorization: Bearer <teacherAccessToken>"
+curl -fsS -X POST "https://<domain>/api/teacher/lessons/<lessonId>/reindex" \
+  -H "Authorization: Bearer <teacherAccessToken>"
 ```
 
 Kiểm tra trạng thái và coverage:

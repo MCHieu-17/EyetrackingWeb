@@ -27,16 +27,18 @@ trung) cho giáo viên.
 | `backend/` | FastAPI — auth/JWT, khóa học, gaze ingestion, analytics (chi tiết: `backend/README.md`) |
 | `services/gaze/` | ML service — ước lượng gaze từ webcam, calibration, WebSocket `/session/{sid}/stream` (cần GPU; chi tiết: `services/gaze/README.md`) |
 | `services/chatbot/` | RAG service (LangGraph + pgvector) — chat hỗ trợ học tập, ingest slide, chữa bài |
-| `db/` | Migrations PostgreSQL (001 schema, 002 seed, 003 partition gaze, 004 analytics, ... 011 quiz & embeddings) |
+| `db/` | Migrations PostgreSQL (001 schema → 022 dọn schema chết; xem `db/README.md`) |
 
 ## Chạy nhanh (Docker)
 
 ```bash
-docker compose up -d              # postgres (:5435) + backend (:8001)
+docker compose up -d              # cả stack: postgres, migrate, backend, frontend, nginx, ...
 ```
 
-- Backend: `server.nmhieu.online` — Swagger tại `server.nmhieu.online/docs`
-- Postgres: `localhost:5435` (user/pass/db: `postgres/postgres/eyetracking`)
+- Backend: `api.eyelearning.id.vn` — Swagger tại `api.eyelearning.id.vn/docs`
+- Frontend: `app.eyelearning.id.vn`
+- Gaze: `gaze.eyelearning.id.vn`
+- Postgres: `localhost:5435` (user/pass/db lấy từ `.env`)
 
 Service ML (`services/gaze/`, cần GPU) chạy image `eyelearning-gaze`; image được
 CI build từ `services/gaze/Dockerfile`. Cả hai service AI (gaze + chatbot) build
@@ -66,16 +68,26 @@ npm install
 npm run dev                       # http://localhost:3000
 ```
 
-Frontend gọi backend qua `NEXT_PUBLIC_API_URL` (mặc định `server.nmhieu.online`,
-đã set trong `frontend/.env.local`).
+Frontend gọi backend qua rewrite same-origin của Next.js (`/api`, `/media`, `/gaze`).
+URL nội bộ cho rewrite đặt trong `frontend/.env.local`:
+
+```env
+API_INTERNAL_URL=http://localhost:8001
+GAZE_INTERNAL_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_GAZE_URL=http://localhost:8000
+```
+
+Để trống `NEXT_PUBLIC_*` = browser dùng same-origin; chỉ đặt domain public khi
+browser phải gọi thẳng backend/gaze.
 
 ### Backend chạy trực tiếp (không Docker)
 
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m uvicorn app.main:app --port 8001 --reload
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m uvicorn app.main:app --port 8001 --reload
 ```
 
 > **Một file env duy nhất**: mọi biến (DB, JWT, CORS, AI service, Postgres) đặt ở
@@ -135,7 +147,7 @@ docker compose down -v        # XÓA volume — mất dữ liệu, migrations ch
   Runner ghi lại file đã áp vào bảng `schema_migrations` và **chỉ chạy file chưa áp**
   (DB cũ chưa có bảng này thì lần đầu chạy như cũ rồi ghi dấu).
 - **Quy tắc: KHÔNG sửa file migration đã ship** — thay đổi mới thì thêm file mới
-  (`021_...`). CI đối chiếu `db/migrations.checksums.txt`; runner cũng từ chối chạy
+  (`022_...`). CI đối chiếu `db/migrations.checksums.txt`; runner cũng từ chối chạy
   nếu file đã áp bị đổi nội dung.
 - Job CI `migrations` canh **đường nâng cấp**: dựng DB từ bộ migration của bản đang
   chạy, áp bộ mới, rồi so `db/schema_fingerprint.sql` với DB dựng mới — phải giống hệt.
@@ -156,4 +168,4 @@ Tạo DB test một lần:
 docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
 ```
 
-(rồi chạy 4 file migration vào DB này — xem `backend/README.md`).
+(rồi chạy toàn bộ migration vào DB này — xem `backend/README.md`).

@@ -13,8 +13,14 @@ npm run dev
 Bien moi truong duoc doc tu `.env.local`:
 
 ```env
-NEXT_PUBLIC_API_URL=https://server.nmhieu.online
+# URL nội bộ cho rewrite phía server (dev trên host dùng localhost).
+API_INTERNAL_URL=http://localhost:8001
+GAZE_INTERNAL_URL=http://localhost:8000
+
+# Origin công khai cho browser. Để trống = same-origin qua rewrite.
+NEXT_PUBLIC_API_URL=
 NEXT_PUBLIC_GAZE_URL=http://localhost:8000
+
 NEXT_PUBLIC_DEMO=0
 ```
 
@@ -58,14 +64,19 @@ e2e/                    # Playwright tests
 | Route | Khu vuc |
 |---|---|
 | `/` | Landing page |
-| `/account/login` | Dang nhap |
+| `/account/login`, `/account/register`, `/account/change-password` | Xác thực |
 | `/student` | Trang chu hoc vien |
 | `/student/courses/[courseId]` | Learning reader (bài học slide hoặc bài tập trắc nghiệm) |
+| `/student/courses/[courseId]/calibrate`, `/prepare` | Hiệu chỉnh gaze / chuẩn bị thiết bị |
+| `/student/profile` | Hồ sơ học viên |
 | `/teacher` | Danh sach khoa hoc |
 | `/teacher/courses/[courseId]` | Course workspace |
-| `/admin` | Quan tri va phan cong |
+| `/teacher/courses/[courseId]/lessons/[lessonId]/heatmap` | Heatmap theo bài |
+| `/teacher/profile` | Hồ sơ giáo viên |
+| `/admin`, `/admin/profile`, `/admin/settings` | Quan tri, phan cong, cau hinh |
 | `/try` | Trai nghiem khach |
 | `/demo` | Danh sach man hinh demo |
+| `/design` | Thư viện component (dev) |
 
 Nhung URL cu `/student/my-courses`, `/teacher/courses` va `/admin/courses`
 duoc redirect sang route moi tuong ung.

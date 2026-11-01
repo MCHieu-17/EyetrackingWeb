@@ -25,8 +25,10 @@ ngay**, không phải build image rồi deploy.
 
 - Backend host đọc `.env` ở gốc repo (`backend/app/core/config.py` → `ROOT_ENV_FILE`),
   trong đó `DATABASE_URL=...@localhost:5435/...` đúng cho host.
-- Frontend đọc `frontend/.env.local`, đang trỏ `NEXT_PUBLIC_API_URL=http://localhost:8001`;
-  `next.config.ts` rewrite `/api/*` và `/media/*` → backend, `/gaze/*` → gaze.
+- Frontend đọc `frontend/.env.local`: `API_INTERNAL_URL=http://localhost:8001`,
+  `GAZE_INTERNAL_URL=http://localhost:8000`; `next.config.ts` rewrite `/api/*` và
+  `/media/*` → backend, `/gaze/*` → gaze. `NEXT_PUBLIC_*` để trống (same-origin),
+  riêng `NEXT_PUBLIC_GAZE_URL=http://localhost:8000` để WS nối thẳng gaze khi dev.
 
 ## Chuẩn bị (chỉ 1 lần)
 
@@ -54,8 +56,7 @@ docker compose up -d postgres redis
 ```
 
 Áp migration **chỉ khi** DB mới hoặc bạn vừa thêm file trong `db/migrations/`
-(ví dụ `021_course_show_gaze_dot.sql` — cờ điểm nhìn chuyển lên cấp khóa + ghi gaze
-cho bài tập):
+(ví dụ `022_drop_dead_schema.sql` — bỏ bảng/cột không còn code dùng):
 
 ```bash
 # Phải build lại vì image migrate đóng gói db/migrations vào trong (không bind mount)
@@ -83,7 +84,6 @@ cd backend
 .venv/bin/python -m uvicorn app.main:app --reload --port 8001
 ```
 
-- Windows: `.venv\Scripts\python -m uvicorn app.main:app --reload --port 8001`
 - Sửa bất kỳ file trong `backend/app/**` → tự nạp lại (xem log `Reloading...`).
 - Kiểm tra: <http://localhost:8001/health> → `{"status":"ok",...}`, Swagger: <http://localhost:8001/docs>.
 
@@ -137,7 +137,7 @@ Mở <http://localhost:3000>. Sửa file trong `frontend/app`, `components`, `li
   `COOKIE_SECURE=false` trong `.env` rồi restart uvicorn.
   ⚠️ `.env` dùng chung với docker — đừng commit giá trị dev này.
 - **Frontend gọi `/api/...` bị 404/`ECONNREFUSED`** → backend 8001 chưa chạy, hoặc
-  `frontend/.env.local` trỏ sai `NEXT_PUBLIC_API_URL` (phải là `http://localhost:8001`).
+  `frontend/.env.local` trỏ sai `API_INTERNAL_URL` (phải là `http://localhost:8001`).
 - **Migration lỗi** → `docker logs eyetracking-migrate`; quy tắc: **không sửa file
   migration đã ship**, hãy thêm file mới (xem `db/README.md`).
 
