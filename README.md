@@ -50,7 +50,9 @@ Yêu cầu: Docker + Docker Compose v2. Nếu dùng GPU: NVIDIA driver +
 ```bash
 # 1) Tạo file env local
 cp .env.example .env
-#    Sửa JWT_SECRET, CHATBOT_INTERNAL_TOKEN, RIVER_API_KEY... nếu cần.
+#    Chỉ cần điền khối "Bắt buộc": JWT_SECRET, CHATBOT_INTERNAL_TOKEN,
+#    RIVER_API_KEY... Khối R2 để trống nếu dùng volume local; các biến
+#    tuning còn lại đã có default và đang được comment sẵn.
 
 # 2) Lần đầu: build image nền torch/CUDA dùng chung cho gaze + chatbot
 ./ops/build_ai_base.sh

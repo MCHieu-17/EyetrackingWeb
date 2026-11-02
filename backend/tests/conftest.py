@@ -10,6 +10,10 @@ os.environ.setdefault(
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-pytest-please-change")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("AI_HTTP_URL", "http://127.0.0.1:8000")
+# Chatbot là service tùy chọn trong compose; test cần URL/token giả để
+# `chatbot_ready` bật, tránh 503 dù không gọi chatbot thật.
+os.environ.setdefault("CHATBOT_URL", "http://localhost:8002")
+os.environ.setdefault("CHATBOT_INTERNAL_TOKEN", "test-chatbot-token")
 os.environ["MEDIA_DIR"] = os.path.join(tempfile.gettempdir(), "eyelearning-test-media")
 for key in (
     "R2_ACCOUNT_ID",

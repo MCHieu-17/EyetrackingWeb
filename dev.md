@@ -10,7 +10,9 @@ Hướng dẫn chi tiết để chạy và sửa code với stack Docker local. 
 
 ```bash
 cp .env.example .env
-# Sửa các secret trong .env: JWT_SECRET, CHATBOT_INTERNAL_TOKEN, RIVER_API_KEY...
+# Chỉ cần điền khối "Bắt buộc": JWT_SECRET, CHATBOT_INTERNAL_TOKEN,
+# RIVER_API_KEY... Khối R2 để trống nếu dùng volume local; các biến
+# tuning còn lại đã có default và đang được comment sẵn.
 ```
 
 Yêu cầu:
@@ -182,6 +184,8 @@ cổng 3000.
 | Migration lỗi | `docker logs eyetracking-migrate`; sửa file mới, không sửa file đã áp |
 | Chatbot chưa `/ready` | Chờ tải weights; `docker compose logs -f chatbot` |
 | Gaze chưa `/ready` | Chờ tải weights + load model; `docker compose logs -f gaze` |
+| Ảnh R2 trả 403 `error code: 1010` khi test bằng Python `urllib` | Cloudflare chặn User-Agent lạ; dùng `curl`/browser hoặc `httpx`. App dùng browser/httpx nên không ảnh hưởng |
+| Ảnh R2 trả 403 với mọi User-Agent | Bật Public Access cho bucket trong Cloudflare Dashboard hoặc dùng custom domain; kiểm tra `R2_PUBLIC_URL` khớp bucket |
 | Hết dung lượng Docker | `./ops/docker_cleanup.sh` (không xóa volume) |
 
 ## 12. Dừng / reset

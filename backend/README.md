@@ -52,17 +52,16 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 
 | Biến | Bắt buộc | Ý nghĩa |
 |---|---|---|
-| `DATABASE_URL` | Có | Chuỗi kết nối PG (asyncpg) khi chạy ngoài container |
+| `DATABASE_URL` | Chỉ host | Chuỗi kết nối PG (asyncpg) khi chạy backend ngoài container |
 | `DATABASE_URL_DOCKER` | Có (compose) | Chuỗi kết nối DB nội bộ cho container backend |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Có (compose) | Tạo DB của service `postgres` |
 | `JWT_SECRET` | Có | Chuỗi random dài; không dùng giá trị mẫu |
-| `JWT_ALGORITHM` | Không | Mặc định `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Không | Hạn JWT access (mặc định 60) |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | Không | Hạn refresh token (mặc định 30) |
+| `JWT_ALGORITHM` | Không | Mặc định `HS256` trong code; không cần đặt trong `.env` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Không | Mặc định 60 trong code |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Không | Mặc định 30 trong code |
 | `CORS_ORIGINS` | Có | Phân tách bằng dấu phẩy |
-| `AI_HTTP_URL` | Có | Gaze service (`http://gaze:8000` trong Docker) — dùng cho `/ai/health` |
-| `CHATBOT_URL` | Không | Chatbot service khi backend chạy host (`http://localhost:8002`) |
-| `CHATBOT_URL_DOCKER` | Không | Fallback URL chatbot trong Docker (`http://chatbot:8000`) |
+| `AI_HTTP_URL` | Có (compose) | Gaze service; compose tự set `http://gaze:8000` |
+| `CHATBOT_URL` | Chỉ host | Chatbot service khi backend chạy host (`http://localhost:8002`) |
 | `CHATBOT_INTERNAL_TOKEN` | Có (nếu dùng chat) | Token nội bộ backend → chatbot |
 | `CHATBOT_TIMEOUT_SECONDS` | Không | Timeout gọi chatbot (mặc định 120) |
 | `CHATBOT_INGEST_TIMEOUT_SECONDS` | Không | Timeout ingest slide (mặc định 600) |
@@ -70,6 +69,7 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `CHATBOT_INGEST_BACKOFF_SECONDS` | Không | Backoff giữa các lần retry (mặc định 5) |
 | `GAZE_DOWNSAMPLE_HZ` | Không | Downsample gaze trước khi ghi DB (mặc định 4.0) |
 | `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
+| `R2_ACCOUNT_ID` / `R2_BUCKET_NAME` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_PUBLIC_URL` | Không | Điền đủ 5 để lưu slide trên Cloudflare R2; để trống dùng volume local |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
 | `TESTING` | - | `1` = dùng NullPool (cho pytest) |
 
