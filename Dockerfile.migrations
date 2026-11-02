@@ -1,9 +1,8 @@
-# One-shot migrations runner — dùng khi bind mount ./db/migrations không tới
-# được container postgres (vd Portainer paste-compose stack).
-# Chạy 1 lần trên cùng compose network rồi xóa container.
+# One-shot migrations runner cho stack local.
+# Chạy 1 lần trên cùng compose network rồi exit.
 #
-# Logic nằm ở db/migrate.sh (dùng chung với CI): bảng `schema_migrations`, chỉ
-# chạy file chưa áp, chặn sửa file đã ship, advisory lock chống chạy song song.
+# Logic nằm ở db/migrate.sh: bảng `schema_migrations`, chỉ chạy file chưa áp,
+# chặn sửa file đã áp, advisory lock chống chạy song song.
 # Xem db/README.md mục "Migrations".
 #
 # Env: PGHOST (mặc định postgres), PGUSER (postgres), PGDATABASE (eyetracking),
@@ -16,7 +15,5 @@ ENV PGHOST=postgres \
 
 COPY db/migrations /migrations
 COPY db/migrate.sh /migrate.sh
-# Cần cho MIGRATE_UPDATE_CHECKSUMS=1 (ghi lại checksums trong container).
-COPY db/migrations.checksums.txt /migrations.checksums.txt
 
 CMD ["bash", "/migrate.sh", "/migrations"]

@@ -18,10 +18,7 @@ Nguồn schema duy nhất là các file trong [`migrations/`](migrations/) — b
 ```
 db/
 ├── README.md                     # file này
-├── migrate.sh                    # runner migration (Docker + CI): schema_migrations, checksum, advisory lock
-├── schema_fingerprint.sql        # in "dấu vân tay" schema để so DB dựng mới vs DB nâng cấp (CI)
-├── migrations.checksums.txt      # checksum sha256 đã chốt — CI chặn sửa file migration đã ship
-├── tests/upgrade_fixture.sql     # dữ liệu "xấu" (2 bài tập cùng 1 item) cho job CI kiểm tra nâng cấp
+├── migrate.sh                    # runner migration local: schema_migrations, checksum, advisory lock
 ├── seed_dev_users.sql            # 3 tài khoản mẫu cho DEV — chạy THỦ CÔNG, không tự động
 └── migrations/                   # chạy theo thứ tự tên (sort -V)
     ├── 001_init.sql              # schema nền: bảng, khóa, CHECK, index, partition gaze_events
@@ -29,17 +26,29 @@ db/
     ├── 003_gaze_partitions.sql   # default partition + 12 tháng đầu + function bảo trì
     ├── 004_analytics.sql         # heatmap_aggregates, aoi_dwell_stats, engagement_scores
     ├── 005_calibration_model.sql # calibration_params: lưu model .ubj + mae/mapping version
-    ├── …                         # 006→013: quiz/embeddings, index, FK cascade, …
+    ├── …                         # 006→013: quiz, index, FK cascade, …
     ├── 014_drop_course_level.sql # bỏ cột courses.level
     ├── 015_drop_lesson_progress.sql # bỏ bảng lesson_progress
     ├── 016_quiz_items.sql        # bài tập trắc nghiệm là một loại lesson (kind)
     ├── 017_lesson_show_gaze_dot.sql # cờ lessons.show_gaze_dot (GV bật/tắt điểm nhìn)
     ├── 018_calibration_keep_latest.sql # chỉ giữ 1 bản ghi calibration / (user, device)
     ├── 019_quiz_allow_retry.sql  # cờ quiz_assignments.allow_retry (GV cho học viên làm lại)
-    ├── 020_chat_sessions.sql     # chat_sessions/chat_messages: phiên + lịch sử trợ lý học tập
+    ├── 020_chat_sessions.sql     # (lịch sử) chat_sessions/chat_messages của trợ lý học tập
     ├── 021_course_show_gaze_dot.sql # cờ cấp KHÓA (courses.show_gaze_dot, thay 017) + gaze cho bài tập
-    └── 022_drop_dead_schema.sql  # bỏ bảng/cột không còn code dùng (oauth, permissions, email/phone/extra…)
+    ├── 022_drop_dead_schema.sql  # bỏ bảng/cột không còn code dùng (oauth, permissions, email/phone/extra…)
+    ├── 023_drop_chatbot.sql      # (lịch sử) gỡ schema chatbot cũ: chat_*, embedding, checkpoint*, pgvector
+    └── 024_chatbot_rag.sql       # dựng lại RAG: embedding 1024d + FTS hybrid + chat_*
 ```
+
+> **Chatbot RAG đã được dựng lại.** `023_drop_chatbot.sql` là migration lịch sử
+> gỡ bản chatbot cũ; `024_chatbot_rag.sql` tạo schema mới:
+> - `lesson_content_embedding` (Qwen3-Embedding-0.6B, `vector(1024)`, HNSW cosine)
+>   + `content_tsv` (Postgres FTS, unaccent + đ→d) cho hybrid search;
+> - `lesson_contents.embedding_status/embedding_error/embedding_updated_at`;
+> - `chat_sessions`/`chat_messages` cho lịch sử hiển thị.
+>
+> `pgvector`, `pg_trgm`, `unaccent` được bật lại ở `024`. DB dựng mới chạy qua
+> `023` rồi `024` nên schema cuối cùng có đầy đủ bảng RAG.
 
 > **Cờ điểm nhìn thuộc KHÓA HỌC**: `courses.show_gaze_dot` quyết định sinh viên có
 > thấy chấm điểm nhìn khi học **mọi bài giảng VÀ bài tập** của khóa. Cột
@@ -65,36 +74,26 @@ Sơ đồ partition `gaze_events` được bảo trì bằng `ops/maintain_parti
 1. **Docker (`docker-compose.yml`)** — nhanh, sạch, khuyến nghị cho dev.
 2. **PostgreSQL native (psql)** — khi đã có Postgres cài trực tiếp trên máy.
 
-Migrations chạy qua `db/migrate.sh` (dùng chung cho Docker và CI). Runner ghi lại
+Migrations chạy qua `db/migrate.sh` trong container `migrate`. Runner ghi lại
 file đã áp vào bảng `schema_migrations` và **chỉ chạy file chưa áp**; file đã áp mà
 đổi nội dung thì dừng ngay. Mọi file **vẫn phải idempotent** — đó là điều kiện để
 DB cũ (chưa có bảng tracking) chạy được trọn bộ một lần rồi ghi dấu.
 
 ## Quy tắc migration
 
-1. **Không sửa file migration đã ship.** Muốn đổi schema → thêm file mới
-   (`022_ten_moi.sql`). Runner từ chối chạy nếu file đã áp bị đổi nội dung, và CI
-   cũng chặn qua `db/migrations.checksums.txt`. Nếu thật sự cố ý sửa thì phải chạy
-   lại `MIGRATE_UPDATE_CHECKSUMS=1 bash db/migrate.sh` (thay đổi sẽ lộ rõ trong review).
+1. **Không sửa file migration đã áp.** Muốn đổi schema → thêm file mới
+   (`025_ten_moi.sql`). Runner từ chối chạy nếu file đã áp bị đổi nội dung.
+   Nếu đang dev và thật sự muốn sửa file cũ, reset DB local bằng
+   `./scripts/reset_db.sh` rồi chạy lại.
 2. **Mọi file phải idempotent** — chạy lại nhiều lần không lỗi, không nhân đôi dữ liệu.
 3. **Thứ tự quan trọng.** Trong một file: ví dụ `016` phải backfill (tách bản trùng)
-   TRƯỚC khi tạo unique index — nếu không, DB đang có bản trùng sẽ gãy ngay lúc deploy.
+   TRƯỚC khi tạo unique index — nếu không, DB đang có bản trùng sẽ gãy ngay.
    Giữa các file: giữ nguyên dãy số, thêm file mới thì tăng số.
 4. **Thao tác phá huỷ dữ liệu** (`TRUNCATE`, đổi số chiều vector, `DROP`) phải ghi rõ
-   hệ quả trong comment — người vận hành cần biết trước khi deploy (ví dụ `012` xoá
-   toàn bộ embedding và bắt buộc re-ingest).
-5. Thêm file mới → cập nhật `db/migrations.checksums.txt`
-   (`MIGRATE_UPDATE_CHECKSUMS=1 bash db/migrate.sh`).
+   hệ quả trong comment (ví dụ `012` xoá toàn bộ embedding và bắt buộc re-ingest).
 
-CI (job `migrations`) kiểm tra 2 thứ: file đã ship có bị sửa không, và **đường nâng
-cấp** — dựng DB từ bộ migration của bản đang chạy, **nạp dữ liệu "xấu"**
-(`db/tests/upgrade_fixture.sql`: 2 bài tập cùng một item — đúng loại dữ liệu làm
-`016` gãy), áp bộ mới, rồi so `db/schema_fingerprint.sql` với DB dựng mới. DB rỗng
-sẽ không lộ được loại lỗi này, nên fixture là bắt buộc.
-
-Service `migrate` **exit 1 ⇒ compose huỷ cả lần deploy** và các container cũ vẫn
-chạy (web không đổi). Gặp lỗi này thì đọc log:
-`docker logs eyetracking-migrate 2>&1 | tail -30`.
+Service `migrate` **exit 1 ⇒ compose huỷ lần chạy đó**; các container cũ vẫn chạy.
+Gặp lỗi này thì đọc log: `docker logs eyetracking-migrate 2>&1 | tail -30`.
 
 ---
 
@@ -113,7 +112,7 @@ tên file. Kiểm tra:
 
 ```bash
 # chạy migrations (một lần) rồi list bảng
-docker compose up migrate
+docker compose run --rm migrate
 docker compose exec postgres psql -U postgres -d eyetracking -c '\dt'
 ```
 
@@ -128,8 +127,7 @@ docker compose run --rm migrate bash -c \
     'psql -h postgres -U $PGUSER -d $PGDATABASE -f /migrations/002_seed.sql'
 
 # tài khoản mẫu cho dev (KHÔNG tự động chạy — mật khẩu mặc định Password123!)
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-    -f - < db/seed_dev_users.sql
+./scripts/seed_dev.sh
 ```
 
 ### Xóa database (xoá hết dữ liệu)
@@ -148,55 +146,13 @@ docker compose up -d postgres
 
 ---
 
-## Cách 2: Postgres native (psql)
-
-### Tạo database
-
-```bash
-sudo systemctl start postgresql
-sudo -u postgres createdb eyetracking
-
-psql -d eyetracking -f db/migrations/001_init.sql
-psql -d eyetracking -f db/migrations/002_seed.sql
-psql -d eyetracking -f db/migrations/003_gaze_partitions.sql
-```
-
-### Seed thêm / chạy lại seed
-
-```bash
-psql -d eyetracking -f db/migrations/002_seed.sql
-```
-
-### Xóa database
-
-```bash
-sudo -u postgres dropdb eyetracking
-# hoặc
-psql -d postgres -c "DROP DATABASE eyetracking;"
-```
-
-> Không thể DROP khi đang có kết nối. Ngắt `pgadmin`/client trước, hoặc dùng:
-> `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='eyetracking';`
-
-### Xóa database trong container postgres
-
-```bash
-docker compose exec postgres psql -U postgres -d postgres -c "DROP DATABASE eyetracking;"
-```
-
----
-
 ## Tài khoản mẫu (CHỈ cho dev — `seed_dev_users.sql`)
 
-⚠️ **Migrations KHÔNG còn tạo tài khoản người dùng.** Trước đây `002_seed.sql`
-tạo sẵn 3 tài khoản với mật khẩu mặc định `Password123!`, và migration `004`
-còn ghi đè `password_hash` mỗi lần deploy → tài khoản production bị reset mật
-khẩu về mặc định sau mỗi lần deploy. Hai điều này đã được bỏ.
-
-Tài khoản mẫu giờ nằm ở `db/seed_dev_users.sql`, **chỉ chạy thủ công** khi dev:
+⚠️ **Migrations KHÔNG tạo tài khoản người dùng.** Tài khoản mẫu nằm ở
+`db/seed_dev_users.sql`, **chỉ chạy thủ công** khi dev:
 
 ```bash
-psql -h localhost -p 5435 -U postgres -d eyetracking -f db/seed_dev_users.sql
+./scripts/seed_dev.sh
 ```
 
 | Vai trò | Email | Khả năng |
@@ -208,16 +164,15 @@ psql -h localhost -p 5435 -U postgres -d eyetracking -f db/seed_dev_users.sql
 - Mật khẩu mặc định: `Password123!`.
 - Cả 3 được đặt `must_change_password = true` → **bắt buộc đổi mật khẩu ở lần
   đăng nhập đầu tiên** (`POST /api/auth/change-password`).
-- Production: tạo tài khoản admin thật qua `/api/auth/register` rồi gán role, hoặc
-  tự thêm user với hash bcrypt riêng. **Không** dùng mật khẩu mặc định.
 
 Kiểm tra nhanh:
 
 ```bash
-psql -d eyetracking -c '\dt'                          # danh sách bảng
-psql -d eyetracking -c "SELECT code FROM roles;"      # admin | teacher | student
-psql -d eyetracking -c "SELECT email FROM users;"
-psql -d eyetracking -c "SELECT inhrelid::regclass FROM pg_inherits WHERE inhparent = 'gaze_events'::regclass;"
+docker compose exec -T postgres psql -U postgres -d eyetracking -c '\dt'
+docker compose exec -T postgres psql -U postgres -d eyetracking -c "SELECT code FROM roles;"
+docker compose exec -T postgres psql -U postgres -d eyetracking -c "SELECT email FROM users;"
+docker compose exec -T postgres psql -U postgres -d eyetracking \
+  -c "SELECT inhrelid::regclass FROM pg_inherits WHERE inhparent = 'gaze_events'::regclass;"
 ```
 
 ---
@@ -227,14 +182,12 @@ psql -d eyetracking -c "SELECT inhrelid::regclass FROM pg_inherits WHERE inhpare
 `003_gaze_partitions.sql` tạo sẵn function `create_gaze_partitions(months_ahead)`
 và 12 partition tháng đầu. Về sau chạy định kỳ để không bao giờ thiếu partition:
 
-Trong `docker-compose.yml`, service **`db-maintenance`** tự gọi function
-`create_gaze_partitions(3)` mỗi 24h (không cần cron của host). Muốn chạy thủ công:
-
 ```bash
-docker compose exec postgres psql -U postgres -d eyetracking \
+docker compose exec -T postgres psql -U postgres -d eyetracking \
     -c "SELECT create_gaze_partitions(3);"
-# hoặc dùng file (chạy trên host có psql):
-psql -d eyetracking -f ops/maintain_partitions.sql
+# hoặc dùng file:
+docker compose exec -T postgres psql -U postgres -d eyetracking \
+    -f - < ops/maintain_partitions.sql
 ```
 
 Dữ liệu rơi ngoài các tháng đã tạo sẽ vào `gaze_events_default` (không mất,

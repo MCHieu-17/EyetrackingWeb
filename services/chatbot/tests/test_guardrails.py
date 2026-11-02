@@ -1,54 +1,128 @@
-from langchain_core.messages import HumanMessage
+from app.workflow.guardrails import (
+    ClaimVerification,
+    VerificationResult,
+    _check_result,
+    safe_response,
+)
 
-from app.workflow.shared import guardrails
-from app.workflow.shared.guardrails import ValidationOutput, validation_node
-
-
-class _FakeChain:
-    def __init__(self, result=None, error=None):
-        self.result = result
-        self.error = error
-
-    def invoke(self, _payload):
-        if self.error is not None:
-            raise self.error
-        return self.result
+DOC = "Khóa chính (primary key) xác định duy nhất mỗi hàng trong bảng."
+DRAFT = "Khóa chính xác định duy nhất mỗi hàng trong bảng [1]."
 
 
-def _state(draft="bản nháp", attempts=0):
-    return {
-        "messages": [HumanMessage(content="câu hỏi")],
-        "retrieved_docs": [],
-        "draft_response": draft,
-        "attempts": attempts,
+def _claim(**overrides):
+    data = {
+        "claim": "Khóa chính xác định duy nhất mỗi hàng trong bảng",
+        "citation_ids": [1],
+        "claim_type": "course",
+        "supported": True,
+        "evidence_quote": "Khóa chính (primary key) xác định duy nhất mỗi hàng",
+        "reason": "",
+        "violates_no_solution": False,
     }
+    data.update(overrides)
+    return ClaimVerification(**data)
 
 
-def test_validation_ok(monkeypatch):
-    monkeypatch.setattr(
-        guardrails,
-        "_validation_chain",
-        lambda: _FakeChain(ValidationOutput(ok=True, violates_no_solution=False, reason="")),
+def test_valid_course_claim():
+    result = VerificationResult(claims=[_claim()])
+    assert _check_result(result, DRAFT, [{"content": DOC}], "course_qa") == []
+
+
+def test_course_claim_without_citation():
+    result = VerificationResult(claims=[_claim(citation_ids=[])])
+    problems = _check_result(result, DRAFT, [{"content": DOC}], "course_qa")
+    assert any("thiếu citation" in problem for problem in problems)
+
+
+def test_invalid_citation():
+    result = VerificationResult(claims=[_claim(citation_ids=[2])])
+    problems = _check_result(result, DRAFT, [{"content": DOC}], "course_qa")
+    assert any("không tồn tại" in problem for problem in problems)
+
+
+def test_evidence_quote_not_in_document():
+    result = VerificationResult(
+        claims=[_claim(evidence_quote="Khóa ngoại liên kết hai bảng")]
     )
-    out = validation_node(_state())
-    assert out["validation_ok"] is True
-    assert out["attempts"] == 1
+    problems = _check_result(result, DRAFT, [{"content": DOC}], "course_qa")
+    assert any("Evidence quote không khớp" in problem for problem in problems)
 
 
-def test_validation_violation_marks_not_ok(monkeypatch):
-    monkeypatch.setattr(
-        guardrails,
-        "_validation_chain",
-        lambda: _FakeChain(ValidationOutput(ok=True, violates_no_solution=True, reason="lộ đáp án")),
+def test_general_claim_without_label():
+    draft = "Đây là kiến thức chung."
+    result = VerificationResult(
+        claims=[
+            _claim(
+                claim="Đây là kiến thức chung",
+                citation_ids=[],
+                claim_type="general",
+                supported=True,
+                evidence_quote="",
+            )
+        ]
     )
-    out = validation_node(_state())
-    assert out["validation_ok"] is False
+    problems = _check_result(result, draft, [], "course_qa")
+    assert any("thiếu label" in problem for problem in problems)
 
 
-def test_validation_error_fails_closed(monkeypatch):
-    monkeypatch.setattr(
-        guardrails, "_validation_chain", lambda: _FakeChain(error=RuntimeError("boom"))
+def test_general_claim_with_label():
+    draft = "Ngoài tài liệu môn học: đây là kiến thức chung."
+    result = VerificationResult(
+        claims=[
+            _claim(
+                claim="đây là kiến thức chung",
+                citation_ids=[],
+                claim_type="general",
+                supported=True,
+                evidence_quote="",
+            )
+        ]
     )
-    out = validation_node(_state(attempts=1))
-    assert out["validation_ok"] is False
-    assert out["attempts"] == 2
+    assert _check_result(result, draft, [], "course_qa") == []
+
+
+def test_general_claim_with_citation_rejected():
+    draft = "Ngoài tài liệu môn học: đây là kiến thức chung [1]."
+    result = VerificationResult(
+        claims=[
+            _claim(
+                claim="đây là kiến thức chung",
+                citation_ids=[1],
+                claim_type="general",
+                supported=True,
+                evidence_quote="",
+            )
+        ]
+    )
+    problems = _check_result(result, draft, [{"content": DOC}], "course_qa")
+    assert any("không được cite" in problem for problem in problems)
+
+
+def test_no_solution_violation_for_hints():
+    result = VerificationResult(claims=[_claim(violates_no_solution=True)])
+    problems = _check_result(result, DRAFT, [{"content": DOC}], "exercise_hints")
+    assert any("Lộ đáp án" in problem for problem in problems)
+
+
+def test_no_solution_allowed_for_review():
+    result = VerificationResult(claims=[_claim(violates_no_solution=True)])
+    assert _check_result(result, DRAFT, [{"content": DOC}], "exercise_review") == []
+
+
+def test_verifier_missing_claims():
+    draft = (
+        "Đây là câu một đủ dài để đếm. "
+        "Đây là câu hai đủ dài để đếm. "
+        "Đây là câu ba đủ dài để đếm."
+    )
+    result = VerificationResult(claims=[])
+    problems = _check_result(result, draft, [], "course_qa")
+    assert any("không đủ để xác minh" in problem for problem in problems)
+
+
+def test_safe_response_hints():
+    assert "gợi ý" in safe_response("exercise_hints").lower()
+
+
+def test_safe_response_course():
+    assert "căn cứ" in safe_response("course_qa").lower()

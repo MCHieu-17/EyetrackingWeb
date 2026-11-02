@@ -3,7 +3,15 @@ import logging
 import uuid
 
 import pymupdf
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +20,6 @@ from app.api.deps import (
     can_access_course,
     can_manage_course,
     get_current_user,
-    require_internal_token,
     require_roles,
 )
 from app.core.config import settings
@@ -45,8 +52,9 @@ logger = logging.getLogger(__name__)
 
 
 async def _embed_slides(slide_ids: list[str]) -> None:
-    """Background task: đồng bộ embedding và cập nhật trạng thái slide."""
-    await embedding.sync_slides(slide_ids)
+    """Background task: đồng bộ embedding cho danh sách slide."""
+    for slide_id in slide_ids:
+        await embedding.sync_slide(slide_id)
 
 
 async def _check_course_owner(db: AsyncSession, lesson: Lesson, user: User) -> None:
@@ -302,7 +310,6 @@ async def upload_lesson_pdf(
     )
 
     version: str | None = None
-    new_slide_ids: list[str] = []
     try:
         count, version, image_urls = await asyncio.to_thread(
             _render_pdf_slides, lesson_id, data
@@ -334,7 +341,6 @@ async def upload_lesson_pdf(
             contents.append((content, page_aois))
 
         await db.flush()
-        new_slide_ids = [content.id for content, _ in contents]
         for content, page_aois in contents:
             for a in page_aois:
                 db.add(
@@ -375,6 +381,9 @@ async def upload_lesson_pdf(
             status.HTTP_409_CONFLICT,
             detail="Không thay thế được slide — bài học đã có dữ liệu quan sát",
         ) from exc
+    # Ingest RAG chạy nền: VLM + embedding có thể mất vài phút với PDF dài.
+    background_tasks.add_task(embedding.sync_lesson, lesson_id)
+
     old_versions = {
         old_version
         for url in old_urls
@@ -389,7 +398,6 @@ async def upload_lesson_pdf(
         except media_storage.StorageError as exc:
             media_storage.log_cleanup_failure("prune replaced version", exc)
     await analytics.invalidate_heatmap_cache(lesson_id)
-    background_tasks.add_task(_embed_slides, new_slide_ids)
     return {"ok": True, "slides": count, "filename": pdf.filename or "lesson.pdf"}
 
 
@@ -440,6 +448,7 @@ async def list_lesson_slides(
             aoi_count=aoi_count,
             aoi_source=c.aoi_source,
             embedding_status=c.embedding_status,
+            embedding_error=c.embedding_error,
         )
         for c, aoi_count in rows
     ]
@@ -548,10 +557,10 @@ async def reindex_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Embedding lại các slide còn thiếu/lỗi của một bài học (đồng bộ)."""
+    """Embedding lại toàn bộ slide của một bài học (đồng bộ)."""
     lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
-    stats = await embedding.reindex_lesson(lesson_id)
+    stats = await embedding.sync_lesson(lesson_id)
     return EmbeddingSyncOut(**stats)
 
 
@@ -565,41 +574,39 @@ async def reindex_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Backfill embedding cho toàn bộ slide còn thiếu/lỗi của một khóa học."""
+    """Embedding lại toàn bộ slide của một khóa học (đồng bộ)."""
     course = await db.get(Course, course_id)
     if course is None or course.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    stats = await embedding.reindex_course(course_id)
+    stats = await embedding.sync_course(course_id)
     return EmbeddingSyncOut(**stats)
 
 
 @router.post(
-    "/internal/embeddings/reindex-all",
-    dependencies=[Depends(require_internal_token)],
-    status_code=202,
+    "/admin/embeddings/reindex-all",
+    response_model=EmbeddingSyncOut,
+    dependencies=[Depends(rate_limit(2, 60, "reindex-all"))],
 )
-async def internal_reindex_all():
-    """Kích hoạt backfill embedding toàn bộ slide còn thiếu (chạy nền).
-
-    Trả về ngay (202) để tránh gateway timeout (Cloudflare 504). Theo dõi tiến
-    độ bằng `GET /internal/embeddings/status`. Không dùng JWT người dùng; xác
-    thực bằng header `X-Chatbot-Token` chia sẻ.
-    """
-    return await embedding.start_reindex_all_job()
+async def reindex_all(
+    _: User = Depends(require_roles("admin")),
+):
+    """Backfill toàn bộ slide chưa ready (admin/CLI)."""
+    stats = await embedding.reindex_all()
+    return EmbeddingSyncOut(**stats)
 
 
-@router.get(
-    "/internal/embeddings/status",
-    dependencies=[Depends(require_internal_token)],
-)
-async def internal_embedding_status():
-    """Thống kê trạng thái embedding + tiến độ job backfill + độ lệch vector."""
-    return {
-        "counts": await embedding.counts(),
-        "vectors": await embedding.vector_count(),
-        "slides": await embedding.slide_count(),
-        "drift": await embedding.drift(),
-        "job": embedding.job_status(),
-    }
+@router.get("/teacher/courses/{course_id}/embedding-status")
+async def embedding_status(
+    course_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Đếm slide theo trạng thái embedding của một khóa (badge lỗi cho GV)."""
+    course = await db.get(Course, course_id)
+    if course is None or course.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return await embedding.course_counts(course_id)

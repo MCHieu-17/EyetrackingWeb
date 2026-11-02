@@ -21,10 +21,15 @@ class Settings(BaseSettings):
     jwt_secret: str
     cors_origins: str
     ai_http_url: str
+
+    # Chatbot RAG service (internal). Backend gọi qua HTTP + token nội bộ.
     chatbot_url: str = ""
-    chatbot_timeout_seconds: float = 60.0
-    chatbot_ingest_timeout_seconds: float = 600.0
+    chatbot_url_docker: str = ""
     chatbot_internal_token: str = ""
+    chatbot_timeout_seconds: float = 120
+    chatbot_ingest_timeout_seconds: float = 600
+    chatbot_ingest_attempts: int = 3
+    chatbot_ingest_backoff_seconds: float = 5
 
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -86,6 +91,15 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def chatbot_url_resolved(self) -> str:
+        """URL chatbot: ưu tiên CHATBOT_URL (host dev), fallback bản Docker."""
+        return self.chatbot_url or self.chatbot_url_docker
+
+    @property
+    def chatbot_ready(self) -> bool:
+        return bool(self.chatbot_url_resolved and self.chatbot_internal_token)
 
     @property
     def media_path(self) -> Path:

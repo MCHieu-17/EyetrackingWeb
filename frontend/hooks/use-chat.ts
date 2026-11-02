@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteChatSession,
@@ -7,6 +8,8 @@ import {
   listChatSessions,
   renameChatSession,
   sendChatMessage,
+  streamChatMessage,
+  type ChatStreamHandlers,
   type SendChatInput,
 } from "@/lib/api/chat";
 
@@ -56,4 +59,44 @@ export function useDeleteChatSession() {
       client.invalidateQueries({ queryKey: ["chat", "sessions"] });
     },
   });
+}
+
+export function useChatStream() {
+  const [streaming, setStreaming] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const send = useCallback(
+    async (input: SendChatInput, handlers: ChatStreamHandlers) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setStreaming(true);
+      setStatus("routing");
+      try {
+        await streamChatMessage(
+          input,
+          {
+            ...handlers,
+            onStatus: (stage) => {
+              setStatus(stage);
+              handlers.onStatus?.(stage);
+            },
+          },
+          controller.signal,
+        );
+      } finally {
+        setStreaming(false);
+        setStatus(null);
+        abortRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  return { streaming, status, send, abort };
 }

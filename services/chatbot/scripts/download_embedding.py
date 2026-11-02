@@ -14,9 +14,7 @@ from pathlib import Path
 # Cho phép chạy trực tiếp file script (khi đó sys.path[0] là scripts/).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.settings import embedding_model_path  # noqa: E402
-
-DEFAULT_REPO = "Qwen/Qwen3-Embedding-0.6B"
+from app.settings import embedding_hf_repo, embedding_model_path  # noqa: E402
 
 
 def _ready(dest: Path) -> bool:
@@ -35,7 +33,7 @@ def ensure_embedding() -> None:
     # Import muộn để script khác (không cần tải) không phải kéo huggingface_hub.
     from huggingface_hub import snapshot_download
 
-    repo = os.getenv("EMBEDDING_HF_REPO", DEFAULT_REPO).strip()
+    repo = embedding_hf_repo()
     token = os.getenv("HF_TOKEN") or None
     print(f"[embedding] tải {repo} -> {dest} ...", flush=True)
     dest.mkdir(parents=True, exist_ok=True)

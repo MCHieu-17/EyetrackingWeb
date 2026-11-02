@@ -47,8 +47,7 @@ def _peer_is_trusted(peer: str | None) -> bool:
 def _real_ip(request: Request) -> str:
     """Lấy IP người dùng thật, chỉ tin header khi request đến từ proxy tin cậy.
 
-    Luồng production: Cloudflare → cloudflared → nginx (realip lấy
-    CF-Connecting-IP, ghi đè X-Forwarded-For = $remote_addr) → backend.
+    Luồng local: client → nginx (ghi đè X-Forwarded-For = $remote_addr) → backend.
     Vì vậy X-Forwarded-For do backend nhận LUÔN do nginx đặt, không phải do
     client. Nếu peer không nằm trong dải tin cậy (vd. client gọi trực tiếp),
     header bị bỏ qua để chống giả mạo IP → rate-limit không bị bypass.

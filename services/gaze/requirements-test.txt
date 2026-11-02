@@ -1,6 +1,6 @@
 # Deps NHẸ để chạy unit test gaze (không cần torch/mediapipe/cv2 — các import
 # nặng trong service là lazy và pipeline được cắm giả trong tests/conftest.py).
-# Dùng trong CI (job `gaze`) để tránh hardcode version trong workflow.
+# Dùng cho unit test gaze (không cần torch/mediapipe/cv2).
 fastapi==0.115.12
 python-multipart==0.0.20
 py-ubjson==0.16.1

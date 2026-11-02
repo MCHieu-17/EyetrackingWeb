@@ -87,8 +87,6 @@ test.describe("Demo mode (không backend)", () => {
 
   test("học viên làm bài trắc nghiệm trong reader và xem kết quả", async ({ page }) => {
     await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");
-    // Trợ lý học tập chỉ hiện sau khi nộp bài.
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toHaveCount(0);
     await page.getByText("def", { exact: true }).click();
     await page.getByRole("button", { name: "Tiếp" }).click();
     await page.getByText("list", { exact: true }).click();
@@ -98,13 +96,11 @@ test.describe("Demo mode (không backend)", () => {
     await page.getByRole("button", { name: "Nộp bài" }).click();
     await expect(page.getByText("3/3 điểm")).toBeVisible();
     await expect(page.getByText("Đáp án đúng").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toBeVisible();
 
-    // Demo bật "cho phép làm lại": làm lại -> quay về câu 1, trợ lý ẩn lại.
+    // Demo bật "cho phép làm lại": làm lại -> quay về câu 1.
     await page.getByRole("button", { name: "Làm lại" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Làm lại" }).click();
     await expect(page.getByText("Câu 1 / 3")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toHaveCount(0);
   });
 
   test("login demo bằng email bất kỳ", async ({ page }) => {

@@ -30,7 +30,7 @@ backend/app/
 ### Cách 1: Docker Compose (khuyến nghị)
 
 ```bash
-docker compose up -d            # cả stack (postgres, migrate, backend, frontend, nginx, ...)
+docker compose up -d --build    # cả stack (postgres, migrate, backend, frontend, nginx, ...)
 ```
 
 ### Cách 2: Chạy trực tiếp (dev)
@@ -55,12 +55,19 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `DATABASE_URL` | Có | Chuỗi kết nối PG (asyncpg) khi chạy ngoài container |
 | `DATABASE_URL_DOCKER` | Có (compose) | Chuỗi kết nối DB nội bộ cho container backend |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Có (compose) | Tạo DB của service `postgres` |
-| `JWT_SECRET` | Có | **Bắt buộc đổi ở production** |
+| `JWT_SECRET` | Có | Chuỗi random dài; không dùng giá trị mẫu |
 | `JWT_ALGORITHM` | Không | Mặc định `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Không | Hạn JWT access (mặc định 60) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Không | Hạn refresh token (mặc định 30) |
 | `CORS_ORIGINS` | Có | Phân tách bằng dấu phẩy |
 | `AI_HTTP_URL` | Có | Gaze service (`http://gaze:8000` trong Docker) — dùng cho `/ai/health` |
+| `CHATBOT_URL` | Không | Chatbot service khi backend chạy host (`http://localhost:8002`) |
+| `CHATBOT_URL_DOCKER` | Không | Fallback URL chatbot trong Docker (`http://chatbot:8000`) |
+| `CHATBOT_INTERNAL_TOKEN` | Có (nếu dùng chat) | Token nội bộ backend → chatbot |
+| `CHATBOT_TIMEOUT_SECONDS` | Không | Timeout gọi chatbot (mặc định 120) |
+| `CHATBOT_INGEST_TIMEOUT_SECONDS` | Không | Timeout ingest slide (mặc định 600) |
+| `CHATBOT_INGEST_ATTEMPTS` | Không | Số lần retry ingest (mặc định 3) |
+| `CHATBOT_INGEST_BACKOFF_SECONDS` | Không | Backoff giữa các lần retry (mặc định 5) |
 | `GAZE_DOWNSAMPLE_HZ` | Không | Downsample gaze trước khi ghi DB (mặc định 4.0) |
 | `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
@@ -96,13 +103,17 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 
 Bài tập là một `lessons.kind='quiz'`; mọi item trong chương dùng chung `order_index` nên thứ tự bài học/bài tập được trộn theo đúng thiết kế khóa học.
 
-### Trợ lý học tập (`/api`)
-- `POST /api/courses/{id}/chat` — gửi câu hỏi (chat theo **môn**, tùy chọn `lessonId` để ưu tiên slide của bài đang học). Không có `sessionId` thì tạo phiên mới; trả `{ sessionId, answer, citations, intent }`. Kèm `assignmentId` (chỉ hợp lệ khi **đã nộp** — 403 nếu chưa) để chữa bài.
-- `GET /api/courses/{id}/chat/sessions` — danh sách phiên của học viên trong môn
-- `GET /api/chat/sessions/{sessionId}/messages` — lịch sử tin nhắn của phiên
-- `PATCH /api/chat/sessions/{sessionId}` / `DELETE /api/chat/sessions/{sessionId}` — đổi tên / xoá phiên (xoá kéo theo bộ nhớ hội thoại bên chatbot)
+### Chatbot học tập (`/api/courses/{id}/chat`, `/api/chat/sessions`)
+- `GET /api/courses/{id}/chat/sessions` — phiên chat của sinh viên trong môn.
+- `POST /api/courses/{id}/chat` — hỏi đáp non-streaming; trả `{answer, citations, intent, verified}`.
+- `POST /api/courses/{id}/chat/stream` — SSE: `session → status → citations → token → done`.
+- `GET /api/chat/sessions/{id}/messages` — lịch sử tin nhắn.
+- `PATCH/DELETE /api/chat/sessions/{id}` — đổi tên/xoá phiên.
+- `POST /teacher/lessons/{id}/reindex`, `POST /teacher/courses/{id}/reindex` — ingest lại slide.
+- `GET /teacher/courses/{id}/embedding-status` — đếm slide theo trạng thái embedding.
 
-Backend là nguồn sự thật cho lịch sử hiển thị (`chat_sessions`/`chat_messages`, migration 020); chatbot LangGraph giữ bộ nhớ hội thoại theo `thread_id` = id phiên.
+Backend dựng ngữ cảnh bài tập: trước khi nộp chỉ gửi đề + options + đáp án đã chọn
+(không gửi đáp án đúng); sau khi nộp mới gửi đáp án + giải thích để chữa bài.
 
 ### Học tập (sinh viên — `/api`)
 - `GET /api/me/enrollments`
@@ -133,8 +144,7 @@ docker compose run --rm -e PGDATABASE=eyetracking_test migrate
 ```
 
 ```bash
-cd backend
-.venv/bin/python -m pytest tests -v
+./scripts/test_backend.sh -v
 ```
 
 ## Thiết kế đáng chú ý

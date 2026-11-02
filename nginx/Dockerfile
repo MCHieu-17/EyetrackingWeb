@@ -1,6 +1,6 @@
 FROM nginx:1.27-alpine
 
-# Config thuần HTTP nội bộ (TLS do Cloudflare Edge lo, cloudflared forward tới nginx:80).
+# Config thuần HTTP cho local (không TLS/Cloudflare).
 COPY default.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

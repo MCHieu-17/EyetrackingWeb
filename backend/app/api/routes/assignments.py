@@ -18,9 +18,17 @@ from app.schemas.quiz import (
     QuizAttemptCreate,
     QuizAttemptOut,
 )
-from app.services.study_chat import question_correct_ids
 
 router = APIRouter(prefix="/api/assignments", tags=["assignments"])
+
+
+def _correct_ids(question: dict) -> list[str]:
+    """Chuẩn hóa đáp án đúng: hỗ trợ cả dữ liệu cũ (correctOptionId) lẫn mới."""
+    ids = question.get("correctOptionIds")
+    if ids is None:
+        single = question.get("correctOptionId")
+        ids = [single] if single else []
+    return [str(item) for item in ids]
 
 
 async def _assignment_or_404(db: AsyncSession, assignment_id: str) -> QuizAssignment:
@@ -73,7 +81,7 @@ def _public_question(question: dict) -> dict:
 def _reveal_question(question: dict) -> dict:
     """Bản câu hỏi đầy đủ (giáo viên hoặc học viên đã nộp)."""
     clean = {key: value for key, value in question.items() if key != "correctOptionId"}
-    clean["correctOptionIds"] = question_correct_ids(question)
+    clean["correctOptionIds"] = _correct_ids(question)
     return clean
 
 
@@ -290,7 +298,7 @@ async def submit_attempt(
         chosen = {option_id for option_id in selected if option_id in valid_option_ids}
         valid_answers[question_id] = sorted(chosen)
         # Chấm "tất cả hoặc không": đúng đủ và không dư đáp án mới được điểm.
-        if chosen and chosen == set(question_correct_ids(question)):
+        if chosen and chosen == set(_correct_ids(question)):
             score += points
     attempt = QuizAttempt(
         assignment_id=assignment.id,

@@ -3,71 +3,106 @@
 Các factory được **cache** (`get_llm`/`get_embedding`/`get_vlm`) để cả tiến trình
 dùng chung một client cho mỗi loại model thay vì mỗi node tạo một instance.
 
-LLM (định tuyến / kiểm duyệt / sinh câu trả lời) và VLM (mô tả slide lúc ingest)
-đều gọi qua **River AI** — endpoint OpenAI-compatible, KHÔNG tốn VRAM local.
+LLM (router/answer/verify) và VLM (mô tả slide lúc ingest) đều gọi qua **River AI**
+— endpoint OpenAI-compatible, KHÔNG tốn VRAM local.
 Embedding chạy local (Qwen3-Embedding-0.6B trên GPU).
 
 `message_text` chuẩn hóa nội dung model trả về thành string.
 """
 
-import os
 from functools import lru_cache
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
-from app.settings import embedding_device as _embedding_device
-from app.settings import embedding_local_files_only as _embedding_local_files_only
-from app.settings import embedding_model_path as _embedding_model_path
-from app.settings import embedding_name as _embedding_name
-from app.settings import llm_name as _llm_name
-from app.settings import river_api_key as _river_api_key
-from app.settings import river_base_url as _river_base_url
-from app.settings import river_llm_model as _river_llm_model
-from app.settings import river_vlm_model as _river_vlm_model
-from app.settings import vlm_name as _vlm_name
+from app.settings import (
+    embedding_device,
+    embedding_local_files_only,
+    embedding_model_path,
+    embedding_name,
+    llm_name,
+    river_api_key,
+    river_base_url,
+    river_llm_max_tokens,
+    river_llm_model,
+    river_max_retries,
+    river_reasoning_effort,
+    river_router_max_tokens,
+    river_router_reasoning_effort,
+    river_timeout,
+    river_verifier_max_tokens,
+    river_verifier_reasoning_effort,
+    river_vlm_max_tokens,
+    river_vlm_model,
+    river_vlm_reasoning_effort,
+    vlm_name,
+)
 
 
-def _river_chat(model: str, max_tokens: int) -> ChatOpenAI:
+def _river_chat(model: str, max_tokens: int, effort: str) -> ChatOpenAI:
     """Client ChatOpenAI trỏ tới River AI (LLM và VLM dùng chung cấu hình)."""
+    kwargs: dict = {}
+    if effort:
+        # River AI/DeepSeek nhận reasoning_effort ở body. `extra_body` được
+        # langchain-openai chuyển nguyên vào request.
+        kwargs["extra_body"] = {"reasoning_effort": effort}
+
     return ChatOpenAI(
         model=model,
-        base_url=_river_base_url(),
-        api_key=_river_api_key(),
+        base_url=river_base_url(),
+        api_key=river_api_key(),
         temperature=0,
         max_tokens=max_tokens,
-        timeout=float(os.getenv("RIVER_TIMEOUT", "180")),
-        max_retries=int(os.getenv("RIVER_MAX_RETRIES", "2")),
+        timeout=river_timeout(),
+        max_retries=river_max_retries(),
+        **kwargs,
     )
 
 
-def _build_llm(name: str) -> BaseChatModel:
+def _build_llm(name: str, purpose: str) -> BaseChatModel:
     if name == "river":
-        # max_tokens đủ rộng vì model có "reasoning" (token suy luận tính vào output).
+        if purpose == "router":
+            return _river_chat(
+                river_llm_model(),
+                river_router_max_tokens(),
+                river_router_reasoning_effort(),
+            )
+        if purpose == "verify":
+            return _river_chat(
+                river_llm_model(),
+                river_verifier_max_tokens(),
+                river_verifier_reasoning_effort(),
+            )
         return _river_chat(
-            _river_llm_model(), int(os.getenv("RIVER_LLM_MAX_TOKENS", "4096"))
+            river_llm_model(),
+            river_llm_max_tokens(),
+            river_reasoning_effort(),
         )
     raise ValueError(f"LLM không được hỗ trợ: {name!r}")
 
 
 @lru_cache(maxsize=None)
-def get_llm(name: str | None = None) -> BaseChatModel:
-    """LLM dùng chung (cache theo tên). Mặc định lấy từ LLM_NAME."""
-    return _build_llm(name or _llm_name())
+def get_llm(name: str | None = None, purpose: str = "answer") -> BaseChatModel:
+    """LLM dùng chung (cache theo tên + purpose).
+
+    purpose: "router" | "answer" | "verify" — mỗi purpose có max_tokens và
+    reasoning_effort riêng để tránh đốt token vào reasoning không cần thiết.
+    """
+    return _build_llm(name or llm_name(), purpose)
 
 
 def _build_embedding(name: str) -> Embeddings:
     if name == "local":
-        # Import muộn để đường không cần embedding local khỏi kéo torch/sentence-transformers.
-        # Weights do scripts/download_embedding.py tải sẵn vào EMBEDDING_MODEL_PATH.
+        # Import muộn để đường không cần embedding local khỏi kéo torch/
+        # sentence-transformers.
         from langchain_huggingface import HuggingFaceEmbeddings
 
         return HuggingFaceEmbeddings(
-            model_name=_embedding_model_path(),
+            model_name=embedding_model_path(),
             model_kwargs={
-                "device": _embedding_device(),
-                "local_files_only": _embedding_local_files_only(),
+                "device": embedding_device(),
+                "local_files_only": embedding_local_files_only(),
             },
             encode_kwargs={"batch_size": 8, "normalize_embeddings": True},
             query_encode_kwargs={
@@ -84,13 +119,15 @@ def _build_embedding(name: str) -> Embeddings:
 @lru_cache(maxsize=None)
 def get_embedding(name: str | None = None) -> Embeddings:
     """Embedding dùng chung (cache theo tên). Mặc định từ EMBEDDING_NAME."""
-    return _build_embedding(name or _embedding_name())
+    return _build_embedding(name or embedding_name())
 
 
 def _build_vlm(name: str) -> BaseChatModel:
     if name == "river":
         return _river_chat(
-            _river_vlm_model(), int(os.getenv("RIVER_VLM_MAX_TOKENS", "16384"))
+            river_vlm_model(),
+            river_vlm_max_tokens(),
+            river_vlm_reasoning_effort(),
         )
     raise ValueError(f"VLM không được hỗ trợ: {name!r}")
 
@@ -98,7 +135,7 @@ def _build_vlm(name: str) -> BaseChatModel:
 @lru_cache(maxsize=None)
 def get_vlm(name: str | None = None) -> BaseChatModel:
     """VLM dùng chung (cache theo tên). Mặc định từ VLM_NAME."""
-    return _build_vlm(name or _vlm_name())
+    return _build_vlm(name or vlm_name())
 
 
 def message_text(content: object) -> str:

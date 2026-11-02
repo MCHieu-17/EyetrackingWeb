@@ -5,7 +5,7 @@
 # embedding local Qwen3-Embedding-0.6B; curl cho HEALTHCHECK).
 #
 # Base KHÔNG có thư viện GL/OpenCV của gaze — chatbot không cần.
-ARG AI_BASE=ghcr.io/manh1504/eyelearning-ai-base:latest
+ARG AI_BASE=eyelearning-ai-base:latest
 FROM ${AI_BASE}
 
 WORKDIR /app

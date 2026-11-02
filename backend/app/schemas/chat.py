@@ -1,3 +1,5 @@
+"""Schema request/response cho API chat."""
+
 from datetime import datetime
 from uuid import UUID
 
@@ -6,22 +8,21 @@ from pydantic import Field
 from app.schemas.common import CamelModel
 
 
-class ChatCitationOut(CamelModel):
-    """Nguồn slide mà trợ lý trích dẫn ở một lượt trả lời."""
-
+class ChatCitation(CamelModel):
     document_id: str
     title: str
     location: str
+    lesson_id: str | None = None
+    lesson_title: str = ""
+    slide_id: str | None = None
+    slide_index: int | None = None
+    image_url: str = ""
+    snippet: str = ""
+    score: float = 0.0
 
 
 class ChatSendIn(CamelModel):
-    """Một lượt hỏi của sinh viên.
-
-    Không truyền `session_id` thì backend tạo phiên mới cho môn này.
-    `assignment_id` chỉ gửi khi hỏi trong ngữ cảnh bài tập đã nộp.
-    """
-
-    message: str = Field(min_length=1, max_length=4000)
+    message: str = Field(min_length=1, max_length=8000)
     session_id: UUID | None = None
     lesson_id: UUID | None = None
     assignment_id: UUID | None = None
@@ -30,8 +31,9 @@ class ChatSendIn(CamelModel):
 class ChatReplyOut(CamelModel):
     session_id: str
     answer: str
-    citations: list[ChatCitationOut] = Field(default_factory=list)
+    citations: list[ChatCitation] = Field(default_factory=list)
     intent: str | None = None
+    verified: bool = True
 
 
 class ChatSessionOut(CamelModel):
@@ -53,6 +55,6 @@ class ChatMessageOut(CamelModel):
     id: str
     role: str
     content: str
-    citations: list[ChatCitationOut] = Field(default_factory=list)
+    citations: list[ChatCitation] = Field(default_factory=list)
     intent: str | None = None
     created_at: datetime

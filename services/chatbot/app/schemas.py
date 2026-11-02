@@ -1,66 +1,67 @@
-"""Schema request/response cho API chat."""
+"""Schema request/response cho API chatbot."""
 
-from typing import Annotated, Literal
-from uuid import UUID
+from typing import Literal
 
-from pydantic import AfterValidator, BaseModel, Field, WithJsonSchema
-
-
-def _validate_uuid_string(value: str) -> str:
-    if not isinstance(value, str):
-        raise ValueError("ID phải là UUID string.")
-    try:
-        return str(UUID(value))
-    except ValueError as exc:
-        raise ValueError("ID phải là UUID string hợp lệ.") from exc
+from pydantic import BaseModel, Field
 
 
-UUIDString = Annotated[
-    str,
-    AfterValidator(_validate_uuid_string),
-    WithJsonSchema({"type": "string", "format": "uuid"}),
-]
+class HistoryMessage(BaseModel):
+    role: Literal["student", "assistant"]
+    content: str = Field(min_length=1, max_length=20000)
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, description="Câu hỏi của sinh viên.")
-    course_id: UUIDString = Field(description="UUID khóa học để giới hạn phạm vi truy hồi.")
-    thread_id: str = Field(
-        min_length=1,
-        max_length=256,
-        pattern=r"^[\w.:-]+$",
-        description="ID hội thoại, dùng để giữ ngữ cảnh.",
-    )
-    assignment_context: str = Field(default="", max_length=30000)
-    support_mode: Literal["hint", "review"] = "hint"
-    # Ngữ cảnh LMS: sinh viên đang hỏi trong bài tập / bài học nào. `lesson_id`
-    # giúp ưu tiên truy hồi slide của đúng bài; các nhãn còn lại để LLM trả lời
-    # đúng ngữ cảnh (đang ở chương nào, bài nào).
-    assignment_id: UUIDString | None = None
-    assignment_title: str = Field(default="", max_length=255)
-    lesson_id: UUIDString | None = None
+    message: str = Field(min_length=1, max_length=8000)
+    course_id: str = Field(min_length=1, max_length=64)
+    thread_id: str = Field(min_length=1, max_length=256)
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=30)
+
+    # Ngữ cảnh LMS: sinh viên đang ở bài/chương nào. `lesson_id` chỉ dùng để
+    # đưa vào prompt, KHÔNG dùng để lọc retrieval (phạm vi là cả môn).
+    lesson_id: str | None = None
     lesson_title: str = Field(default="", max_length=255)
     module_title: str = Field(default="", max_length=255)
+
+    # Bài tập: backend chỉ gửi đáp án đúng/giải thích khi sinh viên đã nộp.
+    assignment_id: str | None = None
+    assignment_title: str = Field(default="", max_length=255)
+    assignment_context: str = Field(default="", max_length=30000)
+    support_mode: Literal["hint", "review"] = "hint"
 
 
 class CitationOut(BaseModel):
     document_id: str
     title: str
     location: str
+    lesson_id: str | None = None
+    lesson_title: str = ""
+    slide_id: str | None = None
+    slide_index: int | None = None
+    image_url: str = ""
+    snippet: str = ""
+    score: float = 0.0
 
 
 class ChatResponse(BaseModel):
     answer: str
     citations: list[CitationOut]
-    intent: str | None = None
+    intent: str
+    verified: bool = True
 
 
-class EmbedSlideRequest(BaseModel):
-    lesson_content_id: UUIDString = Field(
-        description="UUID slide (lesson_contents) cần embedding."
-    )
+class IngestSlideRequest(BaseModel):
+    lesson_content_id: str = Field(min_length=1, max_length=64)
 
 
-class EmbedResult(BaseModel):
-    processed: int = Field(description="Số slide đã xử lý thành công.")
-    failed: int = Field(default=0, description="Số slide bị bỏ qua do lỗi.")
+class IngestLessonRequest(BaseModel):
+    lesson_id: str = Field(min_length=1, max_length=64)
+
+
+class IngestCourseRequest(BaseModel):
+    course_id: str = Field(min_length=1, max_length=64)
+
+
+class IngestResult(BaseModel):
+    processed: int = 0
+    failed: int = 0
+    errors: list[str] = Field(default_factory=list)

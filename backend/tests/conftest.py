@@ -34,12 +34,11 @@ TRUNCATE TABLE users, courses, enrollments, devices, calibration_sessions,
 calibration_params, learning_sessions, gaze_events, gaze_slide_stats,
 gaze_session_stats,
 heatmap_aggregates, aoi_regions, aoi_dwell_stats, engagement_scores,
-slide_coverage_stats, lesson_mastery_scores, auth_sessions,
-chat_sessions, chat_messages CASCADE
+slide_coverage_stats, lesson_mastery_scores, auth_sessions CASCADE
 """
 
 # Tự động áp migrations cho DB test (để stack update/recreate vẫn tự migrate)
-# Dùng logic giống CI: chạy toàn bộ db/migrations/*.sql, idempotent nên an toàn
+# Chạy toàn bộ db/migrations/*.sql, idempotent nên an toàn
 MIGRATIONS_DIR = None
 try:
     from pathlib import Path as _P
@@ -55,7 +54,7 @@ def _strip_sql_comments(sql: str) -> str:
 
     Cần thiết vì comment trong migrations có thể chứa dấu `;` (vd
     `-- ... tham số kappa; ACTIVE duy nhất ...`), khiến bước tách statement
-    cắt sai và sinh lỗi syntax khi chạy local. CI dùng psql -f nên không dính.
+    cắt sai và sinh lỗi syntax khi chạy local. psql -f không dính lỗi này.
     """
     out: list[str] = []
     i = 0

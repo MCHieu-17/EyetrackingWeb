@@ -1,13 +1,17 @@
 """API chat học tập của sinh viên: phiên, lịch sử tin nhắn và gửi câu hỏi.
 
-Phạm vi hỏi là một môn (course). Khi hỏi trong ngữ cảnh bài tập đã nộp, backend
-gửi kèm `assignment_id` để chữa bài. Mọi truy cập đều kiểm tra: đúng vai trò
-`student`, đã ghi danh môn, và phiên thuộc chính sinh viên đó.
+Phạm vi hỏi là một môn (course). Khi hỏi trong ngữ cảnh bài tập:
+- chưa nộp  -> `support_mode="hint"`, backend KHÔNG gửi đáp án đúng;
+- đã nộp    -> `support_mode="review"`, backend gửi đáp án + giải thích để chữa.
+
+Mọi truy cập đều kiểm tra: đúng vai trò `student`, đã ghi danh môn, và phiên
+thuộc chính sinh viên đó.
 """
 
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +30,7 @@ from app.schemas.chat import (
     ChatSessionOut,
     ChatSessionUpdate,
 )
-from app.services.study_chat import answer_in_session, purge_thread
+from app.services.study_chat import answer_in_session, stream_in_session
 
 router = APIRouter(tags=["chat"])
 
@@ -70,24 +74,29 @@ async def _session_out(db: AsyncSession, session: ChatSession) -> ChatSessionOut
     )
 
 
-async def _resolve_lesson(
+async def _lesson_and_module(
     db: AsyncSession, course: Course, lesson_id: str | None
-) -> Lesson | None:
+) -> tuple[Lesson | None, Module | None]:
     if lesson_id is None:
-        return None
+        return None, None
     lesson = await db.get(Lesson, lesson_id)
     module = await db.get(Module, lesson.module_id) if lesson is not None else None
     if lesson is None or module is None or module.course_id != course.id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Bài học không thuộc khóa học"
         )
-    return lesson
+    return lesson, module
 
 
 async def _resolve_assignment(
     db: AsyncSession, course: Course, assignment_id: str, user: User
-) -> tuple[QuizAssignment, QuizAttempt]:
-    """Bài tập phải thuộc môn và sinh viên đã nộp (trợ lý chỉ mở sau khi nộp)."""
+) -> tuple[QuizAssignment, QuizAttempt | None, str]:
+    """Trả (assignment, attempt, support_mode).
+
+    - có attempt  -> review (được chữa bài, kèm đáp án đúng)
+    - chưa nộp    -> hint (chỉ gợi ý, KHÔNG kèm đáp án)
+    - draft/closed mà chưa nộp -> từ chối
+    """
     assignment = await db.get(QuizAssignment, assignment_id)
     if (
         assignment is None
@@ -95,6 +104,7 @@ async def _resolve_assignment(
         or assignment.status == "draft"
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
+
     attempt = (
         await db.execute(
             select(QuizAttempt).where(
@@ -103,15 +113,63 @@ async def _resolve_assignment(
             )
         )
     ).scalar_one_or_none()
-    if attempt is None:
+
+    if attempt is not None:
+        return assignment, attempt, "review"
+    if assignment.status == "closed":
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail="Hãy nộp bài trước khi dùng trợ lý học tập",
+            detail="Bài tập đã đóng và bạn chưa nộp bài",
         )
-    return assignment, attempt
+    return assignment, None, "hint"
 
 
-@router.get("/api/courses/{course_id}/chat/sessions", response_model=list[ChatSessionOut])
+async def _prepare(
+    db: AsyncSession,
+    course: Course,
+    body: ChatSendIn,
+    user: User,
+) -> tuple[ChatSession, Lesson | None, Module | None, QuizAssignment | None, QuizAttempt | None, str]:
+    lesson, module = await _lesson_and_module(
+        db, course, str(body.lesson_id) if body.lesson_id else None
+    )
+
+    assignment: QuizAssignment | None = None
+    attempt: QuizAttempt | None = None
+    support_mode = "hint"
+    if body.assignment_id is not None:
+        assignment, attempt, support_mode = await _resolve_assignment(
+            db, course, str(body.assignment_id), user
+        )
+        if assignment.lesson_id:
+            lesson, module = await _lesson_and_module(
+                db, course, assignment.lesson_id
+            )
+
+    if body.session_id is not None:
+        session = await _session_or_404(db, str(body.session_id), user)
+        if session.course_id != course.id:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên chat"
+            )
+    else:
+        session = ChatSession(
+            student_id=user.id,
+            course_id=course.id,
+            lesson_id=lesson.id if lesson is not None else None,
+            assignment_id=assignment.id if assignment is not None else None,
+            title=NEW_TITLE,
+        )
+        db.add(session)
+        await db.flush()
+
+    return session, lesson, module, assignment, attempt, support_mode
+
+
+@router.get(
+    "/api/courses/{course_id}/chat/sessions",
+    response_model=list[ChatSessionOut],
+)
 async def list_sessions(
     course_id: str,
     user: User = Depends(require_roles("student")),
@@ -163,49 +221,75 @@ async def send_message(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Gửi một câu hỏi. Không có `session_id` thì tạo phiên mới."""
+    """Gửi một câu hỏi (non-streaming). Không có `session_id` thì tạo phiên mới."""
     course = await get_course_or_404(db, course_id)
     await _require_enrolled(db, course.id, user)
+    session, lesson, module, assignment, attempt, support_mode = await _prepare(
+        db, course, body, user
+    )
 
-    lesson = await _resolve_lesson(db, course, str(body.lesson_id) if body.lesson_id else None)
-
-    assignment: QuizAssignment | None = None
-    attempt: QuizAttempt | None = None
-    if body.assignment_id is not None:
-        assignment, attempt = await _resolve_assignment(db, course, str(body.assignment_id), user)
-        if assignment.lesson_id:
-            lesson = await db.get(Lesson, assignment.lesson_id)
-
-    if body.session_id is not None:
-        session = await _session_or_404(db, str(body.session_id), user)
-        if session.course_id != course.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên chat")
-    else:
-        session = ChatSession(
-            student_id=user.id,
-            course_id=course.id,
-            lesson_id=lesson.id if lesson is not None else None,
-            assignment_id=assignment.id if assignment is not None else None,
-            title=NEW_TITLE,
-        )
-        db.add(session)
-        await db.flush()
-
-    answer, citations, intent = await answer_in_session(
+    answer, citations, intent, verified = await answer_in_session(
         db,
         course=course,
         session=session,
         message=body.message,
         lesson=lesson,
+        module=module,
         assignment=assignment,
         attempt=attempt,
+        support_mode=support_mode,
     )
     return ChatReplyOut(
-        session_id=session.id, answer=answer, citations=citations, intent=intent
+        session_id=session.id,
+        answer=answer,
+        citations=citations,
+        intent=intent,
+        verified=verified,
     )
 
 
-@router.get("/api/chat/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
+@router.post(
+    "/api/courses/{course_id}/chat/stream",
+    dependencies=[Depends(rate_limit(20, 60, "study-chat-stream"))],
+)
+async def stream_message(
+    course_id: str,
+    body: ChatSendIn,
+    user: User = Depends(require_roles("student")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Gửi câu hỏi và nhận SSE: session -> status -> citations -> token -> done."""
+    course = await get_course_or_404(db, course_id)
+    await _require_enrolled(db, course.id, user)
+    session, lesson, module, assignment, attempt, support_mode = await _prepare(
+        db, course, body, user
+    )
+
+    return StreamingResponse(
+        stream_in_session(
+            db,
+            course=course,
+            session=session,
+            message=body.message,
+            lesson=lesson,
+            module=module,
+            assignment=assignment,
+            attempt=attempt,
+            support_mode=support_mode,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get(
+    "/api/chat/sessions/{session_id}/messages",
+    response_model=list[ChatMessageOut],
+)
 async def list_messages(
     session_id: str,
     user: User = Depends(require_roles("student")),
@@ -258,9 +342,8 @@ async def delete_session(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Xoá phiên (kèm bộ nhớ hội thoại bên chatbot)."""
+    """Xoá phiên và toàn bộ tin nhắn (cascade)."""
     session = await _session_or_404(db, session_id, user)
-    await purge_thread(session.id)
     await db.delete(session)
     await db.commit()
     return {"status": "ok"}

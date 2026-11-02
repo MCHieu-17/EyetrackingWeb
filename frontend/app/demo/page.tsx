@@ -23,7 +23,7 @@ const GROUPS: Array<{ role: Role; title: string; icon: string; items: LinkItem[]
       {
         label: "Bài tập trắc nghiệm (trong reader)",
         url: "/student/courses/course-1?lesson=lesson-quiz-1",
-        note: "làm bài + chữa bài + chatbot",
+        note: "làm bài + chữa bài",
       },
       { label: "Hồ sơ học viên", url: "/student/profile" },
       { label: "Kiểm tra camera (preflight)", url: "/student/courses/course-1/prepare" },

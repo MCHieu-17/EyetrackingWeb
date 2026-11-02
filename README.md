@@ -4,6 +4,9 @@ Nền tảng học tập theo dõi hành vi mắt (eye-tracking): học viên h�
 qua webcam, hệ thống ước lượng hướng nhìn và sinh phân tích (heatmap, mức độ tập
 trung) cho giáo viên.
 
+> **Repo này chỉ chạy LOCAL.** Không có CI/CD, không GHCR, không Cloudflare Tunnel,
+> không Portainer. Toàn bộ image được build từ source trên máy bạn.
+
 ## Kiến trúc
 
 ```
@@ -19,153 +22,206 @@ trung) cho giáo viên.
 │  (:8000)           │  mediapipe + UniGaze gaze estimation
 │                    │  calibration 16 điểm → train model → .ubj
 └────────────────────┘
+
+      │  POST /api/courses/{id}/chat/stream (SSE)
+      ▼
+┌────────────────────┐
+│ services/chatbot   │  LangChain + pgvector hybrid search (BM25 + vector)
+│  (:8002)           │  DeepSeek qua River AI + Qwen3-Embedding-0.6B local
+└────────────────────┘
 ```
 
 | Thư mục | Vai trò |
 |---|---|
 | `frontend/` | Next.js (App Router, TypeScript, Tailwind) — khu vực học viên + giáo viên |
-| `backend/` | FastAPI — auth/JWT, khóa học, gaze ingestion, analytics (chi tiết: `backend/README.md`) |
-| `services/gaze/` | ML service — ước lượng gaze từ webcam, calibration, WebSocket `/session/{sid}/stream` (cần GPU; chi tiết: `services/gaze/README.md`) |
-| `services/chatbot/` | RAG service (LangGraph + pgvector) — chat hỗ trợ học tập, ingest slide, chữa bài |
-| `db/` | Migrations PostgreSQL (001 schema → 022 dọn schema chết; xem `db/README.md`) |
+| `backend/` | FastAPI — auth/JWT, khóa học, gaze ingestion, analytics, proxy chat |
+| `services/gaze/` | ML service — ước lượng gaze từ webcam, calibration, WebSocket (cần GPU) |
+| `services/chatbot/` | RAG service — ingest slide bằng VLM, hybrid retrieval, citation, SSE |
+| `db/` | Migrations PostgreSQL (001 → 024) |
+| `nginx/` | Reverse proxy local: web :3000 → frontend/backend/gaze |
+| `ops/` | Script build AI base, tạo role chatbot, bảo trì partition, dọn Docker |
+| `scripts/` | Seed tài khoản dev, reset DB, chạy backend tests |
 
-## Chạy nhanh (Docker)
+## Chạy nhanh (Full Docker)
 
-```bash
-docker compose up -d              # cả stack: postgres, migrate, backend, frontend, nginx, ...
-```
-
-- Backend: `api.eyelearning.id.vn` — Swagger tại `api.eyelearning.id.vn/docs`
-- Frontend: `app.eyelearning.id.vn`
-- Gaze: `gaze.eyelearning.id.vn`
-- Postgres: `localhost:5435` (user/pass/db lấy từ `.env`)
-
-Service ML (`services/gaze/`, cần GPU) chạy image `eyelearning-gaze`; image được
-CI build từ `services/gaze/Dockerfile`. Cả hai service AI (gaze + chatbot) build
-`FROM` một **image nền dùng chung** `docker/ai-base` (`ghcr.io/.../eyelearning-ai-base`)
-chứa `python:3.12-slim` + torch/torchvision CUDA 12.4 — nhờ đó layer nặng chỉ lưu
-một bản. CUDA/cuDNN lấy từ wheel pip `cu124`, không cần base image NVIDIA; host chỉ
-cần driver + nvidia-container-toolkit. Frontend kết nối WS `/gaze/session/{sid}/stream`
-(nginx proxy sang gaze service) — khi service tắt, frontend tự fallback mock
-(backend chỉ dùng `AI_HTTP_URL` để probe `/ai/health`).
-
-## Ranh giới giữa các service
-
-| Service | Sở hữu | Không được làm |
-|---|---|---|
-| `backend/` | PostgreSQL (schema, migration), auth/JWT, dữ liệu slide, analytics | Không suy luận gaze (gọi `services/gaze`), không tự tạo vector |
-| `services/gaze/` | Suy luận hướng nhìn (mediapipe + UniGaze) + session calibration trong RAM (TTL 30'); không auth | Không đọc/ghi DB, không biết user là ai |
-| `services/chatbot/` | Vector slide (`lesson_content_embedding`), checkpoint hội thoại, RAG graph | Chỉ đọc dữ liệu; không ghi vào bảng nghiệp vụ của backend |
-
-Backend và chatbot xác thực nội bộ bằng header `X-Chatbot-Token` (`CHATBOT_INTERNAL_TOKEN`);
-chatbot không bao giờ nhận request trực tiếp từ trình duyệt.
-
-### Frontend
+Yêu cầu: Docker + Docker Compose v2. Nếu dùng GPU: NVIDIA driver +
+`nvidia-container-toolkit`.
 
 ```bash
-cd frontend
-npm install
-npm run dev                       # http://localhost:3000
+# 1) Tạo file env local
+cp .env.example .env
+#    Sửa JWT_SECRET, CHATBOT_INTERNAL_TOKEN, RIVER_API_KEY... nếu cần.
+
+# 2) Lần đầu: build image nền torch/CUDA dùng chung cho gaze + chatbot
+./ops/build_ai_base.sh
+
+# 3) Build + chạy toàn bộ stack
+docker compose up -d --build
+
+# 4) Mở web
+#    http://localhost:3000
 ```
 
-Frontend gọi backend qua rewrite same-origin của Next.js (`/api`, `/media`, `/gaze`).
-URL nội bộ cho rewrite đặt trong `frontend/.env.local`:
-
-```env
-API_INTERNAL_URL=http://localhost:8001
-GAZE_INTERNAL_URL=http://localhost:8000
-NEXT_PUBLIC_API_URL=
-NEXT_PUBLIC_GAZE_URL=http://localhost:8000
-```
-
-Để trống `NEXT_PUBLIC_*` = browser dùng same-origin; chỉ đặt domain public khi
-browser phải gọi thẳng backend/gaze.
-
-### Backend chạy trực tiếp (không Docker)
+Lần đầu gaze/chatbot sẽ tải weights vào volume (có thể vài phút). Theo dõi:
 
 ```bash
-cd backend
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m uvicorn app.main:app --port 8001 --reload
+docker compose logs -f gaze
+docker compose logs -f chatbot
 ```
 
-> **Một file env duy nhất**: mọi biến (DB, JWT, CORS, AI service, Postgres) đặt ở
-> `.env` gốc repo — tạo từ `.env.example`. `docker-compose.yml` và
-> `backend/app/core/config.py` đều đọc từ file này; không còn giá trị mẫu nhúng.
+### Tài khoản mẫu (chỉ dev — mật khẩu `Password123!`)
 
-## Tài khoản mẫu (CHỈ dùng khi dev — mật khẩu `Password123!`)
-
-> ⚠️ Các tài khoản này **không** được tạo tự động bởi migrations. Chạy thủ công:
->
-> ```bash
-> psql -h localhost -p 5435 -U postgres -d eyetracking -f db/seed_dev_users.sql
-> ```
->
-> Cả 3 bị đặt `must_change_password` → **bắt buộc đổi mật khẩu ở lần đăng nhập đầu**
-> (trang `/account/change-password`). Production: tự tạo admin thật, KHÔNG dùng
-> mật khẩu mặc định.
+```bash
+./scripts/seed_dev.sh
+```
 
 | Email | Vai trò |
 |---|---|
 | `admin@school.edu.vn` | Quản trị viên |
-| `teacher@school.edu.vn` | Giáo viên — tạo khóa học, xem heatmap/analytics lớp |
-| `student@school.edu.vn` | Học sinh — học bài, calibration, gửi gaze |
+| `teacher@school.edu.vn` | Giáo viên |
+| `student@school.edu.vn` | Học sinh |
 
-## Luồng dữ liệu chính
+Lần đăng nhập đầu bị buộc đổi mật khẩu tại `/account/change-password`.
 
-1. **Calibration**: học viên nhìn lần lượt 16 điểm trên màn hình; mỗi điểm bấm **một
-   lần**, webcam gửi 1 ảnh về `POST /session/{sid}/calibrate` của gaze service →
-   server thu 1 mẫu `(pitch, yaw)` cho điểm đó. Sau khi đủ 16 điểm, frontend gọi
-   `POST /session/{sid}/train` để fit mô hình `LinearRegression` riêng cho phiên →
-   `GET /session/{sid}/model` tải file `.ubj` → gửi lên `POST /api/calibrations`
-   (base64) để backend lưu vào `calibration_params.model_ubj` (bản active duy nhất
-   cho mỗi user+device).
-   Khi phiên cũ hết TTL/restart, frontend tạo session mới rồi
-   `POST /session/{sid}/import` với `.ubj` đã lưu (`GET /api/calibrations/active/model`)
-   → dùng lại ngay, **không phải hiệu chỉnh lại** (chỉ khi màn hình không đổi).
-2. **Học bài**: frontend mở phiên (`POST /api/learning-sessions`, response có
-   `calibrated` — đã có model hiệu chỉnh sẵn sàng chưa), nhận gaze từ WebSocket
-   `/session/{sid}/stream` (trực tiếp từ gaze service), gửi batch về
-   `POST /api/lessons/{id}/gaze-samples`
-   — backend clamp [0,1], downsample ~4Hz, ghi vào `gaze_events` (partition theo tháng)
-   và cập nhật `gaze_slide_stats`.
-3. **Analytics**: giáo viên xem heatmap từng slide (`GET /teacher/lessons/{id}/heatmap`)
-   — on-slide ratio, fixation, hotspot; `POST /teacher/courses/{id}/recompute` tính lại
-   `heatmap_aggregates` + `engagement_scores` dạng batch.
+## Cổng
 
-## Vận hành DB
+| Cổng | Dịch vụ |
+|---|---|
+| `3000` | nginx → web (frontend + /api + /media + /gaze) |
+| `8000` | gaze (debug trực tiếp) |
+| `8001` | backend (Swagger: `/docs`) |
+| `8002` | chatbot (debug trực tiếp) |
+| `5435` | postgres |
+| `6379` | redis |
+
+## Lệnh thường dùng
 
 ```bash
-docker compose exec postgres psql -U postgres -d eyetracking -c '\dt'   # liệt kê bảng
-docker compose down           # dừng, giữ dữ liệu
-docker compose down -v        # XÓA volume — mất dữ liệu, migrations chạy lại từ đầu
+# Xem trạng thái
+docker compose ps
+
+# Log
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f nginx
+
+# Sửa code backend/frontend → build lại service tương ứng
+docker compose up -d --build backend
+docker compose up -d --build frontend
+
+# Sửa code gaze/chatbot → build lại
+docker compose up -d --build gaze
+docker compose up -d --build chatbot
+
+# Dừng (giữ dữ liệu)
+docker compose stop
+
+# Dừng + xóa container (giữ volume)
+docker compose down
+
+# XÓA CẢ VOLUME — mất DB + weights, chỉ dùng khi thật sự muốn reset sạch
+docker compose down -v
 ```
 
-- Migrations chạy qua service một-lần `migrate` (`Dockerfile.migrations` →
-  `db/migrate.sh`) mỗi lần deploy — không dùng `/docker-entrypoint-initdb.d`.
-  Runner ghi lại file đã áp vào bảng `schema_migrations` và **chỉ chạy file chưa áp**
-  (DB cũ chưa có bảng này thì lần đầu chạy như cũ rồi ghi dấu).
-- **Quy tắc: KHÔNG sửa file migration đã ship** — thay đổi mới thì thêm file mới
-  (`022_...`). CI đối chiếu `db/migrations.checksums.txt`; runner cũng từ chối chạy
-  nếu file đã áp bị đổi nội dung.
-- Job CI `migrations` canh **đường nâng cấp**: dựng DB từ bộ migration của bản đang
-  chạy, áp bộ mới, rồi so `db/schema_fingerprint.sql` với DB dựng mới — phải giống hệt.
-- Partition `gaze_events`: service `db-maintenance` trong `docker-compose.yml` tự
-  tạo partition tháng mới mỗi 24h; chạy thủ công bằng `ops/maintain_partitions.sql`
-  (xem `db/README.md`).
+> **Không có hot reload trong Docker.** Mỗi lần sửa code phải build lại service.
+> Nếu muốn hot reload, chạy backend/frontend trên host:
+> `cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8001`
+> và `cd frontend && npm run dev` (Docker chỉ chạy postgres/redis/gaze/chatbot).
 
-## Tests
+## Migrations
+
+Service `migrate` tự chạy mỗi lần `docker compose up`. Runner `db/migrate.sh`:
+
+- Ghi file đã áp vào bảng `schema_migrations`.
+- Chỉ chạy file chưa áp.
+- Từ chối chạy nếu file đã áp bị sửa nội dung.
+
+Chạy tay:
 
 ```bash
-cd backend
-.venv/bin/python -m pytest tests -v         # cần postgres + DB eyetracking_test
+docker compose run --rm migrate
+```
+
+Reset DB local (giữ weights):
+
+```bash
+./scripts/reset_db.sh
+```
+
+Quy tắc: **không sửa file migration đã áp** — thêm file mới (`025_...`).
+
+## Chatbot RAG
+
+Sau khi migrations chạy, tạo role DB hạn chế cho chatbot:
+
+```bash
+./ops/create_chatbot_role.sh
+```
+
+- Retrieval chỉ trong đúng `course_id`; hybrid BM25 (Postgres FTS) + vector
+  (pgvector HNSW), fuse bằng RRF.
+- Model: DeepSeek V4.1 Flash qua River AI cho router/answer/verifier/VLM;
+  embedding local `Qwen3-Embedding-0.6B` (1024 chiều).
+- Citation: mỗi claim về môn học phải có `[n]`; verifier kiểm tra evidence quote.
+- Streaming SSE: `status → citations → token → done`.
+
+## Gaze
+
+- Calibration 16 điểm → train model `.ubj` theo phiên → lưu vào
+  `calibration_params` (một bản active / user+device).
+- WebSocket `/session/{sid}/stream` (qua nginx `/gaze/...`).
+- Không có GPU: đặt `DEVICE=cpu` trong `.env`, bỏ `gpus: all` ở service `gaze`
+  trong `docker-compose.yml`; chatbot đặt `EMBEDDING_DEVICE=cpu` và bỏ `gpus: all`.
+
+## Tests & lint
+
+```bash
+# Backend (cần postgres + DB test)
+./scripts/test_backend.sh -v
+
+# Frontend
+cd frontend && npm run lint && npm run typecheck && npm test
+
+# Chatbot
+cd services/chatbot && .venv/bin/python -m pytest tests -q
+
+# Gaze
+cd services/gaze && python -m pytest tests -q
+
+# Ruff
+ruff check backend services/gaze
 ```
 
 Tạo DB test một lần:
 
 ```bash
 docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
+docker compose run --rm -e PGDATABASE=eyetracking_test migrate
 ```
 
-(rồi chạy toàn bộ migration vào DB này — xem `backend/README.md`).
+## Bảo trì partition
+
+Migration `003` tạo partition cho 12 tháng đầu. Khi cần tạo thêm:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d eyetracking \
+  -c "SELECT create_gaze_partitions(3);"
+```
+
+## Dọn dung lượng Docker
+
+```bash
+./ops/docker_cleanup.sh   # chỉ prune image/build cache, KHÔNG đụng volume
+
+# Xóa image GHCR cũ (nếu còn từ trước khi chuyển sang local)
+docker image rm ghcr.io/manh1504/eyelearning-{backend,frontend,nginx,migrations,gaze,chatbot,ai-base}:latest
+```
+
+## Ghi chú
+
+- `.env` chứa secret và đã được gitignore — không commit.
+- `frontend/.env.local` trỏ backend/gaze local:
+  `API_INTERNAL_URL=http://localhost:8001`, `GAZE_INTERNAL_URL=http://localhost:8000`.
+- Nếu login không giữ phiên trên `http://localhost`: đặt `COOKIE_SECURE=false`
+  trong `.env` rồi `docker compose up -d --build backend`.
+- Nếu `npm run dev` báo cổng 3000 đang dùng: `docker compose stop nginx`.

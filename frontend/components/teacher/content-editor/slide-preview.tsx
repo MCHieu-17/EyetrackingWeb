@@ -51,7 +51,7 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
               type="button"
               onClick={() => setPreview(index)}
               aria-label={`Xem trước trang ${slide.orderIndex}`}
-              className="group overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white p-1 outline-none transition hover:border-black/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-black/20"
+              className="group relative overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white p-1 outline-none transition hover:border-black/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-black/20"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -61,6 +61,14 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
                 onError={() => setFailed((c) => ({ ...c, [slide.id]: true }))}
                 className="aspect-[4/3] w-full object-contain transition group-hover:scale-[1.02]"
               />
+              {slide.embeddingStatus === "failed" && (
+                <span
+                  className="absolute right-1.5 top-1.5 rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+                  title={slide.embeddingError || "Trang chưa được index cho trợ lý học tập"}
+                >
+                  Lỗi index
+                </span>
+              )}
             </button>
           );
         })}

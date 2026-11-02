@@ -1,93 +1,95 @@
-from unittest.mock import MagicMock
-from uuid import uuid4
+from pgvector import Vector
 
-from app.workflow.shared import retrieval as retrieval_mod
-from app.workflow.shared.retrieval import Retriever, build_citations
+from app.workflow import retrieval
 
 
-def _retriever_with_fake_pool(monkeypatch, fetchall_result):
-    retriever = Retriever.__new__(Retriever)
-    retriever.embedding = MagicMock()
-    retriever.embedding.embed_query.return_value = [0.1, 0.2]
-    retriever.top_k = 5
-    retriever.threshold = 0.3
-
-    cursor = MagicMock()
-    cursor.fetchall.return_value = fetchall_result
-
-    conn = MagicMock()
-    conn.__enter__.return_value = conn
-    conn.cursor.return_value.__enter__.return_value = cursor
-
-    pool = MagicMock()
-    pool.connection.return_value = conn
-
-    monkeypatch.setattr(retrieval_mod, "get_pool", lambda: pool)
-    return retriever, cursor
+def _doc():
+    return {
+        "id": "slide-1",
+        "lesson_id": "lesson-1",
+        "content": "Nội dung slide",
+        "course_title": "Cơ sở dữ liệu",
+        "module_title": "Chương 1",
+        "lesson_title": "Bài 1",
+        "image_url": "/media/slide.jpg",
+        "slide_index": 1,
+        "score": 0.5,
+    }
 
 
-def test_search_empty_embedding_table_returns_empty(monkeypatch):
-    retriever, _ = _retriever_with_fake_pool(monkeypatch, [])
-
-    assert retriever.search("question", str(uuid4())) == []
-    retriever.embedding.embed_query.assert_called_once_with("question")
-
-
-def test_search_returns_rows_as_dicts(monkeypatch):
-    row = {"id": str(uuid4()), "content": "c", "score": 0.9}
-    retriever, _ = _retriever_with_fake_pool(monkeypatch, [row])
-
-    assert retriever.search("q", str(uuid4())) == [row]
+def test_build_citations_maps_fields():
+    citations = retrieval.build_citations([_doc()])
+    assert citations[0]["document_id"] == "slide-1"
+    assert citations[0]["lesson_id"] == "lesson-1"
+    assert citations[0]["slide_index"] == 1
+    assert citations[0]["image_url"] == "/media/slide.jpg"
+    assert citations[0]["snippet"] == "Nội dung slide"
 
 
-def test_build_citations_preserves_uuid_as_string():
-    document_id = str(uuid4())
-    docs = [{
-        "id": document_id,
-        "content": "content",
-        "course_title": "Course",
-        "module_title": "Module",
-        "lesson_title": "Lesson",
-        "image_url": "https://example.test/slide.png",
-        "score": 0.9,
-    }]
-
-    assert build_citations(docs)[0]["document_id"] == document_id
+def test_format_context_numbers_documents():
+    context = retrieval.format_context([_doc()])
+    assert context.startswith("[1] Cơ sở dữ liệu > Chương 1 > Bài 1")
+    assert "Nội dung slide" in context
 
 
-def test_search_forwards_lesson_id_and_falls_back_to_course(monkeypatch):
-    lesson_id = str(uuid4())
-    scoped = {"id": str(uuid4()), "content": "c", "score": 0.9}
-    duplicated = {"id": scoped["id"], "content": "c", "score": 0.8}
-    other = {"id": str(uuid4()), "content": "d", "score": 0.7}
-    retriever, cursor = _retriever_with_fake_pool(monkeypatch, [scoped])
-    # Lần 1 (theo bài) chỉ được 1 kết quả < top_k -> lần 2 nới ra toàn khóa.
-    cursor.fetchall.side_effect = [[scoped], [duplicated, other]]
-
-    result = retriever.search("q", str(uuid4()), lesson_id=lesson_id)
-
-    # Gộp kết quả hai lần, không trùng slide, tối đa top_k.
-    assert [doc["id"] for doc in result] == [scoped["id"], other["id"]]
-    assert cursor.execute.call_count == 2
-    scoped_params = cursor.execute.call_args_list[0][0][1]
-    course_params = cursor.execute.call_args_list[1][0][1]
-    assert scoped_params[2] == lesson_id
-    assert course_params[2] is None
+def test_format_context_empty():
+    assert retrieval.format_context([]) == ""
 
 
-def test_search_scoped_never_falls_back_when_enough_rows(monkeypatch):
-    rows = [{"id": str(uuid4()), "content": "c", "score": 0.9} for _ in range(5)]
-    retriever, cursor = _retriever_with_fake_pool(monkeypatch, rows)
+class _FakeCursor:
+    def __init__(self):
+        self.params = None
 
-    result = retriever.search("q", str(uuid4()), lesson_id=str(uuid4()))
+    def __enter__(self):
+        return self
 
-    assert len(result) == 5
-    assert cursor.execute.call_count == 1
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, _sql, params):
+        self.params = params
+
+    def fetchall(self):
+        return []
 
 
-def test_search_without_lesson_id_queries_course_once(monkeypatch):
-    retriever, cursor = _retriever_with_fake_pool(monkeypatch, [])
+class _FakeConnection:
+    def __init__(self, cursor):
+        self._cursor = cursor
 
-    assert retriever.search("q", str(uuid4())) == []
-    assert cursor.execute.call_count == 1
-    assert cursor.execute.call_args_list[0][0][1][2] is None
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def cursor(self, **_kwargs):
+        return self._cursor
+
+
+class _FakePool:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def connection(self):
+        return self._connection
+
+
+def test_query_passes_all_parameters(monkeypatch):
+    cursor = _FakeCursor()
+    pool = _FakePool(_FakeConnection(cursor))
+    monkeypatch.setattr(retrieval, "get_pool", lambda: pool)
+
+    retriever = retrieval.Retriever.__new__(retrieval.Retriever)
+    retriever.top_k = 8
+    retriever.candidates = 20
+    retriever.rrf_k = 60
+    retriever.threshold = 0.25
+
+    retriever._query(Vector([0.1] * 1024), "khóa chính", "course-1")
+
+    assert cursor.params is not None
+    assert len(cursor.params) == 13
+    assert cursor.params[2] == "course-1"
+    assert cursor.params[7] == "khóa chính"
+    assert cursor.params[12] == 8

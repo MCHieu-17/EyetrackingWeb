@@ -151,6 +151,8 @@ class LessonContent(Base):
     content_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     is_key: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     aoi_source: Mapped[str] = mapped_column(String(6), server_default=text("'none'"))
+
+    # Trạng thái ingest RAG (migration 024): none | pending | ready | failed.
     embedding_status: Mapped[str] = mapped_column(
         String(10), server_default=text("'none'")
     )

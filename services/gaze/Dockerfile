@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 #
 # Gaze service — build FROM image nền dùng chung (docker/ai-base) để chia sẻ
-# layer torch/CUDA 12.4 với service chatbot. Base đã có torch/torchvision cu124,
+# layer torch/CUDA 12.4 dùng chung. Base đã có torch/torchvision cu124,
 # numpy, libgomp1, curl; ở đây chỉ thêm thư viện riêng của gaze.
 #
 # CUDA/cuDNN đến từ wheel pip cu124 trong base nên KHÔNG cần base image NVIDIA;
 # host chỉ cần NVIDIA driver + nvidia-container-toolkit (docker-compose đặt
 # `gpus: all`). Chạy CPU vẫn được qua DEVICE=cpu.
-ARG AI_BASE=ghcr.io/manh1504/eyelearning-ai-base:latest
+ARG AI_BASE=eyelearning-ai-base:latest
 FROM ${AI_BASE}
 
 # Thư viện hệ thống cho OpenCV / MediaPipe (GL, EGL) — base chỉ có libgomp1/curl.

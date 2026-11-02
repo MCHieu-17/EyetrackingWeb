@@ -27,8 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
 import { ApiError } from "@/lib/api/client";
+import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
 import type { QuizAssignment, QuizAttempt } from "@/lib/types/domain";
 
 function NextButton({ onNext, hasNext }: { onNext?: () => void; hasNext?: boolean }) {
@@ -195,6 +195,7 @@ function ReviewView({
         courseId={assignment.courseId}
         lessonId={assignment.lessonId ?? null}
         assignmentId={assignment.id}
+        mode="review"
       />
     </div>
   );
@@ -431,6 +432,13 @@ export function InlineQuiz({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <StudyAssistantChat
+        courseId={assignment.courseId}
+        lessonId={assignment.lessonId ?? null}
+        assignmentId={assignment.id}
+        mode="quiz"
+      />
     </div>
   );
 }

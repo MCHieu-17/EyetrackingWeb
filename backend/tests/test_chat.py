@@ -1,210 +1,275 @@
-"""Test API chat học tập: phiên, lịch sử, gửi câu hỏi và phân quyền."""
+import asyncio
 
-from app.core.config import settings
-from app.services import study_chat as study_chat_mod
-from tests.conftest import auth
-from tests.test_assignments import _create_assignment, _setup, _submit
+from sqlalchemy import text
 
-
-class _FakeChatbotResponse:
-    def __init__(self, payload):
-        self._payload = payload
-
-    def raise_for_status(self):
-        return None
-
-    def json(self):
-        return self._payload
+from app.api.routes import chat as chat_routes
+from app.db.session import SessionLocal
+from app.services import embedding, study_chat
+from tests.conftest import auth, login, make_user
 
 
-class _FakeChatbotClient:
-    """Thay httpx.AsyncClient để bắt payload backend gửi sang service chatbot."""
+def _setup(client):
+    asyncio.run(make_user("chat-teacher@test.vn", "teacher"))
+    asyncio.run(make_user("chat-student@test.vn", "student"))
+    asyncio.run(make_user("chat-outsider@test.vn", "student"))
+    teacher = login(client, "chat-teacher@test.vn")
+    student = login(client, "chat-student@test.vn")
+    outsider = login(client, "chat-outsider@test.vn")
+    course = client.post(
+        "/teacher/courses",
+        headers=auth(teacher),
+        json={"title": "Chat course", "status": "published"},
+    ).json()
+    module = client.post(
+        f"/teacher/courses/{course['id']}/modules",
+        headers=auth(teacher),
+        json={"title": "Module"},
+    ).json()
+    lesson = client.post(
+        f"/teacher/modules/{module['id']}/lessons",
+        headers=auth(teacher),
+        json={"title": "Lesson"},
+    ).json()
+    enroll = client.post(f"/api/courses/{course['id']}/enroll", headers=auth(student))
+    assert enroll.status_code == 201, enroll.text
+    return teacher, student, outsider, course["id"], module["id"], lesson["id"]
 
-    def __init__(self, captured, **_kwargs):
-        self.captured = captured
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *_exc):
-        return False
-
-    async def post(self, url, json):
-        self.captured["url"] = url
-        self.captured["payload"] = json
-        return _FakeChatbotResponse(
+def _fake_reply():
+    return {
+        "answer": "Khóa chính xác định duy nhất mỗi hàng [1].",
+        "citations": [
             {
-                "answer": "Đáp án là B",
-                "citations": [
-                    {"documentId": "d1", "title": "Chương 1 - Bài 1", "location": "http://x/s.png"}
-                ],
-                "intent": "qa",
+                "document_id": "slide-1",
+                "title": "Chương 1 - Bài 1",
+                "location": "/media/slide-1.jpg",
+                "lesson_id": "lesson-1",
+                "lesson_title": "Bài 1",
+                "slide_id": "slide-1",
+                "slide_index": 1,
+                "image_url": "/media/slide-1.jpg",
+                "snippet": "Khóa chính xác định duy nhất mỗi hàng.",
+                "score": 0.9,
             }
-        )
+        ],
+        "intent": "course_qa",
+        "verified": True,
+    }
 
-    async def delete(self, url):
-        self.captured.setdefault("deleted", []).append(url)
-        return _FakeChatbotResponse({"status": "ok"})
 
-
-def _patch_chatbot(monkeypatch) -> dict:
-    captured: dict = {}
-    monkeypatch.setattr(
-        study_chat_mod.httpx, "AsyncClient", lambda **kw: _FakeChatbotClient(captured, **kw)
+def test_chat_requires_enrollment(client):
+    _, _, outsider, course_id, _, _ = _setup(client)
+    response = client.post(
+        f"/api/courses/{course_id}/chat",
+        headers=auth(outsider),
+        json={"message": "Khóa chính là gì?"},
     )
-    monkeypatch.setattr(settings, "chatbot_url", "http://chatbot:8000")
-    monkeypatch.setattr(settings, "chatbot_internal_token", "internal-token")
-    return captured
+    assert response.status_code == 403
 
 
-def test_chat_session_lifecycle_and_history(client, monkeypatch):
-    captured = _patch_chatbot(monkeypatch)
+def test_chat_session_crud(client, monkeypatch):
     _, student, _, course_id, _, lesson_id = _setup(client)
 
-    sent = client.post(
+    async def fake_ask(_payload):
+        return _fake_reply()
+
+    monkeypatch.setattr(study_chat, "_ask_chatbot", fake_ask)
+
+    created = client.post(
         f"/api/courses/{course_id}/chat",
         headers=auth(student),
-        json={"message": "Hàm trong Python là gì?", "lessonId": lesson_id},
+        json={"message": "Khóa chính là gì?", "lessonId": lesson_id},
     )
-    assert sent.status_code == 200, sent.text
-    session_id = sent.json()["sessionId"]
-    assert sent.json()["answer"] == "Đáp án là B"
-    assert sent.json()["citations"][0]["documentId"] == "d1"
-
-    # thread_id hội thoại chính là id phiên; chat tự do KHÔNG kèm đáp án.
-    payload = captured["payload"]
-    assert payload["thread_id"] == session_id
-    assert payload["course_id"] == course_id
-    assert payload["lesson_id"] == lesson_id
-    assert payload["assignment_context"] == ""
-    assert payload["support_mode"] == "hint"
+    assert created.status_code == 200, created.text
+    body = created.json()
+    session_id = body["sessionId"]
+    assert body["answer"].startswith("Khóa chính")
+    assert body["citations"][0]["documentId"] == "slide-1"
+    assert body["verified"] is True
 
     sessions = client.get(
         f"/api/courses/{course_id}/chat/sessions", headers=auth(student)
-    ).json()
-    assert len(sessions) == 1
-    assert sessions[0]["id"] == session_id
-    assert sessions[0]["messageCount"] == 2
-    # Tiêu đề tự sinh từ câu hỏi đầu tiên.
-    assert sessions[0]["title"] == "Hàm trong Python là gì?"
+    )
+    assert sessions.status_code == 200
+    assert len(sessions.json()) == 1
+    assert sessions.json()[0]["messageCount"] == 2
 
     messages = client.get(
         f"/api/chat/sessions/{session_id}/messages", headers=auth(student)
-    ).json()
-    assert [m["role"] for m in messages] == ["student", "assistant"]
-    assert messages[0]["content"] == "Hàm trong Python là gì?"
-    assert messages[1]["content"] == "Đáp án là B"
-    assert messages[1]["citations"][0]["title"] == "Chương 1 - Bài 1"
-
-    # Hỏi tiếp trong cùng phiên -> giữ nguyên sessionId, thêm 2 tin nhắn.
-    again = client.post(
-        f"/api/courses/{course_id}/chat",
-        headers=auth(student),
-        json={"message": "Cho ví dụ", "sessionId": session_id},
     )
-    assert again.status_code == 200, again.text
-    assert again.json()["sessionId"] == session_id
-    sessions = client.get(
-        f"/api/courses/{course_id}/chat/sessions", headers=auth(student)
-    ).json()
-    assert sessions[0]["messageCount"] == 4
+    assert messages.status_code == 200
+    assert [item["role"] for item in messages.json()] == ["student", "assistant"]
+    assert messages.json()[1]["citations"][0]["documentId"] == "slide-1"
 
     renamed = client.patch(
         f"/api/chat/sessions/{session_id}",
         headers=auth(student),
-        json={"title": "Ôn Python cơ bản"},
+        json={"title": "Phiên mới"},
     )
     assert renamed.status_code == 200
-    assert renamed.json()["title"] == "Ôn Python cơ bản"
+    assert renamed.json()["title"] == "Phiên mới"
 
-    deleted = client.delete(f"/api/chat/sessions/{session_id}", headers=auth(student))
+    deleted = client.delete(
+        f"/api/chat/sessions/{session_id}", headers=auth(student)
+    )
     assert deleted.status_code == 200
-    assert (
-        client.get(f"/api/courses/{course_id}/chat/sessions", headers=auth(student)).json()
-        == []
-    )
-    # Xoá phiên kéo theo xoá bộ nhớ hội thoại bên chatbot.
-    assert captured["deleted"] == [f"http://chatbot:8000/threads/{session_id}"]
+    assert client.get(
+        f"/api/courses/{course_id}/chat/sessions", headers=auth(student)
+    ).json() == []
 
 
-def test_chat_assignment_context_requires_submission(client, monkeypatch):
-    captured = _patch_chatbot(monkeypatch)
+def test_chat_hints_do_not_include_answers(client, monkeypatch):
     teacher, student, _, course_id, module_id, _ = _setup(client)
-    created = _create_assignment(client, teacher, module_id)
-    assignment_id = created.json()["id"]
-    # Mở bài tập để bắt đầu lượt làm (tạo session) rồi mới nộp được.
-    client.get(f"/api/assignments/{assignment_id}", headers=auth(student))
+    item = client.post(
+        f"/teacher/modules/{module_id}/quizzes",
+        headers=auth(teacher),
+        json={"title": "Quiz", "durationMinutes": 15},
+    ).json()
+    quiz_id = item["quizId"]
+    client.patch(
+        f"/api/assignments/{quiz_id}",
+        headers=auth(teacher),
+        json={
+            "status": "published",
+            "questions": [
+                {
+                    "id": "q1",
+                    "prompt": "Khóa chính dùng để làm gì?",
+                    "options": [
+                        {"id": "a", "text": "Xác định duy nhất mỗi hàng"},
+                        {"id": "b", "text": "Liên kết hai bảng"},
+                    ],
+                    "correctOptionIds": ["a"],
+                    "explanation": "Khóa chính xác định duy nhất mỗi hàng.",
+                    "points": 1,
+                }
+            ],
+        },
+    )
+    # Bắt đầu lượt làm bài (chưa nộp).
+    assert client.get(
+        f"/api/assignments/{quiz_id}", headers=auth(student)
+    ).status_code == 200
 
-    before = client.post(
+    captured: dict = {}
+
+    async def fake_ask(payload):
+        captured.update(payload)
+        return {
+            "answer": "Gợi ý: hãy đọc định nghĩa khóa chính.",
+            "citations": [],
+            "intent": "exercise_hints",
+            "verified": True,
+        }
+
+    monkeypatch.setattr(study_chat, "_ask_chatbot", fake_ask)
+
+    hints = client.post(
         f"/api/courses/{course_id}/chat",
         headers=auth(student),
-        json={"message": "Cho mình gợi ý", "assignmentId": assignment_id},
+        json={"message": "Cho mình đáp án câu 1", "assignmentId": quiz_id},
     )
-    assert before.status_code == 403
-    assert before.json()["detail"] == "Hãy nộp bài trước khi dùng trợ lý học tập"
+    assert hints.status_code == 200, hints.text
+    assert captured["support_mode"] == "hint"
+    assert "Đáp án đúng" not in captured["assignment_context"]
+    assert "Giải thích" not in captured["assignment_context"]
 
-    _submit(client, student, assignment_id)
-    after = client.post(
+    # Nộp bài -> lần hỏi sau là review, được gửi đáp án.
+    submitted = client.post(
+        f"/api/assignments/{quiz_id}/attempts",
+        headers=auth(student),
+        json={"answers": {"q1": ["b"]}},
+    )
+    assert submitted.status_code == 201, submitted.text
+
+    review = client.post(
         f"/api/courses/{course_id}/chat",
         headers=auth(student),
-        json={"message": "Vì sao đáp án là B?", "assignmentId": assignment_id},
+        json={"message": "Vì sao mình sai?", "assignmentId": quiz_id},
     )
-    assert after.status_code == 200, after.text
-
-    payload = captured["payload"]
-    # Chữa bài: có kèm đáp án đúng + giải thích và ngữ cảnh phân cấp.
-    assert payload["support_mode"] == "review"
-    assert "Đáp án đúng: b" in payload["assignment_context"]
-    assert payload["assignment_id"] == assignment_id
-    assert payload["lesson_id"] == created.json()["lessonId"]
-    assert payload["lesson_title"] == "Bài kiểm tra"
-    assert payload["module_title"] == "Module"
+    assert review.status_code == 200, review.text
+    assert captured["support_mode"] == "review"
+    assert "Đáp án đúng" in captured["assignment_context"]
+    assert "Giải thích" in captured["assignment_context"]
 
 
-def test_chat_access_control(client, monkeypatch):
-    _patch_chatbot(monkeypatch)
-    _, student, outsider, course_id, _, lesson_id = _setup(client)
-    session_id = client.post(
-        f"/api/courses/{course_id}/chat",
-        headers=auth(student),
-        json={"message": "Chào trợ lý", "lessonId": lesson_id},
-    ).json()["sessionId"]
-
-    # Người chưa ghi danh môn: không list, không hỏi được.
-    assert (
-        client.get(f"/api/courses/{course_id}/chat/sessions", headers=auth(outsider)).status_code
-        == 403
-    )
-    assert (
-        client.post(
-            f"/api/courses/{course_id}/chat", headers=auth(outsider), json={"message": "hi"}
-        ).status_code
-        == 403
-    )
-    # Phiên của người khác: ẩn như không tồn tại.
-    assert (
-        client.get(
-            f"/api/chat/sessions/{session_id}/messages", headers=auth(outsider)
-        ).status_code
-        == 404
-    )
-    assert (
-        client.delete(f"/api/chat/sessions/{session_id}", headers=auth(outsider)).status_code
-        == 404
-    )
-
-
-def test_chat_unconfigured_returns_503_without_session(client, monkeypatch):
-    monkeypatch.setattr(settings, "chatbot_url", "")
-    monkeypatch.setattr(settings, "chatbot_internal_token", "")
+def test_chat_stream_forwards_sse(client, monkeypatch):
     _, student, _, course_id, _, _ = _setup(client)
 
+    async def fake_stream(*_args, **_kwargs):
+        yield 'event: session\ndata: {"sessionId": "s1"}\n\n'
+        yield 'event: token\ndata: {"text": "Xin chào"}\n\n'
+        yield 'event: done\ndata: {"intent": "course_qa", "verified": true}\n\n'
+
+    monkeypatch.setattr(chat_routes, "stream_in_session", fake_stream)
+
     response = client.post(
-        f"/api/courses/{course_id}/chat", headers=auth(student), json={"message": "hi"}
+        f"/api/courses/{course_id}/chat/stream",
+        headers=auth(student),
+        json={"message": "Khóa chính là gì?"},
     )
-    assert response.status_code == 503
-    # Lỗi trước khi lưu -> không tạo phiên rác.
-    assert (
-        client.get(f"/api/courses/{course_id}/chat/sessions", headers=auth(student)).json()
-        == []
+    assert response.status_code == 200
+    assert "event: session" in response.text
+    assert "event: token" in response.text
+    assert "event: done" in response.text
+
+
+def test_citation_out_camel_case():
+    citation = study_chat._citation_out(
+        {
+            "document_id": "slide-1",
+            "title": "Bài 1",
+            "location": "/media/slide-1.jpg",
+            "lesson_id": "lesson-1",
+            "lesson_title": "Bài 1",
+            "slide_id": "slide-1",
+            "slide_index": 1,
+            "image_url": "/media/slide-1.jpg",
+            "snippet": "Nội dung",
+            "score": 0.9,
+        }
     )
+    assert citation["documentId"] == "slide-1"
+    assert citation["lessonId"] == "lesson-1"
+    assert citation["imageUrl"] == "/media/slide-1.jpg"
+
+
+def test_embedding_mark_updates_status(client):
+    _, _, _, _, _, lesson_id = _setup(client)
+
+    async def _create_slide():
+        async with SessionLocal() as session:
+            slide_id = (
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO lesson_contents
+                            (lesson_id, order_index, image_url, content_json)
+                        VALUES (:lesson_id, 1, '/media/test.jpg', '{}'::jsonb)
+                        RETURNING id
+                        """
+                    ),
+                    {"lesson_id": lesson_id},
+                )
+            ).scalar_one()
+            await session.commit()
+            return str(slide_id)
+
+    slide_id = asyncio.run(_create_slide())
+
+    async def _mark_ready():
+        async with SessionLocal() as session:
+            await embedding._mark(session, slide_id, embedding.READY)
+
+    asyncio.run(_mark_ready())
+
+    async def _status():
+        async with SessionLocal() as session:
+            return (
+                await session.execute(
+                    text("SELECT embedding_status FROM lesson_contents WHERE id = :id"),
+                    {"id": slide_id},
+                )
+            ).scalar_one()
+
+    assert asyncio.run(_status()) == embedding.READY

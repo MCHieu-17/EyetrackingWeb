@@ -1,32 +1,29 @@
 #!/usr/bin/env bash
 # =============================================================================
-# migrate.sh — runner migration DÙNG CHUNG cho Docker (Dockerfile.migrations) và CI.
+# migrate.sh — runner migration cho Docker local (Dockerfile.migrations).
 #
 #   bash db/migrate.sh [THU_MUC_MIGRATION]     # mặc định: <dir của script>/migrations
 #
 # Cơ chế
 #   * Bảng `schema_migrations` ghi lại file nào đã áp + checksum sha256.
 #   * Chỉ chạy file CHƯA áp. File đã áp mà nội dung đổi -> DỪNG NGAY (không cho
-#     sửa file đã ship; phải thêm file mới: 021_..., 022_...).
-#   * pg_advisory_lock giữ suốt quá trình chạy -> chặn 2 deploy chạy song song.
+#     sửa file đã áp; phải thêm file mới: 025_..., 026_...).
+#   * pg_advisory_lock giữ suốt quá trình chạy -> chặn 2 lần chạy song song.
 #   * DB đã có schema nhưng chưa có bảng tracking (lần đầu bật cơ chế này, hoặc
 #     DB cũ) -> chạy như cũ rồi mới ghi dấu. Vì mọi file đều idempotent nên an toàn.
 #
 # Biến môi trường (psql tự đọc): PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE
-#   CHATBOT_DATABASE_URL_DOCKER... không liên quan — chỉ dùng PG*.
 #
 # Chế độ đặc biệt
 #   MIGRATE_BASELINE=1          ghi dấu checksum mà KHÔNG chạy file (dùng khi DB
 #                               đã đồng bộ sẵn nhưng bảng tracking còn trống).
-#                               KHÔNG dùng cho server đang thiếu migration.
-#   MIGRATE_UPDATE_CHECKSUMS=1  chỉ ghi lại db/migrations.checksums.txt, không cần DB.
-#   MIGRATE_NO_LOCK=1           bỏ advisory lock (dùng cho test/CI).
+#                               KHÔNG dùng khi DB đang thiếu migration.
+#   MIGRATE_NO_LOCK=1           bỏ advisory lock (dùng cho test).
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="${1:-${SCRIPT_DIR}/migrations}"
-CHECKSUMS_FILE="${SCRIPT_DIR}/migrations.checksums.txt"
 
 if [ ! -d "${MIGRATIONS_DIR}" ]; then
     echo "LỖI: không thấy thư mục migration: ${MIGRATIONS_DIR}" >&2
@@ -38,27 +35,6 @@ list_migrations() {
 }
 
 checksum_of() { sha256sum "$1" | awk '{print $1}'; }
-
-# ---------------------------------------------------------------------------
-# Chế độ ghi lại checksums.txt (không cần DB)
-# ---------------------------------------------------------------------------
-if [ "${MIGRATE_UPDATE_CHECKSUMS:-0}" = "1" ]; then
-    {
-        echo "# Checksum sha256 của các file migration TẠI THỜI ĐIỂM ĐƯỢC CHỐT."
-        echo "# CI đối chiếu file này (.github/workflows/ci.yml, job 'migrations') để"
-        echo "# chặn việc sửa nội dung file migration đã ship."
-        echo "#"
-        echo "# Sinh lại:  MIGRATE_UPDATE_CHECKSUMS=1 bash db/migrate.sh"
-        echo "# QUY TẮC: KHÔNG sửa file đã ship — hãy thêm file mới (021_..., 022_...)."
-        echo "# (Sửa file + ghi lại file này là hành vi cố ý, sẽ lộ rõ trong review.)"
-        echo "# <tên file> <sha256>"
-        list_migrations | while read -r name; do
-            printf '%s %s\n' "${name}" "$(checksum_of "${MIGRATIONS_DIR}/${name}")"
-        done
-    } > "${CHECKSUMS_FILE}"
-    echo "Đã ghi ${CHECKSUMS_FILE} ($(grep -c '\.sql' "${CHECKSUMS_FILE}") file)."
-    exit 0
-fi
 
 psql_t() { psql -v ON_ERROR_STOP=1 -q -tA "$@"; }
 
@@ -141,8 +117,8 @@ for name in $(list_migrations); do
         echo "LỖI: file migration đã áp nhưng nội dung đã bị SỬA: ${name}" >&2
         echo "      đã áp (checksum): ${existing}" >&2
         echo "      hiện tại        : ${sum}" >&2
-        echo "      => KHÔNG sửa file đã ship. Hãy thêm file mới (vd 021_ten_moi.sql)" >&2
-        echo "         để bù thay đổi, rồi deploy lại." >&2
+        echo "      => KHÔNG sửa file đã áp. Hãy thêm file mới (vd 025_ten_moi.sql)" >&2
+        echo "         để bù thay đổi, rồi chạy lại migration." >&2
         exit 1
     fi
 

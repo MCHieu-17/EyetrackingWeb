@@ -49,6 +49,7 @@ export function LessonEditor({
   const uploading = upload.status === "uploading";
   const slideCount = Math.max(lesson.slides, slides.length);
   const hasSlides = slideCount > 0;
+  const failedSlides = slides.filter((slide) => slide.embeddingStatus === "failed");
 
   const validate = (file: File): string | null => {
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -243,6 +244,18 @@ export function LessonEditor({
         {slidesError && (
           <Alert variant="destructive" className="mt-3" title="Không tải được danh sách trang">
             Kiểm tra kết nối rồi thử lại; nếu vừa tải PDF xong, hãy tải lại trang.
+          </Alert>
+        )}
+
+        {failedSlides.length > 0 && (
+          <Alert
+            variant="destructive"
+            className="mt-3"
+            title={`${failedSlides.length} trang chưa index được cho trợ lý học tập`}
+          >
+            Trợ lý sẽ không tìm thấy nội dung các trang này. Lỗi:{" "}
+            {failedSlides[0].embeddingError || "không rõ"}. Hệ thống tự thử lại khi bạn tải lại
+            PDF; quản trị viên có thể chạy reindex nếu lỗi kéo dài.
           </Alert>
         )}
       </section>

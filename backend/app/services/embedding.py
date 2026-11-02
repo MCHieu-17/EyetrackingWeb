@@ -3,23 +3,20 @@
 Backend là nguồn dữ liệu slide; chatbot giữ vector trong bảng
 `lesson_content_embedding`. Module này:
 
-- Gọi `/ingest/slide` cho một slide và cập nhật trạng thái
+- Gọi `/ingest/lesson` (hoặc `/ingest/slide`) và cập nhật trạng thái
   (`pending` → `ready` / `failed`) trên `lesson_contents`.
-- Cung cấp backfill theo bài học hoặc theo khóa học để reindex các slide
-  còn thiếu / đã đánh dấu `failed`.
+- Cung cấp backfill toàn bộ qua `/ingest/reindex-all`.
 
-Vì ingest gọi VLM + embedding (nặng, chạy nền), các hàm gọi endpoint ở đây
-được thiết kế để chạy trong BackgroundTasks. Trạng thái được cập nhật bằng
-session riêng vì background task chạy sau khi response đã trả về.
+Các hàm được thiết kế để chạy trong BackgroundTasks; trạng thái được cập nhật
+bằng session riêng vì background task chạy sau khi response đã trả về.
 """
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -31,31 +28,10 @@ PENDING = "pending"
 READY = "ready"
 FAILED = "failed"
 
-# Số lần thử và thời gian chờ (giây) giữa các lần khi gọi chatbot. Lỗi 5xx /
-# lỗi kết nối (vd chatbot đang cold-start tải model) là tạm thời nên retry;
-# lỗi 4xx (vd slide không tồn tại) là vĩnh viễn nên bỏ luôn.
-INGEST_ATTEMPTS = int(os.getenv("CHATBOT_INGEST_ATTEMPTS", "3"))
-INGEST_BACKOFF_SECONDS = float(os.getenv("CHATBOT_INGEST_BACKOFF_SECONDS", "5"))
 
-# Trạng thái job backfill toàn cục (in-process). Đủ cho 1 replica backend;
-# dùng để theo dõi tiến độ vì HTTP request không giữ mở tới khi xong.
-_JOB: dict = {
-    "running": False,
-    "queued": 0,
-    "processed": 0,
-    "ready": 0,
-    "failed": 0,
-    "started_at": None,
-    "finished_at": None,
-}
-_JOB_LOCK = asyncio.Lock()
-
-
-def job_status() -> dict:
-    return dict(_JOB)
-
-
-async def _mark(session, slide_id: str, status: str, error: str | None = None) -> None:
+async def _mark(
+    session, slide_id: str, status: str, error: str | None = None
+) -> None:
     slide = await session.get(LessonContent, slide_id)
     if slide is None:
         return
@@ -65,186 +41,191 @@ async def _mark(session, slide_id: str, status: str, error: str | None = None) -
     await session.commit()
 
 
-async def _ingest_one(client: httpx.AsyncClient, slide_id: str) -> tuple[bool, str | None]:
-    """Gọi chatbot ingest 1 slide, retry với backoff cho lỗi tạm thời."""
-    last_error: str | None = None
-    for attempt in range(1, INGEST_ATTEMPTS + 1):
-        try:
-            response = await client.post(
-                f"{settings.chatbot_url.rstrip('/')}/ingest/slide",
-                json={"lesson_content_id": slide_id},
-            )
-            response.raise_for_status()
-            return True, None
-        except httpx.HTTPStatusError as exc:
-            detail = ""
-            try:
-                detail = exc.response.json().get("detail", "")
-            except Exception:  # noqa: BLE001
-                detail = exc.response.text[:200]
-            last_error = f"HTTP {exc.response.status_code}: {detail}"[:500]
-            # 4xx: lỗi dữ liệu/cấu hình -> retry vô ích
-            if 400 <= exc.response.status_code < 500:
-                return False, last_error
-        except httpx.HTTPError as exc:
-            last_error = str(exc)[:500]
-        if attempt < INGEST_ATTEMPTS:
-            await asyncio.sleep(INGEST_BACKOFF_SECONDS * attempt)
-    return False, last_error
-
-
-async def sync_slides(slide_ids: list[str]) -> dict[str, int]:
-    """Ingest danh sách slide, cập nhật trạng thái. Trả về thống kê."""
-    stats = {"ready": 0, "failed": 0}
+async def _mark_many(
+    session, slide_ids: list[str], status: str, error: str | None = None
+) -> None:
     if not slide_ids:
-        return stats
-    if not settings.chatbot_url or not settings.chatbot_internal_token:
-        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding %d slide", len(slide_ids))
-        return stats
-    async with SessionLocal() as session:
-        for slide_id in slide_ids:
-            await _mark(session, slide_id, PENDING)
-        async with httpx.AsyncClient(
-            timeout=settings.chatbot_ingest_timeout_seconds,
-            headers={"X-Chatbot-Token": settings.chatbot_internal_token},
-        ) as client:
-            for slide_id in slide_ids:
-                ok, error = await _ingest_one(client, slide_id)
-                await _mark(session, slide_id, READY if ok else FAILED, error)
-                stats["ready" if ok else "failed"] += 1
-                _JOB["processed"] += 1
-                _JOB["ready" if ok else "failed"] += 1
-                if not ok:
-                    logger.warning("Embedding slide %s thất bại: %s", slide_id, error)
-    return stats
-
-
-async def _pending_slide_ids(lesson_id: str | None, course_id: str | None) -> list[str]:
-    stmt = select(LessonContent.id).where(LessonContent.embedding_status != READY)
-    if lesson_id is not None:
-        stmt = stmt.where(LessonContent.lesson_id == lesson_id)
-    if course_id is not None:
-        stmt = (
-            stmt.join(Lesson, Lesson.id == LessonContent.lesson_id)
-            .join(Module, Module.id == Lesson.module_id)
-            .where(Module.course_id == course_id)
+        return
+    now = datetime.now(timezone.utc)
+    rows = (
+        await session.execute(
+            select(LessonContent).where(LessonContent.id.in_(slide_ids))
         )
-    async with SessionLocal() as session:
-        result = await session.execute(stmt)
-        return [str(row[0]) for row in result.all()]
+    ).scalars()
+    for slide in rows:
+        slide.embedding_status = status
+        slide.embedding_error = error
+        slide.embedding_updated_at = now
+    await session.commit()
 
 
-async def reindex_lesson(lesson_id: str) -> dict[str, int]:
-    return await sync_slides(await _pending_slide_ids(lesson_id, None))
+async def _call(path: str, payload: dict) -> dict:
+    """Gọi chatbot ingest, retry lỗi tạm thời (5xx/429/connection)."""
+    if not settings.chatbot_ready:
+        raise RuntimeError("Chatbot chưa được cấu hình")
+
+    last_error: Exception | None = None
+    attempts = max(1, settings.chatbot_ingest_attempts)
+    for attempt in range(1, attempts + 1):
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.chatbot_ingest_timeout_seconds,
+                headers={"X-Chatbot-Token": settings.chatbot_internal_token},
+            ) as client:
+                response = await client.post(
+                    f"{settings.chatbot_url_resolved.rstrip('/')}{path}",
+                    json=payload,
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            # 4xx: lỗi dữ liệu/cấu hình -> retry vô ích.
+            if 400 <= exc.response.status_code < 500:
+                break
+        except httpx.HTTPError as exc:
+            last_error = exc
+        if attempt < attempts:
+            await asyncio.sleep(settings.chatbot_ingest_backoff_seconds * attempt)
+
+    raise RuntimeError(f"Chatbot ingest thất bại: {last_error}")
 
 
-async def reindex_course(course_id: str) -> dict[str, int]:
-    return await sync_slides(await _pending_slide_ids(None, course_id))
+async def _slide_ids_for_lesson(session, lesson_id: str) -> list[str]:
+    rows = (
+        await session.execute(
+            select(LessonContent.id)
+            .where(LessonContent.lesson_id == lesson_id)
+            .order_by(LessonContent.order_index)
+        )
+    ).scalars()
+    return [str(row) for row in rows]
 
 
-async def all_pending_slide_ids() -> list[str]:
-    from app.models.course import Course
-
-    async with SessionLocal() as session:
-        result = await session.execute(
+async def _slide_ids_for_course(session, course_id: str) -> list[str]:
+    rows = (
+        await session.execute(
             select(LessonContent.id)
             .join(Lesson, Lesson.id == LessonContent.lesson_id)
             .join(Module, Module.id == Lesson.module_id)
-            .join(Course, Course.id == Module.course_id)
-            .where(
-                LessonContent.embedding_status != READY,
-                Course.deleted_at.is_(None),
-            )
+            .where(Module.course_id == course_id)
+            .order_by(Module.order_index, Lesson.order_index, LessonContent.order_index)
         )
-        return [str(row[0]) for row in result.all()]
+    ).scalars()
+    return [str(row) for row in rows]
 
 
-async def start_reindex_all_job() -> dict:
-    """Chạy backfill toàn bộ trong background, trả về ngay.
-
-    Tránh gateway 504 vì request không phải chờ toàn bộ slide. Theo dõi tiến
-    độ qua `job_status()`/endpoint status.
-    """
-    async with _JOB_LOCK:
-        if _JOB["running"]:
-            return {**job_status(), "already_running": True}
-        _JOB.update(
-            running=True,
-            queued=0,
-            processed=0,
-            ready=0,
-            failed=0,
-            started_at=datetime.now(timezone.utc).isoformat(),
-            finished_at=None,
+async def _status_counts(session, slide_ids: list[str]) -> dict[str, int]:
+    if not slide_ids:
+        return {"ready": 0, "failed": 0}
+    rows = (
+        await session.execute(
+            select(LessonContent.embedding_status, func.count(LessonContent.id))
+            .where(LessonContent.id.in_(slide_ids))
+            .group_by(LessonContent.embedding_status)
         )
-        asyncio.create_task(_run_job())
-        return job_status()
+    ).all()
+    counts = {status: int(count) for status, count in rows}
+    return {
+        "ready": counts.get(READY, 0),
+        "failed": counts.get(FAILED, 0),
+    }
 
 
-async def _run_job() -> None:
+async def sync_slide(slide_id: str) -> dict[str, int]:
+    """Ingest một slide (dùng cho add_slide)."""
+    if not settings.chatbot_ready:
+        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding slide %s", slide_id)
+        return {"ready": 0, "failed": 0}
+
+    async with SessionLocal() as session:
+        await _mark(session, slide_id, PENDING)
+        try:
+            await _call("/ingest/slide", {"lesson_content_id": slide_id})
+        except Exception as exc:
+            logger.warning("Embedding slide %s thất bại: %s", slide_id, exc)
+            await _mark(session, slide_id, FAILED, str(exc)[:500])
+            return {"ready": 0, "failed": 1}
+        return await _status_counts(session, [slide_id])
+
+
+async def sync_lesson(lesson_id: str) -> dict[str, int]:
+    """Ingest toàn bộ slide của một bài học."""
+    if not settings.chatbot_ready:
+        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding lesson %s", lesson_id)
+        return {"ready": 0, "failed": 0}
+
+    async with SessionLocal() as session:
+        slide_ids = await _slide_ids_for_lesson(session, lesson_id)
+        if not slide_ids:
+            return {"ready": 0, "failed": 0}
+        await _mark_many(session, slide_ids, PENDING)
+        try:
+            await _call("/ingest/lesson", {"lesson_id": lesson_id})
+        except Exception as exc:
+            logger.warning("Embedding lesson %s thất bại: %s", lesson_id, exc)
+            await _mark_many(session, slide_ids, FAILED, str(exc)[:500])
+            return {"ready": 0, "failed": len(slide_ids)}
+        return await _status_counts(session, slide_ids)
+
+
+async def sync_course(course_id: str) -> dict[str, int]:
+    """Ingest toàn bộ slide của một khóa học."""
+    if not settings.chatbot_ready:
+        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding course %s", course_id)
+        return {"ready": 0, "failed": 0}
+
+    async with SessionLocal() as session:
+        slide_ids = await _slide_ids_for_course(session, course_id)
+        if not slide_ids:
+            return {"ready": 0, "failed": 0}
+        await _mark_many(session, slide_ids, PENDING)
+        try:
+            await _call("/ingest/course", {"course_id": course_id})
+        except Exception as exc:
+            logger.warning("Embedding course %s thất bại: %s", course_id, exc)
+            await _mark_many(session, slide_ids, FAILED, str(exc)[:500])
+            return {"ready": 0, "failed": len(slide_ids)}
+        return await _status_counts(session, slide_ids)
+
+
+async def reindex_all() -> dict[str, int]:
+    """Backfill toàn bộ slide chưa ready (admin/CLI)."""
+    if not settings.chatbot_ready:
+        return {"ready": 0, "failed": 0}
     try:
-        slide_ids = await all_pending_slide_ids()
-        _JOB["queued"] = len(slide_ids)
-        await sync_slides(slide_ids)
-    except Exception:  # noqa: BLE001
-        logger.exception("Backfill embedding job thất bại")
-    finally:
-        _JOB["running"] = False
-        _JOB["finished_at"] = datetime.now(timezone.utc).isoformat()
+        data = await _call("/ingest/reindex-all", {})
+    except Exception as exc:
+        logger.warning("Reindex all thất bại: %s", exc)
+        return {"ready": 0, "failed": 0}
+    return {
+        "ready": int(data.get("processed", 0)),
+        "failed": int(data.get("failed", 0)),
+    }
 
 
 async def counts() -> dict[str, int]:
-    """Thống kê trạng thái embedding để giám sát."""
+    """Thống kê trạng thái embedding toàn hệ thống."""
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(LessonContent.embedding_status, func.count(LessonContent.id))
-            .group_by(LessonContent.embedding_status)
-        )
-        return {status: count for status, count in result.all()}
+        rows = (
+            await session.execute(
+                select(LessonContent.embedding_status, func.count(LessonContent.id))
+                .group_by(LessonContent.embedding_status)
+            )
+        ).all()
+        return {status: int(count) for status, count in rows}
 
 
-async def slide_count() -> int:
-    """Tổng số slide (lesson_contents)."""
+async def course_counts(course_id: str) -> dict[str, int]:
+    """Thống kê trạng thái embedding của một khóa học."""
     async with SessionLocal() as session:
-        result = await session.execute(select(func.count()).select_from(LessonContent))
-        return int(result.scalar_one())
-
-
-async def vector_count() -> int:
-    """Số dòng vector đã lưu trong lesson_content_embedding.
-
-    Dùng cho bootstrap lần đầu: bằng 0 nghĩa là chưa từng ingest.
-    """
-    async with SessionLocal() as session:
-        result = await session.execute(
-            text("SELECT count(*) FROM lesson_content_embedding")
-        )
-        return int(result.scalar_one())
-
-
-# Đối chiếu `lesson_contents.embedding_status` (nguồn sự thật, do backend ghi)
-# với bảng vector `lesson_content_embedding` (chatbot ghi). Lệch nghĩa là có
-# người ghi vector trực tiếp không qua backend, hoặc DB khôi phục không đồng bộ.
-DRIFT_SQL = text(
-    """
-    SELECT
-        (SELECT count(*)
-           FROM lesson_contents lc
-          WHERE lc.embedding_status = 'ready'
-            AND NOT EXISTS (
-                SELECT 1 FROM lesson_content_embedding e
-                 WHERE e.lesson_content_id = lc.id
-            )) AS ready_without_vector,
-        (SELECT count(*)
-           FROM lesson_content_embedding e
-           JOIN lesson_contents lc ON lc.id = e.lesson_content_id
-          WHERE lc.embedding_status <> 'ready') AS vector_not_marked_ready
-    """
-)
-
-
-async def drift() -> dict[str, int]:
-    """Số slide lệch giữa trạng thái do backend ghi và vector thực tế."""
-    async with SessionLocal() as session:
-        row = (await session.execute(DRIFT_SQL)).mappings().one()
-        return {key: int(value) for key, value in row.items()}
+        rows = (
+            await session.execute(
+                select(LessonContent.embedding_status, func.count(LessonContent.id))
+                .join(Lesson, Lesson.id == LessonContent.lesson_id)
+                .join(Module, Module.id == Lesson.module_id)
+                .where(Module.course_id == course_id)
+                .group_by(LessonContent.embedding_status)
+            )
+        ).all()
+        return {status: int(count) for status, count in rows}

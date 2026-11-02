@@ -1,16 +1,23 @@
-"""Chat học tập: dựng ngữ cảnh LMS, gọi chatbot và lưu phiên/tin nhắn.
+"""Chat học tập: dựng ngữ cảnh LMS, gọi chatbot service và lưu phiên/tin nhắn.
 
 Backend là nơi dựng ngữ cảnh (khóa > chương > bài > bài tập) và là **nguồn sự
-thật** cho lịch sử hiển thị (`chat_sessions`/`chat_messages`). Chatbot LangGraph
-giữ bộ nhớ hội thoại theo `thread_id` = id phiên, nên hai bên luôn khớp nhau:
-xoá phiên là xoá luôn thread tương ứng.
+thật** cho lịch sử hiển thị (`chat_sessions`/`chat_messages`). Chatbot service
+stateless: backend gửi kèm history trong mỗi request.
+
+Bảo vệ đáp án:
+- Trước khi nộp (`support_mode="hint"`): chỉ gửi đề + options + đáp án sinh viên
+  đã chọn; KHÔNG gửi đáp án đúng/giải thích.
+- Sau khi nộp (`support_mode="review"`): gửi đáp án đúng + giải thích để chữa bài.
 """
 
+import json
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -25,6 +32,9 @@ TITLE_MAX = 60
 
 # Trần ngữ cảnh bài tập gửi kèm (khớp giới hạn phía chatbot).
 CONTEXT_MAX = 30000
+
+# Số tin nhắn gần nhất gửi kèm làm history.
+HISTORY_LIMIT = 10
 
 
 def question_correct_ids(question: dict) -> list[str]:
@@ -41,9 +51,15 @@ def build_assignment_context(
     module: Module | None,
     lesson: Lesson | None,
     assignment: QuizAssignment,
-    attempt: QuizAttempt,
+    attempt: QuizAttempt | None,
+    *,
+    include_answers: bool,
 ) -> str:
-    """Chuỗi ngữ cảnh bài tập gửi kèm (kèm đáp án đúng + giải thích để chữa bài)."""
+    """Chuỗi ngữ cảnh bài tập gửi kèm.
+
+    `include_answers=False` (hints trước khi nộp) tuyệt đối không chứa đáp án
+    đúng/giải thích.
+    """
     lines = [
         f"Khóa học: {course.title}",
         f"Chương: {module.title}" if module is not None else "",
@@ -53,16 +69,21 @@ def build_assignment_context(
     lines = [line for line in lines if line]
     if assignment.instructions.strip():
         lines.append(f"Hướng dẫn: {assignment.instructions.strip()}")
+
+    answers = (attempt.answers if attempt is not None else {}) or {}
     for index, question in enumerate(assignment.questions, start=1):
         lines.append(f"Câu {index}: {question['prompt']}")
         for option in question["options"]:
             lines.append(f"- {option['id']}: {option['text']}")
-        selected = attempt.answers.get(question["id"]) or []
+        selected = answers.get(question["id"]) or []
         if isinstance(selected, str):
             selected = [selected]
-        lines.append(f"Học viên chọn: {', '.join(selected) if selected else 'chưa trả lời'}")
-        lines.append(f"Đáp án đúng: {', '.join(question_correct_ids(question))}")
-        lines.append(f"Giải thích: {question['explanation']}")
+        lines.append(
+            f"Học viên chọn: {', '.join(selected) if selected else 'chưa trả lời'}"
+        )
+        if include_answers:
+            lines.append(f"Đáp án đúng: {', '.join(question_correct_ids(question))}")
+            lines.append(f"Giải thích: {question.get('explanation', '')}")
     return "\n".join(lines)[:CONTEXT_MAX]
 
 
@@ -75,32 +96,137 @@ def _title_from(message: str) -> str:
 
 
 def _chatbot_ready() -> bool:
-    return bool(settings.chatbot_url and settings.chatbot_internal_token)
+    return bool(settings.chatbot_url_resolved and settings.chatbot_internal_token)
+
+
+def _headers() -> dict[str, str]:
+    return {"X-Chatbot-Token": settings.chatbot_internal_token}
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _citation_out(citation: dict) -> dict:
+    """Chuyển citation snake_case của chatbot sang camelCase cho frontend."""
+    return {
+        "documentId": citation.get("document_id"),
+        "title": citation.get("title") or "",
+        "location": citation.get("location") or "",
+        "lessonId": citation.get("lesson_id"),
+        "lessonTitle": citation.get("lesson_title") or "",
+        "slideId": citation.get("slide_id"),
+        "slideIndex": citation.get("slide_index"),
+        "imageUrl": citation.get("image_url") or "",
+        "snippet": citation.get("snippet") or "",
+        "score": citation.get("score") or 0.0,
+    }
+
+
+async def _history(db: AsyncSession, session_id: str) -> list[dict]:
+    rows = (
+        (
+            await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.session_id == session_id)
+                .order_by(ChatMessage.created_at.desc())
+                .limit(HISTORY_LIMIT)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {"role": message.role, "content": message.content}
+        for message in reversed(rows)
+    ]
+
+
+def _payload(
+    *,
+    course: Course,
+    session: ChatSession,
+    message: str,
+    history: list[dict],
+    lesson: Lesson | None,
+    module: Module | None,
+    assignment: QuizAssignment | None,
+    attempt: QuizAttempt | None,
+    support_mode: str,
+) -> dict:
+    context = ""
+    if assignment is not None:
+        context = build_assignment_context(
+            course,
+            module,
+            lesson,
+            assignment,
+            attempt,
+            include_answers=support_mode == "review",
+        )
+    return {
+        "message": message,
+        "course_id": course.id,
+        "thread_id": session.id,
+        "history": history,
+        "lesson_id": lesson.id if lesson is not None else None,
+        "lesson_title": lesson.title if lesson is not None else "",
+        "module_title": module.title if module is not None else "",
+        "assignment_id": assignment.id if assignment is not None else None,
+        "assignment_title": assignment.title if assignment is not None else "",
+        "assignment_context": context,
+        "support_mode": support_mode,
+    }
 
 
 async def _ask_chatbot(payload: dict) -> dict:
     async with httpx.AsyncClient(
         timeout=settings.chatbot_timeout_seconds,
-        headers={"X-Chatbot-Token": settings.chatbot_internal_token},
+        headers=_headers(),
     ) as client:
-        response = await client.post(f"{settings.chatbot_url.rstrip('/')}/chat", json=payload)
+        response = await client.post(
+            f"{settings.chatbot_url_resolved.rstrip('/')}/chat", json=payload
+        )
         response.raise_for_status()
         return response.json()
 
 
-async def purge_thread(thread_id: str) -> None:
-    """Xoá bộ nhớ hội thoại của phiên bên chatbot (best-effort, không chặn xoá)."""
-    if not _chatbot_ready():
-        return
-    url = f"{settings.chatbot_url.rstrip('/')}/threads/{thread_id}"
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.chatbot_timeout_seconds,
-            headers={"X-Chatbot-Token": settings.chatbot_internal_token},
-        ) as client:
-            await client.delete(url)
-    except httpx.HTTPError:
-        logger.warning("Không xoá được thread %s bên chatbot", thread_id, exc_info=True)
+async def _persist_assistant(
+    db: AsyncSession,
+    *,
+    session: ChatSession,
+    answer: str,
+    citations: list[dict],
+    intent: str | None,
+) -> ChatMessage:
+    message = ChatMessage(
+        session_id=session.id,
+        role="assistant",
+        content=answer,
+        citations=citations,
+        intent=intent,
+    )
+    db.add(message)
+    if session.title in ("", "Phiên mới"):
+        # Tiêu đề lấy từ câu hỏi đầu tiên nếu có thể.
+        first = (
+            await db.execute(
+                select(ChatMessage.content)
+                .where(
+                    ChatMessage.session_id == session.id,
+                    ChatMessage.role == "student",
+                )
+                .order_by(ChatMessage.created_at)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if first:
+            session.title = _title_from(first)
+    session.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.commit()
+    await db.refresh(message)
+    return message
 
 
 async def answer_in_session(
@@ -110,66 +236,183 @@ async def answer_in_session(
     session: ChatSession,
     message: str,
     lesson: Lesson | None,
+    module: Module | None,
     assignment: QuizAssignment | None,
     attempt: QuizAttempt | None,
-) -> tuple[str, list[dict], str | None]:
-    """Gọi chatbot cho một lượt hỏi rồi lưu cả câu hỏi lẫn câu trả lời.
-
-    Chỉ gửi `assignment_context` (kèm đáp án đúng) khi đang chữa một bài tập đã
-    nộp; chat kiến thức thường để trống nên không lộ đáp án.
-    """
+    support_mode: str,
+) -> tuple[str, list[dict], str | None, bool]:
+    """Gọi chatbot cho một lượt hỏi rồi lưu cả câu hỏi lẫn câu trả lời."""
     if not _chatbot_ready():
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, detail="Trợ lý học tập chưa được cấu hình"
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Trợ lý học tập chưa được cấu hình",
         )
 
-    module = await db.get(Module, lesson.module_id) if lesson is not None else None
-    if assignment is not None and attempt is not None:
-        context = build_assignment_context(course, module, lesson, assignment, attempt)
-    else:
-        context = ""
-
-    payload = {
-        "message": message,
-        "course_id": course.id,
-        "thread_id": session.id,
-        "assignment_context": context,
-        "support_mode": "review" if assignment is not None else "hint",
-        "assignment_id": assignment.id if assignment is not None else None,
-        "assignment_title": assignment.title if assignment is not None else "",
-        "lesson_id": lesson.id if lesson is not None else None,
-        "lesson_title": lesson.title if lesson is not None else "",
-        "module_title": module.title if module is not None else "",
-    }
-
-    db.add(
-        ChatMessage(
-            session_id=session.id, role="student", content=message, citations=[], intent=None
-        )
+    history = await _history(db, session.id)
+    payload = _payload(
+        course=course,
+        session=session,
+        message=message,
+        history=history,
+        lesson=lesson,
+        module=module,
+        assignment=assignment,
+        attempt=attempt,
+        support_mode=support_mode,
     )
-
-    try:
-        data = await _ask_chatbot(payload)
-    except (httpx.HTTPError, ValueError):
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, detail="Trợ lý học tập tạm thời không phản hồi"
-        )
-
-    answer = data.get("answer") or ""
-    citations = data.get("citations") or []
-    intent = data.get("intent")
 
     db.add(
         ChatMessage(
             session_id=session.id,
-            role="assistant",
-            content=answer,
-            citations=citations,
-            intent=intent,
+            role="student",
+            content=message,
+            citations=[],
+            intent=None,
         )
     )
-    if session.title in ("", "Phiên mới"):
-        session.title = _title_from(message)
-    session.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    return answer, citations, intent
+
+    try:
+        data = await _ask_chatbot(payload)
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail="Trợ lý học tập tạm thời không phản hồi",
+        ) from exc
+
+    answer = data.get("answer") or ""
+    citations = data.get("citations") or []
+    intent = data.get("intent")
+    verified = bool(data.get("verified", True))
+
+    await _persist_assistant(
+        db,
+        session=session,
+        answer=answer,
+        citations=citations,
+        intent=intent,
+    )
+    return answer, citations, intent, verified
+
+
+async def stream_in_session(
+    db: AsyncSession,
+    *,
+    course: Course,
+    session: ChatSession,
+    message: str,
+    lesson: Lesson | None,
+    module: Module | None,
+    assignment: QuizAssignment | None,
+    attempt: QuizAttempt | None,
+    support_mode: str,
+) -> AsyncIterator[str]:
+    """Proxy SSE từ chatbot, đồng thời lưu assistant message khi nhận `done`."""
+    if not _chatbot_ready():
+        yield _sse("error", {"message": "Trợ lý học tập chưa được cấu hình"})
+        return
+
+    history = await _history(db, session.id)
+    payload = _payload(
+        course=course,
+        session=session,
+        message=message,
+        history=history,
+        lesson=lesson,
+        module=module,
+        assignment=assignment,
+        attempt=attempt,
+        support_mode=support_mode,
+    )
+
+    db.add(
+        ChatMessage(
+            session_id=session.id,
+            role="student",
+            content=message,
+            citations=[],
+            intent=None,
+        )
+    )
+    await db.commit()
+
+    yield _sse("session", {"sessionId": session.id})
+
+    answer_parts: list[str] = []
+    citations: list[dict] = []
+    intent: str | None = None
+    completed = False
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.chatbot_timeout_seconds,
+            headers=_headers(),
+        ) as client:
+            async with client.stream(
+                "POST",
+                f"{settings.chatbot_url_resolved.rstrip('/')}/chat/stream",
+                json=payload,
+            ) as response:
+                if response.status_code != 200:
+                    await response.aread()
+                    yield _sse(
+                        "error",
+                        {"message": "Trợ lý học tập tạm thời không phản hồi"},
+                    )
+                    return
+
+                event_name = ""
+                data_lines: list[str] = []
+                async for line in response.aiter_lines():
+                    if line == "":
+                        if event_name and data_lines:
+                            raw = "\n".join(data_lines)
+                            try:
+                                data = json.loads(raw)
+                            except json.JSONDecodeError:
+                                data = {}
+                            if event_name == "token":
+                                answer_parts.append(data.get("text") or "")
+                                yield _sse("token", data)
+                            elif event_name == "citations":
+                                citations = [
+                                    _citation_out(item)
+                                    for item in (data.get("citations") or [])
+                                ]
+                                yield _sse("citations", {"citations": citations})
+                            elif event_name == "done":
+                                intent = data.get("intent")
+                                assistant = await _persist_assistant(
+                                    db,
+                                    session=session,
+                                    answer="".join(answer_parts),
+                                    citations=citations,
+                                    intent=intent,
+                                )
+                                completed = True
+                                yield _sse(
+                                    "done",
+                                    {
+                                        **data,
+                                        "sessionId": session.id,
+                                        "messageId": assistant.id,
+                                    },
+                                )
+                            elif event_name == "error":
+                                yield _sse("error", data)
+                            else:
+                                yield _sse(event_name, data)
+                        event_name = ""
+                        data_lines = []
+                        continue
+
+                    if line.startswith("event:"):
+                        event_name = line[len("event:") :].strip()
+                    elif line.startswith("data:"):
+                        data_lines.append(line[len("data:") :].strip())
+    except httpx.HTTPError:
+        logger.warning("Chatbot stream lỗi", exc_info=True)
+        yield _sse("error", {"message": "Trợ lý học tập tạm thời không phản hồi"})
+    finally:
+        if not completed:
+            logger.info("SSE kết thúc trước khi verify xong — không lưu assistant message")

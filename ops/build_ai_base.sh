@@ -2,18 +2,18 @@
 # =====================================================================
 # build_ai_base.sh — build image nền dùng chung (docker/ai-base)
 #
-# Base chứa torch/torchvision CUDA 12.4 + libgomp1/curl, dùng cho cả
-# services/gaze và services/chatbot (xem docker/ai-base/README.md).
+# Base chứa torch/torchvision CUDA 12.4 + libgomp1/curl, dùng cho
+# services/gaze + services/chatbot (xem docker/ai-base/README.md).
 #
-# Phải build/pull base TRƯỚC khi build gaze/chatbot, vì hai Dockerfile của
-# service `FROM ghcr.io/manh1504/eyelearning-ai-base:latest`.
+# Phải build base TRƯỚC khi build gaze/chatbot, vì Dockerfile của service
+# `FROM eyelearning-ai-base:latest`.
 #
 # Dùng:
 #   ./ops/build_ai_base.sh
 # =====================================================================
 set -euo pipefail
 
-IMAGE="${AI_BASE_IMAGE:-ghcr.io/manh1504/eyelearning-ai-base:latest}"
+IMAGE="${AI_BASE_IMAGE:-eyelearning-ai-base:latest}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log() { printf '[build_ai_base] %s\n' "$*"; }

@@ -2,6 +2,9 @@
 
 Ung dung Next.js 16 App Router chinh cua GazeEdu, su dung giao dien redesign.
 
+> Mặc định cả stack chạy bằng Docker: `docker compose up -d --build` (xem
+> `README.md` gốc). Phần dưới là cách chạy frontend trên host khi cần hot reload.
+
 ## Chay local
 
 ```bash
@@ -47,9 +50,10 @@ app/                    # Routes va layouts
 components/
   account/              # Dang nhap
   admin/                # Phan cong va cau hinh calibration
+  assistant/            # Widget tro ly hoc tap (chat + citation)
   calibration/          # Calibration dung chung
   layout/               # App shell, topbar (nav + user), sidebar drawer mobile
-  quiz/                 # Bài tập trắc nghiệm: soạn, làm bài, chữa bài, chatbot
+  quiz/                 # Bài tập trắc nghiệm: soạn, làm bài, chữa bài
   student/              # Dashboard, preflight, learning reader
   teacher/              # Danh sach khoa hoc, workspace, heatmap
   ui/                   # Radix UI primitives
@@ -78,6 +82,16 @@ e2e/                    # Playwright tests
 | `/demo` | Danh sach man hinh demo |
 | `/design` | Thư viện component (dev) |
 
+## Trợ lý học tập
+
+- Widget nổi trong learning reader và quiz: trước khi nộp chỉ gợi ý, sau khi nộp
+  mới chữa bài.
+- SSE: `status → citations → token → done`; answer chỉ stream sau khi verify citation.
+- Citation chip mở modal ảnh slide + snippet.
+- API client: `lib/api/chat.ts`; hooks: `hooks/use-chat.ts`; UI:
+  `components/assistant/study-assistant-chat.tsx`.
+- Demo mode (`NEXT_PUBLIC_DEMO=1`) có câu trả lời giả để xem UI không cần backend.
+
 Nhung URL cu `/student/my-courses`, `/teacher/courses` va `/admin/courses`
 duoc redirect sang route moi tuong ung.
 
@@ -96,11 +110,6 @@ Bài tập là một **item trong chương**, cùng cấp với bài học slide
   soạn bài tập (bật là lưu ngay, không cần bấm Lưu); học viên thấy nút **Làm lại** ở
   trang kết quả → xoá lượt làm cũ, đồng hồ chạy lại, đáp án ẩn lại cho tới khi nộp
   lần mới (mỗi học viên vẫn chỉ giữ 1 lượt).
-- **Trợ lý học tập** (`components/assistant/study-assistant-chat.tsx`) là widget nổi ở
-  trang **đọc slide** và (sau khi nộp) ở trang **bài tập**. Chat theo **môn**, ưu tiên
-  truy hồi slide của bài đang học; hỗ trợ **nhiều phiên chat** (Chat mới, lịch sử, đổi
-  tên, xoá) lưu ở backend. Chat trong bài tập chỉ mở **sau khi nộp** (backend trả 403
-  nếu chưa nộp) nên trợ lý không thể tiết lộ đáp án trước khi học viên làm bài.
 
 ## Workspace soạn nội dung của giáo viên
 

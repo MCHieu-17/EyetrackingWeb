@@ -1,15 +1,8 @@
-from langchain_core.messages import HumanMessage
-
 from app.workflow import router as router_mod
-from app.workflow.router import router_node
+from app.workflow.router import RouterOutput, route
 
 
-class _Result:
-    def __init__(self, intent):
-        self.intent = intent
-
-
-class _Chain:
+class _FakeChain:
     def __init__(self, result=None, error=None):
         self.result = result
         self.error = error
@@ -21,25 +14,41 @@ class _Chain:
 
 
 def _state(**overrides):
-    state = {
-        "messages": [HumanMessage(content="giải thích định lý")],
-        "support_mode": "review",
+    data = {
+        "question": "Khóa chính là gì?",
+        "course_id": "course-1",
+        "thread_id": "thread-1",
+        "history": [],
         "assignment_context": "",
+        "support_mode": "hint",
     }
-    state.update(overrides)
-    return state
+    data.update(overrides)
+    return data
 
 
-def test_hint_with_assignment_shortcuts_to_hints():
-    out = router_node(_state(support_mode="hint", assignment_context="Bài 1"))
-    assert out == {"intent": "hints"}
+def test_review_shortcut():
+    state = _state(support_mode="review", assignment_context="Bài tập đã nộp")
+    assert route(state) == "exercise_review"
 
 
-def test_router_uses_llm_result(monkeypatch):
-    monkeypatch.setattr(router_mod, "_router_chain", lambda: _Chain(_Result("hints")))
-    assert router_node(_state()) == {"intent": "hints"}
+def test_hint_shortcut():
+    state = _state(support_mode="hint", assignment_context="Bài tập đang làm")
+    assert route(state) == "exercise_hints"
 
 
-def test_router_falls_back_to_qa_on_error(monkeypatch):
-    monkeypatch.setattr(router_mod, "_router_chain", lambda: _Chain(error=RuntimeError("x")))
-    assert router_node(_state()) == {"intent": "qa"}
+def test_llm_classification(monkeypatch):
+    monkeypatch.setattr(
+        router_mod,
+        "_router_chain",
+        lambda: _FakeChain(RouterOutput(intent="study_skills")),
+    )
+    assert route(_state()) == "study_skills"
+
+
+def test_llm_error_defaults_to_course_qa(monkeypatch):
+    monkeypatch.setattr(
+        router_mod,
+        "_router_chain",
+        lambda: _FakeChain(error=RuntimeError("boom")),
+    )
+    assert route(_state()) == "course_qa"

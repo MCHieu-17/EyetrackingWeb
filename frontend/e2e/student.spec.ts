@@ -85,8 +85,6 @@ test.describe("Student", () => {
   test("reader mở bài tập trắc nghiệm và nộp bài", async ({ page }) => {
     await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");
     await expect(page.getByText("Bài tập: Kiểm tra nhập môn").first()).toBeVisible();
-    // Chưa nộp bài thì chưa có trợ lý học tập.
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toHaveCount(0);
 
     await page.getByText("def", { exact: true }).click();
     await page.getByRole("button", { name: "Tiếp" }).click();
@@ -98,8 +96,6 @@ test.describe("Student", () => {
     await expect(page.getByText(/3\/3 điểm/)).toBeVisible();
     await expect(page.getByText("Đáp án đúng").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Bài tiếp theo" })).toBeVisible();
-    // Nộp xong mới hiện trợ lý học tập.
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toBeVisible();
   });
 
   test("học viên làm lại bài tập khi giáo viên cho phép", async ({ page }) => {
@@ -116,10 +112,9 @@ test.describe("Student", () => {
     await page.getByRole("button", { name: "Làm lại" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Làm lại" }).click();
 
-    // Quay lại câu 1 với bài làm trắng và trợ lý học tập ẩn lại.
+    // Quay lại câu 1 với bài làm trắng.
     await expect(page.getByText("Câu 1 / 3")).toBeVisible();
     await expect(page.getByRole("button", { name: "Nộp bài" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Mở trợ lý học tập" })).toHaveCount(0);
   });
 
   test("đổi bài đóng phiên cũ và quay lại tạo phiên mới", async ({ page }) => {

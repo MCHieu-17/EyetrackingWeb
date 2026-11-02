@@ -117,6 +117,9 @@ export interface SlideAdmin {
   isKey: boolean;
   aoiCount: number;
   aoiSource: string;
+  /** Trạng thái ingest RAG: none | pending | ready | failed. */
+  embeddingStatus?: "none" | "pending" | "ready" | "failed";
+  embeddingError?: string | null;
 }
 
 export interface LessonItem {

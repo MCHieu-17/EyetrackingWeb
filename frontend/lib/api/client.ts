@@ -74,6 +74,11 @@ function getCsrfHeader(): Record<string, string> {
   return token ? { "X-CSRF-Token": token } : {};
 }
 
+/** Header auth cho các request không đi qua `apiFetch` (vd SSE bằng fetch). */
+export function getAuthHeaders(): Record<string, string> {
+  return { ...getAuthHeader(), ...getCsrfHeader() };
+}
+
 // One-time migration from versions that persisted credentials in browser storage.
 if (typeof window !== "undefined") {
   try {

@@ -178,6 +178,7 @@ class SlideAdminOut(CamelModel):
     aoi_count: int = 0
     aoi_source: str = "none"
     embedding_status: str = "none"
+    embedding_error: str | None = None
 
 
 class EmbeddingSyncOut(CamelModel):

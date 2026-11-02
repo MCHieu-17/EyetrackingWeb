@@ -3,13 +3,14 @@
 --
 -- ⚠️ KHÔNG nằm trong db/migrations/ nên Dockerfile.migrations sẽ KHÔNG chạy file
 --    này. Chỉ chạy thủ công khi phát triển:
---        psql -h localhost -p 5435 -U postgres -d eyetracking -f db/seed_dev_users.sql
+--        ./scripts/seed_dev.sh
 --
 -- Mật khẩu của cả 3 tài khoản là "Password123!" (hash bcrypt bên dưới).
 -- Mọi tài khoản được đặt must_change_password = true để buộc đổi mật khẩu ngay
 -- lần đăng nhập đầu tiên (xem backend: POST /api/auth/change-password).
 --
--- Idempotent: dựa vào email UNIQUE.
+-- Idempotent: chạy lại sẽ RESET mật khẩu dev về "Password123!" và bật lại
+-- must_change_password (tiện cho local testing).
 -- =====================================================================
 
 BEGIN;
@@ -23,7 +24,10 @@ SELECT 'admin@school.edu.vn',
        s.id,
        true
 FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE
+    SET password_hash = EXCLUDED.password_hash,
+        status_id = EXCLUDED.status_id,
+        must_change_password = true;
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
@@ -46,7 +50,10 @@ SELECT 'teacher@school.edu.vn',
        s.id,
        true
 FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE
+    SET password_hash = EXCLUDED.password_hash,
+        status_id = EXCLUDED.status_id,
+        must_change_password = true;
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
@@ -75,7 +82,10 @@ SELECT 'student@school.edu.vn',
        s.id,
        true
 FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE
+    SET password_hash = EXCLUDED.password_hash,
+        status_id = EXCLUDED.status_id,
+        must_change_password = true;
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id

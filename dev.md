@@ -1,156 +1,205 @@
-# Dev local — xem thay đổi ngay (hot reload)
+# Dev local — Full Docker
 
-Tài liệu này hướng dẫn cách khởi động để **sửa code backend/frontend là thấy kết quả
-ngay**, không phải build image rồi deploy.
+Hướng dẫn chi tiết để chạy và sửa code với stack Docker local. Tóm tắt nhanh xem
+`README.md`.
 
-> **Vì sao cần?** Trong `docker-compose.yml`, `backend` và `frontend` **không có `build:`**
-> — chúng chỉ chạy image `ghcr.io/manh1504/eyelearning-{backend,frontend}:latest` với
-> `pull_policy: always` (backend chạy `uvicorn` **không có `--reload`**, frontend là
-> Next.js `output: standalone` đã build sẵn). Nên `docker compose up` sau khi sửa code
-> sẽ **không** cập nhật gì: Docker kéo lại đúng image cũ từ GHCR.
-> Cách duy nhất để thấy thay đổi ngay là chạy backend/frontend **trên host** với
-> chế độ dev (mục 2 và 3 dưới đây).
+> Repo này **không dùng CI/CD, GHCR, Cloudflare Tunnel hay Portainer**. Mọi image
+> được build từ source trên máy.
 
-## Kiến trúc khi dev
-
-| Thành phần | Chạy ở đâu | Cổng | Hot reload |
-|---|---|---|---|
-| `postgres` | Docker | `127.0.0.1:5435` | — |
-| `redis` | Docker (tuỳ chọn) | `127.0.0.1:6379` | — |
-| `migrate` | Docker (one-shot) | — | — |
-| `backend` | **host** (`uvicorn --reload`) | `localhost:8001` | ✅ |
-| `frontend` | **host** (`next dev`) | `localhost:3000` | ✅ |
-| `gaze` | Docker (tuỳ chọn, cần GPU) | `127.0.0.1:8000` | ❌ (code nằm trong image) |
-| `chatbot` | Docker (tuỳ chọn) | `127.0.0.1:8002` | ❌ (code nằm trong image) |
-
-- Backend host đọc `.env` ở gốc repo (`backend/app/core/config.py` → `ROOT_ENV_FILE`),
-  trong đó `DATABASE_URL=...@localhost:5435/...` đúng cho host.
-- Frontend đọc `frontend/.env.local`: `API_INTERNAL_URL=http://localhost:8001`,
-  `GAZE_INTERNAL_URL=http://localhost:8000`; `next.config.ts` rewrite `/api/*` và
-  `/media/*` → backend, `/gaze/*` → gaze. `NEXT_PUBLIC_*` để trống (same-origin),
-  riêng `NEXT_PUBLIC_GAZE_URL=http://localhost:8000` để WS nối thẳng gaze khi dev.
-
-## Chuẩn bị (chỉ 1 lần)
+## 1. Chuẩn bị (một lần)
 
 ```bash
-# 1) .env ở gốc repo (đã có sẵn; nếu chưa: cp .env.example .env)
-# 2) Backend env ảo — .venv đã có sẵn trong backend/
-cd backend
-.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-cd ..
-
-# 3) Frontend deps
-cd frontend && npm install && cd ..
+cp .env.example .env
+# Sửa các secret trong .env: JWT_SECRET, CHATBOT_INTERNAL_TOKEN, RIVER_API_KEY...
 ```
 
-Yêu cầu: Docker, Node ≥ 20, Python ≥ 3.12.
+Yêu cầu:
+- Docker + Docker Compose v2.
+- GPU (tuỳ chọn): NVIDIA driver + `nvidia-container-toolkit`.
+- `psql` trên host chỉ cần nếu bạn muốn chạy script ngoài Docker; các script
+  trong repo đã chuyển sang `docker compose exec`.
 
-## Bước 1 — Hạ tầng bằng Docker
+## 2. Build image nền AI (một lần, hoặc khi `docker/ai-base/**` đổi)
 
 ```bash
-# Nếu stack "kiểu production" đang chạy thì nhả cổng 3000 cho frontend dev:
-docker compose stop frontend
-
-# Postgres + Redis (đủ để dev backend/frontend)
-docker compose up -d postgres redis
+./ops/build_ai_base.sh
 ```
 
-Áp migration **chỉ khi** DB mới hoặc bạn vừa thêm file trong `db/migrations/`
-(ví dụ `022_drop_dead_schema.sql` — bỏ bảng/cột không còn code dùng):
+Base chứa torch/torchvision CUDA 12.4 dùng chung cho `gaze` + `chatbot`
+(`eyelearning-ai-base:latest`). Không build base trước thì 2 service này sẽ lỗi
+`FROM eyelearning-ai-base:latest`.
+
+## 3. Chạy toàn bộ stack
 
 ```bash
-# Phải build lại vì image migrate đóng gói db/migrations vào trong (không bind mount)
-docker compose build migrate
+docker compose up -d --build
+```
+
+Lần đầu sẽ build:
+- `eyelearning-migrations:local`
+- `eyelearning-backend:local`
+- `eyelearning-frontend:local`
+- `eyelearning-nginx:local`
+- `eyelearning-gaze:local`
+- `eyelearning-chatbot:local`
+
+Sau đó:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f gaze
+docker compose logs -f chatbot
+```
+
+Mở <http://localhost:3000>. Backend Swagger: <http://localhost:8001/docs>.
+
+## 4. Seed tài khoản dev
+
+```bash
+./scripts/seed_dev.sh
+```
+
+Mật khẩu chung: `Password123!`. Lần đầu đăng nhập bắt buộc đổi mật khẩu.
+
+## 5. Tạo role DB cho chatbot
+
+Sau khi migrations đã áp:
+
+```bash
+./ops/create_chatbot_role.sh
+```
+
+Script chạy `psql` trong container `postgres`, không cần cài psql trên host.
+
+## 6. Sửa code thì làm gì?
+
+| Bạn sửa | Lệnh |
+|---|---|
+| `backend/app/**` | `docker compose up -d --build backend` |
+| `backend/requirements*.txt` | `docker compose up -d --build backend` |
+| `frontend/app/**`, `components/**`, `lib/**`, `hooks/**` | `docker compose up -d --build frontend` |
+| `frontend/package.json` | `docker compose up -d --build frontend` |
+| `frontend/next.config.ts` | `docker compose up -d --build frontend` |
+| `nginx/default.conf` | `docker compose up -d --build nginx` |
+| `services/gaze/**` | `docker compose up -d --build gaze` |
+| `services/chatbot/**` | `docker compose up -d --build chatbot` |
+| `db/migrations/**`, `db/migrate.sh` | `docker compose up -d --build migrate` rồi `docker compose run --rm migrate` |
+| `.env` | `docker compose up -d --build backend chatbot` |
+| `docker/ai-base/**` | `./ops/build_ai_base.sh` rồi `docker compose up -d --build gaze chatbot` |
+
+> Docker không có hot reload. Nếu muốn sửa là thấy ngay, xem mục 10.
+
+## 7. Migrations
+
+Tự động: service `migrate` chạy mỗi lần `docker compose up`.
+
+Chạy tay:
+
+```bash
 docker compose run --rm migrate
-# Lỗi thì xem: docker logs eyetracking-migrate
 ```
 
-> ⚠️ Schema và code phải đi cùng nhau: backend mới cần `courses.show_gaze_dot` /
-> `gaze_session_stats`. Chạy migration **trước** khi chạy backend bản mới.
-
-Tuỳ chọn — nếu cần tính năng AI (gaze/chatbot):
+Xem file đã áp:
 
 ```bash
-docker compose up -d gaze chatbot      # lần đầu / sau khi sửa services/: thêm --build
-docker compose logs -f gaze            # theo dõi tải weights (lần đầu, có thể vài phút)
+docker compose exec -T postgres psql -U postgres -d eyetracking \
+  -c "SELECT filename, applied_at FROM schema_migrations ORDER BY filename;"
 ```
 
-## Bước 2 — Backend (hot reload)
-
-Terminal 1:
+Reset DB local (giữ weights gaze/chatbot):
 
 ```bash
+./scripts/reset_db.sh
+```
+
+Quy tắc: **không sửa file migration đã áp** — thêm file mới (`025_...`).
+
+## 8. Bảo trì partition
+
+```bash
+docker compose exec -T postgres psql -U postgres -d eyetracking \
+  -c "SELECT create_gaze_partitions(3);"
+```
+
+## 9. Tests & lint
+
+```bash
+# Backend
+./scripts/test_backend.sh -v
+
+# Frontend
+cd frontend && npm run lint && npm run typecheck && npm test
+
+# Chatbot
+cd services/chatbot && .venv/bin/python -m pytest tests -q
+
+# Gaze
+cd services/gaze && python -m pytest tests -q
+
+# Ruff
+ruff check backend services/gaze
+```
+
+Tạo DB test một lần:
+
+```bash
+docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
+docker compose run --rm -e PGDATABASE=eyetracking_test migrate
+```
+
+## 10. Tuỳ chọn — hot reload trên host
+
+Nếu không muốn build lại Docker mỗi lần sửa backend/frontend:
+
+```bash
+# Hạ tầng + AI trong Docker
+docker compose up -d postgres redis migrate gaze chatbot
+
+# Terminal 1 — backend
 cd backend
 .venv/bin/python -m uvicorn app.main:app --reload --port 8001
-```
 
-- Sửa bất kỳ file trong `backend/app/**` → tự nạp lại (xem log `Reloading...`).
-- Kiểm tra: <http://localhost:8001/health> → `{"status":"ok",...}`, Swagger: <http://localhost:8001/docs>.
-
-## Bước 3 — Frontend (hot reload)
-
-Terminal 2:
-
-```bash
+# Terminal 2 — frontend
 cd frontend
 npm run dev
 ```
 
-Mở <http://localhost:3000>. Sửa file trong `frontend/app`, `components`, `lib`, `hooks`
-→ HMR cập nhật ngay trên trình duyệt (không cần F5 cho hầu hết thay đổi).
+Khi đó web ở <http://localhost:3000> (Next.js dev), backend ở `:8001`, gaze ở
+`:8000`, chatbot ở `:8002`. Nhớ `docker compose stop nginx` nếu nginx đang giữ
+cổng 3000.
 
-## Sửa gì thì cần làm gì
+## 11. Xử lý sự cố
 
-| Bạn sửa | Cần làm |
+| Lỗi | Cách xử lý |
 |---|---|
-| `backend/app/**` | không cần gì — reload tự động |
-| `backend/requirements*.txt` | `pip install -r ...` rồi restart uvicorn |
-| `.env` (gốc repo) | restart uvicorn (settings đọc lúc khởi động) |
-| `frontend/**` (app/components/lib/hooks) | không cần gì — HMR |
-| `frontend/next.config.ts`, `frontend/.env.local` | restart `npm run dev` |
-| `frontend/package.json` | `npm install` rồi restart `npm run dev` |
-| `db/migrations/**` hoặc `db/migrate.sh` | `docker compose build migrate && docker compose run --rm migrate` |
-| `services/gaze/**`, `services/chatbot/**` | `docker compose up -d --build gaze chatbot` (không hot reload) |
+| `FROM eyelearning-ai-base:latest` không tìm thấy | Chạy `./ops/build_ai_base.sh` trước |
+| `gpus: all` lỗi / không có GPU | Bỏ `gpus: all` ở `gaze`/`chatbot`, đặt `DEVICE=cpu`, `EMBEDDING_DEVICE=cpu` |
+| Cổng 3000 đang dùng | `docker compose stop nginx` hoặc dừng process đang giữ cổng |
+| Cổng 8001/8000/8002 đang dùng | `ss -ltnp \| grep -E '8000\|8001\|8002'` rồi dừng process |
+| Login không giữ phiên | `.env` phải có `COOKIE_SECURE=false`, rebuild backend |
+| Backend `connection refused` tới DB | `docker compose ps` — postgres chưa healthy |
+| Migration lỗi | `docker logs eyetracking-migrate`; sửa file mới, không sửa file đã áp |
+| Chatbot chưa `/ready` | Chờ tải weights; `docker compose logs -f chatbot` |
+| Gaze chưa `/ready` | Chờ tải weights + load model; `docker compose logs -f gaze` |
+| Hết dung lượng Docker | `./ops/docker_cleanup.sh` (không xóa volume) |
 
-## Khi nào thay đổi KHÔNG hiện ngay
+## 12. Dừng / reset
 
-- **Container `backend`/`frontend`**: image GHCR đóng băng + `pull_policy: always`, nên
-  dù bạn build tay thì `docker compose up` cũng kéo lại `:latest` và ghi đè.
-- Muốn test đúng image production → commit, push `main`, chờ CI (`ci.yml`) và
-  `build.yml` build & push lên GHCR, webhook Portainer redeploy; sau đó:
+```bash
+docker compose stop          # dừng, giữ dữ liệu
+docker compose down          # xóa container, giữ volume
+docker compose down -v       # XÓA volume — mất DB + weights
+```
 
-  ```bash
-  docker compose pull backend frontend && docker compose up -d backend frontend nginx
-  ```
+## 13. Cấu trúc image local
 
-## Xử lý sự cố
-
-- **`npm run dev` báo cổng 3000 đang dùng** → container `eyetracking-frontend` đang giữ
-  cổng: `docker compose stop frontend`.
-- **Cổng 8001 đang dùng** → `ss -ltnp | grep 8001` (hoặc `lsof -i :8001`) để tìm process
-  và dừng nó trước khi chạy uvicorn.
-- **Backend `connection refused` / `Connection refused` tới DB** → postgres chưa healthy
-  (`docker compose ps`) hoặc sai cổng: `DATABASE_URL` trong `.env` phải là
-  `...@localhost:5435/...` (bản `DATABASE_URL_DOCKER` chỉ dùng cho container).
-- **Đăng nhập không giữ được phiên trên `http://localhost`** → cookie bị đánh dấu
-  `Secure` khi `DEBUG=false`/`COOKIE_SECURE=true`. Dev qua http thì đặt
-  `COOKIE_SECURE=false` trong `.env` rồi restart uvicorn.
-  ⚠️ `.env` dùng chung với docker — đừng commit giá trị dev này.
-- **Frontend gọi `/api/...` bị 404/`ECONNREFUSED`** → backend 8001 chưa chạy, hoặc
-  `frontend/.env.local` trỏ sai `API_INTERNAL_URL` (phải là `http://localhost:8001`).
-- **Migration lỗi** → `docker logs eyetracking-migrate`; quy tắc: **không sửa file
-  migration đã ship**, hãy thêm file mới (xem `db/README.md`).
-
-## Bảng cổng nhanh
-
-| Cổng | Dịch vụ |
+| Image | Build từ |
 |---|---|
-| 3000 | frontend (`npm run dev`, hoặc container nếu không stop) |
-| 5435 | postgres |
-| 6379 | redis |
-| 8000 | gaze (Docker) |
-| 8001 | backend host |
-| 8002 | chatbot (Docker) |
-
-Dừng dev: `Ctrl+C` ở 2 terminal. Dừng hạ tầng: `docker compose stop` (giữ dữ liệu) hoặc
-`docker compose down` (giữ volume) / `docker compose down -v` (**xoá dữ liệu**).
+| `eyelearning-ai-base:latest` | `docker/ai-base/` |
+| `eyelearning-migrations:local` | `Dockerfile.migrations` |
+| `eyelearning-backend:local` | `backend/` |
+| `eyelearning-frontend:local` | `frontend/` |
+| `eyelearning-nginx:local` | `nginx/` |
+| `eyelearning-gaze:local` | `services/gaze/` |
+| `eyelearning-chatbot:local` | `services/chatbot/` |

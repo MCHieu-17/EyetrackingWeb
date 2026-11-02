@@ -1,21 +1,19 @@
-# Dependencies cho service chatbot: web API + ingest slide + workflow RAG.
-# Version được PIN để build tái lập được (trước đây để trôi nổi).
+# Dependencies cho service chatbot: web API + ingest slide + RAG.
+# Version được PIN để build tái lập được.
 #
-# Embedding local (EMBEDDING_NAME=local) cần thêm stack nặng (torch/sentence-
-# transformers/langchain-huggingface) — tách ở requirements-embedding.txt để
-# Docker image cài (cùng file này), còn CI/unit test không phải kéo torch.
+# Embedding local (Qwen3-Embedding-0.6B) cần thêm stack nặng
+# (torch/sentence-transformers/langchain-huggingface) — tách ở
+# requirements-embedding.txt để unit test không phải kéo torch.
 
 # Web service
 fastapi==0.146.0
 uvicorn[standard]==0.54.0
 python-dotenv==1.2.4
 
-# PostgreSQL + pgvector (checkpoint hội thoại & vector truy hồi)
+# PostgreSQL + pgvector
 psycopg[binary]==3.3.6
 psycopg_pool==3.3.3
 pgvector==0.5.1
-langgraph==1.2.16
-langgraph-checkpoint-postgres==3.2.0
 
 # LangChain + provider model (River AI OpenAI-compatible cho LLM + VLM)
 langchain-core==1.6.12

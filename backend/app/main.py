@@ -87,8 +87,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(assignments.router)
 app.include_router(chat.router)
+app.include_router(assignments.router)
 app.include_router(users.router)
 app.include_router(courses.router)
 app.include_router(admin.router)

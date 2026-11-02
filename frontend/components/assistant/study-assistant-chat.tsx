@@ -1,27 +1,25 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   RiAddLine,
-  RiArrowDownSLine,
   RiChatHistoryLine,
+  RiCloseLine,
   RiDeleteBinLine,
   RiEditLine,
-  RiQuestionAnswerLine,
   RiSendPlane2Line,
   RiSparkling2Line,
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -33,16 +31,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ChatCitation, ChatMessageItem } from "@/lib/api/chat";
+import { resolveMediaUrl } from "@/lib/api/client";
+import type { ChatCitation } from "@/lib/api/chat";
 import {
   useChatMessages,
   useChatSessions,
+  useChatStream,
   useDeleteChatSession,
   useRenameChatSession,
-  useSendChatMessage,
 } from "@/hooks/use-chat";
 
-type UiMessage = Pick<ChatMessageItem, "id" | "role" | "content" | "citations">;
+type UiMessage = {
+  id: string;
+  role: "student" | "assistant";
+  content: string;
+  citations: ChatCitation[];
+  pending?: boolean;
+};
 
 const MARKDOWN_CLASS = cn(
   "text-sm leading-6 break-words",
@@ -62,12 +67,20 @@ const MARKDOWN_CLASS = cn(
 
 const CITE_RE = /\[(\d+)\](?!\()/g;
 
+const STATUS_LABEL: Record<string, string> = {
+  routing: "Đang phân loại câu hỏi…",
+  retrieving: "Đang tìm trong tài liệu môn học…",
+  generating: "Đang soạn câu trả lời…",
+  verifying: "Đang kiểm tra trích dẫn…",
+  retrying: "Đang sửa lại câu trả lời…",
+};
+
 function newLocalId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** Biến `[1]` trong câu trả lời thành liên kết nhảy tới chip trích dẫn tương ứng. */
+/** Biến `[1]` trong câu trả lời thành liên kết mở citation tương ứng. */
 function withCitationLinks(text: string, messageId: string): string {
   return text.replace(CITE_RE, `[$1](#chat-cite-${messageId}-$1)`);
 }
@@ -75,35 +88,35 @@ function withCitationLinks(text: string, messageId: string): string {
 function CitationChip({
   index,
   citation,
-  messageId,
+  onClick,
 }: {
   index: number;
   citation: ChatCitation;
-  messageId: string;
+  onClick: () => void;
 }) {
-  const label = `[${index}] ${citation.title}`;
-  const className =
-    "inline-flex max-w-full items-center truncate rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-muted-foreground";
-  const isLink = /^https?:\/\//.test(citation.location);
   return (
-    <span id={`chat-cite-${messageId}-${index}`} className="max-w-full">
-      {isLink ? (
-        <a
-          href={citation.location}
-          target="_blank"
-          rel="noreferrer"
-          className={cn(className, "transition hover:bg-muted hover:text-foreground")}
-        >
-          {label}
-        </a>
-      ) : (
-        <span className={className}>{label}</span>
-      )}
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+      title={citation.title}
+    >
+      [{index}] {citation.title}
+    </button>
   );
 }
 
-function Markdown({ text, messageId }: { text: string; messageId: string }) {
+function Markdown({
+  text,
+  messageId,
+  citations,
+  onCitationClick,
+}: {
+  text: string;
+  messageId: string;
+  citations: ChatCitation[];
+  onCitationClick: (citation: ChatCitation) => void;
+}) {
   return (
     <div className={MARKDOWN_CLASS}>
       <ReactMarkdown
@@ -111,20 +124,20 @@ function Markdown({ text, messageId }: { text: string; messageId: string }) {
         components={{
           a: ({ href, children }) => {
             if (href?.startsWith("#chat-cite-")) {
-              return (
-                <button
-                  type="button"
-                  className="mx-0.5 inline-flex min-w-4 items-center justify-center rounded border border-current px-1 text-[10px] align-super font-semibold"
-                  onClick={() =>
-                    document
-                      .getElementById(href.slice(1))
-                      ?.scrollIntoView({ behavior: "smooth", block: "center" })
-                  }
-                  aria-label="Xem nguồn trích dẫn"
-                >
-                  {children}
-                </button>
-              );
+              const index = Number(href.split("-").pop());
+              const citation = citations[index - 1];
+              if (citation) {
+                return (
+                  <button
+                    type="button"
+                    className="mx-0.5 inline-flex min-w-4 items-center justify-center rounded border border-current px-1 text-[10px] align-super font-semibold"
+                    onClick={() => onCitationClick(citation)}
+                    aria-label={`Xem nguồn trích dẫn ${index}`}
+                  >
+                    {children}
+                  </button>
+                );
+              }
             }
             return (
               <a href={href} target="_blank" rel="noreferrer">
@@ -144,373 +157,519 @@ export function StudyAssistantChat({
   courseId,
   lessonId = null,
   assignmentId = null,
+  mode = "reader",
 }: {
   courseId: string;
   lessonId?: string | null;
   assignmentId?: string | null;
+  mode?: "reader" | "quiz" | "review";
 }) {
   const [open, setOpen] = useState(false);
-  // undefined = chưa chọn (sẽ tự mở phiên gần nhất), null = phiên mới chưa lưu, string = phiên đang mở.
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null | undefined>(undefined);
+  // undefined = chưa chọn (tự mở phiên gần nhất), null = phiên mới chưa lưu.
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null | undefined>(
+    undefined,
+  );
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [streamingText, setStreamingText] = useState("");
+  const [streamingCitations, setStreamingCitations] = useState<ChatCitation[]>([]);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [citationModal, setCitationModal] = useState<ChatCitation | null>(null);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const loadedSessionRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const streamingTextRef = useRef("");
+  const citationsRef = useRef<ChatCitation[]>([]);
 
-  const sessionsQuery = useChatSessions(open ? courseId : null);
-  const sessions = sessionsQuery.data ?? [];
-  // Chưa chọn gì -> tự mở phiên gần nhất; danh sách trống -> phiên mới.
-  const activeSessionId: string | null | undefined =
-    selectedSessionId === undefined
-      ? sessionsQuery.data
-        ? (sessionsQuery.data[0]?.id ?? null)
-        : undefined
-      : selectedSessionId;
-  const activeSession = sessions.find((session) => session.id === activeSessionId);
-  const messagesQuery = useChatMessages(
-    open && typeof activeSessionId === "string" ? activeSessionId : null,
-  );
-  const send = useSendChatMessage();
-  const rename = useRenameChatSession();
-  const remove = useDeleteChatSession();
+  const sessionsQuery = useChatSessions(courseId);
+  const sessions = Array.isArray(sessionsQuery.data) ? sessionsQuery.data : [];
+  // undefined = chưa chọn -> tự dùng phiên gần nhất; null = phiên mới.
+  const effectiveSessionId =
+    selectedSessionId === undefined ? (sessions[0]?.id ?? null) : selectedSessionId;
+  const messagesQuery = useChatMessages(effectiveSessionId);
+  const renameMutation = useRenameChatSession();
+  const deleteMutation = useDeleteChatSession();
+  const chatStream = useChatStream();
 
-  // Nạp lịch sử khi đổi phiên (không đè lên tin nhắn vừa gửi cục bộ).
-  useEffect(() => {
-    if (typeof activeSessionId !== "string") return;
-    if (!messagesQuery.data || loadedSessionRef.current === activeSessionId) return;
-    loadedSessionRef.current = activeSessionId;
-    setMessages(messagesQuery.data);
-  }, [activeSessionId, messagesQuery.data]);
+  const currentSession = sessions.find((item) => item.id === effectiveSessionId);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, pendingMessage, open, send.isPending, activeSessionId]);
+    if (Array.isArray(messagesQuery.data)) {
+      // Đồng bộ lịch sử từ server vào state hiển thị cục bộ (optimistic stream
+      // được ghép sau). Đây là sync có chủ đích, không phải derived state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMessages(
+        messagesQuery.data.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          citations: message.citations ?? [],
+        })),
+      );
+    }
+  }, [messagesQuery.data]);
 
-  const suggestions = assignmentId
-    ? [
-        "Giải thích các câu mình làm sai",
-        "Tóm tắt kiến thức cần nhớ",
-        "Gợi ý hướng làm, đừng cho đáp án",
-      ]
-    : ["Tóm tắt bài này", "Giải thích khái niệm chính", "Cho ví dụ minh hoạ"];
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
 
-  function startNewChat() {
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, streamingText, chatStream.status]);
+
+  const resetConversation = () => {
     setMessages([]);
-    setSelectedSessionId(null);
-    loadedSessionRef.current = null;
+    setStreamingText("");
+    setStreamingCitations([]);
     setError("");
-  }
+    streamingTextRef.current = "";
+    citationsRef.current = [];
+  };
 
-  async function sendMessage(text: string) {
+  const selectSession = (sessionId: string | null) => {
+    setSelectedSessionId(sessionId);
+    resetConversation();
+  };
+
+  const send = async (text: string) => {
     const message = text.trim();
-    if (!message || send.isPending) return;
+    if (!message || chatStream.streaming) return;
+
     setInput("");
     setError("");
-    setPendingMessage(message);
+    resetConversation();
+
+    const userMessage: UiMessage = {
+      id: newLocalId(),
+      role: "student",
+      content: message,
+      citations: [],
+    };
+    const assistantId = newLocalId();
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      { id: assistantId, role: "assistant", content: "", citations: [], pending: true },
+    ]);
+
+    let completed = false;
     try {
-      const reply = await send.mutateAsync({
-        courseId,
-        message,
-        sessionId: typeof activeSessionId === "string" ? activeSessionId : null,
-        lessonId: lessonId ?? null,
-        assignmentId: assignmentId ?? null,
-      });
-      setMessages((current) => [
-        ...current,
+      await chatStream.send(
         {
-          id: newLocalId(),
-          role: "student",
-          content: message,
-          citations: [],
+          courseId,
+          message,
+          sessionId: sessionIdRef.current ?? effectiveSessionId,
+          lessonId,
+          assignmentId,
         },
         {
-          id: newLocalId(),
-          role: "assistant",
-          content: reply.answer,
-          citations: reply.citations,
+          onSession: (sessionId) => {
+            sessionIdRef.current = sessionId;
+          },
+          onCitations: (citations) => {
+            citationsRef.current = citations;
+            setStreamingCitations(citations);
+          },
+          onToken: (token) => {
+            streamingTextRef.current += token;
+            setStreamingText(streamingTextRef.current);
+          },
+          onDone: (data) => {
+            completed = true;
+            const finalText = streamingTextRef.current;
+            const finalCitations = citationsRef.current;
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === assistantId
+                  ? {
+                      ...item,
+                      content: finalText,
+                      citations: finalCitations,
+                      pending: false,
+                    }
+                  : item,
+              ),
+            );
+            setStreamingText("");
+            setStreamingCitations([]);
+            if (data.sessionId) {
+              sessionIdRef.current = data.sessionId;
+              setSelectedSessionId(data.sessionId);
+            }
+            void sessionsQuery.refetch();
+          },
+          onError: (message) => {
+            setError(message);
+          },
         },
-      ]);
-      loadedSessionRef.current = reply.sessionId;
-      // Ghim phiên đang mở để danh sách refetch không đổi phiên giữa chừng.
-      setSelectedSessionId(reply.sessionId);
-    } catch {
-      setError("Trợ lý chưa thể trả lời. Vui lòng thử lại.");
-      setInput(message);
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Trợ lý học tập tạm thời không phản hồi");
     } finally {
-      setPendingMessage(null);
+      if (!completed) {
+        setMessages((prev) => prev.filter((item) => item.id !== assistantId));
+        setStreamingText("");
+        setStreamingCitations([]);
+      }
     }
-  }
+  };
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void sendMessage(input);
-  }
+    void send(input);
+  };
 
-  if (!open) {
-    return (
-      <Button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-3 right-3 z-50 h-12 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
-        aria-label="Mở trợ lý học tập"
-      >
-        <RiSparkling2Line />
-        Trợ lý học tập
-      </Button>
+  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void send(input);
+    }
+  };
+
+  const openRename = () => {
+    if (!currentSession) return;
+    setRenameValue(currentSession.title);
+    setRenameOpen(true);
+  };
+
+  const confirmRename = () => {
+    if (!currentSession) return;
+    const title = renameValue.trim();
+    if (!title) return;
+    renameMutation.mutate(
+      { sessionId: currentSession.id, title },
+      { onSuccess: () => setRenameOpen(false) },
     );
-  }
+  };
+
+  const confirmDelete = () => {
+    if (!currentSession) return;
+    deleteMutation.mutate(currentSession.id, {
+      onSuccess: () => {
+        setDeleteOpen(false);
+        const next = sessions.find((item) => item.id !== currentSession.id);
+        selectSession(next?.id ?? null);
+      },
+    });
+  };
+
+  const statusLabel = chatStream.status ? STATUS_LABEL[chatStream.status] : null;
+  const showEmpty = messages.length === 0 && !streamingText && !chatStream.streaming;
 
   return (
     <>
-      <aside
-        className="fixed bottom-3 right-3 z-50 flex h-[min(560px,72dvh)] w-[min(420px,calc(100vw-1rem))] flex-col overflow-hidden rounded-[24px] border border-border/80 bg-white shadow-[0_20px_60px_rgba(22,28,20,0.2)] sm:bottom-5 sm:right-5 sm:h-[min(640px,calc(100dvh-2.5rem))]"
-        aria-label="Trợ lý học tập"
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={cn(
+          "fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-[#36533a] text-white shadow-lg transition hover:scale-105 hover:bg-[#2c4530] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          open && "hidden",
+        )}
+        aria-label="Mở trợ lý học tập"
+        aria-expanded={open}
       >
-        <div className="shrink-0 border-b border-border bg-[#f2f7f0] p-3.5">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-full bg-white text-[#36533a] shadow-xs">
+        <RiSparkling2Line className="size-6" />
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-[#fdfdfa] sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[min(680px,calc(100vh-2.5rem))] sm:w-[430px] sm:rounded-[24px] sm:border sm:border-border sm:shadow-2xl"
+          role="dialog"
+          aria-label="Trợ lý học tập"
+        >
+          <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <div className="flex size-9 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
               <RiSparkling2Line className="size-5" />
-            </span>
+            </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">Trợ lý học tập</h2>
-              <p className="truncate text-xs font-medium text-[#567052]">
-                {activeSession ? activeSession.title : "Hỏi về nội dung đang học"}
+              <p className="truncate text-sm font-semibold">Trợ lý học tập</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {mode === "quiz"
+                  ? "Gợi ý bài tập · không giải hộ"
+                  : mode === "review"
+                    ? "Chữa bài đã nộp · có đáp án"
+                    : "Hỏi đáp trong môn học"}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Lịch sử trò chuyện"
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Lịch sử phiên chat">
+                  <RiChatHistoryLine className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Phiên chat</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => selectSession(null)}>
+                  <RiAddLine className="mr-2 size-4" />
+                  Phiên mới
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {sessions.length === 0 && (
+                  <p className="px-2 py-3 text-xs text-muted-foreground">Chưa có phiên nào.</p>
+                )}
+                {sessions.map((session) => (
+                  <DropdownMenuItem
+                    key={session.id}
+                    onSelect={() => selectSession(session.id)}
+                    className="flex items-center justify-between gap-2"
                   >
-                    <RiChatHistoryLine />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-72">
-                  <DropdownMenuLabel>Phiên gần đây</DropdownMenuLabel>
-                  <DropdownMenuItem onSelect={startNewChat} className="gap-2 font-medium">
-                    <RiAddLine className="size-4" />
-                    Chat mới
+                    <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {session.messageCount}
+                    </span>
                   </DropdownMenuItem>
-                  {sessions.length > 0 && <DropdownMenuSeparator />}
-                  {sessions.slice(0, 8).map((session) => (
-                    <DropdownMenuItem
-                      key={session.id}
-                      onSelect={() => setSelectedSessionId(session.id)}
-                      className={cn(
-                        "flex-col items-start gap-0.5",
-                        session.id === activeSessionId && "bg-muted",
-                      )}
-                    >
-                      <span className="w-full truncate text-sm">{session.title}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {session.messageCount} tin nhắn ·{" "}
-                        {new Date(session.updatedAt).toLocaleDateString("vi-VN")}
-                      </span>
+                ))}
+                {currentSession && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={openRename}>
+                      <RiEditLine className="mr-2 size-4" />
+                      Đổi tên phiên
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => setDeleteOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <RiDeleteBinLine className="mr-2 size-4" />
+                      Xoá phiên
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpen(false)}
+              aria-label="Đóng trợ lý"
+            >
+              <RiCloseLine className="size-4" />
+            </Button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {showEmpty && (
+              <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
+                  <RiSparkling2Line className="size-7" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Mình có thể giúp gì?</p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                    {mode === "quiz"
+                      ? "Mình sẽ gợi ý từng bước, không đưa đáp án cuối hay lời giải hoàn chỉnh."
+                      : mode === "review"
+                        ? "Hỏi về bài đã nộp. Mình có thể giải thích đáp án và chỉ ra lỗi sai."
+                        : "Hỏi về khái niệm trong bài. Câu trả lời sẽ kèm trích dẫn slide liên quan."}
+                  </p>
+                </div>
+                <div className="flex w-full max-w-xs flex-col gap-2">
+                  {(mode === "quiz"
+                    ? [
+                        "Cho mình gợi ý cho câu này",
+                        "Giải thích khái niệm liên quan",
+                        "Mình đang làm sai ở bước nào?",
+                      ]
+                    : mode === "review"
+                      ? [
+                          "Giải thích đáp án đúng",
+                          "Vì sao mình sai câu này?",
+                          "Tóm tắt kiến thức liên quan",
+                        ]
+                      : [
+                          "Tóm tắt nội dung chính của bài này",
+                          "Giải thích khái niệm quan trọng nhất",
+                          "Mình nên học phần nào trước?",
+                        ]
+                  ).map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => void send(suggestion)}
+                      className="rounded-xl border border-border bg-white px-3 py-2 text-left text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    >
+                      {suggestion}
+                    </button>
                   ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {activeSession && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Đổi tên phiên"
-                    onClick={() => {
-                      setRenameValue(activeSession.title);
-                      setRenameOpen(true);
-                    }}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex flex-col gap-1.5",
+                    message.role === "student" ? "items-end" : "items-start",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "max-w-[92%] rounded-2xl px-3.5 py-2.5",
+                      message.role === "student"
+                        ? "bg-[#36533a] text-white"
+                        : "border border-border bg-white text-foreground",
+                    )}
                   >
-                    <RiEditLine />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Xoá phiên"
-                    onClick={() => setDeleteOpen(true)}
-                  >
-                    <RiDeleteBinLine />
-                  </Button>
-                </>
+                    {message.role === "student" ? (
+                      <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
+                    ) : message.pending && !message.content ? (
+                      <p className="text-sm text-muted-foreground">
+                        {statusLabel ?? "Đang xử lý…"}
+                      </p>
+                    ) : (
+                      <Markdown
+                        text={message.content}
+                        messageId={message.id}
+                        citations={message.citations}
+                        onCitationClick={setCitationModal}
+                      />
+                    )}
+                  </div>
+                  {message.role === "assistant" && message.citations.length > 0 && (
+                    <div className="flex max-w-[92%] flex-wrap gap-1.5">
+                      {message.citations.map((citation, index) => (
+                        <CitationChip
+                          key={`${message.id}-${citation.documentId}-${index}`}
+                          index={index + 1}
+                          citation={citation}
+                          onClick={() => setCitationModal(citation)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {chatStream.streaming && (
+                <div className="flex flex-col gap-1.5 items-start">
+                  <div className="max-w-[92%] rounded-2xl border border-border bg-white px-3.5 py-2.5">
+                    {streamingText ? (
+                      <Markdown
+                        text={streamingText}
+                        messageId="streaming"
+                        citations={streamingCitations}
+                        onCitationClick={setCitationModal}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {statusLabel ?? "Đang xử lý…"}
+                      </p>
+                    )}
+                  </div>
+                </div>
               )}
+
+              {error && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {error}
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          <form onSubmit={onSubmit} className="border-t border-border p-3">
+            <div className="flex items-end gap-2">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={
+                  mode === "quiz"
+                    ? "Hỏi gợi ý cho bài tập… (Enter để gửi)"
+                    : mode === "review"
+                      ? "Hỏi về bài đã nộp… (Enter để gửi)"
+                      : "Hỏi về nội dung bài học… (Enter để gửi)"
+                }
+                rows={1}
+                className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl py-2.5"
+                disabled={chatStream.streaming}
+              />
               <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setOpen(false)}
-                aria-label="Thu gọn trợ lý học tập"
+                type="submit"
+                size="icon"
+                className="size-10 shrink-0 rounded-full"
+                disabled={!input.trim() || chatStream.streaming}
+                aria-label="Gửi câu hỏi"
               >
-                <RiArrowDownSLine />
+                <RiSendPlane2Line className="size-4" />
               </Button>
             </div>
-          </div>
-        </div>
-
-        <div
-          ref={scrollRef}
-          className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
-          aria-live="polite"
-        >
-          {messages.length === 0 && !pendingMessage && (
-            <div className="rounded-2xl bg-muted/60 p-3.5 text-sm leading-6 text-foreground/80">
-              {assignmentId
-                ? "Mình có thể giúp bạn xem lại các câu chưa đúng dựa trên phần giải thích của bài."
-                : "Mình là trợ lý học tập của môn này. Hỏi mình về nội dung bài đang học, mình sẽ trả lời kèm nguồn slide."}
-            </div>
-          )}
-
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn("flex", message.role === "student" ? "justify-end" : "justify-start")}
-            >
-              <div
-                className={cn(
-                  "max-w-[90%] rounded-2xl px-4 py-3",
-                  message.role === "student"
-                    ? "rounded-br-md bg-foreground text-white"
-                    : "rounded-bl-md bg-muted text-foreground",
-                )}
-              >
-                {message.role === "student" ? (
-                  <p className="whitespace-pre-line text-sm leading-6">{message.content}</p>
-                ) : (
-                  <Markdown text={message.content} messageId={message.id} />
-                )}
-                {message.citations.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-foreground/10 pt-2">
-                    {message.citations.map((citation, index) => (
-                      <CitationChip
-                        key={`${citation.documentId}-${index}`}
-                        index={index + 1}
-                        citation={citation}
-                        messageId={message.id}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {pendingMessage && (
-            <div className="flex justify-end">
-              <div className="max-w-[90%] whitespace-pre-line rounded-2xl rounded-br-md bg-foreground px-4 py-3 text-sm leading-6 text-white">
-                {pendingMessage}
-              </div>
-            </div>
-          )}
-
-          {send.isPending && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-muted px-4 py-3.5">
-                <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground" />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="shrink-0 border-t border-border bg-white p-3">
-          <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-            {suggestions.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                disabled={send.isPending}
-                onClick={() => void sendMessage(prompt)}
-                className="shrink-0 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-          {error && (
-            <p role="alert" className="mb-2 text-xs text-destructive">
-              {error}
+            <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">
+              Trợ lý không giải bài hộ. Câu trả lời dựa trên tài liệu môn học và có trích dẫn.
             </p>
-          )}
-          <form
-            onSubmit={handleSubmit}
-            className="flex items-end gap-2 rounded-2xl border border-input bg-white p-2 focus-within:ring-2 focus-within:ring-ring"
-          >
-            <RiQuestionAnswerLine className="mb-2 ml-1 size-4 shrink-0 text-muted-foreground" />
-            <label htmlFor="study-chat" className="sr-only">
-              Hỏi trợ lý học tập
-            </label>
-            <textarea
-              id="study-chat"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void sendMessage(input);
-                }
-              }}
-              rows={1}
-              placeholder="Nhập câu hỏi..."
-              className="max-h-24 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground"
-            />
-            <Button
-              type="submit"
-              size="icon-sm"
-              aria-label="Gửi câu hỏi"
-              disabled={!input.trim() || send.isPending}
-            >
-              <RiSendPlane2Line />
-            </Button>
           </form>
-          <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-            Enter để gửi · Shift+Enter xuống dòng ·{" "}
-            <Link href={`/student/courses/${courseId}`} className="underline underline-offset-2">
-              Học tiếp
-            </Link>
-          </p>
         </div>
-      </aside>
+      )}
+
+      <Dialog open={Boolean(citationModal)} onOpenChange={(value) => !value && setCitationModal(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{citationModal?.title ?? "Nguồn trích dẫn"}</DialogTitle>
+            <DialogDescription>
+              {citationModal?.lessonTitle || "Slide trong môn học"}
+              {citationModal?.slideIndex ? ` · Slide ${citationModal.slideIndex}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto px-6 pb-6">
+            {citationModal?.imageUrl || citationModal?.location ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={
+                  resolveMediaUrl(citationModal.imageUrl || citationModal.location) ?? undefined
+                }
+                alt={citationModal.title}
+                className="w-full rounded-xl border border-border"
+              />
+            ) : (
+              <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                {citationModal?.snippet || "Không có ảnh slide cho nguồn này."}
+              </p>
+            )}
+            {citationModal?.snippet && (citationModal?.imageUrl || citationModal?.location) && (
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {citationModal.snippet}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Đổi tên phiên</DialogTitle>
+            <DialogTitle>Đổi tên phiên chat</DialogTitle>
           </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(event) => setRenameValue(event.target.value)}
-            maxLength={255}
-            aria-label="Tên phiên"
-          />
-          <DialogFooter>
+          <div className="px-6 pb-4">
+            <Textarea
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              rows={2}
+              maxLength={255}
+            />
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
               Hủy
             </Button>
             <Button
-              disabled={!renameValue.trim() || rename.isPending}
-              onClick={() => {
-                if (!activeSession) return;
-                rename.mutate(
-                  { sessionId: activeSession.id, title: renameValue.trim() },
-                  { onSuccess: () => setRenameOpen(false) },
-                );
-              }}
+              onClick={confirmRename}
+              disabled={!renameValue.trim() || renameMutation.isPending}
             >
               Lưu
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -518,19 +677,11 @@ export function StudyAssistantChat({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Xoá phiên chat?"
-        description="Toàn bộ nội dung trò chuyện trong phiên này sẽ bị xoá."
-        confirmLabel="Xoá phiên"
+        description="Toàn bộ tin nhắn trong phiên này sẽ bị xoá và không thể khôi phục."
+        confirmLabel="Xoá"
         destructive
-        loading={remove.isPending}
-        onConfirm={() => {
-          if (!activeSession) return;
-          remove.mutate(activeSession.id, {
-            onSuccess: () => {
-              setDeleteOpen(false);
-              startNewChat();
-            },
-          });
-        }}
+        loading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
       />
     </>
   );

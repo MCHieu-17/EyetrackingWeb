@@ -1,1 +1,1 @@
-"""FastAPI service cho chatbot học tập."""
+"""Chatbot RAG service package."""

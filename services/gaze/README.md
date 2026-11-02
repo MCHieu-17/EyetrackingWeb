@@ -487,7 +487,7 @@ requirements.txt              runtime; requirements-dev.txt: pytest/ruff/httpx
 Dockerfile                    FROM image nền dùng chung docker/ai-base (torch cu124)
 ```
 
-Bố cục giống `services/chatbot` và `backend/` (gói `app/`). Service không ghi gì
+Bố cục giống `backend/` (gói `app/`). Service không ghi gì
 xuống đĩa: session nằm trong RAM, weights nằm trong volume `gaze-weights`.
 
 ## 8. Đổi model UniGaze (b16 / l16 / h14)

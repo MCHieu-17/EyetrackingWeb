@@ -1,25 +1,24 @@
 # syntax=docker/dockerfile:1
 #
 # ============================================================
-# AI base — image dùng CHUNG cho services/gaze và services/chatbot
+# AI base — image nền cho services/gaze + services/chatbot
 # ============================================================
 #
 # Mục đích: cài torch/torchvision (CUDA 12.4) + thư viện hệ thống tối thiểu
-# MỘT LẦN. Hai service `FROM` image này nên các layer nặng (torch + nvidia-cuda-*,
-# ~vài GB) chỉ được lưu một bản trên host/registry thay vì hai bản.
+# MỘT LẦN. Gaze/chatbot `FROM` image này nên các layer nặng (torch + nvidia-cuda-*,
+# ~vài GB) chỉ được lưu một bản trên host.
 #
-# Base CHỈ chứa thứ cả hai service đều cần (python, torch cu124, libgomp1, curl).
-# Thư viện riêng của từng service (vd libgl1/libglib2.0-0 cho OpenCV/MediaPipe của
-# gaze) được cài ở Dockerfile của service đó.
+# Base CHỈ chứa thứ gaze/chatbot cần (python, torch cu124, libgomp1, curl).
+# Thư viện riêng của gaze (vd libgl1/libglib2.0-0 cho OpenCV/MediaPipe) được cài
+# ở Dockerfile của service đó.
 #
-# Build & push (CI tự làm khi docker/ai-base/** đổi):
-#   docker build -t ghcr.io/manh1504/eyelearning-ai-base:latest docker/ai-base
-#   docker push ghcr.io/manh1504/eyelearning-ai-base:latest
+# Build local:
+#   docker build -t eyelearning-ai-base:latest docker/ai-base
 # hoặc dùng script tiện dụng: ./ops/build_ai_base.sh
 #
 # CUDA/cuDNN đến từ wheel pip cu124 (requirements-torch.txt) nên KHÔNG cần base
 # image NVIDIA; host chỉ cần NVIDIA driver + nvidia-container-toolkit (compose đặt
-# `gpus: all`). Chạy CPU vẫn được qua DEVICE=cpu / EMBEDDING_DEVICE=cpu.
+# `gpus: all`). Chạy CPU vẫn được qua DEVICE=cpu.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

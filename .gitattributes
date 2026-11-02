@@ -1,7 +1,7 @@
 # Script shell luôn dùng LF để chạy được trong container Linux.
 *.sh text eol=lf
 
-# SQL/migration giữ nguyên nội dung (checksum CI phụ thuộc byte).
+# SQL/migration giữ nguyên nội dung (checksum trong schema_migrations phụ thuộc byte).
 *.sql text eol=lf
 
 # Ảnh/binary không xử lý text.

@@ -1,6 +1,6 @@
 """Gaze service: ước lượng hướng nhìn (mediapipe + UniGaze) + calibration.
 
-Bố cục giống các service khác trong repo (backend, chatbot):
+Bố cục giống backend trong repo:
     app/main.py      - FastAPI app, lifespan, /health
     app/settings.py  - đọc biến môi trường
     app/schemas.py   - pydantic request/response

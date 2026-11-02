@@ -4,6 +4,15 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# ============================================================
+# Stack LOCAL — build toàn bộ image từ source trên máy.
+# Không dùng GHCR, không pull_policy, không Cloudflare/Portainer.
+#
+#   ./ops/build_ai_base.sh          # lần đầu: build image nền torch/CUDA
+#   docker compose up -d --build    # build + chạy toàn bộ stack
+#
+# Web: http://localhost:3000 (nginx -> frontend/backend/gaze)
+# ============================================================
 services:
   postgres:
     image: pgvector/pgvector:0.8.7-pg16
@@ -16,7 +25,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       TZ: UTC
     ports:
-      - "127.0.0.1:5435:5432"   # prod: chỉ tool trên host truy cập; app dùng service name `postgres:5432`
+      - "127.0.0.1:5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,24 +34,15 @@ services:
       timeout: 3s
       retries: 10
 
-  # Chạy migration một lần mỗi lần deploy, qua runner db/migrate.sh (bảng
-  # `schema_migrations`: chỉ chạy file chưa áp, chặn sửa file đã ship) — thay cho
-  # bind mount ./db/migrations (không hoạt động khi Portainer deploy từ Git/web-editor).
-  # Service này exit 1 ⇒ compose huỷ cả lần deploy, container cũ vẫn chạy → xem
-  # `docker logs eyetracking-migrate`. Quy tắc: KHÔNG sửa file migration đã ship,
-  # hãy thêm file mới (xem db/README.md mục "Quy tắc migration").
-  # Có `build` để `docker compose up --build` luôn dùng migrations local,
-  # còn khi deploy qua GHCR thì image đã được CI build/push sẵn.
-  # `pull_policy: always` giữ cho deploy production (luôn lấy image CI mới);
-  # khi cần build local, dùng `docker compose build migrate` rồi `up` với
-  # `--pull never` hoặc `docker compose run --rm migrate`.
+  # Chạy migration một lần mỗi lần `docker compose up`. Runner db/migrate.sh
+  # dùng bảng `schema_migrations`: chỉ chạy file chưa áp, chặn sửa file đã áp.
+  # Service exit 1 ⇒ compose huỷ lần chạy đó; xem `docker logs eyetracking-migrate`.
   migrate:
     build:
       context: .
       dockerfile: Dockerfile.migrations
-    image: ghcr.io/manh1504/eyelearning-migrations:${IMAGE_TAG:-latest}
+    image: eyelearning-migrations:local
     container_name: eyetracking-migrate
-    pull_policy: always
     restart: "no"
     logging: *default-logging
     depends_on:
@@ -60,9 +60,8 @@ services:
     restart: unless-stopped
     logging: *default-logging
     command: ["redis-server", "--appendonly", "yes"]
-    # Không publish ra host — chỉ backend dùng nội bộ qua redis:6379 (tránh conflict 6379 trên host)
-    expose:
-      - "6379"
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -71,42 +70,12 @@ services:
       timeout: 3s
       retries: 10
 
-  # Bảo trì partition gaze_events: gọi create_gaze_partitions() mỗi 24h để không
-  # bao giờ thiếu partition tháng (dữ liệu rơi vào gaze_events_default sẽ phải
-  # xử lý thủ công). Chạy sau khi migrate xong (function do 003 tạo).
-  db-maintenance:
-    image: pgvector/pgvector:0.8.7-pg16
-    container_name: eyetracking-db-maintenance
-    restart: unless-stopped
-    logging: *default-logging
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    environment:
-      PGHOST: postgres
-      PGUSER: ${POSTGRES_USER}
-      PGDATABASE: ${POSTGRES_DB}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        while true; do
-          echo "[db-maintenance] $$(date -u +%FT%TZ) tạo partition gaze_events..."
-          psql -v ON_ERROR_STOP=1 -c "SELECT create_gaze_partitions(3);" \
-            || echo "[db-maintenance] lỗi — sẽ thử lại sau 24h" >&2
-          sleep 86400
-        done
-
-  # Image backend/frontend/nginx do CI build & push lên GHCR (xem
-  # .github/workflows/build.yml). Không khai báo `build:` ở đây để deploy
-  # production luôn pull image đã kiểm thử; muốn build local thì dùng
-  # `docker build -f backend/Dockerfile -t ghcr.io/.../eyelearning-backend:latest backend`.
   backend:
-    image: ghcr.io/manh1504/eyelearning-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: eyelearning-backend:local
     container_name: eyetracking-backend
-    pull_policy: always
     restart: unless-stopped
     logging: *default-logging
     depends_on:
@@ -118,13 +87,14 @@ services:
       DATABASE_URL: ${DATABASE_URL_DOCKER}
       REDIS_URL: ${REDIS_URL_DOCKER}
       AI_HTTP_URL: http://gaze:8000
+      # Chatbot RAG service (nội bộ). Backend gọi qua tên service + token.
       CHATBOT_URL: http://chatbot:8000
-      CHATBOT_TIMEOUT_SECONDS: ${CHATBOT_TIMEOUT_SECONDS:-60}
-      CHATBOT_INGEST_TIMEOUT_SECONDS: ${CHATBOT_INGEST_TIMEOUT_SECONDS:-600}
       CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+      CHATBOT_TIMEOUT_SECONDS: ${CHATBOT_TIMEOUT_SECONDS:-120}
+      CHATBOT_INGEST_TIMEOUT_SECONDS: ${CHATBOT_INGEST_TIMEOUT_SECONDS:-600}
+      CHATBOT_INGEST_ATTEMPTS: ${CHATBOT_INGEST_ATTEMPTS:-3}
+      CHATBOT_INGEST_BACKOFF_SECONDS: ${CHATBOT_INGEST_BACKOFF_SECONDS:-5}
       JWT_SECRET: ${JWT_SECRET}
-      # Frontend production phục vụ cả apex và www; proxy giữ nguyên Origin.
-      # Giá trị thật (gồm domain production) khai báo trong .env.
       CORS_ORIGINS: ${CORS_ORIGINS}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
@@ -134,11 +104,13 @@ services:
       GAZE_DOWNSAMPLE_HZ: ${GAZE_DOWNSAMPLE_HZ:-4.0}
       GAZE_BATCH_MAX: ${GAZE_BATCH_MAX:-2000}
       # Dải mạng proxy tin cậy: chỉ peer trong dải này mới được tin X-Forwarded-For
-      # (nginx trong mạng docker nội bộ). Xem nginx/default.conf set_real_ip_from.
+      # (nginx trong mạng docker nội bộ).
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
       DEBUG: ${DEBUG:-false}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+    ports:
+      - "127.0.0.1:8001:8001"
     volumes:
       - backend-media:/app/media
     healthcheck:
@@ -147,44 +119,56 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    # Không publish 8001 ra host — chỉ nginx truy cập nội bộ.
 
+  # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B.
+  # Build từ ./services/chatbot (FROM image nền docker/ai-base có torch CUDA).
   chatbot:
     build:
       context: ./services/chatbot
       dockerfile: Dockerfile
-    image: ghcr.io/manh1504/eyelearning-chatbot:${IMAGE_TAG:-latest}
+      args:
+        AI_BASE: eyelearning-ai-base:latest
+    image: eyelearning-chatbot:local
     container_name: eyetracking-chatbot
-    pull_policy: always
     restart: unless-stopped
     logging: *default-logging
     gpus: all
     depends_on:
       migrate:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: ${CHATBOT_DATABASE_URL_DOCKER}
+      CHATBOT_DATABASE_URL: ${CHATBOT_DATABASE_URL_DOCKER}
       CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
-      # --- Model & thiết bị (nguồn duy nhất: .env) ---
-      LLM_NAME: ${LLM_NAME}
-      VLM_NAME: ${VLM_NAME}
-      EMBEDDING_NAME: ${EMBEDDING_NAME}
-      EMBEDDING_DIM: ${EMBEDDING_DIM}
-      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH}
-      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE}
-      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY}
-      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO}
+      LLM_NAME: ${LLM_NAME:-river}
+      VLM_NAME: ${VLM_NAME:-river}
+      EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cuda}
+      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
+      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
       HF_TOKEN: ${HF_TOKEN:-}
-      # --- LLM + VLM: River AI (OpenAI-compatible, không tốn VRAM local) ---
       RIVER_API_KEY: ${RIVER_API_KEY}
       RIVER_BASE_URL: ${RIVER_BASE_URL:-https://api.river.ai/v1}
       RIVER_LLM_MODEL: ${RIVER_LLM_MODEL}
       RIVER_VLM_MODEL: ${RIVER_VLM_MODEL}
-      RIVER_LLM_MAX_TOKENS: ${RIVER_LLM_MAX_TOKENS:-4096}
+      RIVER_LLM_MAX_TOKENS: ${RIVER_LLM_MAX_TOKENS:-8192}
+      RIVER_ROUTER_MAX_TOKENS: ${RIVER_ROUTER_MAX_TOKENS:-1024}
+      RIVER_VERIFIER_MAX_TOKENS: ${RIVER_VERIFIER_MAX_TOKENS:-8192}
       RIVER_VLM_MAX_TOKENS: ${RIVER_VLM_MAX_TOKENS:-16384}
       RIVER_TIMEOUT: ${RIVER_TIMEOUT:-180}
-      # --- Storage ---
-      STORAGE_PROVIDER: ${STORAGE_PROVIDER}
+      RIVER_MAX_RETRIES: ${RIVER_MAX_RETRIES:-2}
+      RIVER_REASONING_EFFORT: ${RIVER_REASONING_EFFORT:-low}
+      RIVER_ROUTER_REASONING_EFFORT: ${RIVER_ROUTER_REASONING_EFFORT:-none}
+      RIVER_VERIFIER_REASONING_EFFORT: ${RIVER_VERIFIER_REASONING_EFFORT:-none}
+      RIVER_VLM_REASONING_EFFORT: ${RIVER_VLM_REASONING_EFFORT:-none}
+      RAG_TOP_K: ${RAG_TOP_K:-8}
+      RAG_CANDIDATES: ${RAG_CANDIDATES:-20}
+      RAG_RRF_K: ${RAG_RRF_K:-60}
+      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.25}
+      CITATION_MAX_ATTEMPTS: ${CITATION_MAX_ATTEMPTS:-2}
       LOCAL_MEDIA_DIR: /app/media
       STORAGE_HTTP_ALLOWED_HOSTS: ${STORAGE_HTTP_ALLOWED_HOSTS:-}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
@@ -192,83 +176,26 @@ services:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
-      # --- RAG ---
-      RAG_TOP_K: ${RAG_TOP_K}
-      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD}
+    ports:
+      - "127.0.0.1:8002:8000"
     volumes:
       - backend-media:/app/media:ro
       - chatbot-weights:/app/weights
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ready || exit 1"]
-      interval: 15s
+      interval: 30s
       timeout: 5s
-      retries: 5
-      # Lần đầu entrypoint tải embedding weights về volume (có thể vài phút).
-      start_period: ${CHATBOT_HEALTH_START_PERIOD}
-
-  # One-shot: ingest lần đầu (chỉ chạy khi CHƯA có vector nào và đã có slide).
-  # Idempotent — chạy lại mỗi lần deploy cũng an toàn: có vector thì bỏ qua.
-  ingest-bootstrap:
-    image: python:3.12-alpine
-    container_name: eyetracking-ingest-bootstrap
-    restart: "no"
-    logging: *default-logging
-    depends_on:
-      backend:
-        condition: service_healthy
-      chatbot:
-        condition: service_healthy
-    environment:
-      BACKEND_INTERNAL_URL: http://backend:8001
-      CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
-    entrypoint: ["python", "-c"]
-    command:
-      - |
-        import json, os, sys, urllib.error, urllib.request
-
-        base = os.environ.get("BACKEND_INTERNAL_URL", "http://backend:8001")
-        token = os.environ.get("CHATBOT_INTERNAL_TOKEN", "")
-        if not token:
-            print("Thiếu CHATBOT_INTERNAL_TOKEN — bỏ qua bootstrap ingest.")
-            sys.exit(0)
-
-        def call(path, method="GET"):
-            r = urllib.request.Request(base + path, method=method)
-            r.add_header("X-Chatbot-Token", token)
-            with urllib.request.urlopen(r, timeout=30) as resp:
-                body = resp.read()
-                return json.loads(body) if body else {}
-
-        try:
-            status = call("/internal/embeddings/status")
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            print(f"Không đọc được /internal/embeddings/status — bỏ qua ({exc}).", file=sys.stderr)
-            sys.exit(0)
-
-        vectors = int(status.get("vectors", 0) or 0)
-        slides = int(status.get("slides", 0) or 0)
-        print(f"vector hiện có: {vectors}, slide: {slides}")
-        if vectors != 0:
-            print("Đã có vector — bỏ qua ingest lần đầu.")
-            sys.exit(0)
-        if slides == 0:
-            print("Chưa có slide nào — không cần ingest.")
-            sys.exit(0)
-        print("Chưa có vector và có slide — kích hoạt ingest lần đầu.")
-        try:
-            call("/internal/embeddings/reindex-all", method="POST")
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            print(f"Kích hoạt thất bại — chạy lại sau bằng POST /internal/embeddings/reindex-all ({exc}).", file=sys.stderr)
-            sys.exit(0)
-        print("Đã kích hoạt (chạy nền). Theo dõi qua /internal/embeddings/status.")
+      retries: 3
+      start_period: 180s
 
   gaze:
     build:
       context: ./services/gaze
       dockerfile: Dockerfile
-    image: ghcr.io/manh1504/eyelearning-gaze:${IMAGE_TAG:-latest}
+      args:
+        AI_BASE: eyelearning-ai-base:latest
+    image: eyelearning-gaze:local
     container_name: eyetracking-gaze
-    pull_policy: always
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -278,6 +205,15 @@ services:
       - ONEEURO_BETA=${ONEEURO_BETA:-0.5}
       - ONEEURO_MIN_CUTOFF=${ONEEURO_MIN_CUTOFF:-0.5}
       - ONEEURO_D_CUTOFF=${ONEEURO_D_CUTOFF:-1.0}
+      # Giới hạn session calibration.
+      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-1800}
+      - MAX_SESSIONS=${MAX_SESSIONS:-100}
+      - MAX_POINTS=${MAX_POINTS:-64}
+      - MAX_SAMPLES_PER_POINT=${MAX_SAMPLES_PER_POINT:-50}
+      - INFER_WORKERS=${INFER_WORKERS:-1}
+      - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-5242880}
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
       - gaze-weights:/app/weights
     gpus: all
@@ -290,19 +226,23 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s
-    # Không publish 8000 ra host — chỉ nginx (và backend nội bộ) truy cập.
-    # Build từ ./services/gaze/Dockerfile (FROM image nền dùng chung docker/ai-base),
-    # weights tải runtime vào volume (xem services/gaze/scripts/download_weights.py).
 
   frontend:
-    image: ghcr.io/manh1504/eyelearning-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # URL nội bộ cho rewrite phía server (không inlay vào client bundle).
+        API_INTERNAL_URL: http://backend:8001
+        GAZE_INTERNAL_URL: http://gaze:8000
+        # Browser dùng same-origin qua nginx.
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_GAZE_URL: ""
+        NEXT_PUBLIC_DEMO: "0"
+    image: eyelearning-frontend:local
     container_name: eyetracking-frontend
-    pull_policy: always
     restart: unless-stopped
     logging: *default-logging
-    # Không publish 3000 ra host — chỉ nginx truy cập nội bộ.
-    # Next.js standalone (node server.js); rewrites server-side trỏ
-    # /api,/media -> backend và /gaze -> gaze qua tên service docker.
     healthcheck:
       # 127.0.0.1 thay vì localhost: trong container localhost có thể resolve ::1
       # còn Next.js chỉ listen IPv4 -> healthcheck fail dù web vẫn chạy.
@@ -313,11 +253,15 @@ services:
       start_period: 30s
 
   nginx:
-    image: ghcr.io/manh1504/eyelearning-nginx:${IMAGE_TAG:-latest}
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: eyelearning-nginx:local
     container_name: eyetracking-nginx
-    pull_policy: always
     restart: unless-stopped
     logging: *default-logging
+    ports:
+      - "127.0.0.1:3000:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -327,18 +271,6 @@ services:
       # chậm không được chặn nginx/backend — gaze chỉ ảnh hưởng tính năng AI.
       gaze:
         condition: service_started
-  cloudflared:
-    image: cloudflare/cloudflared:2026.10.1
-    container_name: eyetracking-cloudflared
-    restart: unless-stopped
-    logging: *default-logging
-    depends_on:
-      - nginx
-    # Token truyền qua biến môi trường (không lộ trong `docker inspect` /
-    # command line / ps) thay vì tham số --token.
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
-    command: ["tunnel", "--no-autoupdate", "run"]
 
 volumes:
   pgdata:

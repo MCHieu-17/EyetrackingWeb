@@ -296,12 +296,6 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   );
   await page.route("**/api/assignments/*/attempt", (r) => json(r, null));
   await page.route("**/api/assignments/*/attempts", (r) => json(r, QUIZ_ATTEMPT, 201));
-  // Trợ lý học tập theo môn (chat session)
-  await page.route("**/api/courses/*/chat/sessions", (r) => json(r, []));
-  await page.route("**/api/chat/sessions/*/messages", (r) => json(r, []));
-  await page.route("**/api/courses/*/chat", (r) =>
-    json(r, { sessionId: "session-1", answer: "Gợi ý", citations: [], intent: "qa" }),
-  );
   // Giáo viên/quản trị luôn thấy đáp án đúng (giống backend: reveal theo role).
   const revealQuizAnswers = user.role === "teacher" || user.role === "admin";
   // Route cụ thể đăng ký sau route tổng để được ưu tiên (last match wins).
