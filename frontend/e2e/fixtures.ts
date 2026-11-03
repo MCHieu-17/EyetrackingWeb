@@ -202,10 +202,16 @@ export const QUIZ_ATTEMPT = {
   maxScore: 3,
 };
 
+const SLIDE_IMAGE =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450"><rect width="100%" height="100%" fill="#e2e8f0"/></svg>',
+  );
+
 export const SLIDES = [
-  { id: "c1", title: "Trang 1", imageUrl: null },
-  { id: "c2", title: "Trang 2", imageUrl: null },
-  { id: "c3", title: "Trang 3", imageUrl: null },
+  { id: "c1", title: "Trang 1", imageUrl: SLIDE_IMAGE },
+  { id: "c2", title: "Trang 2", imageUrl: SLIDE_IMAGE },
+  { id: "c3", title: "Trang 3", imageUrl: SLIDE_IMAGE },
 ];
 
 export const HEATMAP_STATS = [
@@ -288,6 +294,9 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   // Student
   await page.route("**/api/me/enrollments", (r) => json(r, ENROLLMENTS));
   await page.route("**/api/courses/**", (r) => json(r, OUTLINE));
+  // Chat: route cụ thể hơn phải đăng ký SAU route tổng để được ưu tiên.
+  await page.route("**/api/courses/*/chat/sessions", (r) => json(r, []));
+  await page.route("**/api/chat/sessions/*/messages", (r) => json(r, []));
   await page.route("**/api/lessons/**/contents", (r) => json(r, SLIDES));
   await page.route("**/api/learning-sessions**", (r) => {
     if (r.request().method() === "PATCH") return json(r, {});

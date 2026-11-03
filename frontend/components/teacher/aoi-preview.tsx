@@ -29,6 +29,13 @@ export const AoiPreview = forwardRef<
         <span className="mx-auto truncate text-xs font-medium text-muted-foreground">
           Khóa học mẫu · Bài 1
         </span>
+        <span
+          data-aoi="chat-open-button"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground"
+        >
+          <Icon name="ri-sparkling-2-line" className="size-3.5" />
+          Trợ lý
+        </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[11px] text-muted-foreground">
           <span className="size-1.5 rounded-full bg-primary" />
           Gaze đang hoạt động

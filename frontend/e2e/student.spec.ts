@@ -130,6 +130,56 @@ test.describe("Student", () => {
     await expect(page.getByText(/3\s*\/\s*3/)).toBeVisible();
   });
 
+  test("reader mở trợ lý dạng dock bên phải, slide chỉ dịch trái", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await seedCalibration(page);
+    await page.goto("/student/courses/course-1");
+
+    const slide = page.locator('[data-aoi="slide"]');
+    await expect(slide).toBeVisible();
+    const before = await slide.boundingBox();
+    expect(before).not.toBeNull();
+
+    await page.getByRole("button", { name: "Mở trợ lý học tập" }).click();
+    const panel = page.locator('[data-aoi="chatbot"]');
+    await expect(panel).toBeVisible();
+    await expect(page.getByText("Trợ lý học tập")).toBeVisible();
+
+    const after = await slide.boundingBox();
+    expect(after).not.toBeNull();
+    // 1920px: slide vẫn ở max 1120px, chỉ dịch sang trái.
+    expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(2);
+    expect(after!.x).toBeLessThan(before!.x);
+
+    const panelBox = await panel.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(panelBox!.x).toBeGreaterThan(after!.x + after!.width);
+
+    await page.getByRole("button", { name: "Đóng trợ lý", exact: true }).click();
+    await expect(panel).toBeHidden();
+    const restored = await slide.boundingBox();
+    expect(restored).not.toBeNull();
+    expect(Math.abs(restored!.x - before!.x)).toBeLessThanOrEqual(2);
+  });
+
+  test("reader mở trợ lý ở màn 1280 vẫn dùng được", async ({ page }) => {
+    await seedCalibration(page);
+    await page.goto("/student/courses/course-1");
+    await page.getByRole("button", { name: "Mở trợ lý học tập" }).click();
+    await expect(page.locator('[data-aoi="chatbot"]')).toBeVisible();
+    await expect(page.getByText("Trợ lý học tập")).toBeVisible();
+  });
+
+  test("quiz mở trợ lý đúng chế độ gợi ý", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await seedCalibration(page);
+    await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");
+    await expect(page.getByText("Bài tập: Kiểm tra nhập môn").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Mở trợ lý học tập" }).click();
+    await expect(page.getByText("Gợi ý bài tập · không giải hộ")).toBeVisible();
+  });
+
   test("reader mở bài tập trắc nghiệm và nộp bài", async ({ page }) => {
     await seedCalibration(page);
     await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");

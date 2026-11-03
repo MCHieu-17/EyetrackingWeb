@@ -150,6 +150,10 @@ partition cũ** — dữ liệu raw được giữ để phân tích lại.
   toàn hệ thống; mỗi vùng gắn với `data-aoi` trên DOM.
 - Sau khi thêm/sửa AOI, bấm **Tính lại AOI hits** để rebuild `gaze_aoi_hits`
   cho khóa học.
+- Chat là panel dock bên phải ở desktop `xl` (>=1280px), rộng
+  `clamp(240px, 18vw, 400px)`. Mở/đóng chat tạo layout key mới
+  (`reader-chat` / `quiz-chat`) và snapshot AOI mới; không có animation width
+  để tránh chụp snapshot giữa lúc chuyển layout.
 
 ## 9. Tests & lint
 

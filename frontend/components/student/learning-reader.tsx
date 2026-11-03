@@ -40,6 +40,10 @@ import {
 import { ApiError, resolveMediaUrl } from "@/lib/api/client";
 import { InlineQuiz } from "@/components/quiz/inline-quiz";
 import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
+import {
+  AssistantProvider,
+  useAssistant,
+} from "@/components/assistant/assistant-context";
 
 const SLIDE_FALLBACK_IMAGE =
   "data:image/svg+xml;charset=utf-8," +
@@ -59,6 +63,14 @@ const GAZE_FLUSH_MS = 1500;
 const GAZE_MAX_BATCH = 40;
 
 export function LearningReader({ courseId }: { courseId: string }) {
+  return (
+    <AssistantProvider>
+      <ReaderContent courseId={courseId} />
+    </AssistantProvider>
+  );
+}
+
+function ReaderContent({ courseId }: { courseId: string }) {
   const searchParams = useSearchParams();
   const requestedLessonId = searchParams.get("lesson");
 
@@ -85,6 +97,11 @@ export function LearningReader({ courseId }: { courseId: string }) {
   const [gazeDot, setGazeDot] = useState<{ x: number; y: number; key: string } | null>(null);
   // Viewport hiện tại khác lúc calibration (F11/zoom) → dừng ghi gaze.
   const [viewportError, setViewportError] = useState(false);
+  // Chat dock bên phải. Chỉ dùng ở desktop (>= xl); mobile không thiết kế.
+  const [chatOpen, setChatOpen] = useState(false);
+  const { setReaderMode, setReaderLessonId } = useAssistant();
+  const assistantButtonRef = useRef<HTMLButtonElement>(null);
+  const wasChatOpen = useRef(false);
 
   const slideImgRef = useRef<HTMLImageElement>(null);
   const gazeBufferRef = useRef<GazeSample[]>([]);
@@ -150,6 +167,24 @@ export function LearningReader({ courseId }: { courseId: string }) {
     (!calibrationScreen || isCalibrationScreenStale());
   // Chỉ tạo phiên học khi đã có dữ liệu khóa (tránh tạo với consent mặc định).
   const courseReady = Boolean(course);
+
+  // Đồng bộ ngữ cảnh chat: reader thường / quiz. InlineQuiz sẽ override bằng
+  // assignmentId + mode quiz/review khi mount.
+  useEffect(() => {
+    setReaderMode(activeIsQuiz ? "quiz" : "reader");
+  }, [activeIsQuiz, setReaderMode]);
+
+  useEffect(() => {
+    setReaderLessonId(activeLessonId || null);
+  }, [activeLessonId, setReaderLessonId]);
+
+  // Đóng chat thì trả focus về nút "Trợ lý" ở header.
+  useEffect(() => {
+    if (wasChatOpen.current && !chatOpen) {
+      assistantButtonRef.current?.focus();
+    }
+    wasChatOpen.current = chatOpen;
+  }, [chatOpen]);
 
   // Render-phase adjust: mở chương chứa bài đang học.
   if (activeModule && !openModules[activeModule.id]) {
@@ -292,9 +327,18 @@ export function LearningReader({ courseId }: { courseId: string }) {
     flushGazeForLesson(activeLessonId);
   }, [activeLessonId, flushGazeForLesson]);
 
+  // Layout key đổi khi mở/đóng chat để snapshot AOI phản ánh đúng bố cục.
+  const layoutKey = activeIsQuiz
+    ? chatOpen
+      ? "quiz-chat"
+      : "quiz"
+    : chatOpen
+      ? "reader-chat"
+      : "reader";
+
   useEffect(() => {
-    layoutKeyRef.current = activeIsQuiz ? "quiz" : "reader";
-  }, [activeIsQuiz]);
+    layoutKeyRef.current = layoutKey;
+  }, [layoutKey]);
 
   // Đo layout DOM và tạo snapshot AOI. Tạm dừng ghi gaze trong lúc đo để
   // sample không bị gán sang layout mới.
@@ -303,7 +347,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
     enabled: Boolean(
       learningSessionId && trackingAllowed && (total > 0 || activeIsQuiz),
     ),
-    layoutKey: activeIsQuiz ? "quiz" : "reader",
+    layoutKey,
     onBeforeSnapshot: pauseAndFlushGaze,
   });
 
@@ -449,6 +493,8 @@ export function LearningReader({ courseId }: { courseId: string }) {
     );
     if (mod) setOpenModules((prevOpen) => ({ ...prevOpen, [mod.id]: true }));
   };
+
+  const closeChat = useCallback(() => setChatOpen(false), []);
 
   if (courseLoading) {
     return (
@@ -600,6 +646,24 @@ export function LearningReader({ courseId }: { courseId: string }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            ref={assistantButtonRef}
+            data-aoi="chat-open-button"
+            variant="outline"
+            size="sm"
+            onClick={() => setChatOpen((value) => !value)}
+            aria-expanded={chatOpen}
+            aria-controls="assistant-panel"
+            aria-label={chatOpen ? "Đóng trợ lý học tập" : "Mở trợ lý học tập"}
+            className={cn(
+              "hidden gap-1.5 xl:inline-flex",
+              chatOpen && "border-[#cfe0cb] bg-[#e8efe6] text-[#36533a]",
+            )}
+          >
+            <Icon name="ri-sparkling-2-line" className="size-4" />
+            <span className="hidden sm:inline">Trợ lý</span>
+          </Button>
+
           {gazeSource === "real" ? (
             <div className="hidden items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] text-foreground sm:flex">
               <span className="size-1.5 animate-pulse rounded-full bg-primary" />
@@ -631,7 +695,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
 
       <div className="flex min-h-0 flex-1 gap-3">
         {desktopOutlineOpen && (
-          <aside data-aoi="outline" className="hidden w-[280px] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs lg:flex">
+          <aside data-aoi="outline" className="hidden w-[220px] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs lg:flex">
             {outline}
           </aside>
         )}
@@ -827,6 +891,12 @@ export function LearningReader({ courseId }: { courseId: string }) {
           </footer>
           )}
         </main>
+
+        <StudyAssistantChat
+          courseId={courseId}
+          open={chatOpen}
+          onClose={closeChat}
+        />
       </div>
 
       {showGazeDot && gazeDot && gazeDot.key === `${activeLessonId}:${currentSlide}` && (
@@ -838,11 +908,6 @@ export function LearningReader({ courseId }: { courseId: string }) {
         </div>
       )}
 
-      {/* Trợ lý học tập: gắn ở trang đọc slide để hỏi ngay trong ngữ cảnh bài đang học.
-          Bài tập (quiz) có widget riêng trong InlineQuiz nên không gắn trùng. */}
-      {!activeIsQuiz && activeLessonId && (
-        <StudyAssistantChat courseId={courseId} lessonId={activeLessonId} />
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -40,6 +40,7 @@ import {
   useDeleteChatSession,
   useRenameChatSession,
 } from "@/hooks/use-chat";
+import { useAssistant } from "@/components/assistant/assistant-context";
 
 type UiMessage = {
   id: string;
@@ -155,16 +156,14 @@ function Markdown({
 
 export function StudyAssistantChat({
   courseId,
-  lessonId = null,
-  assignmentId = null,
-  mode = "reader",
+  open,
+  onClose,
 }: {
   courseId: string;
-  lessonId?: string | null;
-  assignmentId?: string | null;
-  mode?: "reader" | "quiz" | "review";
+  open: boolean;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const { mode, assignmentId, lessonId } = useAssistant();
   // undefined = chưa chọn (tự mở phiên gần nhất), null = phiên mới chưa lưu.
   const [selectedSessionId, setSelectedSessionId] = useState<string | null | undefined>(
     undefined,
@@ -184,6 +183,13 @@ export function StudyAssistantChat({
   const sessionIdRef = useRef<string | null>(null);
   const streamingTextRef = useRef("");
   const citationsRef = useRef<ChatCitation[]>([]);
+
+  const handleClose = useCallback(() => {
+    setCitationModal(null);
+    setRenameOpen(false);
+    setDeleteOpen(false);
+    onClose();
+  }, [onClose]);
 
   const sessionsQuery = useChatSessions(courseId);
   const sessions = Array.isArray(sessionsQuery.data) ? sessionsQuery.data : [];
@@ -214,14 +220,25 @@ export function StudyAssistantChat({
   }, [messagesQuery.data]);
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+    if (!open) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 50);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, streamingText, chatStream.status]);
+  }, [open, messages, streamingText, chatStream.status]);
+
+  // Escape đóng panel, trả focus về nút "Trợ lý" ở header (reader xử lý focus).
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") handleClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, handleClose]);
 
   const resetConversation = () => {
     setMessages([]);
@@ -362,31 +379,22 @@ export function StudyAssistantChat({
   const statusLabel = chatStream.status ? STATUS_LABEL[chatStream.status] : null;
   const showEmpty = messages.length === 0 && !streamingText && !chatStream.streaming;
 
+  if (!open) return null;
+
   return (
     <>
-      <button
-        type="button"
-        data-aoi="chat-open-button"
-        onClick={() => setOpen((value) => !value)}
-        className={cn(
-          "fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-[#36533a] text-white shadow-lg transition hover:scale-105 hover:bg-[#2c4530] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          open && "hidden",
-        )}
-        aria-label="Mở trợ lý học tập"
-        aria-expanded={open}
+      <div
+        id="assistant-panel"
+        data-aoi="chatbot"
+        className="@container hidden h-full w-[clamp(240px,18vw,400px)] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fdfdfa] shadow-xs xl:flex"
+        role="dialog"
+        aria-label="Trợ lý học tập"
       >
-        <RiSparkling2Line className="size-6" />
-      </button>
-
-      {open && (
-        <div
-          data-aoi="chatbot"
-          className="fixed inset-0 z-50 flex flex-col bg-[#fdfdfa] sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[min(680px,calc(100vh-2.5rem))] sm:w-[430px] sm:rounded-[24px] sm:border sm:border-border sm:shadow-2xl"
-          role="dialog"
-          aria-label="Trợ lý học tập"
-        >
-          <header data-aoi="chat-header" className="flex items-center gap-2 border-b border-border px-4 py-3">
-            <div className="flex size-9 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
+          <header
+            data-aoi="chat-header"
+            className="flex items-center gap-2 border-b border-border px-4 py-3 @max-[320px]:px-3 @max-[320px]:py-2.5"
+          >
+            <div className="flex size-9 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a] @max-[320px]:hidden">
               <RiSparkling2Line className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -450,14 +458,17 @@ export function StudyAssistantChat({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setOpen(false)}
+              onClick={handleClose}
               aria-label="Đóng trợ lý"
             >
               <RiCloseLine className="size-4" />
             </Button>
           </header>
 
-          <div data-aoi="chat-messages" className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div
+            data-aoi="chat-messages"
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4 @max-[320px]:px-3"
+          >
             {showEmpty && (
               <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                 <div className="flex size-14 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
@@ -588,7 +599,11 @@ export function StudyAssistantChat({
             </div>
           </div>
 
-          <form data-aoi="chat-input" onSubmit={onSubmit} className="border-t border-border p-3">
+          <form
+            data-aoi="chat-input"
+            onSubmit={onSubmit}
+            className="border-t border-border p-3 @max-[320px]:p-2.5"
+          >
             <div className="flex items-end gap-2">
               <Textarea
                 ref={inputRef}
@@ -622,7 +637,6 @@ export function StudyAssistantChat({
             </p>
           </form>
         </div>
-      )}
 
       <Dialog open={Boolean(citationModal)} onOpenChange={(value) => !value && setCitationModal(null)}>
         <DialogContent className="max-w-3xl">

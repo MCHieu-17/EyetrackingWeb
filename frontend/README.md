@@ -84,8 +84,15 @@ e2e/                    # Playwright tests
 
 ## Trợ lý học tập
 
-- Widget nổi trong learning reader và quiz: trước khi nộp chỉ gợi ý, sau khi nộp
-  mới chữa bài.
+- Nút **Trợ lý** trên header reader mở panel **dock bên phải** (kiểu Copilot),
+  dùng chung cho cả bài giảng và bài tập. Chỉ hiện ở desktop `xl` (>=1280px);
+  mobile không thiết kế chat.
+- Panel rộng `clamp(240px, 18vw, 400px)`, cao hết vùng nội dung. Outline thu còn
+  `220px`; slide tự co theo phần còn lại (trên màn 1920px slide vẫn giữ max
+  1120px, chỉ dịch trái).
+- Trước khi nộp chỉ gợi ý, sau khi nộp mới chữa bài. Mode được chia sẻ qua
+  `components/assistant/assistant-context.tsx`; `InlineQuiz` đăng ký
+  `assignmentId` + mode quiz/review, reader root chỉ render một panel chat.
 - SSE: `status → citations → token → done`; answer chỉ stream sau khi verify citation.
 - Citation chip mở modal ảnh slide + snippet.
 - API client: `lib/api/chat.ts`; hooks: `hooks/use-chat.ts`; UI:
@@ -134,6 +141,7 @@ Bài tập là một **item trong chương**, cùng cấp với bài học slide
 - Runtime (`useAoiSnapshot`) đo `getBoundingClientRect()` của mọi `[data-aoi]`
   và gửi `POST /api/learning-sessions/{id}/aoi-layout` mỗi khi layout đổi
   (mở/đóng chatbot, mục lục, đổi slide, tin nhắn mới, scroll/resize).
+  `layoutKey` là `reader` / `reader-chat` / `quiz` / `quiz-chat`.
 - `data-aoi` hiện có: `header`, `outline`, `lesson-content`, `slide`,
   `lesson-nav`, `quiz`, `quiz-question`, `quiz-options`, `quiz-submit`,
   `chatbot`, `chat-header`, `chat-messages`, `chat-user-message`,

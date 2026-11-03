@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiError } from "@/lib/api/client";
-import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
+import { useAssistant } from "@/components/assistant/assistant-context";
 import type { QuizAssignment, QuizAttempt } from "@/lib/types/domain";
 
 function NextButton({ onNext, hasNext }: { onNext?: () => void; hasNext?: boolean }) {
@@ -190,13 +190,6 @@ function ReviewView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <StudyAssistantChat
-        courseId={assignment.courseId}
-        lessonId={assignment.lessonId ?? null}
-        assignmentId={assignment.id}
-        mode="review"
-      />
     </div>
   );
 }
@@ -220,6 +213,23 @@ export function InlineQuiz({
   const [expired, setExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const expiresAt = assignmentQuery.data?.expiresAt;
+  const assignment = assignmentQuery.data;
+  const attempt = attemptQuery.data;
+  const { setQuizContext } = useAssistant();
+
+  // Chat panel ở reader root đọc context này để chuyển sang mode quiz/review.
+  useEffect(() => {
+    if (!assignment) return;
+    setQuizContext({
+      mode: attempt ? "review" : "quiz",
+      assignmentId: assignment.id,
+      lessonId: assignment.lessonId ?? null,
+    });
+  }, [assignment, attempt, setQuizContext]);
+
+  useEffect(() => {
+    return () => setQuizContext(null);
+  }, [setQuizContext]);
 
   useEffect(() => {
     if (!expiresAt) return;
@@ -236,18 +246,17 @@ export function InlineQuiz({
   if (assignmentQuery.isLoading || attemptQuery.isLoading) {
     return <Skeleton className="h-72 w-full rounded-2xl" />;
   }
-  const assignment = assignmentQuery.data;
   if (assignmentQuery.isError || attemptQuery.isError || !assignment) {
     return (
       <p className="p-8 text-center text-sm text-muted-foreground">Bài tập hiện không khả dụng.</p>
     );
   }
 
-  if (attemptQuery.data) {
+  if (attempt) {
     return (
       <ReviewView
         assignment={assignment}
-        attempt={attemptQuery.data}
+        attempt={attempt}
         onNext={onNext}
         hasNext={hasNext}
         // Chỉ làm lại được khi giáo viên bật cờ và bài vẫn đang mở.
@@ -436,13 +445,6 @@ export function InlineQuiz({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <StudyAssistantChat
-        courseId={assignment.courseId}
-        lessonId={assignment.lessonId ?? null}
-        assignmentId={assignment.id}
-        mode="quiz"
-      />
     </div>
   );
 }
