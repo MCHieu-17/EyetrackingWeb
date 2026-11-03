@@ -1,96 +1,25 @@
-"""Tính điểm hoàn thành bài học dựa trên độ bao phủ nội dung (AOI).
+"""Tính điểm hoàn thành bài học dựa trên tỷ lệ gaze trên trang.
 
 Ý tưởng chốt với người dùng:
   - Slide `is_key` (GV đánh dấu) chiếm 85% điểm, slide thường 15%.
-  - Một AOI được xem là "đã đọc" khi tổng dwell >= mastery_min_aoi_dwell_ms.
-  - Một trang "hoàn thành" khi độ bao phủ (tỷ lệ trọng số AOI đã đọc) >=
-    mastery_coverage_threshold (0.85).
+  - Một trang "hoàn thành" khi tỷ lệ gaze trên trang >= mastery_coverage_threshold.
   - Điểm chỉ hiển thị cho giáo viên; SV vẫn hoàn thành bài theo cơ chế cũ
     (xem hết trang), không đổi.
 
-Hai luồng ghi dữ liệu:
-  - accumulate_dwell(): chạy trong post_gaze_samples, cộng dồn dwell từng AOI
-    vào aoi_dwell_stats (chỉ dữ liệu thật — simulated đã bị chặn ở route).
-  - refresh_mastery(): chạy định kỳ/incremental, đọc aoi_dwell_stats → tính
-    coverage từng trang + điểm bài → ghi slide_coverage_stats, lesson_mastery_scores.
+Ghi chú: AOI (vùng nội dung) đang tạm gỡ khỏi backend/frontend. Khi làm lại AOI,
+có thể bổ sung lại logic coverage theo `aoi_regions`/`aoi_dwell_stats`; schema DB
+vẫn được giữ nguyên.
 """
 
-from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.analytics import (
-    AoiDwellStat,
-    AoiRegion,
-    LessonMasteryScore,
-    SlideCoverageStat,
-)
+from app.models.analytics import LessonMasteryScore, SlideCoverageStat
 from app.models.course import Enrollment, Lesson, LessonContent, Module
 from app.models.gaze import GazeSlideStat, LearningSession
-
-
-def _point_in_aoi(x: float, y: float, aois: list[AoiRegion], pad: float) -> str | None:
-    for a in aois:
-        if (a.x_min - pad) <= x <= (a.x_max + pad) and (a.y_min - pad) <= y <= (
-            a.y_max + pad
-        ):
-            return a.id
-    return None
-
-
-async def accumulate_dwell(
-    db: AsyncSession,
-    session_id: str,
-    content_id: str,
-    points: list[tuple[float, float, int]],
-) -> None:
-    """Cộng dồn dwell vào aoi_dwell_stats cho danh sách điểm (x, y, dwell_ms)."""
-    if not points:
-        return
-    aois = (
-        (
-            await db.execute(
-                select(AoiRegion).where(AoiRegion.lesson_content_id == content_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not aois:
-        return
-    pad = settings.mastery_aoi_padding
-    accum: dict[str, list[int]] = {}
-    for x, y, dwell in points:
-        aoi_id = _point_in_aoi(x, y, aois, pad)
-        if aoi_id is None:
-            continue
-        d, c = accum.get(aoi_id, [0, 0])
-        accum[aoi_id] = [d + dwell, c + 1]
-
-    if not accum:
-        return
-    rows = [
-        {
-            "learning_session_id": session_id,
-            "aoi_region_id": aoi_id,
-            "dwell_ms": d,
-            "sample_count": c,
-        }
-        for aoi_id, (d, c) in accum.items()
-    ]
-    stmt = pg_insert(AoiDwellStat).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_aoi_dwell_stats",
-        set_={
-            "dwell_ms": AoiDwellStat.dwell_ms + stmt.excluded.dwell_ms,
-            "sample_count": AoiDwellStat.sample_count + stmt.excluded.sample_count,
-        },
-    )
-    await db.execute(stmt)
 
 
 async def _session_ids(
@@ -128,37 +57,10 @@ async def refresh_mastery(
         return 0.0
 
     content_ids = [c.id for c in contents]
-    aois = (
-        (
-            await db.execute(
-                select(AoiRegion).where(AoiRegion.lesson_content_id.in_(content_ids))
-            )
-        )
-        .scalars()
-        .all()
-    )
-    aoi_by_content: dict[str, list[AoiRegion]] = defaultdict(list)
-    for a in aois:
-        aoi_by_content[a.lesson_content_id].append(a)
-
     sessions = await _session_ids(db, lesson_id, enrollment_id)
 
-    dwell_map: dict[str, tuple[int, int]] = {}
     on_slide_map: dict[str, float] = {}
     if sessions:
-        dwell_rows = (
-            await db.execute(
-                select(
-                    AoiDwellStat.aoi_region_id,
-                    func.sum(AoiDwellStat.dwell_ms),
-                    func.sum(AoiDwellStat.sample_count),
-                )
-                .where(AoiDwellStat.learning_session_id.in_(sessions))
-                .group_by(AoiDwellStat.aoi_region_id)
-            )
-        ).all()
-        dwell_map = {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in dwell_rows}
-
         slide_rows = (
             await db.execute(
                 select(
@@ -173,27 +75,14 @@ async def refresh_mastery(
         for cid, on_slide, total in slide_rows:
             on_slide_map[cid] = (on_slide / total) if total else 0.0
 
-    min_dwell = settings.mastery_min_aoi_dwell_ms
     threshold = settings.mastery_coverage_threshold
 
     coverages: dict[str, float] = {}
-    stat_rows: list[tuple[str, float, int, bool]] = []
+    stat_rows: list[tuple[str, float, bool]] = []
     for c in contents:
-        slide_aois = aoi_by_content.get(c.id, [])
-        if slide_aois:
-            total_w = sum(a.weight for a in slide_aois)
-            covered_w = sum(
-                a.weight
-                for a in slide_aois
-                if dwell_map.get(a.id, (0, 0))[0] >= min_dwell
-            )
-            coverage = covered_w / total_w if total_w > 0 else 0.0
-            dwell_total = sum(dwell_map.get(a.id, (0, 0))[0] for a in slide_aois)
-        else:
-            coverage = on_slide_map.get(c.id, 0.0)
-            dwell_total = 0
+        coverage = on_slide_map.get(c.id, 0.0)
         coverages[c.id] = coverage
-        stat_rows.append((c.id, coverage, dwell_total, coverage >= threshold))
+        stat_rows.append((c.id, coverage, coverage >= threshold))
 
     await db.execute(
         delete(SlideCoverageStat).where(
@@ -202,13 +91,13 @@ async def refresh_mastery(
         )
     )
     now = datetime.now(timezone.utc)
-    for cid, coverage, dwell_total, complete in stat_rows:
+    for cid, coverage, complete in stat_rows:
         db.add(
             SlideCoverageStat(
                 enrollment_id=enrollment_id,
                 lesson_content_id=cid,
                 coverage=round(coverage, 4),
-                dwell_ms=dwell_total,
+                dwell_ms=0,
                 is_complete=complete,
                 computed_at=now,
             )
@@ -281,6 +170,3 @@ async def recompute_lesson_mastery(db: AsyncSession, lesson_id: str) -> int:
     for eid in enrollment_ids:
         await refresh_mastery(db, lesson_id, eid)
     return len(enrollment_ids)
-
-
-

@@ -156,6 +156,7 @@ class LessonContent(Base):
     image_url: Mapped[str] = mapped_column(Text)
     content_json: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     is_key: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Giữ lại cho lần triển khai AOI sau; backend hiện không ghi cột này.
     aoi_source: Mapped[str] = mapped_column(String(6), server_default=text("'none'"))
 
     # Trạng thái ingest RAG (migration 024): none | pending | ready | failed.

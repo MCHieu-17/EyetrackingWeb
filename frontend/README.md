@@ -143,7 +143,7 @@ gọn sau nút **Mục lục** nhưng thanh trên vẫn hiện tên mục đang 
 | Công tắc điểm nhìn (cấp khóa) | bấm là lưu ngay |
 | Tên chương | Enter/rời ô trong menu **Đổi tên chương** |
 | Tên bài giảng | Enter/rời ô ở tiêu đề trình soạn |
-| Tải PDF | chọn file là tải ngay; **bài đã có slide phải xác nhận** (thay PDF xoá toàn bộ slide + AOI cũ, và bị từ chối nếu bài đã có dữ liệu điểm nhìn) |
+| Tải PDF | chọn file là tải ngay; **bài đã có slide phải xác nhận** (thay PDF xoá toàn bộ slide cũ, và bị từ chối nếu bài đã có dữ liệu điểm nhìn) |
 | Bài tập trắc nghiệm (câu hỏi, thời lượng, hạn, hướng dẫn) | **Lưu bài tập nháp** / **Giao bài cho học viên** |
 | Cho phép làm lại | bấm là lưu ngay |
 

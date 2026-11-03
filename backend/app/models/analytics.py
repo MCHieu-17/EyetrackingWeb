@@ -19,6 +19,11 @@ from app.db.base import Base
 
 
 class AoiRegion(Base):
+    """Vùng nội dung (AOI) — giữ lại cho lần triển khai AOI sau.
+
+    Backend hiện không trích/lưu/đọc bảng này; schema DB vẫn được giữ nguyên.
+    """
+
     __tablename__ = "aoi_regions"
     __table_args__ = (
         CheckConstraint(
@@ -80,6 +85,8 @@ class HeatmapAggregate(Base):
 
 
 class AoiDwellStat(Base):
+    """Dwell theo AOI — giữ lại cho lần triển khai AOI sau (hiện không dùng)."""
+
     __tablename__ = "aoi_dwell_stats"
     __table_args__ = (UniqueConstraint("learning_session_id", "aoi_region_id"),)
 

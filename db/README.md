@@ -59,11 +59,15 @@ db/
 > **Cờ bắt buộc hiệu chỉnh**: `courses.require_calibration` (025) mặc định `true`.
 > Tắt = sinh viên vào thẳng trang học, không bật camera và không ghi gaze.
 >
+> **AOI đang tạm gỡ khỏi backend/frontend**: các bảng `aoi_regions`, `aoi_dwell_stats`
+> và cột `lesson_contents.aoi_source` vẫn được **giữ nguyên trong DB** để triển khai
+> lại sau này. Hiện backend không trích/lưu AOI và frontend không hiển thị vùng AOI.
+>
 > **Gaze của bài tập**: bài tập trắc nghiệm không có `lesson_contents`, nên dòng gaze
 > của bài tập lưu `gaze_events.lesson_content_id = NULL`, `surface = 'quiz'` với
 > toạ độ chuẩn hoá theo **viewport** (bài giảng: `surface = 'slide'`, toạ độ theo
 > ảnh slide). Tổng hợp mức phiên nằm ở `gaze_session_stats` (bài tập không có
-> `gaze_slide_stats`/AOI/heatmap).
+> `gaze_slide_stats`/heatmap).
 
 > **Calibration không lưu lịch sử**: mỗi lần hiệu chỉnh lại sẽ **ghi đè** bản ghi
 > cũ của (user, thiết bị) — `calibration_params` giữ đúng 1 dòng, kèm 1 dòng

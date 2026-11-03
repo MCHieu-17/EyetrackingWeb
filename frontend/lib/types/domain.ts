@@ -64,15 +64,6 @@ export interface StudentRow {
 }
 
 export interface Hotspot { x: number; y: number; r: number; w: number } // x,y,r chuẩn hóa [0,1] theo slide — khớp gaze_events
-export interface HeatmapAoi {
-  id: string;
-  name: string;
-  xMin: number;
-  yMin: number;
-  xMax: number;
-  yMax: number;
-  source: string;
-}
 export interface SlideStat {
   idx: number;               // lesson_contents.order_index
   onSlide: number;           // on-slide ratio %
@@ -80,7 +71,6 @@ export interface SlideStat {
   viewSec: number;           // thời gian xem TB (giây)
   hotspots: Hotspot[];
   points?: [number, number][]; // gaze thô (chuẩn hóa [0,1]), dùng để vẽ scatter khi thiếu hotspot
-  aois: HeatmapAoi[];         // vùng nội dung chuẩn hóa [0,1], độc lập với scope heatmap
 }
 
 // Student (my-courses)
@@ -117,8 +107,6 @@ export interface SlideAdmin {
   title: string;
   imageUrl: string | null;
   isKey: boolean;
-  aoiCount: number;
-  aoiSource: string;
   /** Trạng thái ingest RAG: none | pending | ready | failed. */
   embeddingStatus?: "none" | "pending" | "ready" | "failed";
   embeddingError?: string | null;

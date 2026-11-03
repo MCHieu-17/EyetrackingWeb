@@ -4,5 +4,3 @@ pytest==9.1.1
 pytest-cov==7.0.0
 fakeredis==2.40.0
 ruff==0.17.1
-# Chỉ dùng trong tests/test_aoi_extraction.py (tạo ảnh PDF giả).
-pillow==12.3.0

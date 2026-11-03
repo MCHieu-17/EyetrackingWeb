@@ -207,13 +207,6 @@ export function fetchLessonSlidesAdmin(lessonId: string): Promise<SlideAdmin[]> 
   return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`);
 }
 
-export function rebuildLessonAois(lessonId: string): Promise<{ ok: boolean; slides: number }> {
-  return apiFetch<{ ok: boolean; slides: number }>(
-    `/api/teacher/lessons/${lessonId}/aoi/rebuild`,
-    { method: "POST" },
-  );
-}
-
 export function setSlideKey(slideId: string, isKey: boolean): Promise<{ ok: boolean }> {
   return apiFetch<{ ok: boolean }>(`/api/teacher/slides/${slideId}`, {
     method: "PATCH",

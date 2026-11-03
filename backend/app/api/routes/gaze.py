@@ -309,7 +309,7 @@ async def post_gaze_samples(
     min_interval_ms = 1000.0 / max(settings.gaze_downsample_hz, 0.1)
 
     if lesson.kind == "quiz":
-        # Bài tập trắc nghiệm: không có slide để map toạ độ/AOI/heatmap. Ghi gaze
+        # Bài tập trắc nghiệm: không có slide để map toạ độ/heatmap. Ghi gaze
         # thô theo viewport (surface='quiz') + tổng hợp mức phiên; bỏ qua
         # mastery/engagement/heatmap vì không có nội dung để gắn vào.
         events, total, on_screen, view_ms = _quiz_gaze_batch(
@@ -349,9 +349,7 @@ async def post_gaze_samples(
         bucket.append(s)
 
     events: list[GazeEvent] = []
-    kept_points: dict[str, list[tuple[float, float, float]]] = {}
     view_ms_by_content: dict[str, int] = {}
-    nominal_dwell = int(1000.0 / max(settings.gaze_downsample_hz, 0.1))
     for content_id, bucket in by_content.items():
         bucket.sort(key=lambda s: s.ts)
         kept: list[tuple[float, float, float]] = []
@@ -366,7 +364,6 @@ async def post_gaze_samples(
                 last_kept = s.ts
                 kept.append((s.x, s.y, s.ts))
         if kept:
-            kept_points[content_id] = kept
             events.extend(
                 GazeEvent(
                     learning_session_id=session.id,
@@ -385,18 +382,6 @@ async def post_gaze_samples(
 
     if events:
         db.add_all(events)
-
-    # Cộng dồn dwell vào aoi_dwell_stats cho từng AOI (chỉ dữ liệu thật).
-    if session and session.tracking_consent:
-        for content_id, kept in kept_points.items():
-            dwell_points: list[tuple[float, float, int]] = []
-            for i, (x, y, ts) in enumerate(kept):
-                if i + 1 < len(kept):
-                    d = min(kept[i + 1][2] - ts, settings.mastery_max_dwell_ms)
-                else:
-                    d = nominal_dwell
-                dwell_points.append((x, y, int(d)))
-            await mastery.accumulate_dwell(db, session.id, content_id, dwell_points)
 
     for content_id, raw in raw_counts.items():
         stmt = pg_insert(GazeSlideStat).values(

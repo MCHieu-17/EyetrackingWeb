@@ -1,64 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Alert } from "@/components/ui/alert";
-import { deleteSlide, rebuildLessonAois, setSlideKey } from "@/lib/api/teacher";
-import { cn } from "@/lib/utils";
+import { deleteSlide, setSlideKey } from "@/lib/api/teacher";
 import type { SlideAdmin } from "@/lib/types/domain";
 
 /**
- * "Cài đặt nâng cao" của bài giảng: đánh dấu trang trọng tâm + kiểm tra vùng AOI.
+ * "Cài đặt nâng cao" của bài giảng: đánh dấu trang trọng tâm + xóa slide.
  * Danh sách slide do trình soạn truyền xuống để không gọi API hai lần.
  */
 export function KeySlideControls({
   lessonId,
-  courseId,
   canDelete,
   slides,
 }: {
   lessonId: string;
-  courseId: string;
   canDelete: boolean;
   slides: SlideAdmin[];
 }) {
   const queryClient = useQueryClient();
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [rebuilding, setRebuilding] = useState(false);
   const [slideToDelete, setSlideToDelete] = useState<{ id: string; orderIndex: number } | null>(null);
   const [toggleError, setToggleError] = useState("");
-  const [aoiMessage, setAoiMessage] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
-
-  const sourceLabel = (source: string) =>
-    source === "pdf" ? "PDF gốc" : source === "grid" ? "Lưới dự phòng" : "Chưa xác định";
-
-  const rebuildAois = async () => {
-    setRebuilding(true);
-    setAoiMessage(null);
-    try {
-      const result = await rebuildLessonAois(lessonId);
-      if (result.slides === 0) {
-        setAoiMessage({ tone: "err", text: "Bài học chưa có slide để tạo AOI." });
-        return;
-      }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["teacher", "lesson-slides", lessonId] }),
-        queryClient.invalidateQueries({ queryKey: ["teacher", "heatmap", lessonId] }),
-      ]);
-      setAoiMessage({ tone: "ok", text: `Đã tạo lại và lưu AOI cho ${result.slides} trang.` });
-    } catch (error) {
-      setAoiMessage({
-        tone: "err",
-        text: error instanceof Error ? error.message : "Không tạo lại được AOI.",
-      });
-    } finally {
-      setRebuilding(false);
-    }
-  };
 
   const toggle = async (slideId: string, isKey: boolean) => {
     setPendingId(slideId);
@@ -98,87 +64,54 @@ export function KeySlideControls({
   return (
     <>
       <section className="mt-8 border-t border-black/10 pt-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h5 className="text-sm font-semibold text-black">Vùng nội dung (AOI)</h5>
-            <p className="mt-1 text-sm leading-6 text-black/45">
-              Kiểm tra vùng đo trên từng trang. AOI được tạo và lưu từ PDF nguồn.
-            </p>
-          </div>
-          <Button variant="outline" className="rounded-full border-black/10" onClick={() => void rebuildAois()} disabled={rebuilding}>
-            <Icon name="ri-loader-4-line" className={cn("size-4", !rebuilding && "hidden")} />
-            {rebuilding ? "Đang tạo AOI…" : "Tạo lại & lưu AOI"}
-          </Button>
+        <div>
+          <h5 className="text-sm font-semibold text-black">Trang trọng tâm</h5>
+          <p className="mt-1 text-sm leading-6 text-black/45">
+            Đánh dấu trang trọng tâm để tính điểm hoàn thành bài học. Trang trọng tâm có trọng số
+            cao hơn trang thường.
+          </p>
         </div>
-
-        {aoiMessage && (
-          <Alert
-            variant={aoiMessage.tone === "ok" ? "success" : "destructive"}
-            className="mt-4"
-            title={aoiMessage.text}
-          />
-        )}
 
         <div className="mt-5">
           <ul className="grid gap-2 md:grid-cols-2">
-            {slides.map((slide) => {
-              const aoiReady = slide.aoiCount > 0 && slide.aoiSource !== "none";
-              return (
-                <li
-                  key={slide.id}
-                  className="grid gap-4 rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                >
-                  <label className="flex min-w-0 cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={slide.isKey}
-                      disabled={pendingId === slide.id}
-                      onChange={() => void toggle(slide.id, slide.isKey)}
-                      className="size-4 accent-primary"
-                    />
-                    <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-black">
-                        Trang {slide.orderIndex}
-                      </span>
-                        <span className="mt-1 block text-xs text-black/40">
-                        {slide.isKey ? "Slide trọng tâm" : "Slide thường"} · {slide.aoiCount} AOI
-                      </span>
+            {slides.map((slide) => (
+              <li
+                key={slide.id}
+                className="grid gap-4 rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              >
+                <label className="flex min-w-0 cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={slide.isKey}
+                    disabled={pendingId === slide.id}
+                    onChange={() => void toggle(slide.id, slide.isKey)}
+                    className="size-4 accent-primary"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-black">
+                      Trang {slide.orderIndex}
                     </span>
-                  </label>
-                  <div className="hidden text-xs text-black/45 sm:block">{sourceLabel(slide.aoiSource)}</div>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-2 text-xs font-medium text-black/50",
-                    )}
-                  >
-                    <span className={cn("size-2 rounded-full", aoiReady ? "bg-[#6f8f69]" : "bg-[#dfe9dc]")} />
-                    {aoiReady ? "Sẵn sàng" : "Cần tạo lại"}
+                    <span className="mt-1 block text-xs text-black/40">
+                      {slide.isKey ? "Slide trọng tâm" : "Slide thường"}
+                    </span>
                   </span>
-                  <div className="flex items-center gap-2 sm:justify-end">
-                    <Button asChild variant="outline" size="sm" className="rounded-full border-black/10 bg-white">
-                      <Link
-                        href={`/teacher/courses/${courseId}/lessons/${lessonId}/heatmap?from=content&view=aoi&page=${slide.orderIndex}`}
-                      >
-                        <Icon name="ri-focus-2-line" className="size-4" />
-                        Xem AOI
-                      </Link>
+                </label>
+                <div className="flex items-center gap-2 sm:justify-end">
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={pendingId === slide.id}
+                      onClick={() => setSlideToDelete({ id: slide.id, orderIndex: slide.orderIndex })}
+                      aria-label={`Xóa slide trang ${slide.orderIndex}`}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Icon name="ri-delete-bin-line" className="size-4" />
                     </Button>
-                    {canDelete && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={pendingId === slide.id}
-                        onClick={() => setSlideToDelete({ id: slide.id, orderIndex: slide.orderIndex })}
-                        aria-label={`Xóa slide trang ${slide.orderIndex}`}
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Icon name="ri-delete-bin-line" className="size-4" />
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+                  )}
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
         {toggleError && (

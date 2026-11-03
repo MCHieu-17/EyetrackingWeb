@@ -25,7 +25,6 @@ from app.api.deps import (
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
-from app.models.analytics import AoiRegion
 from app.models.auth import User
 from app.models.course import (
     Course,
@@ -45,7 +44,7 @@ from app.schemas.course import (
     SlideOut,
 )
 from app.schemas.gaze import OkOut
-from app.services import analytics, aoi, embedding, media_storage
+from app.services import analytics, embedding, media_storage
 
 router = APIRouter(tags=["lessons"])
 logger = logging.getLogger(__name__)
@@ -314,49 +313,20 @@ async def upload_lesson_pdf(
         count, version, image_urls = await asyncio.to_thread(
             _render_pdf_slides, lesson_id, data
         )
-        pages_aois = await asyncio.to_thread(aoi.extract_slide_aois, data)
 
         await db.execute(
             delete(LessonContent).where(LessonContent.lesson_id == lesson_id)
         )
-        contents: list[tuple[LessonContent, list[dict]]] = []
         for page_no in range(count):
-            page_aois = pages_aois[page_no] if page_no < len(pages_aois) else []
-            if not page_aois:
-                page_aois = aoi.grid_cells(
-                    settings.mastery_grid_cols, settings.mastery_grid_rows
+            db.add(
+                LessonContent(
+                    lesson_id=lesson_id,
+                    order_index=page_no + 1,
+                    image_url=image_urls[page_no],
+                    content_json={"title": f"Slide {page_no + 1}"},
+                    embedding_status=embedding.PENDING,
                 )
-                aoi_source = "grid"
-            else:
-                aoi_source = "pdf"
-            content = LessonContent(
-                lesson_id=lesson_id,
-                order_index=page_no + 1,
-                image_url=image_urls[page_no],
-                content_json={"title": f"Slide {page_no + 1}"},
-                aoi_source=aoi_source,
-                embedding_status=embedding.PENDING,
             )
-            db.add(content)
-            contents.append((content, page_aois))
-
-        await db.flush()
-        for content, page_aois in contents:
-            for a in page_aois:
-                db.add(
-                    AoiRegion(
-                        lesson_content_id=content.id,
-                        name=a["name"],
-                        x_min=a["x_min"],
-                        y_min=a["y_min"],
-                        x_max=a["x_max"],
-                        y_max=a["y_max"],
-                        source=a["source"],
-                        weight=a["weight"],
-                        char_count=a["char_count"],
-                        block_index=a["block_index"],
-                    )
-                )
         await db.commit()
     except HTTPException:
         await db.rollback()
@@ -425,19 +395,21 @@ async def list_lesson_slides(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh sách slide của bài để GV đánh dấu trọng tâm (kèm isKey, số AOI)."""
+    """Danh sách slide của bài để GV đánh dấu trọng tâm (kèm isKey)."""
     lesson = await get_lesson_or_404(db, lesson_id)
     await _check_course_access(db, lesson, user)
 
     rows = (
-        await db.execute(
-            select(LessonContent, func.count(AoiRegion.id))
-            .outerjoin(AoiRegion, AoiRegion.lesson_content_id == LessonContent.id)
-            .where(LessonContent.lesson_id == lesson_id)
-            .group_by(LessonContent.id)
-            .order_by(LessonContent.order_index)
+        (
+            await db.execute(
+                select(LessonContent)
+                .where(LessonContent.lesson_id == lesson_id)
+                .order_by(LessonContent.order_index)
+            )
         )
-    ).all()
+        .scalars()
+        .all()
+    )
     return [
         SlideAdminOut(
             id=c.id,
@@ -445,12 +417,10 @@ async def list_lesson_slides(
             title=c.content_json.get("title") or f"Slide {c.order_index}",
             image_url=c.image_url,
             is_key=c.is_key,
-            aoi_count=aoi_count,
-            aoi_source=c.aoi_source,
             embedding_status=c.embedding_status,
             embedding_error=c.embedding_error,
         )
-        for c, aoi_count in rows
+        for c in rows
     ]
 
 
@@ -495,27 +465,6 @@ async def set_slide_keys(
         s.is_key = s.order_index in key_set
     await db.commit()
     return OkOut()
-
-
-@router.post("/teacher/lessons/{lesson_id}/aoi/rebuild", response_model=dict)
-async def rebuild_lesson_aois(
-    lesson_id: str,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    """Trích lại AOI từ source.pdf đã lưu (dùng khi muốn sửa vùng đo độ bao phủ)."""
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
-    try:
-        updated = await aoi.rebuild_lesson_aois(db, lesson_id)
-    except media_storage.StorageError as exc:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Không thể đọc PDF nguồn từ kho tệp",
-        ) from exc
-    await db.commit()
-    await analytics.invalidate_heatmap_cache(lesson_id)
-    return {"ok": True, "slides": updated}
 
 
 @router.get("/api/lessons/{lesson_id}/contents", response_model=list[SlideOut])

@@ -225,7 +225,7 @@ test.describe("Teacher", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify([
-          { id: `slide-${slideRequests}`, orderIndex: 1, imageUrl: null, isKey: false, aoiCount: 0, aoiSource: "none" },
+          { id: `slide-${slideRequests}`, orderIndex: 1, imageUrl: null, isKey: false },
         ]),
       });
     });

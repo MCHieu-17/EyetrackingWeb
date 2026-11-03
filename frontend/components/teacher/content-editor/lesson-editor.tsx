@@ -277,10 +277,10 @@ export function LessonEditor({
       {slides.length > 0 && (
         <details className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
           <summary className="cursor-pointer text-sm font-semibold text-black">
-            Cài đặt nâng cao (trang trọng tâm, vùng nội dung AOI)
+            Cài đặt nâng cao (trang trọng tâm)
           </summary>
           <p className="mt-2 text-xs leading-5 text-black/60">
-            Đánh dấu trang trọng tâm và kiểm tra vùng đo trên từng trang. Những thiết lập này ảnh
+            Đánh dấu trang trọng tâm để tính điểm hoàn thành bài học. Những thiết lập này ảnh
             hưởng tới cách tính mức độ hoàn thành của học viên.
           </p>
           <p className="mt-1 text-xs leading-5 text-black/60">
@@ -296,7 +296,6 @@ export function LessonEditor({
           <div className="mt-1">
             <KeySlideControls
               lessonId={lesson.id}
-              courseId={courseId}
               canDelete={canManage}
               slides={slides}
             />
@@ -314,7 +313,7 @@ export function LessonEditor({
         title="Thay tài liệu của bài giảng?"
         description={
           `Tải "${pendingReplace?.name ?? ""}" sẽ XÓA toàn bộ ${slideCount} trang slide hiện có và ` +
-          "tạo lại slide + vùng nội dung AOI từ file mới. Nếu bài học đã có dữ liệu điểm nhìn của " +
+          "tạo lại slide từ file mới. Nếu bài học đã có dữ liệu điểm nhìn của " +
           "học viên, hệ thống sẽ từ chối thay để không phá dữ liệu phân tích."
         }
         confirmLabel="Thay tài liệu"

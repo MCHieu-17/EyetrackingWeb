@@ -186,8 +186,6 @@ class SlideAdminOut(CamelModel):
     title: str
     image_url: str | None = None
     is_key: bool = False
-    aoi_count: int = 0
-    aoi_source: str = "none"
     embedding_status: str = "none"
     embedding_error: str | None = None
 

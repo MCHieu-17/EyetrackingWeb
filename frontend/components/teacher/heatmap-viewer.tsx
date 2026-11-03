@@ -32,16 +32,14 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
   const router = useRouter();
   const searchParams = useSearchParams();
   const scope: Scope = searchParams.get("student") ?? "class";
-  const isAoiInspection = searchParams.get("view") === "aoi";
   const requestedPage = Number(searchParams.get("page"));
 
   const [pageIdx, setPageIdx] = useState(
     Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage - 1 : 0,
   );
   const [opacity, setOpacity] = useState(HEATMAP_DEFAULT_OPACITY);
-  const [showHeatmap, setShowHeatmap] = useState(!isAoiInspection);
+  const [showHeatmap, setShowHeatmap] = useState(true);
   const [showScatter, setShowScatter] = useState(false);
-  const [showAois, setShowAois] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 });
@@ -77,7 +75,6 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
         fixations: 0,
         viewSec: 0,
         hotspots: [],
-        aois: [],
       },
     [activePageIdx, stats],
   );
@@ -332,7 +329,6 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
           <div className="mt-2 space-y-2">
             <ToggleRow label="Bản nhiệt" checked={showHeatmap} onChange={setShowHeatmap} />
             <ToggleRow label="Điểm nhìn" checked={showScatter} onChange={setShowScatter} />
-            <ToggleRow label="Vùng nội dung" checked={showAois} onChange={setShowAois} />
           </div>
           <label className="mt-4 block border-t border-border/70 pt-3 text-[11px] font-medium text-muted-foreground">
             Độ đậm nhạt của heatmap
@@ -358,36 +354,8 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
             <DataRow label="Thời gian quan sát" value={formatDuration(current.viewSec)} />
             <DataRow label="Tỷ lệ gaze trên trang" value={`${current.onSlide}%`} />
             <DataRow label="Vùng tập trung" value={String((current.hotspots ?? []).length)} />
-            <DataRow label="Vùng nội dung" value={String((current.aois ?? []).length)} />
           </dl>
         </section>
-
-        {isAoiInspection && (
-          <section className="rounded-[18px] border border-[#eeeee9] bg-white p-3.5 shadow-xs">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-medium text-muted-foreground">AOI trang này</p>
-              <span className="font-mono text-xs font-medium tabular-nums text-foreground">
-                {(current.aois ?? []).length}
-              </span>
-            </div>
-            {(current.aois ?? []).length > 0 ? (
-              <ol className="mt-2 space-y-2">
-                {current.aois.map((region, index) => (
-                  <li key={region.id} className="flex items-start gap-2 text-xs leading-5 text-foreground">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-xs font-semibold text-primary-foreground">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5">{region.name || `Vùng ${index + 1}`}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-2 text-xs leading-5 text-destructive">
-                Trang này chưa có AOI. Quay lại nội dung bài học để tạo lại.
-              </p>
-            )}
-          </section>
-        )}
 
         {lowestOnPage && (
           <Button
@@ -435,7 +403,7 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <h1 className="shrink-0 text-sm font-bold tracking-[-0.01em] text-foreground">
-                {isAoiInspection ? "Kiểm tra vùng nội dung" : "Phân tích điểm nhìn"}
+                Phân tích điểm nhìn
               </h1>
               <span className="hidden text-muted-foreground sm:inline">·</span>
               <p className="hidden truncate text-sm text-muted-foreground sm:block">{lesson.title}</p>
@@ -522,30 +490,6 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
                       <Icon name="ri-image-line" className="mb-2 size-7 text-muted-foreground" />
                       <p className="text-sm font-semibold leading-6 text-foreground">{lesson.title}</p>
                       <p className="mt-1 text-xs text-muted-foreground">Trang {activePageIdx + 1}</p>
-                    </div>
-                  )}
-
-                  {showAois && (current.aois ?? []).length > 0 && (
-                    <div className="pointer-events-none absolute inset-0 z-10" aria-hidden="true">
-                      {current.aois.map((region, index) => (
-                        <div
-                          key={region.id}
-                          title={region.name}
-                          className="absolute border-2 border-primary bg-primary/10"
-                          style={{
-                            left: `${region.xMin * 100}%`,
-                            top: `${region.yMin * 100}%`,
-                            width: `${(region.xMax - region.xMin) * 100}%`,
-                            height: `${(region.yMax - region.yMin) * 100}%`,
-                          }}
-                        >
-                          {isAoiInspection ? (
-                            <span className="absolute left-0 top-0 flex size-6 items-center justify-center rounded-br-md bg-primary font-mono text-xs font-semibold text-primary-foreground">
-                              {index + 1}
-                            </span>
-                          ) : null}
-                        </div>
-                      ))}
                     </div>
                   )}
 

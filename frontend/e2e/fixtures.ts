@@ -209,9 +209,9 @@ export const SLIDES = [
 ];
 
 export const HEATMAP_STATS = [
-  { idx: 0, onSlide: 82, fixations: 10, viewSec: 30, hotspots: [], points: [[0.4, 0.4]], aois: [] },
-  { idx: 1, onSlide: 64, fixations: 8, viewSec: 22, hotspots: [], points: [[0.5, 0.5]], aois: [] },
-  { idx: 2, onSlide: 40, fixations: 5, viewSec: 15, hotspots: [], points: [[0.6, 0.6]], aois: [] },
+  { idx: 0, onSlide: 82, fixations: 10, viewSec: 30, hotspots: [], points: [[0.4, 0.4]] },
+  { idx: 1, onSlide: 64, fixations: 8, viewSec: 22, hotspots: [], points: [[0.5, 0.5]] },
+  { idx: 2, onSlide: 40, fixations: 5, viewSec: 15, hotspots: [], points: [[0.6, 0.6]] },
 ];
 
 export const TEACHER_DIRECTORY = [
