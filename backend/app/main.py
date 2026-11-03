@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     admin,
     analytics,
+    aoi,
     assignments,
     auth,
     calibration,
@@ -97,6 +98,7 @@ app.include_router(module_items.router)
 app.include_router(lessons.router)
 app.include_router(enrollments.router)
 app.include_router(gaze.router)
+app.include_router(aoi.router)
 app.include_router(calibration.router)
 app.include_router(analytics.router)
 app.include_router(proxy.router)

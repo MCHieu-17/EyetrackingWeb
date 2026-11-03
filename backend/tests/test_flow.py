@@ -90,6 +90,11 @@ def test_full_learning_flow(client):
             "enrollmentId": enrollment_id,
             "lessonId": lesson_id,
             "deviceFingerprint": "fp-test",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
             "trackingConsent": True,
         },
     )
@@ -97,15 +102,34 @@ def test_full_learning_flow(client):
     session = r.json()
 
     samples = [
-        {"lessonContentId": slide_ids[0], "x": 0.3 + i * 0.01, "y": 0.4, "ts": 1755000000000 + i * 300}
+        {
+            "lessonContentId": slide_ids[0],
+            "x": 0.3 + i * 0.01,
+            "y": 0.4,
+            "slideX": 0.3 + i * 0.01,
+            "slideY": 0.4,
+            "ts": 1755000000000 + i * 300,
+        }
         for i in range(10)
     ] + [
-        {"lessonContentId": slide_ids[1], "x": 1.5, "y": 0.5, "ts": 1755000003000},
+        {
+            "lessonContentId": slide_ids[1],
+            "x": 1.5,
+            "y": 0.5,
+            "slideX": 1.5,
+            "slideY": 0.5,
+            "ts": 1755000003000,
+        },
     ]
     r = client.post(
         f"/api/lessons/{lesson_id}/gaze-samples",
         headers=auth(student),
-        json={"learningSessionId": session["id"], "samples": samples},
+        json={
+            "learningSessionId": session["id"],
+            "samples": samples,
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+        },
     )
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
@@ -243,6 +267,11 @@ def test_course_require_calibration_toggle(client):
             "enrollmentId": enrollment_id,
             "lessonId": lesson_id,
             "deviceFingerprint": "fp-calib-off",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
             "trackingConsent": True,
         },
     )
@@ -260,9 +289,13 @@ def test_course_require_calibration_toggle(client):
                     "lessonContentId": slide_ids[0],
                     "x": 0.3,
                     "y": 0.4,
+                    "slideX": 0.3,
+                    "slideY": 0.4,
                     "ts": 1755000000000,
                 }
             ],
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
         },
     )
     assert r.status_code == 200, r.text
@@ -284,6 +317,11 @@ def test_course_require_calibration_toggle(client):
             "enrollmentId": enrollment_id,
             "lessonId": lesson_id,
             "deviceFingerprint": "fp-calib-off",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
             "trackingConsent": True,
         },
     )
@@ -348,6 +386,11 @@ def test_quiz_gaze_samples_recorded(client):
             "enrollmentId": enrollment_id,
             "lessonId": quiz_lesson_id,
             "deviceFingerprint": "fp-quiz",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
             "trackingConsent": True,
         },
     )
@@ -357,11 +400,24 @@ def test_quiz_gaze_samples_recorded(client):
     samples = [
         {"lessonContentId": None, "x": 0.3 + i * 0.01, "y": 0.4, "ts": 1755000000000 + i * 300}
         for i in range(10)
-    ] + [{"lessonContentId": None, "x": -1, "y": -1, "ts": 1755000004000}]
+    ] + [
+        {
+            "lessonContentId": None,
+            "x": -1,
+            "y": -1,
+            "faceDetected": False,
+            "ts": 1755000004000,
+        }
+    ]
     r = client.post(
         f"/api/lessons/{quiz_lesson_id}/gaze-samples",
         headers=auth(student),
-        json={"learningSessionId": session["id"], "samples": samples},
+        json={
+            "learningSessionId": session["id"],
+            "samples": samples,
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+        },
     )
     assert r.status_code == 200, r.text
     assert r.json()["inserted"] >= 2
@@ -384,6 +440,8 @@ def test_quiz_gaze_samples_recorded(client):
             "samples": [
                 {"lessonContentId": None, "x": 0.5, "y": 0.5, "ts": 1755000009000},
             ],
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
         },
     )
     assert r.status_code == 200, r.text

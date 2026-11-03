@@ -92,19 +92,36 @@ def test_mastery_endpoint(client):
             "enrollmentId": enrollment["enrollmentId"],
             "lessonId": lesson_id,
             "deviceFingerprint": "fp-m",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
             "trackingConsent": True,
         },
     )
     session = r.json()
 
     samples = [
-        {"lessonContentId": slide_ids[0], "x": 0.3, "y": 0.5, "ts": 1755000000000 + i * 300}
+        {
+            "lessonContentId": slide_ids[0],
+            "x": 0.3,
+            "y": 0.5,
+            "slideX": 0.3,
+            "slideY": 0.5,
+            "ts": 1755000000000 + i * 300,
+        }
         for i in range(15)
     ]
     r = client.post(
         f"/api/lessons/{lesson_id}/gaze-samples",
         headers=auth(student),
-        json={"learningSessionId": session["id"], "samples": samples},
+        json={
+            "learningSessionId": session["id"],
+            "samples": samples,
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+        },
     )
     assert r.status_code == 200, r.text
 

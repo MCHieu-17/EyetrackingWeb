@@ -67,7 +67,8 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `CHATBOT_INGEST_TIMEOUT_SECONDS` | Không | Timeout ingest slide (mặc định 600) |
 | `CHATBOT_INGEST_ATTEMPTS` | Không | Số lần retry ingest (mặc định 3) |
 | `CHATBOT_INGEST_BACKOFF_SECONDS` | Không | Backoff giữa các lần retry (mặc định 5) |
-| `GAZE_DOWNSAMPLE_HZ` | Không | Downsample gaze trước khi ghi DB (mặc định 4.0) |
+| `GAZE_DOWNSAMPLE_HZ` | Không | Downsample `gaze_events` trước khi ghi DB (mặc định 4.0) |
+| `GAZE_RAW_HZ` | Không | Tần số lưu `gaze_raw_samples` (mặc định 15.0; `0` = lưu tất cả) |
 | `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
 | `R2_ACCOUNT_ID` / `R2_BUCKET_NAME` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_PUBLIC_URL` | Không | Điền đủ 5 để lưu slide trên Cloudflare R2; để trống dùng volume local |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
@@ -120,8 +121,17 @@ Backend dựng ngữ cảnh bài tập: trước khi nộp chỉ gửi đề + o
 - `POST /api/courses/{id}/enroll`
 - `GET /api/courses/{id}` — outline
 - `GET /api/lessons/{id}/contents` — slides
-- `POST /api/learning-sessions` / `PATCH /api/learning-sessions/{id}` — phiên học của cả bài giảng và bài tập
-- `POST /api/lessons/{id}/gaze-samples` — batch `{lessonContentId, x, y, ts}`; clamp [0,1], downsample, cập nhật `gaze_slide_stats` (bài giảng) hoặc `gaze_session_stats` (bài tập: `lessonContentId = null`, toạ độ theo viewport, `gaze_events.surface = 'quiz'`)
+- `POST /api/learning-sessions` — bắt buộc `viewportWidthPx/HeightPx`, `calibrationWidthPx/HeightPx`, `devicePixelRatio`; viewport phải bằng calibration (nếu không → `409 viewport_mismatch`)
+- `PATCH /api/learning-sessions/{id}` — đóng phiên
+- `POST /api/lessons/{id}/gaze-samples` — batch `{samples: [{lessonContentId, x, y, slideX?, slideY?, faceDetected, ts}], viewportWidthPx, viewportHeightPx, layoutSnapshotId?}`. `x/y` là toạ độ RAW theo viewport (có thể <0/>1); `slideX/slideY` dùng cho `gaze_events`/analytics cũ. Backend ghi `gaze_raw_samples` (downsample `GAZE_RAW_HZ`) + `gaze_events` (downsample `GAZE_DOWNSAMPLE_HZ`). Viewport lệch calibration → `409 viewport_mismatch`.
+- `POST /api/learning-sessions/{id}/aoi-layout` — frontend gửi rect thật của mọi `[data-aoi]`; tạo `aoi_layout_snapshots` + `aoi_layout_rects`
+
+### AOI (giáo viên/admin)
+- `GET /api/aoi-definitions?include_inactive=` — catalog AOI toàn hệ thống
+- `POST /api/aoi-definitions` — `{code, name, description?, parentId?, selector?}`
+- `PATCH /api/aoi-definitions/{id}` — sửa tên/mô tả/parent/selector/isActive
+- `DELETE /api/aoi-definitions/{id}` — soft delete (`isActive=false`)
+- `POST /api/aoi/rebuild` — `{sessionId?, lessonId?, courseId?, fromTime?, toTime?}`; tính lại `gaze_aoi_hits` từ raw + snapshot rects
 
 ### Calibration
 - `POST /api/calibrations` — JSON `{deviceFingerprint, numPoints, modelUbjBase64, maePx?, screenWidthPx?, screenHeightPx?}` — `modelUbjBase64` là file `.ubj` tải từ `GET /session/{sid}/model` của gaze service (base64, ~1-3KB); bất kỳ bản cũ nào của (user, device) tự deactivate. Ghi vào `calibration_params.model_ubj`.
@@ -151,6 +161,7 @@ docker compose run --rm -e PGDATABASE=eyetracking_test migrate
 
 - **JWT access ngắn hạn + refresh token** lưu dạng SHA-256 hash trong `auth_sessions`, rotation khi refresh.
 - **RBAC**: role trong JWT + kiểm tra `user_roles`; ownership khóa học theo `courses.teacher_id`.
-- **Gaze**: tọa độ chuẩn hóa [0,1]; chỉ ghi event khi nằm trong [0,1] — sample "ngoài màn hình" (AI báo no_face → -1,-1) chỉ đếm vào `gaze_slide_stats` (total/on-slide) để on-slide ratio chính xác mà không nhiễu heatmap; thống kê on-slide/view-time ghi lúc ingest.
+- **Gaze**: `gaze_events` giữ tọa độ slide chuẩn hóa [0,1] cho heatmap/mastery; chỉ ghi event khi nằm trong [0,1]. `gaze_raw_samples` lưu **raw viewport** (có thể <0/>1), `status='no_face'` với `gaze_x/gaze_y=NULL`, downsample theo `GAZE_RAW_HZ`. Viewport lúc lấy mẫu phải bằng viewport lúc calibration (F11/zoom → 409, phải hiệu chỉnh lại).
+- **AOI DOM-anchored**: frontend đo `getBoundingClientRect()` của mọi `[data-aoi]` và gửi layout snapshot; backend lưu rect thật. `gaze_aoi_hits` là derived, rebuild từ raw + snapshot + catalog nên thêm AOI mới sau khi đã thu dữ liệu vẫn map lại được.
 - **Heatmap**: fixation detection (dispersion) + hotspot clustering (grid 24×24 + local maxima) tính on-the-fly từ `gaze_events`; `heatmap_aggregates`/`engagement_scores` được tự refresh gần thời gian thực sau mỗi batch gaze-sample (incremental, chỉ chạm slide của batch) + endpoint recompute (batch) để chạy lại toàn bài.
 - **camelCase**: toàn bộ response dùng alias generator `to_camel` — khớp `frontend/lib/types/domain.ts`, UI không cần sửa.

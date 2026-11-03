@@ -55,10 +55,10 @@ components/
   layout/               # App shell, topbar (nav + user), sidebar drawer mobile
   quiz/                 # Bài tập trắc nghiệm: soạn, làm bài, chữa bài
   student/              # Dashboard, preflight, learning reader
-  teacher/              # Danh sach khoa hoc, workspace, heatmap
+  teacher/              # Danh sach khoa hoc, workspace, heatmap, AOI editor
   ui/                   # Radix UI primitives
-hooks/                  # TanStack Query, gaze va calibration hooks
-lib/                    # API client, types, constants va utilities
+hooks/                  # TanStack Query, gaze, calibration, AOI snapshot hooks
+lib/                    # API client, types, constants, AOI measure utilities
 tests/                  # Vitest unit tests
 e2e/                    # Playwright tests
 ```
@@ -105,7 +105,8 @@ Bài tập là một **item trong chương**, cùng cấp với bài học slide
   "Thêm trắc nghiệm"; câu hỏi hỗ trợ một hoặc nhiều đáp án đúng (chấm tất cả-hoặc-không).
 - Học viên gặp bài tập như một bước trong learning reader; làm bài, được chấm và có
   nút "Bài tiếp theo" ngay trong luồng học. Bài tập **cũng ghi dữ liệu gaze** (toạ độ
-  theo viewport, `gaze_events.surface = 'quiz'`, không có slide/heatmap).
+  theo viewport, `gaze_events.surface = 'quiz'`, không có slide/heatmap). Gaze RAW
+  theo viewport được ghi song song vào `gaze_raw_samples` cho phân tích AOI.
 - **Làm lại**: giáo viên bật công tắc **Cho phép học viên làm lại** ngay đầu phần
   soạn bài tập (bật là lưu ngay, không cần bấm Lưu); học viên thấy nút **Làm lại** ở
   trang kết quả → xoá lượt làm cũ, đồng hồ chạy lại, đáp án ẩn lại cho tới khi nộp
@@ -113,15 +114,32 @@ Bài tập là một **item trong chương**, cùng cấp với bài học slide
 
 ## Workspace soạn nội dung của giáo viên
 
-`/teacher/courses/{courseId}` có **4 tab** (`?tab=`, xem
+`/teacher/courses/{courseId}` có **5 tab** (`?tab=`, xem
 `components/teacher/course-workspace.tsx`):
 
 | Tab | Nội dung |
 |---|---|
 | **Nội dung** | Soạn chương/bài giảng/bài tập (mặc định) |
 | **Thông tin khóa học** | Tên, mô tả, xuất bản / thu hồi / lưu trữ, xoá khóa học |
-| **Cài đặt** | Thiết lập ít dùng áp cho cả khóa (hiện có "Hiển thị điểm nhìn cho sinh viên") |
+| **Cài đặt** | Thiết lập ít dùng áp cho cả khóa (hiển thị điểm nhìn, bắt buộc hiệu chỉnh) |
 | **Học viên** | Ghi danh, danh sách, drawer heatmap từng học viên |
+| **Vùng phân tích** | Editor AOI DOM-anchored (toàn hệ thống) + rebuild `gaze_aoi_hits` |
+
+### AOI editor (`?tab=aoi`)
+
+- AOI áp dụng **toàn hệ thống** vì cấu trúc khóa học giống nhau.
+- Mỗi vùng gắn với một `data-aoi` trên DOM. Editor quét mọi `[data-aoi]` trong
+  preview, hiển thị rect đo được và cho tạo/sửa/tắt AOI (code, tên, parent,
+  selector).
+- Runtime (`useAoiSnapshot`) đo `getBoundingClientRect()` của mọi `[data-aoi]`
+  và gửi `POST /api/learning-sessions/{id}/aoi-layout` mỗi khi layout đổi
+  (mở/đóng chatbot, mục lục, đổi slide, tin nhắn mới, scroll/resize).
+- `data-aoi` hiện có: `header`, `outline`, `lesson-content`, `slide`,
+  `lesson-nav`, `quiz`, `quiz-question`, `quiz-options`, `quiz-submit`,
+  `chatbot`, `chat-header`, `chat-messages`, `chat-user-message`,
+  `chat-ai-message`, `chat-input`, `chat-send`, `chat-open-button`.
+- **Viewport phải bằng lúc calibration**: F11/zoom làm `innerWidth/innerHeight`
+  đổi → reader dừng ghi gaze và hiện banner "Hiệu chỉnh lại".
 
 Tab **Nội dung** là **master–detail**: mục lục bên trái (`content-outline.tsx` — chương,
 bài giảng, bài tập, badge trạng thái thiếu/đủ nội dung, dòng đang chọn có viền đậm) và

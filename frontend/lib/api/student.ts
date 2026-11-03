@@ -11,14 +11,23 @@ export interface LearningSession {
   trackingConsent: boolean;
   // first: lần đầu (tracking), continue: học tiếp phiên cũ (tracking).
   mode: "first" | "continue";
+  viewportWidthPx?: number | null;
+  viewportHeightPx?: number | null;
+  calibrationWidthPx?: number | null;
+  calibrationHeightPx?: number | null;
+  devicePixelRatio?: number | null;
 }
 
 export interface CreateLearningSessionInput {
   enrollmentId: string;
   lessonId: string;
   deviceFingerprint: string;
-  screenWidthPx?: number;
-  screenHeightPx?: number;
+  // Viewport lúc tạo phiên và viewport lúc calibration phải bằng nhau.
+  viewportWidthPx: number;
+  viewportHeightPx: number;
+  calibrationWidthPx: number;
+  calibrationHeightPx: number;
+  devicePixelRatio: number;
   trackingConsent?: boolean;
 }
 
@@ -37,11 +46,24 @@ export function getDeviceFingerprint(): string {
 }
 
 export interface GazeSample {
-  /** null = bài tập trắc nghiệm (không có slide) — toạ độ theo viewport. */
+  /** null = bài tập trắc nghiệm (không có slide). */
   lessonContentId: string | null;
-  x: number;
-  y: number;
+  /** Toạ độ RAW theo viewport, có thể < 0 hoặc > 1 khi nhìn ra ngoài màn hình. */
+  x: number | null;
+  y: number | null;
+  /** Toạ độ theo ảnh slide (nếu map được). */
+  slideX?: number | null;
+  slideY?: number | null;
+  /** false = AI service báo no_face; x/y sẽ được backend lưu NULL. */
+  faceDetected: boolean;
   ts: number;
+}
+
+export interface GazeBatchMeta {
+  viewportWidthPx: number;
+  viewportHeightPx: number;
+  layoutSnapshotId?: string | null;
+  layoutKey?: string | null;
 }
 
 export function fetchMyEnrollments(): Promise<EnrolledCourse[]> {
@@ -82,10 +104,19 @@ export function postGazeSamples(
   learningSessionId?: string,
   source: "real" | "simulated" = "real",
   keepalive = false,
+  meta?: GazeBatchMeta,
 ): Promise<{ ok: boolean; inserted?: number }> {
   return apiFetch<{ ok: boolean; inserted?: number }>(`/api/lessons/${lessonId}/gaze-samples`, {
     method: "POST",
-    body: { learningSessionId, samples, source },
+    body: {
+      learningSessionId,
+      samples,
+      source,
+      viewportWidthPx: meta?.viewportWidthPx ?? window.innerWidth,
+      viewportHeightPx: meta?.viewportHeightPx ?? window.innerHeight,
+      layoutSnapshotId: meta?.layoutSnapshotId ?? null,
+      layoutKey: meta?.layoutKey ?? null,
+    },
     keepalive,
   });
 }

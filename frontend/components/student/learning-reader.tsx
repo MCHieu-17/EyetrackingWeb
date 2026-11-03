@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -9,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { cn } from "@/lib/utils";
 import { useGazeTracker } from "@/hooks/use-gaze-tracker";
+import { useAoiSnapshot } from "@/hooks/use-aoi-snapshot";
 import {
   useCourseOutline,
   useLessonSlides,
@@ -22,11 +30,14 @@ import {
   type GazeSample,
 } from "@/lib/api/student";
 import {
+  getCalibrationScreenSnapshot,
   getContainedImageRect,
   getStoredGazeSessionId,
+  isCalibrationScreenStale,
   screenGazeToSlide,
+  subscribeCalibrationScreen,
 } from "@/lib/api/calibration";
-import { resolveMediaUrl } from "@/lib/api/client";
+import { ApiError, resolveMediaUrl } from "@/lib/api/client";
 import { InlineQuiz } from "@/components/quiz/inline-quiz";
 import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
 
@@ -72,12 +83,17 @@ export function LearningReader({ courseId }: { courseId: string }) {
   // Vị trí chấm điểm nhìn (chuẩn hóa theo màn hình) khi GV bật hiển thị cho SV.
   // `key` = bài+trang lúc ghi, để tự ẩn khi đổi trang/bài mà không cần effect.
   const [gazeDot, setGazeDot] = useState<{ x: number; y: number; key: string } | null>(null);
+  // Viewport hiện tại khác lúc calibration (F11/zoom) → dừng ghi gaze.
+  const [viewportError, setViewportError] = useState(false);
 
   const slideImgRef = useRef<HTMLImageElement>(null);
   const gazeBufferRef = useRef<GazeSample[]>([]);
   const gazeBufferLessonRef = useRef<string | null>(null);
   const flushTimerRef = useRef<number>(0);
   const sessionsRef = useRef<Record<string, string>>({});
+  const aoiSnapshotIdRef = useRef<string | null>(null);
+  const aoiReadyRef = useRef(false);
+  const layoutKeyRef = useRef("reader");
 
   const allItems = useMemo(
     () => course?.modules.flatMap((module) => module.lessons) ?? [],
@@ -122,6 +138,16 @@ export function LearningReader({ courseId }: { courseId: string }) {
   const showGazeDot = Boolean(course?.showGazeDot);
   // Khóa tắt bắt buộc hiệu chỉnh -> không bật camera, không ghi gaze.
   const calibrationRequired = course?.requireCalibration !== false;
+  // Viewport lúc calibration (localStorage). Dùng useSyncExternalStore để
+  // không đọc localStorage trong render gây lệch hydration.
+  const calibrationScreen = useSyncExternalStore(
+    subscribeCalibrationScreen,
+    getCalibrationScreenSnapshot,
+    () => null,
+  );
+  const calibrationStale =
+    calibrationRequired &&
+    (!calibrationScreen || isCalibrationScreenStale());
   // Chỉ tạo phiên học khi đã có dữ liệu khóa (tránh tạo với consent mặc định).
   const courseReady = Boolean(course);
 
@@ -156,7 +182,14 @@ export function LearningReader({ courseId }: { courseId: string }) {
     if (!sid || buf.length === 0) return;
     gazeBufferRef.current = [];
     gazeBufferLessonRef.current = null;
-    postGazeSamples(lessonId, buf, sid, "real", keepalive).catch(() => {});
+    postGazeSamples(lessonId, buf, sid, "real", keepalive, {
+      viewportWidthPx: window.innerWidth,
+      viewportHeightPx: window.innerHeight,
+      layoutSnapshotId: aoiSnapshotIdRef.current,
+      layoutKey: layoutKeyRef.current,
+    }).catch((error) => {
+      if (error instanceof ApiError && error.status === 409) setViewportError(true);
+    });
   }, []);
 
   const closeLearningSession = useCallback((lessonId: string, expectedSessionId?: string, keepalive = false) => {
@@ -178,17 +211,34 @@ export function LearningReader({ courseId }: { courseId: string }) {
   // Bài tập trắc nghiệm cũng có phiên: gaze của bài tập được ghi thô theo viewport
   // (surface='quiz', không có slide).
   useEffect(() => {
-    if (!courseReady || !activeLessonId || !enrollmentId || sessionsRef.current[activeLessonId]) return;
+    if (
+      !courseReady ||
+      !activeLessonId ||
+      !enrollmentId ||
+      sessionsRef.current[activeLessonId] ||
+      viewportError ||
+      calibrationStale
+    ) {
+      return;
+    }
 
     const lessonId = activeLessonId;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const calibrationWidth = calibrationScreen?.w ?? viewportWidth;
+    const calibrationHeight = calibrationScreen?.h ?? viewportHeight;
+
     let cancelled = false;
     let createdSessionId: string | null = null;
     createLearningSession({
       enrollmentId,
       lessonId,
       deviceFingerprint: getDeviceFingerprint(),
-      screenWidthPx: window.innerWidth,
-      screenHeightPx: window.innerHeight,
+      viewportWidthPx: viewportWidth,
+      viewportHeightPx: viewportHeight,
+      calibrationWidthPx: calibrationWidth,
+      calibrationHeightPx: calibrationHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
       // Khóa tắt bắt buộc hiệu chỉnh -> không xin consent ghi gaze.
       trackingConsent: calibrationRequired,
     })
@@ -203,22 +253,64 @@ export function LearningReader({ courseId }: { courseId: string }) {
         setTrackingLessons((prev) => ({ ...prev, [lessonId]: session.trackingConsent }));
         setGazeCalibrated(Boolean(getStoredGazeSessionId()));
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 409) setViewportError(true);
+      });
 
     return () => {
       cancelled = true;
       if (createdSessionId) closeLearningSession(lessonId, createdSessionId);
     };
-  }, [courseReady, activeLessonId, enrollmentId, closeLearningSession, calibrationRequired]);
+  }, [
+    courseReady,
+    activeLessonId,
+    enrollmentId,
+    closeLearningSession,
+    calibrationRequired,
+    calibrationStale,
+    calibrationScreen,
+    viewportError,
+  ]);
 
   const learningSessionId = learningSessionIds[activeLessonId];
   // Chỉ thu gaze khi khóa bật theo dõi VÀ backend cho phép (trackingConsent=true).
   const trackingAllowed =
-    calibrationRequired && Boolean(activeLessonId) && trackingLessons[activeLessonId] !== false;
+    calibrationRequired &&
+    !viewportError &&
+    !calibrationStale &&
+    Boolean(activeLessonId) &&
+    trackingLessons[activeLessonId] !== false;
 
   const flushGaze = useCallback(() => {
     flushGazeForLesson(activeLessonId);
   }, [activeLessonId, flushGazeForLesson]);
+
+  // Trước khi đo layout mới: dừng nhận sample + flush batch cũ ngay lập tức,
+  // tránh sample bị gán sang snapshot mới.
+  const pauseAndFlushGaze = useCallback(() => {
+    aoiReadyRef.current = false;
+    flushGazeForLesson(activeLessonId);
+  }, [activeLessonId, flushGazeForLesson]);
+
+  useEffect(() => {
+    layoutKeyRef.current = activeIsQuiz ? "quiz" : "reader";
+  }, [activeIsQuiz]);
+
+  // Đo layout DOM và tạo snapshot AOI. Tạm dừng ghi gaze trong lúc đo để
+  // sample không bị gán sang layout mới.
+  const aoiSnapshot = useAoiSnapshot({
+    sessionId: learningSessionId ?? null,
+    enabled: Boolean(
+      learningSessionId && trackingAllowed && (total > 0 || activeIsQuiz),
+    ),
+    layoutKey: activeIsQuiz ? "quiz" : "reader",
+    onBeforeSnapshot: pauseAndFlushGaze,
+  });
+
+  useEffect(() => {
+    aoiSnapshotIdRef.current = aoiSnapshot.snapshotId;
+    aoiReadyRef.current = aoiSnapshot.ready;
+  }, [aoiSnapshot.snapshotId, aoiSnapshot.ready]);
 
   const enqueueGaze = useCallback(
     (sample: GazeSample) => {
@@ -246,24 +338,38 @@ export function LearningReader({ courseId }: { courseId: string }) {
   const { source: gazeSource } = useGazeTracker({
     // Bài giảng: cần có slide. Bài tập: không có slide nhưng vẫn thu gaze để ghi
     // nhận (và để hiện chấm nếu khóa bật "hiển thị điểm nhìn cho sinh viên").
-    enabled: Boolean(activeLessonId && trackingAllowed && (total > 0 || activeIsQuiz)),
+    enabled: Boolean(
+      activeLessonId && trackingAllowed && (total > 0 || activeIsQuiz),
+    ),
     calibrated: gazeCalibrated,
     allowSimulation: false,
     onPoint: useCallback(
       (x: number, y: number, source: string) => {
         if (source !== "real") return;
+        // (-1, -1) là sentinel "mất khuôn mặt" (no_face) → không lưu toạ độ.
+        const faceDetected = !(x === -1 && y === -1);
         if (showGazeDot) {
           // Toạ độ gaze chuẩn hoá theo viewport có thể < 0 hoặc > 1 khi nhìn ra
           // ngoài màn hình → cho chấm đi hẳn ra ngoài thay vì kẹp lại bên trong.
-          // (-1, -1) là sentinel "mất khuôn mặt" (no_face) → ẩn chấm.
-          if (x === -1 && y === -1) setGazeDot(null);
+          if (!faceDetected) setGazeDot(null);
           else setGazeDot({ x, y, key: `${activeLessonId}:${currentSlide}` });
         }
         if (!learningSessionId || !trackingAllowed) return;
+        // Đang đo/tạo snapshot AOI mới → tạm bỏ sample để không gán sai layout.
+        // Không tắt useGazeTracker vì sẽ làm camera restart mỗi lần layout đổi.
+        if (!aoiReadyRef.current) return;
 
         if (activeIsQuiz) {
           // Bài tập: không có ảnh slide để map toạ độ → gửi thẳng toạ độ viewport.
-          enqueueGaze({ lessonContentId: null, x, y, ts: Date.now() });
+          enqueueGaze({
+            lessonContentId: null,
+            x: faceDetected ? x : null,
+            y: faceDetected ? y : null,
+            slideX: null,
+            slideY: null,
+            faceDetected,
+            ts: Date.now(),
+          });
           return;
         }
 
@@ -272,7 +378,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
         const containerRect = img?.getBoundingClientRect();
 
         let mapped: { x: number; y: number } | null = null;
-        if (img && containerRect) {
+        if (faceDetected && img && containerRect) {
           const paintedRect = getContainedImageRect(
             {
               left: containerRect.left,
@@ -289,8 +395,11 @@ export function LearningReader({ courseId }: { courseId: string }) {
         if (!slide) return;
         enqueueGaze({
           lessonContentId: slide.id,
-          x: mapped ? mapped.x : -1,
-          y: mapped ? mapped.y : -1,
+          x: faceDetected ? x : null,
+          y: faceDetected ? y : null,
+          slideX: mapped?.x ?? null,
+          slideY: mapped?.y ?? null,
+          faceDetected,
           ts: Date.now(),
         });
       },
@@ -475,7 +584,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-[#f5f6f2] p-2 text-foreground sm:p-3">
-      <header className="z-40 flex h-12 shrink-0 items-center px-2 sm:px-3">
+      <header data-aoi="header" className="z-40 flex h-12 shrink-0 items-center px-2 sm:px-3">
         <Link
           href="/student"
           className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
@@ -522,7 +631,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
 
       <div className="flex min-h-0 flex-1 gap-3">
         {desktopOutlineOpen && (
-          <aside className="hidden w-[280px] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs lg:flex">
+          <aside data-aoi="outline" className="hidden w-[280px] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs lg:flex">
             {outline}
           </aside>
         )}
@@ -535,7 +644,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
               onClick={() => setMobileOutlineOpen(false)}
               aria-label="Đóng mục lục"
             />
-             <aside className="absolute inset-y-2 left-2 flex w-[min(88vw,320px)] flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-lg">
+             <aside data-aoi="outline" className="absolute inset-y-2 left-2 flex w-[min(88vw,320px)] flex-col overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-lg">
               <div className="flex h-14 items-center justify-between px-5">
                 <span className="text-sm font-semibold">Mục lục</span>
                 <Button
@@ -552,7 +661,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
           </div>
         )}
 
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fffffb] shadow-xs">
+        <main data-aoi="lesson-content" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fffffb] shadow-xs">
           <div className="z-10 shrink-0 px-4 py-3 sm:px-5">
             <div className="mx-auto flex max-w-[1400px] items-center gap-3">
               {!desktopOutlineOpen && (
@@ -587,7 +696,25 @@ export function LearningReader({ courseId }: { courseId: string }) {
             </div>
           </div>
 
-          {gazeSource === "off" && calibrationRequired && (total > 0 || activeIsQuiz) && (
+          {(viewportError || calibrationStale) && (
+            <div className="z-10 shrink-0 px-4 pb-2 sm:px-5">
+              <div className="mx-auto flex max-w-[1400px] flex-col gap-2 rounded-xl border border-[#f0d9c8] bg-[#fdf3e8] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-5 text-foreground">
+                  Kích thước màn hình đã thay đổi so với lúc hiệu chỉnh. Hãy hiệu chỉnh lại để
+                  tiếp tục ghi dữ liệu điểm nhìn.
+                </p>
+                <Button asChild size="sm" variant="outline" className="shrink-0">
+                  <Link
+                    href={`/student/courses/${courseId}/prepare${activeLessonId ? `?lesson=${encodeURIComponent(activeLessonId)}` : ""}`}
+                  >
+                    Hiệu chỉnh lại
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {gazeSource === "off" && calibrationRequired && !viewportError && !calibrationStale && (total > 0 || activeIsQuiz) && (
             <div className="z-10 shrink-0 px-4 pb-2 sm:px-5">
               <div className="mx-auto flex max-w-[1400px] flex-col gap-2 rounded-xl border border-[#dce8d9] bg-[#e8f1e6] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-foreground">
@@ -607,7 +734,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
 
           <div className="min-h-0 flex-1 overflow-auto bg-[#f9f9f5] px-3 pb-24 pt-3 sm:px-5">
             {activeIsQuiz ? (
-              <div className="mx-auto w-full max-w-4xl py-2">
+              <div data-aoi="quiz" className="mx-auto w-full max-w-4xl py-2">
                 {activeQuizId ? (
                   <InlineQuiz
                     quizId={activeQuizId}
@@ -626,7 +753,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
               {slidesLoading ? (
                 <Skeleton className="aspect-video w-full rounded-2xl" />
               ) : slideImageUrl ? (
-                <div className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm">
+                <div data-aoi="slide" className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     ref={slideImgRef}
@@ -660,7 +787,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
           </div>
 
           {!activeIsQuiz && (
-          <footer className="absolute inset-x-0 bottom-3 z-20 px-3 sm:bottom-4 sm:px-5">
+          <footer data-aoi="lesson-nav" className="absolute inset-x-0 bottom-3 z-20 px-3 sm:bottom-4 sm:px-5">
             <div className="mx-auto flex max-w-xl items-center gap-2 rounded-full border border-border/80 bg-white/95 p-1.5 shadow-md backdrop-blur-md">
               <Button
                 variant="outline"

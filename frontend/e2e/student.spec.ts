@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { ENROLLMENTS, OUTLINE, json, mockApi, seedAuth } from "./fixtures";
+import {
+  ENROLLMENTS,
+  OUTLINE,
+  json,
+  mockApi,
+  seedAuth,
+  seedCalibration,
+} from "./fixtures";
 
 const STUDENT = {
   email: "student@school.edu.vn",
@@ -115,6 +122,7 @@ test.describe("Student", () => {
   });
 
   test("reader hiển thị slide và điều hướng trang", async ({ page }) => {
+    await seedCalibration(page);
     await page.goto("/student/courses/course-1");
     await expect(page.getByRole("heading", { name: "Bài 1: Giới thiệu" })).toBeVisible();
     await page.getByRole("button", { name: "Sau" }).click();
@@ -123,6 +131,7 @@ test.describe("Student", () => {
   });
 
   test("reader mở bài tập trắc nghiệm và nộp bài", async ({ page }) => {
+    await seedCalibration(page);
     await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");
     await expect(page.getByText("Bài tập: Kiểm tra nhập môn").first()).toBeVisible();
 
@@ -139,6 +148,7 @@ test.describe("Student", () => {
   });
 
   test("học viên làm lại bài tập khi giáo viên cho phép", async ({ page }) => {
+    await seedCalibration(page);
     await page.goto("/student/courses/course-1?lesson=lesson-quiz-1");
     await page.getByText("def", { exact: true }).click();
     await page.getByRole("button", { name: "Tiếp" }).click();
@@ -158,6 +168,7 @@ test.describe("Student", () => {
   });
 
   test("đổi bài đóng phiên cũ và quay lại tạo phiên mới", async ({ page }) => {
+    await seedCalibration(page);
     const created: string[] = [];
     const closed: string[] = [];
     await page.route("**/api/learning-sessions**", async (route) => {

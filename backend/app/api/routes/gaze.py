@@ -11,9 +11,16 @@ from app.core import rediscache
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
+from app.models.aoi import AoiLayoutSnapshot
 from app.models.auth import User
 from app.models.course import Enrollment, Lesson, LessonContent, Module
-from app.models.gaze import GazeEvent, GazeSessionStat, GazeSlideStat, LearningSession
+from app.models.gaze import (
+    GazeEvent,
+    GazeRawSample,
+    GazeSessionStat,
+    GazeSlideStat,
+    LearningSession,
+)
 from app.schemas.gaze import (
     GazeBatchIn,
     GazeBatchOut,
@@ -29,6 +36,37 @@ router = APIRouter(tags=["gaze"])
 DEFAULT_FINGERPRINT = "web-default"
 
 
+def _viewport_mismatch() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "viewport_mismatch",
+            "message": (
+                "Kích thước viewport hiện tại khác lúc hiệu chỉnh. "
+                "Hãy hiệu chỉnh lại trước khi tiếp tục."
+            ),
+        },
+    )
+
+
+def _session_out(session: LearningSession, *, calibrated: bool, mode: str = "first") -> LearningSessionOut:
+    return LearningSessionOut(
+        id=session.id,
+        enrollment_id=session.enrollment_id,
+        lesson_id=session.lesson_id,
+        device_id=session.device_id,
+        calibrated=calibrated,
+        status=session.status,
+        tracking_consent=session.tracking_consent,
+        mode=mode,
+        viewport_width_px=session.viewport_width_px,
+        viewport_height_px=session.viewport_height_px,
+        calibration_width_px=session.calibration_width_px,
+        calibration_height_px=session.calibration_height_px,
+        device_pixel_ratio=session.device_pixel_ratio,
+    )
+
+
 @router.post("/api/learning-sessions", response_model=LearningSessionOut, status_code=201)
 async def create_learning_session(
     body: LearningSessionCreateIn,
@@ -42,6 +80,14 @@ async def create_learning_session(
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
 
+    # Viewport lúc lấy mẫu phải bằng viewport lúc calibration. Chặn ngay từ
+    # lúc tạo phiên để tránh ghi dữ liệu sai toạ độ (F11/zoom giữa chừng).
+    if (
+        body.viewport_width_px != body.calibration_width_px
+        or body.viewport_height_px != body.calibration_height_px
+    ):
+        raise _viewport_mismatch()
+
     # Khóa tắt yêu cầu hiệu chỉnh => không ghi gaze, kể cả khi client gửi
     # trackingConsent=true. Cờ khóa là nguồn sự thật cuối cùng.
     tracking_consent = body.tracking_consent and enrollment.course.require_calibration
@@ -50,8 +96,8 @@ async def create_learning_session(
         db,
         user_id=user.id,
         fingerprint=body.device_fingerprint,
-        screen_width_px=body.screen_width_px,
-        screen_height_px=body.screen_height_px,
+        screen_width_px=body.viewport_width_px,
+        screen_height_px=body.viewport_height_px,
     )
     params = await active_calibration_param(db, user.id, device.id)
 
@@ -82,17 +128,30 @@ async def create_learning_session(
         if existing.tracking_consent != tracking_consent:
             existing.tracking_consent = tracking_consent
             changed = True
+        # Người dùng có thể đã hiệu chỉnh lại ở viewport khác (vd thoát F11).
+        # Cập nhật calibration viewport của phiên theo lần calibration mới nhất.
+        if (
+            existing.calibration_width_px != body.calibration_width_px
+            or existing.calibration_height_px != body.calibration_height_px
+            or existing.device_pixel_ratio != body.device_pixel_ratio
+        ):
+            existing.calibration_width_px = body.calibration_width_px
+            existing.calibration_height_px = body.calibration_height_px
+            existing.device_pixel_ratio = body.device_pixel_ratio
+            changed = True
+        if (
+            existing.viewport_width_px != body.viewport_width_px
+            or existing.viewport_height_px != body.viewport_height_px
+        ):
+            existing.viewport_width_px = body.viewport_width_px
+            existing.viewport_height_px = body.viewport_height_px
+            changed = True
         if changed:
             await db.commit()
             await db.refresh(existing)
-        return LearningSessionOut(
-            id=existing.id,
-            enrollment_id=existing.enrollment_id,
-            lesson_id=existing.lesson_id,
-            device_id=existing.device_id,
+        return _session_out(
+            existing,
             calibrated=existing.calibration_param_id is not None,
-            status=existing.status,
-            tracking_consent=existing.tracking_consent,
             mode="continue",
         )
 
@@ -102,18 +161,18 @@ async def create_learning_session(
         device_id=device.id,
         calibration_param_id=params.id if params else None,
         tracking_consent=tracking_consent,
+        viewport_width_px=body.viewport_width_px,
+        viewport_height_px=body.viewport_height_px,
+        calibration_width_px=body.calibration_width_px,
+        calibration_height_px=body.calibration_height_px,
+        device_pixel_ratio=body.device_pixel_ratio,
     )
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    return LearningSessionOut(
-        id=session.id,
-        enrollment_id=session.enrollment_id,
-        lesson_id=session.lesson_id,
-        device_id=session.device_id,
+    return _session_out(
+        session,
         calibrated=bool(params and params.has_model),
-        status=session.status,
-        tracking_consent=session.tracking_consent,
         mode="first",
     )
 
@@ -134,14 +193,9 @@ async def end_learning_session(
     session.status = body.status
     session.ended_at = datetime.now(timezone.utc)
     await db.commit()
-    return LearningSessionOut(
-        id=session.id,
-        enrollment_id=session.enrollment_id,
-        lesson_id=session.lesson_id,
-        device_id=session.device_id,
+    return _session_out(
+        session,
         calibrated=session.calibration_param_id is not None,
-        status=session.status,
-        tracking_consent=session.tracking_consent,
     )
 
 
@@ -162,8 +216,8 @@ def _quiz_gaze_batch(
     """Chuẩn hoá một batch gaze của BÀI TẬP TRẮC NGHIỆM (không có slide).
 
     Toạ độ giữ nguyên theo VIEWPORT (AI service trả về), ghi `surface='quiz'` và
-    `lesson_content_id=NULL`. Sample "ngoài màn hình" (-1,-1 do no_face) vẫn đếm
-    vào `total`/`on_screen` nhưng không tạo dòng gaze_events (giống bài giảng).
+    `lesson_content_id=NULL`. Sample "ngoài màn hình" hoặc no_face vẫn đếm vào
+    `total`/`on_screen` nhưng không tạo dòng gaze_events (giống bài giảng).
 
     Trả về (events, total_samples, on_screen_samples, view_ms).
     """
@@ -173,6 +227,8 @@ def _quiz_gaze_batch(
     on_screen = 0
     last_kept = float("-inf")
     for s in ordered:
+        if not s.face_detected or s.x is None or s.y is None:
+            continue
         if not (0.0 <= s.x <= 1.0 and 0.0 <= s.y <= 1.0):
             continue
         on_screen += 1
@@ -222,6 +278,80 @@ async def _upsert_session_stats(
         ),
     )
     await db.execute(stmt)
+
+
+async def _build_raw_samples(
+    db: AsyncSession,
+    session: LearningSession,
+    lesson: Lesson,
+    body: GazeBatchIn,
+) -> list[GazeRawSample]:
+    """Tạo các dòng gaze_raw_samples, downsample theo GAZE_RAW_HZ.
+
+    Raw lưu MỌI sample (kể cả no_face và off-screen), khác gaze_events chỉ lưu
+    sample on-slide đã downsample 4Hz.
+    """
+    min_interval_ms = (
+        1000.0 / settings.gaze_raw_hz if settings.gaze_raw_hz > 0 else 0.0
+    )
+
+    last_raw = (
+        await db.execute(
+            select(func.max(GazeRawSample.event_time)).where(
+                GazeRawSample.learning_session_id == session.id
+            )
+        )
+    ).scalar_one_or_none()
+    last_ts = last_raw.timestamp() * 1000 if last_raw else float("-inf")
+
+    content_ids = {s.lesson_content_id for s in body.samples if s.lesson_content_id}
+    valid_ids: set[str] = set()
+    if content_ids:
+        valid_ids = set(
+            (
+                await db.execute(
+                    select(LessonContent.id).where(
+                        LessonContent.lesson_id == lesson.id,
+                        LessonContent.id.in_(content_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    surface = "quiz" if lesson.kind == "quiz" else "lesson"
+    out: list[GazeRawSample] = []
+    for s in sorted(body.samples, key=lambda item: item.ts):
+        if min_interval_ms > 0 and s.ts - last_ts < min_interval_ms:
+            continue
+        last_ts = s.ts
+        content_id = s.lesson_content_id if s.lesson_content_id in valid_ids else None
+        if surface == "quiz":
+            content_id = None
+        out.append(
+            GazeRawSample(
+                learning_session_id=session.id,
+                lesson_content_id=content_id,
+                layout_snapshot_id=body.layout_snapshot_id,
+                event_time=_ts_to_datetime(s.ts),
+                client_ts_ms=int(s.ts),
+                gaze_x=s.x if s.face_detected else None,
+                gaze_y=s.y if s.face_detected else None,
+                slide_x=s.slide_x if s.face_detected else None,
+                slide_y=s.slide_y if s.face_detected else None,
+                status="ok" if s.face_detected else "no_face",
+                surface=surface,
+                viewport_width_px=body.viewport_width_px,
+                viewport_height_px=body.viewport_height_px,
+                calibration_width_px=session.calibration_width_px,
+                calibration_height_px=session.calibration_height_px,
+                device_pixel_ratio=session.device_pixel_ratio or 1.0,
+                layout_key=body.layout_key,
+                source=body.source or "real",
+            )
+        )
+    return out
 
 
 @router.post(
@@ -286,14 +416,19 @@ async def post_gaze_samples(
                 db,
                 user_id=user.id,
                 fingerprint=DEFAULT_FINGERPRINT,
-                screen_width_px=None,
-                screen_height_px=None,
+                screen_width_px=body.viewport_width_px,
+                screen_height_px=body.viewport_height_px,
             )
             session = LearningSession(
                 enrollment_id=enrollment.id,
                 lesson_id=lesson_id,
                 device_id=device.id,
                 tracking_consent=enrollment.course.require_calibration,
+                viewport_width_px=body.viewport_width_px,
+                viewport_height_px=body.viewport_height_px,
+                calibration_width_px=body.viewport_width_px,
+                calibration_height_px=body.viewport_height_px,
+                device_pixel_ratio=1.0,
             )
             db.add(session)
             await db.flush()
@@ -306,6 +441,30 @@ async def post_gaze_samples(
     if not session.tracking_consent:
         return GazeBatchOut(ok=True, inserted=0)
 
+    # Viewport hiện tại phải bằng viewport lúc calibration của phiên.
+    if (
+        session.calibration_width_px is None
+        or session.calibration_height_px is None
+        or body.viewport_width_px != session.calibration_width_px
+        or body.viewport_height_px != session.calibration_height_px
+    ):
+        raise _viewport_mismatch()
+
+    # Layout snapshot (nếu có) phải thuộc đúng phiên và đúng viewport.
+    if body.layout_snapshot_id:
+        snapshot = await db.get(AoiLayoutSnapshot, body.layout_snapshot_id)
+        if snapshot is None or snapshot.learning_session_id != session.id:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail="Không tìm thấy layout snapshot"
+            )
+        if (
+            snapshot.viewport_width_px != session.calibration_width_px
+            or snapshot.viewport_height_px != session.calibration_height_px
+        ):
+            raise _viewport_mismatch()
+
+    raw_samples = await _build_raw_samples(db, session, lesson, body)
+
     min_interval_ms = 1000.0 / max(settings.gaze_downsample_hz, 0.1)
 
     if lesson.kind == "quiz":
@@ -315,6 +474,8 @@ async def post_gaze_samples(
         events, total, on_screen, view_ms = _quiz_gaze_batch(
             body.samples, session.id, min_interval_ms
         )
+        if raw_samples:
+            db.add_all(raw_samples)
         if events:
             db.add_all(events)
         if total:
@@ -331,10 +492,12 @@ async def post_gaze_samples(
                     LessonContent.id.in_(content_ids),
                 )
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
-    by_content: dict[str, list] = {}
+    by_content: dict[str, list[GazeSampleIn]] = {}
     raw_counts: dict[str, int] = {}
     on_slide_counts: dict[str, int] = {}
     for s in body.samples:
@@ -342,7 +505,13 @@ async def post_gaze_samples(
             continue
         bucket = by_content.setdefault(s.lesson_content_id, [])
         raw_counts[s.lesson_content_id] = raw_counts.get(s.lesson_content_id, 0) + 1
-        if 0.0 <= s.x <= 1.0 and 0.0 <= s.y <= 1.0:
+        if (
+            s.face_detected
+            and s.slide_x is not None
+            and s.slide_y is not None
+            and 0.0 <= s.slide_x <= 1.0
+            and 0.0 <= s.slide_y <= 1.0
+        ):
             on_slide_counts[s.lesson_content_id] = (
                 on_slide_counts.get(s.lesson_content_id, 0) + 1
             )
@@ -355,14 +524,19 @@ async def post_gaze_samples(
         kept: list[tuple[float, float, float]] = []
         last_kept = float("-inf")
         for s in bucket:
-            # Chỉ ghi gaze_events cho điểm hợp lệ trong [0,1]; sample "ngoài màn
-            # hình" (AI báo no_face → -1,-1) vẫn đếm vào total/on_slide để tỷ lệ
-            # on_slide phản ánh đúng, nhưng không thêm chấm làm nhiễu heatmap.
-            if not (0.0 <= s.x <= 1.0 and 0.0 <= s.y <= 1.0):
+            # Chỉ ghi gaze_events cho điểm slide hợp lệ trong [0,1]; sample
+            # ngoài slide/no_face vẫn đếm vào total/on_slide để tỷ lệ phản ánh
+            # đúng, nhưng không thêm chấm làm nhiễu heatmap.
+            if (
+                not s.face_detected
+                or s.slide_x is None
+                or s.slide_y is None
+                or not (0.0 <= s.slide_x <= 1.0 and 0.0 <= s.slide_y <= 1.0)
+            ):
                 continue
             if s.ts - last_kept >= min_interval_ms:
                 last_kept = s.ts
-                kept.append((s.x, s.y, s.ts))
+                kept.append((s.slide_x, s.slide_y, s.ts))
         if kept:
             events.extend(
                 GazeEvent(
@@ -380,6 +554,8 @@ async def post_gaze_samples(
                 span = min_interval_ms
             view_ms_by_content[content_id] = int(span)
 
+    if raw_samples:
+        db.add_all(raw_samples)
     if events:
         db.add_all(events)
 

@@ -366,6 +366,7 @@ export function StudyAssistantChat({
     <>
       <button
         type="button"
+        data-aoi="chat-open-button"
         onClick={() => setOpen((value) => !value)}
         className={cn(
           "fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-[#36533a] text-white shadow-lg transition hover:scale-105 hover:bg-[#2c4530] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -379,11 +380,12 @@ export function StudyAssistantChat({
 
       {open && (
         <div
+          data-aoi="chatbot"
           className="fixed inset-0 z-50 flex flex-col bg-[#fdfdfa] sm:inset-auto sm:bottom-5 sm:right-5 sm:h-[min(680px,calc(100vh-2.5rem))] sm:w-[430px] sm:rounded-[24px] sm:border sm:border-border sm:shadow-2xl"
           role="dialog"
           aria-label="Trợ lý học tập"
         >
-          <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <header data-aoi="chat-header" className="flex items-center gap-2 border-b border-border px-4 py-3">
             <div className="flex size-9 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
               <RiSparkling2Line className="size-5" />
             </div>
@@ -455,7 +457,7 @@ export function StudyAssistantChat({
             </Button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div data-aoi="chat-messages" className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {showEmpty && (
               <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                 <div className="flex size-14 items-center justify-center rounded-full bg-[#e8efe6] text-[#36533a]">
@@ -513,6 +515,11 @@ export function StudyAssistantChat({
                   )}
                 >
                   <div
+                    data-aoi={
+                      message.role === "student"
+                        ? "chat-user-message"
+                        : "chat-ai-message"
+                    }
                     className={cn(
                       "max-w-[92%] rounded-2xl px-3.5 py-2.5",
                       message.role === "student"
@@ -552,7 +559,10 @@ export function StudyAssistantChat({
 
               {chatStream.streaming && (
                 <div className="flex flex-col gap-1.5 items-start">
-                  <div className="max-w-[92%] rounded-2xl border border-border bg-white px-3.5 py-2.5">
+                  <div
+                    data-aoi="chat-ai-message"
+                    className="max-w-[92%] rounded-2xl border border-border bg-white px-3.5 py-2.5"
+                  >
                     {streamingText ? (
                       <Markdown
                         text={streamingText}
@@ -578,7 +588,7 @@ export function StudyAssistantChat({
             </div>
           </div>
 
-          <form onSubmit={onSubmit} className="border-t border-border p-3">
+          <form data-aoi="chat-input" onSubmit={onSubmit} className="border-t border-border p-3">
             <div className="flex items-end gap-2">
               <Textarea
                 ref={inputRef}
@@ -598,6 +608,7 @@ export function StudyAssistantChat({
               />
               <Button
                 type="submit"
+                data-aoi="chat-send"
                 size="icon"
                 className="size-10 shrink-0 rounded-full"
                 disabled={!input.trim() || chatStream.streaming}

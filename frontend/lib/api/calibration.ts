@@ -153,6 +153,27 @@ export function storeGazeSession(
     globalThis.localStorage?.setItem(SCREEN_W_KEY, String(Math.round(screenWidth)));
     globalThis.localStorage?.setItem(SCREEN_H_KEY, String(Math.round(screenHeight)));
   }
+  calibrationScreenSnapshot = undefined;
+}
+
+// Snapshot ổn định cho useSyncExternalStore (tránh trả object mới mỗi render).
+let calibrationScreenSnapshot: { w: number; h: number } | null | undefined;
+
+export function getCalibrationScreenSnapshot(): { w: number; h: number } | null {
+  if (calibrationScreenSnapshot === undefined) {
+    calibrationScreenSnapshot = getStoredCalibrationScreen();
+  }
+  return calibrationScreenSnapshot;
+}
+
+export function subscribeCalibrationScreen(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => {
+    calibrationScreenSnapshot = undefined;
+    callback();
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
 }
 
 export function getStoredCalibrationScreen(): { w: number; h: number } | null {
@@ -171,13 +192,15 @@ export function isCalibrationScreenStale(): boolean {
   if (typeof window === "undefined") return false;
   const stored = getStoredCalibrationScreen();
   if (!stored) return false;
+  // Viewport lúc lấy mẫu phải BẰNG viewport lúc calibration. Không dùng
+  // tolerance: F11/zoom làm innerWidth/innerHeight đổi là phải hiệu chỉnh lại.
   const currentDpr = window.devicePixelRatio || 1;
   const storedDpr = getStoredCalibrationDpr();
-  const storedWidthPx = stored.w * storedDpr;
-  const storedHeightPx = stored.h * storedDpr;
-  const dw = Math.abs(window.innerWidth * currentDpr - storedWidthPx) / storedWidthPx;
-  const dh = Math.abs(window.innerHeight * currentDpr - storedHeightPx) / storedHeightPx;
-  return dw > 0.1 || dh > 0.1;
+  return (
+    window.innerWidth !== stored.w ||
+    window.innerHeight !== stored.h ||
+    currentDpr !== storedDpr
+  );
 }
 
 export function getStoredGazeSessionId(): string | null {
@@ -197,6 +220,7 @@ export function clearStoredGazeSession(): void {
   globalThis.localStorage?.removeItem(SCREEN_W_KEY);
   globalThis.localStorage?.removeItem(SCREEN_H_KEY);
   globalThis.localStorage?.removeItem(DPR_KEY);
+  calibrationScreenSnapshot = undefined;
 }
 
 // Lưu / khôi phục model hiệu chỉnh (.ubj)

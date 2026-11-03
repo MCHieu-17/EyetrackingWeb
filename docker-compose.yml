@@ -102,6 +102,7 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
       GAZE_DOWNSAMPLE_HZ: ${GAZE_DOWNSAMPLE_HZ:-4.0}
+      GAZE_RAW_HZ: ${GAZE_RAW_HZ:-15.0}
       GAZE_BATCH_MAX: ${GAZE_BATCH_MAX:-2000}
       # Dải mạng proxy tin cậy: chỉ peer trong dải này mới được tin X-Forwarded-For
       # (nginx trong mạng docker nội bộ).

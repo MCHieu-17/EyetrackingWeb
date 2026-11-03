@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { FullPageSpinner } from "@/components/ui/spinner";
+import { AoiEditor } from "@/components/teacher/aoi-editor";
 import { ContentEditor } from "@/components/teacher/content-editor";
 import { CourseInfoTab } from "@/components/teacher/course-info-tab";
 import { CourseSettingsTab } from "@/components/teacher/course-settings-tab";
@@ -15,13 +16,14 @@ import { useTeacherCourses } from "@/hooks/use-teacher";
 import { STATUS_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-type View = "content" | "info" | "settings" | "students";
+type View = "content" | "info" | "settings" | "students" | "aoi";
 
 const TABS: { key: View; label: string }[] = [
   { key: "content", label: "Nội dung" },
   { key: "info", label: "Thông tin khóa học" },
   { key: "settings", label: "Cài đặt" },
   { key: "students", label: "Học viên" },
+  { key: "aoi", label: "Vùng phân tích" },
 ];
 
 function Workspace({ courseId }: { courseId: string }) {
@@ -135,6 +137,7 @@ function Workspace({ courseId }: { courseId: string }) {
           <CourseSettingsTab courseId={courseId} canManage={canManage} />
         )}
         {!isNew && view === "students" && <StudentsTab courseId={courseId} canManage={canManage} />}
+        {!isNew && view === "aoi" && <AoiEditor courseId={courseId} />}
       </main>
     </div>
   );

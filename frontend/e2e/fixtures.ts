@@ -227,6 +227,22 @@ export const COURSE_TEACHERS = [
  * Chặn toàn bộ API của backend + ML. Mọi route chưa khai báo sẽ trả 404 JSON
  * để test phát hiện rõ thay vì treo.
  */
+export async function seedCalibration(page: Page) {
+  // E2E đi thẳng vào reader, bỏ qua preflight. Giả lập calibration đã lưu ở
+  // đúng viewport hiện tại để reader không chặn vì viewport_mismatch.
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("gaze_session_id", "gaze-session-e2e");
+      localStorage.setItem("gaze_calibrated_at", new Date().toISOString());
+      localStorage.setItem("gaze_screen_w", String(window.innerWidth));
+      localStorage.setItem("gaze_screen_h", String(window.innerHeight));
+      localStorage.setItem("gaze_dpr", String(window.devicePixelRatio || 1));
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   const user: MockUser = opts.user ?? {
     email: "student@school.edu.vn",
@@ -408,6 +424,64 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/teacher/lessons/*", (r) => json(r, { ok: true }));
   await page.route("**/api/teacher/lessons/*/heatmap**", (r) => json(r, HEATMAP_STATS));
   await page.route("**/api/teacher/lessons/*/slides", (r) => json(r, []));
+
+  // AOI editor
+  const now = new Date().toISOString();
+  const aoiDefinitions = [
+    {
+      id: "aoi-slide",
+      code: "slide",
+      name: "Bài giảng",
+      description: null,
+      scope: "viewport",
+      parentId: null,
+      selector: '[data-aoi="slide"]',
+      lessonContentId: null,
+      isActive: true,
+      metadata: {},
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "aoi-chatbot",
+      code: "chatbot",
+      name: "Khung chatbot",
+      description: null,
+      scope: "viewport",
+      parentId: null,
+      selector: '[data-aoi="chatbot"]',
+      lessonContentId: null,
+      isActive: true,
+      metadata: {},
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  await page.route("**/api/aoi-definitions**", (r) => {
+    const method = r.request().method();
+    if (method === "GET") return json(r, aoiDefinitions);
+    if (method === "POST") {
+      const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      return json(
+        r,
+        {
+          ...body,
+          id: `aoi-${Date.now()}`,
+          isActive: true,
+          metadata: {},
+          createdAt: now,
+          updatedAt: now,
+        },
+        201,
+      );
+    }
+    if (method === "PATCH") {
+      const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      return json(r, { ...aoiDefinitions[0], ...body });
+    }
+    return json(r, { ok: true });
+  });
+  await page.route("**/api/aoi/rebuild", (r) => json(r, { ok: true, inserted: 0 }));
 
   // Admin
   await page.route("**/api/admin/teachers", (r) => json(r, TEACHER_DIRECTORY));

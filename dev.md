@@ -94,8 +94,8 @@ Script chạy `psql` trong container `postgres`, không cần cài psql trên ho
 
 ### Dev không có camera
 
-Mỗi khóa học có công tắc **“Bắt buộc hiệu chỉnh điểm nhìn”** (tab Cài đặt hoặc
-danh sách khóa học của giáo viên):
+Mỗi khóa học có công tắc **“Bắt buộc hiệu chỉnh điểm nhìn”** (tab **Cài đặt**
+của workspace khóa học):
 
 1. Tắt công tắc cho khóa đang dev.
 2. Sinh viên vào khóa sẽ **vào thẳng trang học**, không qua preflight.
@@ -132,10 +132,24 @@ Quy tắc: **không sửa file migration đã áp** — thêm file mới (`025_.
 
 ## 8. Bảo trì partition
 
+`gaze_events` và `gaze_raw_samples` đều partition theo tháng. **Không xoá
+partition cũ** — dữ liệu raw được giữ để phân tích lại.
+
 ```bash
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-  -c "SELECT create_gaze_partitions(3);"
+./scripts/create_partitions.sh        # tạo thêm 12 tháng
+./scripts/create_partitions.sh 24     # hoặc chỉ định số tháng
 ```
+
+## 8.1. Gaze RAW + AOI
+
+- `GAZE_RAW_HZ` (mặc định `15`) quyết định tần số lưu `gaze_raw_samples`.
+  `0` = lưu tất cả sample client gửi.
+- Viewport lúc lấy mẫu **phải bằng** viewport lúc calibration. Nếu bấm F11/zoom
+  làm `innerWidth/innerHeight` đổi, reader dừng ghi gaze và yêu cầu hiệu chỉnh lại.
+- AOI định nghĩa ở tab **Vùng phân tích** của workspace khóa học. AOI áp dụng
+  toàn hệ thống; mỗi vùng gắn với `data-aoi` trên DOM.
+- Sau khi thêm/sửa AOI, bấm **Tính lại AOI hits** để rebuild `gaze_aoi_hits`
+  cho khóa học.
 
 ## 9. Tests & lint
 

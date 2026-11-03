@@ -53,9 +53,15 @@ test.describe("Teacher", () => {
     await expect(page.getByLabel("Tên bài giảng")).toHaveValue("Bài 1: Giới thiệu");
   });
 
-  test("workspace có 4 tab và tab Thông tin khóa học lưu được thay đổi", async ({ page }) => {
+  test("workspace có 5 tab và tab Thông tin khóa học lưu được thay đổi", async ({ page }) => {
     await page.goto("/teacher/courses/course-1?tab=info");
-    for (const label of ["Nội dung", "Thông tin khóa học", "Cài đặt", "Học viên"]) {
+    for (const label of [
+      "Nội dung",
+      "Thông tin khóa học",
+      "Cài đặt",
+      "Học viên",
+      "Vùng phân tích",
+    ]) {
       await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
     await expect(page.getByRole("heading", { name: "Xuất bản" })).toBeVisible();
@@ -69,6 +75,16 @@ test.describe("Teacher", () => {
     await page.getByRole("button", { name: "Lưu thay đổi" }).click();
 
     expect((await request).postDataJSON()).toMatchObject({ title: "Lập trình Python nâng cao" });
+  });
+
+  test("tab Vùng phân tích hiển thị editor AOI và phần tử DOM", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=aoi");
+    await expect(
+      page.getByRole("heading", { name: "Vùng phân tích (AOI)" }),
+    ).toBeVisible();
+    await expect(page.getByText("Phần tử DOM phát hiện")).toBeVisible();
+    await expect(page.getByText("chat-user-message").first()).toBeVisible();
+    await expect(page.getByText("Danh sách AOI")).toBeVisible();
   });
 
   test("thêm bài tập vào chương gọi API tạo", async ({ page }) => {

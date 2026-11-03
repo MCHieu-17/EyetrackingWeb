@@ -38,7 +38,8 @@ db/
     ├── 022_drop_dead_schema.sql  # bỏ bảng/cột không còn code dùng (oauth, permissions, email/phone/extra…)
     ├── 023_drop_chatbot.sql      # (lịch sử) gỡ schema chatbot cũ: chat_*, embedding, checkpoint*, pgvector
     ├── 024_chatbot_rag.sql       # dựng lại RAG: embedding 1024d + FTS hybrid + chat_*
-    └── 025_course_require_calibration.sql # cờ cấp khóa: bắt buộc hiệu chỉnh trước khi học
+    ├── 025_course_require_calibration.sql # cờ cấp khóa: bắt buộc hiệu chỉnh trước khi học
+    └── 026_gaze_raw_and_aoi.sql  # gaze raw viewport + AOI DOM-anchored + gaze_aoi_hits
 ```
 
 > **Chatbot RAG đã được dựng lại.** `023_drop_chatbot.sql` là migration lịch sử
@@ -59,9 +60,22 @@ db/
 > **Cờ bắt buộc hiệu chỉnh**: `courses.require_calibration` (025) mặc định `true`.
 > Tắt = sinh viên vào thẳng trang học, không bật camera và không ghi gaze.
 >
-> **AOI đang tạm gỡ khỏi backend/frontend**: các bảng `aoi_regions`, `aoi_dwell_stats`
-> và cột `lesson_contents.aoi_source` vẫn được **giữ nguyên trong DB** để triển khai
-> lại sau này. Hiện backend không trích/lưu AOI và frontend không hiển thị vùng AOI.
+> **Gaze RAW + AOI DOM-anchored (026)**:
+> - `gaze_raw_samples`: gaze RAW theo **viewport**, cho phép `gaze_x/gaze_y < 0`
+>   hoặc `> 1` khi nhìn ra ngoài màn hình. Partition theo tháng, **không xoá
+>   partition cũ**. Backend downsample theo `GAZE_RAW_HZ` (mặc định 15Hz).
+>   `status='no_face'` lưu `gaze_x/gaze_y = NULL` (không dùng sentinel `-1,-1`).
+> - `learning_sessions.viewport_*` + `calibration_*`: viewport lúc lấy mẫu phải
+>   **bằng** viewport lúc calibration. DB có CHECK; API trả `409 viewport_mismatch`.
+> - `aoi_definitions`: catalog AOI toàn hệ thống (`code`, `name`, `parent_id`,
+>   `selector`). Không lưu toạ độ cố định.
+> - `aoi_layout_snapshots` + `aoi_layout_rects`: frontend đo
+>   `getBoundingClientRect()` của mọi `[data-aoi]` và gửi lên theo từng layout.
+>   Một `aoi_code` có thể có nhiều rect (nhiều bong bóng chat).
+> - `gaze_aoi_hits`: bảng **derived** (sample ↔ AOI), rebuild từ raw + snapshot
+>   rects. Thêm AOI mới sau khi đã thu dữ liệu vẫn map lại được.
+> - `aoi_regions`/`aoi_dwell_stats`/`lesson_contents.aoi_source` vẫn được giữ cho
+>   AOI nội dung slide sau này; backend hiện không dùng.
 >
 > **Gaze của bài tập**: bài tập trắc nghiệm không có `lesson_contents`, nên dòng gaze
 > của bài tập lưu `gaze_events.lesson_content_id = NULL`, `surface = 'quiz'` với
@@ -74,8 +88,8 @@ db/
 > `calibration_sessions`. Model `.ubj` cũ bị thay thế hoàn toàn (xem
 > `POST /api/calibrations` và migration `018`).
 
-Sơ đồ partition `gaze_events` được bảo trì bằng `ops/maintain_partitions.sql`
-(xem mục "Bảo trì partition" bên dưới).
+Sơ đồ partition `gaze_events` + `gaze_raw_samples` được bảo trì bằng
+`scripts/create_partitions.sh` (xem mục "Bảo trì partition" bên dưới).
 
 ## Có 2 cách cài database
 
@@ -185,22 +199,21 @@ docker compose exec -T postgres psql -U postgres -d eyetracking \
 
 ---
 
-## Bảo trì partition gaze_events
+## Bảo trì partition gaze_events + gaze_raw_samples
 
-`003_gaze_partitions.sql` tạo sẵn function `create_gaze_partitions(months_ahead)`
-và 12 partition tháng đầu. Về sau chạy định kỳ để không bao giờ thiếu partition:
+`003_gaze_partitions.sql` tạo function `create_gaze_partitions(months_ahead)`;
+`026_gaze_raw_and_aoi.sql` tạo `create_gaze_raw_partitions(months_ahead)`.
+Cả hai tạo sẵn 12 partition tháng đầu. Về sau chạy định kỳ:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-    -c "SELECT create_gaze_partitions(3);"
-# hoặc dùng file:
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-    -f - < ops/maintain_partitions.sql
+./scripts/create_partitions.sh        # mặc định 12 tháng
+./scripts/create_partitions.sh 24     # hoặc chỉ định số tháng
 ```
 
-Dữ liệu rơi ngoài các tháng đã tạo sẽ vào `gaze_events_default` (không mất,
-nhưng nên xử lý sớm). Nếu cần tạo partition trùng khoảng dữ liệu đang nằm
-trong default:
+**Không xoá partition cũ** — dữ liệu raw được giữ theo tháng để phân tích lại.
+Dữ liệu rơi ngoài các tháng đã tạo sẽ vào `gaze_events_default` /
+`gaze_raw_samples_default` (không mất, nhưng nên xử lý sớm). Nếu cần tạo
+partition trùng khoảng dữ liệu đang nằm trong default:
 
 ```sql
 CREATE TABLE tmp AS SELECT * FROM gaze_events_default

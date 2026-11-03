@@ -12,7 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -38,6 +38,13 @@ class LearningSession(Base):
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     tracking_consent: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Viewport lúc tạo phiên và viewport lúc calibration. Hai bộ phải bằng nhau
+    # (xem CHECK ở gaze_raw_samples + validate ở route).
+    viewport_width_px: Mapped[int | None] = mapped_column(Integer)
+    viewport_height_px: Mapped[int | None] = mapped_column(Integer)
+    calibration_width_px: Mapped[int | None] = mapped_column(Integer)
+    calibration_height_px: Mapped[int | None] = mapped_column(Integer)
+    device_pixel_ratio: Mapped[float | None] = mapped_column(REAL)
 
 
 class GazeEvent(Base):
@@ -110,4 +117,78 @@ class GazeSlideStat(Base):
         DateTime(timezone=True),
         server_default=text("now()"),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class GazeRawSample(Base):
+    """Một mẫu gaze RAW theo viewport (đã qua One-Euro smoothing ở AI service).
+
+    Khác `gaze_events`:
+      - Toạ độ chuẩn hoá theo VIEWPORT, không phải ảnh slide.
+      - Cho phép gaze_x/gaze_y < 0 hoặc > 1 khi nhìn ra ngoài màn hình.
+      - Lưu cả viewport lúc lấy mẫu và viewport lúc calibration; hai bộ phải
+        bằng nhau (CHECK ở DB + validate ở route).
+      - `status='no_face'` dùng gaze_x/gaze_y = NULL, không dùng sentinel (-1,-1).
+
+    Partition theo tháng; không xoá partition cũ.
+    """
+
+    __tablename__ = "gaze_raw_samples"
+    __table_args__ = (
+        CheckConstraint(
+            "viewport_width_px = calibration_width_px",
+            name="gaze_raw_samples_viewport_width_check",
+        ),
+        CheckConstraint(
+            "viewport_height_px = calibration_height_px",
+            name="gaze_raw_samples_viewport_height_check",
+        ),
+        CheckConstraint(
+            "(status = 'ok' AND gaze_x IS NOT NULL AND gaze_y IS NOT NULL) "
+            "OR (status <> 'ok' AND gaze_x IS NULL AND gaze_y IS NULL)",
+            name="gaze_raw_samples_status_coords_check",
+        ),
+        CheckConstraint(
+            "gaze_x IS NULL OR (gaze_x > -100 AND gaze_x < 100)",
+            name="gaze_raw_samples_gaze_x_check",
+        ),
+        CheckConstraint(
+            "gaze_y IS NULL OR (gaze_y > -100 AND gaze_y < 100)",
+            name="gaze_raw_samples_gaze_y_check",
+        ),
+        {"postgresql_partition_by": "RANGE (event_time)"},
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    learning_session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    lesson_content_id: Mapped[str | None] = mapped_column(
+        ForeignKey("lesson_contents.id", ondelete="SET NULL"), nullable=True
+    )
+    layout_snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("aoi_layout_snapshots.id", ondelete="SET NULL"), nullable=True
+    )
+    event_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    client_ts_ms: Mapped[int | None] = mapped_column(BigInteger)
+    gaze_x: Mapped[float | None] = mapped_column(REAL)
+    gaze_y: Mapped[float | None] = mapped_column(REAL)
+    slide_x: Mapped[float | None] = mapped_column(REAL)
+    slide_y: Mapped[float | None] = mapped_column(REAL)
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'ok'"))
+    surface: Mapped[str] = mapped_column(String(16), server_default=text("'lesson'"))
+    viewport_width_px: Mapped[int] = mapped_column(Integer, nullable=False)
+    viewport_height_px: Mapped[int] = mapped_column(Integer, nullable=False)
+    calibration_width_px: Mapped[int] = mapped_column(Integer, nullable=False)
+    calibration_height_px: Mapped[int] = mapped_column(Integer, nullable=False)
+    device_pixel_ratio: Mapped[float] = mapped_column(REAL, nullable=False)
+    layout_key: Mapped[str | None] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(16), server_default=text("'real'"))
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
     )

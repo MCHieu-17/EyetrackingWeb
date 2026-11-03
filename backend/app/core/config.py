@@ -48,6 +48,8 @@ class Settings(BaseSettings):
         return not self.debug
 
     gaze_downsample_hz: float = 4.0
+    # Tần số lưu gaze RAW (viewport). 0 = lưu tất cả sample client gửi.
+    gaze_raw_hz: float = 15.0
     gaze_batch_max: int = 2000
 
     # Dải mạng proxy tin cậy (CIDR, phẩy phân tách) — chỉ khi request đến từ

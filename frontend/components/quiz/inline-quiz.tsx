@@ -314,8 +314,11 @@ export function InlineQuiz({
   const submit = () => submitAttempt.mutate({ assignment, answers });
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-border/80 bg-white p-5 shadow-xs sm:p-7">
+    <div data-aoi="quiz" className="space-y-5">
+      <div
+        data-aoi="quiz-question"
+        className="rounded-2xl border border-border/80 bg-white p-5 shadow-xs sm:p-7"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="rounded-full bg-[#e8f1e6] px-3 py-1 text-xs font-semibold text-[#36533a]">
             Câu {currentIndex + 1} / {total}
@@ -339,7 +342,7 @@ export function InlineQuiz({
           <p className="mt-1 text-xs text-muted-foreground">Chọn tất cả đáp án đúng.</p>
         )}
 
-        <fieldset className="mt-5 space-y-2.5">
+        <fieldset data-aoi="quiz-options" className="mt-5 space-y-2.5">
           <legend className="sr-only">Chọn đáp án</legend>
           {question.options.map((option, index) => {
             const isSelected = selected.includes(option.id);
@@ -391,6 +394,7 @@ export function InlineQuiz({
             </Button>
           ) : (
             <Button
+              data-aoi="quiz-submit"
               size="sm"
               disabled={submitAttempt.isPending}
               onClick={() => (unanswered > 0 ? setConfirmOpen(true) : submit())}
