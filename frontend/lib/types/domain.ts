@@ -20,6 +20,7 @@ export interface TeacherCourse {
   isOwner?: boolean;          // admin hoặc chủ khóa học (quyền quản lý); false = GV được phân công
   lessonCount?: number;       // số bài giảng (item) trong khóa
   showGazeDot?: boolean;      // cờ cấp khóa: cho SV thấy chấm điểm nhìn (mọi bài giảng + bài tập)
+  requireCalibration?: boolean; // cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học
 }
 
 export interface LessonNode {
@@ -96,6 +97,7 @@ export interface EnrolledCourse {
     moduleCount: number;
     lessonCount: number;
     gradient: string; // placeholder khi thumbnailUrl = null
+    requireCalibration?: boolean; // false = vào học ngay, không cần camera/calibration
   };
 }
 
@@ -152,6 +154,8 @@ export interface CourseOutline {
   modules: ModuleItem[];
   // Cờ cấp khóa: SV thấy chấm điểm nhìn ở mọi bài giảng VÀ bài tập của khóa.
   showGazeDot?: boolean;
+  // Cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học.
+  requireCalibration?: boolean;
 }
 
 // Profile (users / user_profiles / student_profiles / teacher_profiles)

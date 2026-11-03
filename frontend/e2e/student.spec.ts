@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mockApi, seedAuth } from "./fixtures";
+import { ENROLLMENTS, OUTLINE, json, mockApi, seedAuth } from "./fixtures";
 
 const STUDENT = {
   email: "student@school.edu.vn",
@@ -72,6 +72,46 @@ test.describe("Student", () => {
     await expect(page.getByText("Hiệu chỉnh điểm nhìn").first()).toBeVisible();
     await expect(page.getByText("Cần hiệu chỉnh", { exact: true })).toBeVisible();
     await expect(page.getByText(/không có phiên theo dõi cục bộ đang hoạt động/i)).toBeVisible();
+  });
+
+  test("khóa tắt bắt buộc hiệu chỉnh vào thẳng trang học", async ({ page }) => {
+    await page.route("**/api/me/enrollments", (r) =>
+      json(
+        r,
+        ENROLLMENTS.map((enrollment) => ({
+          ...enrollment,
+          course: { ...enrollment.course, requireCalibration: false },
+        })),
+      ),
+    );
+    await page.route("**/api/courses/**", (r) =>
+      json(r, { ...OUTLINE, requireCalibration: false }),
+    );
+
+    await page.goto("/student");
+    await page.getByRole("link", { name: /Lập trình Python cơ bản/ }).click();
+    await expect(page).toHaveURL(/\/student\/courses\/course-1$/);
+  });
+
+  test("preflight bỏ qua khi khóa tắt bắt buộc hiệu chỉnh", async ({ page }) => {
+    await page.route("**/api/courses/**", (r) =>
+      json(r, { ...OUTLINE, requireCalibration: false }),
+    );
+
+    await page.goto("/student/courses/course-1/prepare");
+    await expect(page.getByRole("heading", { name: "Vào học ngay." })).toBeVisible();
+    await expect(page.getByText("Không cần hiệu chỉnh")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Bắt đầu học" })).toBeVisible();
+  });
+
+  test("reader không hiện cảnh báo gaze khi khóa tắt bắt buộc hiệu chỉnh", async ({ page }) => {
+    await page.route("**/api/courses/**", (r) =>
+      json(r, { ...OUTLINE, requireCalibration: false }),
+    );
+
+    await page.goto("/student/courses/course-1");
+    await expect(page.getByText("Gaze tắt")).toBeVisible();
+    await expect(page.getByText(/Không kết nối được phiên theo dõi/)).toHaveCount(0);
   });
 
   test("reader hiển thị slide và điều hướng trang", async ({ page }) => {

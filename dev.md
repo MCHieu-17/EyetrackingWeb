@@ -92,6 +92,19 @@ Script chạy `psql` trong container `postgres`, không cần cài psql trên ho
 
 > Docker không có hot reload. Nếu muốn sửa là thấy ngay, xem mục 10.
 
+### Dev không có camera
+
+Mỗi khóa học có công tắc **“Bắt buộc hiệu chỉnh điểm nhìn”** (tab Cài đặt hoặc
+danh sách khóa học của giáo viên):
+
+1. Tắt công tắc cho khóa đang dev.
+2. Sinh viên vào khóa sẽ **vào thẳng trang học**, không qua preflight.
+3. Camera không bật và gaze **không được ghi** cho khóa đó — kể cả khi tài khoản
+   đã có calibration cũ.
+4. Bật lại khi cần test gaze/heatmap/analytics.
+
+Mặc định công tắc **bật** để giữ hành vi cũ. Khóa cũ không cần migration dữ liệu.
+
 ## 7. Migrations
 
 Tự động: service `migrate` chạy mỗi lần `docker compose up`.

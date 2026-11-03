@@ -31,6 +31,7 @@ from app.schemas.course import (
     CourseCreateIn,
     CourseGazeDotIn,
     CourseOutlineOut,
+    CourseRequireCalibrationIn,
     CourseUpdateIn,
     LessonItemOut,
     LessonNodeOut,
@@ -107,6 +108,7 @@ async def list_teacher_courses(
             is_owner="admin" in user.role_codes or c.teacher_id == user.id,
             lesson_count=lesson_counts.get(c.id, 0),
             show_gaze_dot=c.show_gaze_dot,
+            require_calibration=c.require_calibration,
         )
         for c in courses
     ]
@@ -141,6 +143,7 @@ async def create_course(
         teacher_id=user.id,
         created_by=user.id,
         show_gaze_dot=body.show_gaze_dot,
+        require_calibration=body.require_calibration,
     )
     db.add(course)
     await db.flush()
@@ -157,6 +160,7 @@ async def create_course(
         sessions=0,
         updated_at=course.updated_at,
         show_gaze_dot=course.show_gaze_dot,
+        require_calibration=course.require_calibration,
     )
 
 
@@ -179,6 +183,8 @@ async def update_course(
         course.status_id = await _course_status_id(db, data["status"])
     if data.get("show_gaze_dot") is not None:
         course.show_gaze_dot = data["show_gaze_dot"]
+    if data.get("require_calibration") is not None:
+        course.require_calibration = data["require_calibration"]
     await db.commit()
     await db.refresh(course)
     ids = [course.id]
@@ -198,6 +204,7 @@ async def update_course(
         updated_at=course.updated_at,
         lesson_count=lesson_counts.get(course.id, 0),
         show_gaze_dot=course.show_gaze_dot,
+        require_calibration=course.require_calibration,
     )
 
 
@@ -217,6 +224,24 @@ async def set_course_gaze_dot(
     course.show_gaze_dot = body.show_gaze_dot
     await db.commit()
     return {"ok": True, "showGazeDot": course.show_gaze_dot}
+
+
+@router.patch("/teacher/courses/{course_id}/require-calibration", response_model=dict)
+async def set_course_require_calibration(
+    course_id: str,
+    body: CourseRequireCalibrationIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bật/tắt yêu cầu hiệu chỉnh điểm nhìn cho cả khóa học.
+
+    Tắt = sinh viên vào thẳng trang học, không bật camera và không ghi gaze.
+    Nguồn sự thật duy nhất là `courses.require_calibration`.
+    """
+    course = await get_owned_course(db, course_id, user)
+    course.require_calibration = body.require_calibration
+    await db.commit()
+    return {"ok": True, "requireCalibration": course.require_calibration}
 
 
 @router.delete("/teacher/courses/{course_id}")
@@ -527,6 +552,7 @@ async def get_course_outline(
         id=course.id,
         title=course.title,
         show_gaze_dot=course.show_gaze_dot,
+        require_calibration=course.require_calibration,
         modules=[
             ModuleItemOut(
                 id=m.id,

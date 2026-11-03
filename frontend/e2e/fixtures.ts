@@ -28,6 +28,7 @@ export const TEACHER_COURSE = {
   isOwner: true,
   lessonCount: 3,
   showGazeDot: false,
+  requireCalibration: true,
 };
 
 export const MODULES = [
@@ -90,6 +91,7 @@ export const ENROLLMENTS = [
       moduleCount: 1,
       lessonCount: 2,
       gradient: "",
+      requireCalibration: true,
     },
   },
 ];
@@ -97,6 +99,7 @@ export const ENROLLMENTS = [
 export const OUTLINE = {
   id: "course-1",
   title: "Lập trình Python cơ bản",
+  requireCalibration: true,
   modules: [
     {
       id: "mod-1",
@@ -359,6 +362,10 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/teacher/courses/*/gaze-dot", (r) =>
     json(r, { ok: true, updated: 3 }),
   );
+  await page.route("**/api/teacher/courses/*/require-calibration", (r) => {
+    const body = (r.request().postDataJSON() ?? {}) as { requireCalibration?: boolean };
+    return json(r, { ok: true, requireCalibration: body.requireCalibration ?? false });
+  });
   await page.route("**/api/teacher/modules/*/quizzes", (r) =>
     json(
       r,

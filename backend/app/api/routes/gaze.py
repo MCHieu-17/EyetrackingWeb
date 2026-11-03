@@ -42,6 +42,10 @@ async def create_learning_session(
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
 
+    # Khóa tắt yêu cầu hiệu chỉnh => không ghi gaze, kể cả khi client gửi
+    # trackingConsent=true. Cờ khóa là nguồn sự thật cuối cùng.
+    tracking_consent = body.tracking_consent and enrollment.course.require_calibration
+
     device = await upsert_device(
         db,
         user_id=user.id,
@@ -69,9 +73,16 @@ async def create_learning_session(
 
     if existing is not None:
         # Học tiếp: tái sử dụng phiên cũ nếu nó vẫn mở; nếu đã đóng thì mở lại.
+        changed = False
         if existing.status != "in_progress":
             existing.status = "in_progress"
             existing.ended_at = None
+            changed = True
+        # Cờ khóa có thể đã đổi từ lần học trước -> đồng bộ lại consent.
+        if existing.tracking_consent != tracking_consent:
+            existing.tracking_consent = tracking_consent
+            changed = True
+        if changed:
             await db.commit()
             await db.refresh(existing)
         return LearningSessionOut(
@@ -90,7 +101,7 @@ async def create_learning_session(
         lesson_id=lesson.id,
         device_id=device.id,
         calibration_param_id=params.id if params else None,
-        tracking_consent=body.tracking_consent,
+        tracking_consent=tracking_consent,
     )
     db.add(session)
     await db.commit()
@@ -282,9 +293,15 @@ async def post_gaze_samples(
                 enrollment_id=enrollment.id,
                 lesson_id=lesson_id,
                 device_id=device.id,
+                tracking_consent=enrollment.course.require_calibration,
             )
             db.add(session)
             await db.flush()
+
+    # Khóa tắt yêu cầu hiệu chỉnh => không ghi gaze (kể cả session cũ còn
+    # tracking_consent=true từ trước khi GV đổi cờ).
+    if not enrollment.course.require_calibration:
+        return GazeBatchOut(ok=True, inserted=0)
 
     if not session.tracking_consent:
         return GazeBatchOut(ok=True, inserted=0)

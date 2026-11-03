@@ -37,7 +37,8 @@ db/
     ├── 021_course_show_gaze_dot.sql # cờ cấp KHÓA (courses.show_gaze_dot, thay 017) + gaze cho bài tập
     ├── 022_drop_dead_schema.sql  # bỏ bảng/cột không còn code dùng (oauth, permissions, email/phone/extra…)
     ├── 023_drop_chatbot.sql      # (lịch sử) gỡ schema chatbot cũ: chat_*, embedding, checkpoint*, pgvector
-    └── 024_chatbot_rag.sql       # dựng lại RAG: embedding 1024d + FTS hybrid + chat_*
+    ├── 024_chatbot_rag.sql       # dựng lại RAG: embedding 1024d + FTS hybrid + chat_*
+    └── 025_course_require_calibration.sql # cờ cấp khóa: bắt buộc hiệu chỉnh trước khi học
 ```
 
 > **Chatbot RAG đã được dựng lại.** `023_drop_chatbot.sql` là migration lịch sử
@@ -54,6 +55,9 @@ db/
 > thấy chấm điểm nhìn khi học **mọi bài giảng VÀ bài tập** của khóa. Cột
 > `lessons.show_gaze_dot` (017) đã bị bỏ ở 021; khóa có cờ `true` khi mọi bài giảng
 > của khóa đang bật (đúng giá trị công tắc cấp khóa trước nâng cấp).
+>
+> **Cờ bắt buộc hiệu chỉnh**: `courses.require_calibration` (025) mặc định `true`.
+> Tắt = sinh viên vào thẳng trang học, không bật camera và không ghi gaze.
 >
 > **Gaze của bài tập**: bài tập trắc nghiệm không có `lesson_contents`, nên dòng gaze
 > của bài tập lưu `gaze_events.lesson_content_id = NULL`, `surface = 'quiz'` với

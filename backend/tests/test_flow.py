@@ -202,6 +202,95 @@ def test_course_gaze_dot_toggle(client):
     assert r.json()["showGazeDot"] is True
 
 
+def test_course_require_calibration_toggle(client):
+    teacher, student, course_id, lesson_id, slide_ids = _setup_course(client)
+
+    # Mặc định bật -> giữ hành vi cũ.
+    r = client.get("/teacher/courses", headers=auth(teacher))
+    assert r.json()[0]["requireCalibration"] is True
+
+    r = client.get(f"/api/courses/{course_id}", headers=auth(student))
+    assert r.json()["requireCalibration"] is True
+
+    r = client.post(f"/api/courses/{course_id}/enroll", headers=auth(student))
+    assert r.status_code == 201, r.text
+    enrollment_id = r.json()["enrollmentId"]
+
+    r = client.get("/api/me/enrollments", headers=auth(student))
+    assert r.json()[0]["course"]["requireCalibration"] is True
+
+    # Tắt cấp khóa.
+    r = client.patch(
+        f"/teacher/courses/{course_id}/require-calibration",
+        headers=auth(teacher),
+        json={"requireCalibration": False},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["requireCalibration"] is False
+
+    r = client.get("/teacher/courses", headers=auth(teacher))
+    assert r.json()[0]["requireCalibration"] is False
+    r = client.get(f"/api/courses/{course_id}", headers=auth(student))
+    assert r.json()["requireCalibration"] is False
+    r = client.get("/api/me/enrollments", headers=auth(student))
+    assert r.json()[0]["course"]["requireCalibration"] is False
+
+    # Khóa tắt -> session bị ép trackingConsent=false, gaze không được ghi.
+    r = client.post(
+        "/api/learning-sessions",
+        headers=auth(student),
+        json={
+            "enrollmentId": enrollment_id,
+            "lessonId": lesson_id,
+            "deviceFingerprint": "fp-calib-off",
+            "trackingConsent": True,
+        },
+    )
+    assert r.status_code == 201, r.text
+    session = r.json()
+    assert session["trackingConsent"] is False
+
+    r = client.post(
+        f"/api/lessons/{lesson_id}/gaze-samples",
+        headers=auth(student),
+        json={
+            "learningSessionId": session["id"],
+            "samples": [
+                {
+                    "lessonContentId": slide_ids[0],
+                    "x": 0.3,
+                    "y": 0.4,
+                    "ts": 1755000000000,
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["inserted"] == 0
+
+    # Bật lại qua PATCH khóa học; session cũ được đồng bộ consent=true.
+    r = client.patch(
+        f"/teacher/courses/{course_id}",
+        headers=auth(teacher),
+        json={"requireCalibration": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["requireCalibration"] is True
+
+    r = client.post(
+        "/api/learning-sessions",
+        headers=auth(student),
+        json={
+            "enrollmentId": enrollment_id,
+            "lessonId": lesson_id,
+            "deviceFingerprint": "fp-calib-off",
+            "trackingConsent": True,
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["trackingConsent"] is True
+
+
 def _quiz_gaze_rows(session_id: str):
     """(danh sách (lesson_content_id, surface) của gaze_events, dòng gaze_session_stats)."""
     from sqlalchemy import text

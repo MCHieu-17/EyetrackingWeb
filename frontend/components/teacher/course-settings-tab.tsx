@@ -5,16 +5,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { Icon } from "@/components/ui/icon";
 import { FullPageSpinner } from "@/components/ui/spinner";
+import { CourseCalibrationToggle } from "@/components/teacher/calibration-toggle";
 import { CourseGazeDotToggle } from "@/components/teacher/gaze-dot-toggle";
 import { useTeacherCourses } from "@/hooks/use-teacher";
-import { setCourseGazeDot } from "@/lib/api/teacher";
+import { setCourseGazeDot, setCourseRequireCalibration } from "@/lib/api/teacher";
 import type { TeacherCourse } from "@/lib/types/domain";
 
 /**
  * Tab "Cài đặt": những thiết lập ít dùng nhưng áp cho CẢ khóa học.
  *
- * Hiện chỉ có "Hiển thị điểm nhìn cho sinh viên" — thiết lập dành cho việc kiểm
- * tra/hiệu chỉnh độ chính xác của hệ thống đo mắt (không phải để dạy học).
+ * Gồm "Bắt buộc hiệu chỉnh điểm nhìn" (dev không camera) và "Hiển thị điểm nhìn
+ * cho sinh viên" (kiểm tra/hiệu chỉnh độ chính xác của hệ thống đo mắt).
  */
 export function CourseSettingsTab({
   courseId,
@@ -29,12 +30,15 @@ export function CourseSettingsTab({
 
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   const [showGazeDot, setShowGazeDot] = useState(false);
+  const [requireCalibration, setRequireCalibration] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [calibrationBusy, setCalibrationBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   if (course && hydratedId !== course.id) {
     setHydratedId(course.id);
     setShowGazeDot(Boolean(course.showGazeDot));
+    setRequireCalibration(course.requireCalibration !== false);
   }
 
   const toggle = async (value: boolean) => {
@@ -67,6 +71,38 @@ export function CourseSettingsTab({
     }
   };
 
+  const toggleCalibration = async (value: boolean) => {
+    const key = ["teacher", "courses"];
+    const previous = queryClient.getQueryData<TeacherCourse[]>(key);
+    setRequireCalibration(value);
+    setCalibrationBusy(true);
+    setMessage(null);
+    queryClient.setQueryData<TeacherCourse[]>(key, (list) =>
+      list?.map((item) =>
+        item.id === courseId ? { ...item, requireCalibration: value } : item,
+      ),
+    );
+    try {
+      await setCourseRequireCalibration(courseId, value);
+      setMessage({
+        tone: "ok",
+        text: value
+          ? "Đã bật: sinh viên phải kiểm tra camera và hiệu chỉnh trước khi vào học."
+          : "Đã tắt: sinh viên vào học ngay, không bật camera và không ghi gaze.",
+      });
+    } catch (error) {
+      setRequireCalibration(!value);
+      if (previous) queryClient.setQueryData(key, previous);
+      setMessage({
+        tone: "err",
+        text: `Không đổi được thiết lập: ${error instanceof Error ? error.message : "lỗi không xác định"}`,
+      });
+    } finally {
+      setCalibrationBusy(false);
+      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+    }
+  };
+
   if (isLoading && !course) return <FullPageSpinner label="Đang tải khóa học…" />;
   if (!course) return <Alert variant="destructive" title="Không tìm thấy khóa học" />;
 
@@ -80,6 +116,13 @@ export function CourseSettingsTab({
       </div>
 
       <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-5 shadow-xs sm:p-7">
+        <CourseCalibrationToggle
+          checked={requireCalibration}
+          disabled={!canManage}
+          busy={calibrationBusy}
+          onChange={(value) => void toggleCalibration(value)}
+        />
+
         <CourseGazeDotToggle
           checked={showGazeDot}
           disabled={!canManage}
@@ -101,7 +144,19 @@ export function CourseSettingsTab({
         <div className="rounded-[16px] border border-black/10 bg-[#fdfdfa] p-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-black">
             <Icon name="ri-information-line" className="size-4 text-black/55" />
-            Khi bật, điều gì xảy ra?
+            Bắt buộc hiệu chỉnh — khi bật/tắt
+          </h3>
+          <ul className="mt-2 space-y-1.5 text-sm leading-6 text-black/70">
+            <li>· Bật (mặc định): sinh viên phải kiểm tra camera và hiệu chỉnh trước khi vào học.</li>
+            <li>· Tắt: sinh viên vào thẳng trang học, không bật camera và không ghi gaze.</li>
+            <li>· Dùng khi dev không có camera hoặc không cần dữ liệu điểm nhìn cho khóa này.</li>
+          </ul>
+        </div>
+
+        <div className="rounded-[16px] border border-black/10 bg-[#fdfdfa] p-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-black">
+            <Icon name="ri-information-line" className="size-4 text-black/55" />
+            Hiển thị điểm nhìn — khi bật, điều gì xảy ra?
           </h3>
           <ul className="mt-2 space-y-1.5 text-sm leading-6 text-black/70">
             <li>· Sinh viên thấy một chấm tròn tại vị trí họ đang nhìn trong MỌI bài giảng và bài tập của khóa.</li>

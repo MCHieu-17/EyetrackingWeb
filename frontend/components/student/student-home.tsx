@@ -16,7 +16,11 @@ export function StudentHome() {
       lessonCount: enrollment.course.lessonCount,
       enrolledAt: enrollment.enrolledAt,
       status: enrollment.status,
-      href: `/student/courses/${enrollment.course.id}/prepare`,
+      // Khóa tắt bắt buộc hiệu chỉnh -> vào thẳng trang học, không qua preflight.
+      href:
+        enrollment.course.requireCalibration === false
+          ? `/student/courses/${enrollment.course.id}`
+          : `/student/courses/${enrollment.course.id}/prepare`,
     }));
 
   return (

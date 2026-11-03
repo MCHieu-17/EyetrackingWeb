@@ -85,6 +85,8 @@ export interface CourseWriteInput {
   status?: CourseStatus;
   /** Cờ cấp khóa: cho sinh viên thấy chấm điểm nhìn (mọi bài giảng + bài tập). */
   showGazeDot?: boolean;
+  /** Cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học. */
+  requireCalibration?: boolean;
 }
 
 export function createCourse(input: CourseWriteInput): Promise<TeacherCourse> {
@@ -112,6 +114,16 @@ export function setCourseGazeDot(
   return apiFetch(`/api/teacher/courses/${courseId}/gaze-dot`, {
     method: "PATCH",
     body: { showGazeDot },
+  });
+}
+
+export function setCourseRequireCalibration(
+  courseId: string,
+  requireCalibration: boolean,
+): Promise<{ ok: boolean; requireCalibration: boolean }> {
+  return apiFetch(`/api/teacher/courses/${courseId}/require-calibration`, {
+    method: "PATCH",
+    body: { requireCalibration },
   });
 }
 

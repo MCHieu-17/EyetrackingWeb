@@ -120,6 +120,10 @@ export function LearningReader({ courseId }: { courseId: string }) {
   const activeQuizId = activeLesson?.quizId ?? "";
   // Cờ điểm nhìn thuộc KHÓA HỌC: bật là áp cho mọi bài giảng VÀ bài tập.
   const showGazeDot = Boolean(course?.showGazeDot);
+  // Khóa tắt bắt buộc hiệu chỉnh -> không bật camera, không ghi gaze.
+  const calibrationRequired = course?.requireCalibration !== false;
+  // Chỉ tạo phiên học khi đã có dữ liệu khóa (tránh tạo với consent mặc định).
+  const courseReady = Boolean(course);
 
   // Render-phase adjust: mở chương chứa bài đang học.
   if (activeModule && !openModules[activeModule.id]) {
@@ -174,7 +178,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
   // Bài tập trắc nghiệm cũng có phiên: gaze của bài tập được ghi thô theo viewport
   // (surface='quiz', không có slide).
   useEffect(() => {
-    if (!activeLessonId || !enrollmentId || sessionsRef.current[activeLessonId]) return;
+    if (!courseReady || !activeLessonId || !enrollmentId || sessionsRef.current[activeLessonId]) return;
 
     const lessonId = activeLessonId;
     let cancelled = false;
@@ -185,7 +189,8 @@ export function LearningReader({ courseId }: { courseId: string }) {
       deviceFingerprint: getDeviceFingerprint(),
       screenWidthPx: window.innerWidth,
       screenHeightPx: window.innerHeight,
-      trackingConsent: true,
+      // Khóa tắt bắt buộc hiệu chỉnh -> không xin consent ghi gaze.
+      trackingConsent: calibrationRequired,
     })
       .then((session) => {
         createdSessionId = session.id;
@@ -204,11 +209,12 @@ export function LearningReader({ courseId }: { courseId: string }) {
       cancelled = true;
       if (createdSessionId) closeLearningSession(lessonId, createdSessionId);
     };
-  }, [activeLessonId, enrollmentId, closeLearningSession]);
+  }, [courseReady, activeLessonId, enrollmentId, closeLearningSession, calibrationRequired]);
 
   const learningSessionId = learningSessionIds[activeLessonId];
-  // Chỉ thu gaze khi backend cho phép (trackingConsent=true trong phiên học).
-  const trackingAllowed = Boolean(activeLessonId) && trackingLessons[activeLessonId] !== false;
+  // Chỉ thu gaze khi khóa bật theo dõi VÀ backend cho phép (trackingConsent=true).
+  const trackingAllowed =
+    calibrationRequired && Boolean(activeLessonId) && trackingLessons[activeLessonId] !== false;
 
   const flushGaze = useCallback(() => {
     flushGazeForLesson(activeLessonId);
@@ -490,6 +496,11 @@ export function LearningReader({ courseId }: { courseId: string }) {
               <span className="size-1.5 animate-pulse rounded-full bg-primary" />
               Gaze đang hoạt động
             </div>
+          ) : !calibrationRequired ? (
+            <div className="hidden items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] text-muted-foreground sm:flex">
+              <span className="size-1.5 rounded-full bg-muted-foreground" />
+              Gaze tắt
+            </div>
           ) : (
             <div className="hidden items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] text-muted-foreground sm:flex">
               <span className="size-1.5 rounded-full bg-muted-foreground" />
@@ -576,7 +587,7 @@ export function LearningReader({ courseId }: { courseId: string }) {
             </div>
           </div>
 
-          {gazeSource === "off" && (total > 0 || activeIsQuiz) && (
+          {gazeSource === "off" && calibrationRequired && (total > 0 || activeIsQuiz) && (
             <div className="z-10 shrink-0 px-4 pb-2 sm:px-5">
               <div className="mx-auto flex max-w-[1400px] flex-col gap-2 rounded-xl border border-[#dce8d9] bg-[#e8f1e6] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-foreground">

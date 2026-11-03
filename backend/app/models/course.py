@@ -53,6 +53,12 @@ class Course(Base):
     # lessons.show_gaze_dot đã bỏ ở migration 021).
     show_gaze_dot: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
+    # Bắt buộc kiểm tra camera + hiệu chỉnh trước khi vào học. Tắt = vào thẳng
+    # trang học, không bật camera và không ghi gaze (dùng khi dev không có camera).
+    require_calibration: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true")
+    )
+
     status: Mapped[CourseStatus] = relationship(lazy="joined")
     modules: Mapped[list["Module"]] = relationship(
         back_populates="course",

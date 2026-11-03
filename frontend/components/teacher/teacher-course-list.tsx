@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTeacherCourses } from "@/hooks/use-teacher";
-import { setCourseGazeDot } from "@/lib/api/teacher";
+import { setCourseGazeDot, setCourseRequireCalibration } from "@/lib/api/teacher";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
 import { Switch } from "@/components/ui/switch";
@@ -34,12 +34,16 @@ function CourseRow({
   course,
   canManage,
   toggling,
+  togglingCalibration,
   onToggleGaze,
+  onToggleCalibration,
 }: {
   course: TeacherCourse;
   canManage: boolean;
   toggling: boolean;
+  togglingCalibration: boolean;
   onToggleGaze: (course: TeacherCourse, value: boolean) => void;
+  onToggleCalibration: (course: TeacherCourse, value: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:gap-5 sm:px-5">
@@ -98,6 +102,23 @@ function CourseRow({
           />
         </div>
 
+        <div
+          className="flex items-center gap-2 rounded-full border border-[#dfe9dc] bg-[#e8f1e6]/50 py-1 pl-3 pr-1"
+          title={
+            canManage
+              ? "Tắt để vào học ngay, không cần camera/calibration"
+              : "Chỉ chủ khóa học mới đổi được"
+          }
+        >
+          <span className="text-[11px] font-medium text-[#3f573c]">Bắt buộc calibration</span>
+          <Switch
+            checked={course.requireCalibration !== false}
+            disabled={!canManage || togglingCalibration}
+            onCheckedChange={(value) => onToggleCalibration(course, value)}
+            ariaLabel={`Bắt buộc hiệu chỉnh điểm nhìn — ${course.title}`}
+          />
+        </div>
+
         <nav aria-label={`Mở khóa ${course.title}`} className="flex items-center gap-1 rounded-full border border-border/80 bg-muted/40 p-1">
           {COURSE_TABS.map((tab) => (
             <Link
@@ -127,6 +148,7 @@ export function TeacherCourseList() {
   const [query, setQuery] = useState(urlQuery);
   const [sort, setSort] = useState<SortMode>("recent");
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [pendingCalibration, setPendingCalibration] = useState<Record<string, boolean>>({});
 
   // Ghi từ khóa vào URL (?q=) sau khi người dùng ngừng gõ.
   useEffect(() => {
@@ -154,6 +176,21 @@ export function TeacherCourseList() {
       // Bỏ qua: invalidate ở dưới sẽ kéo lại trạng thái thật từ máy chủ.
     } finally {
       setPending((prev) => ({ ...prev, [course.id]: false }));
+      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+    }
+  };
+
+  const toggleCalibration = async (course: TeacherCourse, value: boolean) => {
+    setPendingCalibration((prev) => ({ ...prev, [course.id]: true }));
+    queryClient.setQueriesData<TeacherCourse[]>({ queryKey: ["teacher", "courses"] }, (list) =>
+      list?.map((c) => (c.id === course.id ? { ...c, requireCalibration: value } : c)),
+    );
+    try {
+      await setCourseRequireCalibration(course.id, value);
+    } catch {
+      // Bỏ qua: invalidate ở dưới sẽ kéo lại trạng thái thật từ máy chủ.
+    } finally {
+      setPendingCalibration((prev) => ({ ...prev, [course.id]: false }));
       queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
     }
   };
@@ -239,7 +276,9 @@ export function TeacherCourseList() {
               course={course}
               canManage={course.isOwner !== false}
               toggling={Boolean(pending[course.id])}
+              togglingCalibration={Boolean(pendingCalibration[course.id])}
               onToggleGaze={(target, value) => void toggleGaze(target, value)}
+              onToggleCalibration={(target, value) => void toggleCalibration(target, value)}
             />
           ))}
         </div>

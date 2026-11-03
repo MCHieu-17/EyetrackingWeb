@@ -49,6 +49,7 @@ const TEACHER_COURSE = {
   isOwner: true,
   lessonCount: 3,
   showGazeDot: false,
+  requireCalibration: true,
 };
 
 const MODULES = [
@@ -131,6 +132,7 @@ const ENROLLMENTS = [
       moduleCount: 2,
       lessonCount: 3,
       gradient: "",
+      requireCalibration: true,
     },
   },
   {
@@ -145,6 +147,7 @@ const ENROLLMENTS = [
       moduleCount: 3,
       lessonCount: 8,
       gradient: "",
+      requireCalibration: true,
     },
   },
 ];
@@ -153,6 +156,7 @@ const OUTLINE = {
   id: "course-1",
   title: "Lập trình Python cơ bản",
   showGazeDot: false,
+  requireCalibration: true,
   modules: [
     {
       id: "mod-1",
@@ -270,6 +274,10 @@ export function demoResponse(path: string, method: string, body?: unknown): unkn
   }
   if (/^\/api\/teacher\/courses\/[^/]+\/students\/[^/]+$/.test(clean)) return { ok: true };
   if (/^\/api\/teacher\/courses\/[^/]+\/gaze-dot$/.test(clean)) return { ok: true, updated: 3 };
+  if (/^\/api\/teacher\/courses\/[^/]+\/require-calibration$/.test(clean)) {
+    const value = (body as { requireCalibration?: boolean })?.requireCalibration ?? false;
+    return { ok: true, requireCalibration: value };
+  }
   if (clean.startsWith("/api/teacher/students")) {
     return [{ id: "stu-9", name: "Hoàng Văn Dũng", code: "SV009", color: "#000" }];
   }

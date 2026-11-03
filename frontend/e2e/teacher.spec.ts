@@ -56,6 +56,21 @@ test.describe("Teacher", () => {
     expect((await request).postDataJSON()).toEqual({ showGazeDot: true });
   });
 
+  test("công tắc bắt buộc hiệu chỉnh gọi API cập nhật", async ({ page }) => {
+    await page.goto("/teacher");
+    const request = page.waitForRequest(
+      (candidate) =>
+        candidate.url().includes("/api/teacher/courses/course-1/require-calibration") &&
+        candidate.method() === "PATCH",
+    );
+
+    const toggle = page.getByRole("switch", { name: /Bắt buộc hiệu chỉnh điểm nhìn/ });
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await toggle.click();
+
+    expect((await request).postDataJSON()).toEqual({ requireCalibration: false });
+  });
+
   test("workspace tab Nội dung hiển thị mục lục và trình soạn", async ({ page }) => {
     await page.goto("/teacher/courses/course-1?tab=content");
     await expect(
@@ -293,6 +308,23 @@ test.describe("Teacher", () => {
     await toggle.click();
 
     expect((await request).postDataJSON()).toEqual({ showGazeDot: true });
+  });
+
+  test("tắt bắt buộc hiệu chỉnh ở tab Cài đặt gọi API cập nhật khóa", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=settings");
+    const request = page.waitForRequest(
+      (candidate) =>
+        candidate.url().includes("/api/teacher/courses/course-1/require-calibration") &&
+        candidate.method() === "PATCH",
+    );
+
+    const toggle = page.getByRole("switch", {
+      name: "Bắt buộc hiệu chỉnh điểm nhìn cho cả khóa học",
+    });
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await toggle.click();
+
+    expect((await request).postDataJSON()).toEqual({ requireCalibration: false });
   });
 
   test("kiểm tra nội dung trước khi xuất bản liệt kê mục còn thiếu", async ({ page }) => {

@@ -12,6 +12,8 @@ class CourseCreateIn(CamelModel):
     status: str = Field(default="draft", pattern="^(draft|published|archived)$")
     # Hiển thị chấm điểm nhìn cho sinh viên (áp cho mọi bài giảng + bài tập).
     show_gaze_dot: bool = False
+    # Bắt buộc kiểm tra camera + hiệu chỉnh trước khi vào học.
+    require_calibration: bool = True
 
 
 class CourseUpdateIn(CamelModel):
@@ -20,6 +22,7 @@ class CourseUpdateIn(CamelModel):
     thumbnail_url: str | None = None
     status: str | None = Field(default=None, pattern="^(draft|published|archived)$")
     show_gaze_dot: bool | None = None
+    require_calibration: bool | None = None
 
 
 class ModuleCreateIn(CamelModel):
@@ -45,6 +48,10 @@ class LessonUpdateIn(CamelModel):
 
 class CourseGazeDotIn(CamelModel):
     show_gaze_dot: bool
+
+
+class CourseRequireCalibrationIn(CamelModel):
+    require_calibration: bool
 
 
 class SlideCreateIn(CamelModel):
@@ -117,6 +124,7 @@ class TeacherCourseOut(CamelModel):
     is_owner: bool = True
     lesson_count: int = 0
     show_gaze_dot: bool = False  # cờ cấp khóa: cho SV thấy chấm điểm nhìn
+    require_calibration: bool = True  # cờ cấp khóa: bắt buộc hiệu chỉnh trước khi học
 
 
 class LessonItemOut(CamelModel):
@@ -144,6 +152,8 @@ class CourseOutlineOut(CamelModel):
     modules: list[ModuleItemOut]
     # Cờ cấp khóa: SV thấy chấm điểm nhìn ở MỌI bài giảng và bài tập của khóa.
     show_gaze_dot: bool = False
+    # Cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học.
+    require_calibration: bool = True
 
 
 class CourseSummaryOut(CamelModel):
@@ -154,6 +164,7 @@ class CourseSummaryOut(CamelModel):
     module_count: int
     lesson_count: int
     gradient: str
+    require_calibration: bool = True
 
 
 class EnrolledCourseOut(CamelModel):

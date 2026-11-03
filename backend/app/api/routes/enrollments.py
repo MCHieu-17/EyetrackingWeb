@@ -71,6 +71,7 @@ async def my_enrollments(
                     module_count=module_counts.get(course.id, 0),
                     lesson_count=total_lessons,
                     gradient=gradient_for(course.id),
+                    require_calibration=course.require_calibration,
                 ),
             )
         )
