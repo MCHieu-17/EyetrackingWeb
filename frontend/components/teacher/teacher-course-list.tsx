@@ -3,12 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTeacherCourses } from "@/hooks/use-teacher";
-import { setCourseGazeDot, setCourseRequireCalibration } from "@/lib/api/teacher";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -30,21 +27,7 @@ const STATUS_CLS: Record<string, string> = {
   archived: "bg-[#f3ede4] text-[#8a6d3b]",
 };
 
-function CourseRow({
-  course,
-  canManage,
-  toggling,
-  togglingCalibration,
-  onToggleGaze,
-  onToggleCalibration,
-}: {
-  course: TeacherCourse;
-  canManage: boolean;
-  toggling: boolean;
-  togglingCalibration: boolean;
-  onToggleGaze: (course: TeacherCourse, value: boolean) => void;
-  onToggleCalibration: (course: TeacherCourse, value: boolean) => void;
-}) {
+function CourseRow({ course }: { course: TeacherCourse }) {
   return (
     <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:gap-5 sm:px-5">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#eef3eb] text-[#52654f]">
@@ -89,36 +72,6 @@ function CourseRow({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
-        <div
-          className="flex items-center gap-2 rounded-full border border-[#dfe9dc] bg-[#e8f1e6]/50 py-1 pl-3 pr-1"
-          title={canManage ? "Áp cho mọi bài giảng và bài tập của khóa" : "Chỉ chủ khóa học mới đổi được"}
-        >
-          <span className="text-[11px] font-medium text-[#3f573c]">Điểm nhìn cho SV</span>
-          <Switch
-            checked={Boolean(course.showGazeDot)}
-            disabled={!canManage || toggling}
-            onCheckedChange={(value) => onToggleGaze(course, value)}
-            ariaLabel={`Hiển thị điểm nhìn cho sinh viên — ${course.title}`}
-          />
-        </div>
-
-        <div
-          className="flex items-center gap-2 rounded-full border border-[#dfe9dc] bg-[#e8f1e6]/50 py-1 pl-3 pr-1"
-          title={
-            canManage
-              ? "Tắt để vào học ngay, không cần camera/calibration"
-              : "Chỉ chủ khóa học mới đổi được"
-          }
-        >
-          <span className="text-[11px] font-medium text-[#3f573c]">Bắt buộc calibration</span>
-          <Switch
-            checked={course.requireCalibration !== false}
-            disabled={!canManage || togglingCalibration}
-            onCheckedChange={(value) => onToggleCalibration(course, value)}
-            ariaLabel={`Bắt buộc hiệu chỉnh điểm nhìn — ${course.title}`}
-          />
-        </div>
-
         <nav aria-label={`Mở khóa ${course.title}`} className="flex items-center gap-1 rounded-full border border-border/80 bg-muted/40 p-1">
           {COURSE_TABS.map((tab) => (
             <Link
@@ -140,15 +93,12 @@ export function TeacherCourseList() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
 
   const { data: courses = [], isLoading, isError, refetch } = useTeacherCourses();
 
   const urlQuery = searchParams.get("q") ?? "";
   const [query, setQuery] = useState(urlQuery);
   const [sort, setSort] = useState<SortMode>("recent");
-  const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [pendingCalibration, setPendingCalibration] = useState<Record<string, boolean>>({});
 
   // Ghi từ khóa vào URL (?q=) sau khi người dùng ngừng gõ.
   useEffect(() => {
@@ -164,36 +114,6 @@ export function TeacherCourseList() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [query, searchParams, pathname, router]);
-
-  const toggleGaze = async (course: TeacherCourse, value: boolean) => {
-    setPending((prev) => ({ ...prev, [course.id]: true }));
-    queryClient.setQueriesData<TeacherCourse[]>({ queryKey: ["teacher", "courses"] }, (list) =>
-      list?.map((c) => (c.id === course.id ? { ...c, showGazeDot: value } : c)),
-    );
-    try {
-      await setCourseGazeDot(course.id, value);
-    } catch {
-      // Bỏ qua: invalidate ở dưới sẽ kéo lại trạng thái thật từ máy chủ.
-    } finally {
-      setPending((prev) => ({ ...prev, [course.id]: false }));
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-    }
-  };
-
-  const toggleCalibration = async (course: TeacherCourse, value: boolean) => {
-    setPendingCalibration((prev) => ({ ...prev, [course.id]: true }));
-    queryClient.setQueriesData<TeacherCourse[]>({ queryKey: ["teacher", "courses"] }, (list) =>
-      list?.map((c) => (c.id === course.id ? { ...c, requireCalibration: value } : c)),
-    );
-    try {
-      await setCourseRequireCalibration(course.id, value);
-    } catch {
-      // Bỏ qua: invalidate ở dưới sẽ kéo lại trạng thái thật từ máy chủ.
-    } finally {
-      setPendingCalibration((prev) => ({ ...prev, [course.id]: false }));
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-    }
-  };
 
   const visible = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase("vi");
@@ -271,15 +191,7 @@ export function TeacherCourseList() {
       {visible.length ? (
         <div className="divide-y divide-border/70 overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs">
           {visible.map((course) => (
-            <CourseRow
-              key={course.id}
-              course={course}
-              canManage={course.isOwner !== false}
-              toggling={Boolean(pending[course.id])}
-              togglingCalibration={Boolean(pendingCalibration[course.id])}
-              onToggleGaze={(target, value) => void toggleGaze(target, value)}
-              onToggleCalibration={(target, value) => void toggleCalibration(target, value)}
-            />
+            <CourseRow key={course.id} course={course} />
           ))}
         </div>
       ) : (

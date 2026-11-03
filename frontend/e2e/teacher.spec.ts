@@ -41,36 +41,6 @@ test.describe("Teacher", () => {
     await expect(page.getByRole("heading", { name: "Khóa học" })).toBeVisible();
   });
 
-  test("công tắc điểm nhìn cấp khóa gọi API cập nhật", async ({ page }) => {
-    await page.goto("/teacher");
-    const request = page.waitForRequest(
-      (candidate) =>
-        candidate.url().includes("/api/teacher/courses/course-1/gaze-dot") &&
-        candidate.method() === "PATCH",
-    );
-
-    const toggle = page.getByRole("switch", { name: /Hiển thị điểm nhìn cho sinh viên/ });
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
-    await toggle.click();
-
-    expect((await request).postDataJSON()).toEqual({ showGazeDot: true });
-  });
-
-  test("công tắc bắt buộc hiệu chỉnh gọi API cập nhật", async ({ page }) => {
-    await page.goto("/teacher");
-    const request = page.waitForRequest(
-      (candidate) =>
-        candidate.url().includes("/api/teacher/courses/course-1/require-calibration") &&
-        candidate.method() === "PATCH",
-    );
-
-    const toggle = page.getByRole("switch", { name: /Bắt buộc hiệu chỉnh điểm nhìn/ });
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await toggle.click();
-
-    expect((await request).postDataJSON()).toEqual({ requireCalibration: false });
-  });
-
   test("workspace tab Nội dung hiển thị mục lục và trình soạn", async ({ page }) => {
     await page.goto("/teacher/courses/course-1?tab=content");
     await expect(
