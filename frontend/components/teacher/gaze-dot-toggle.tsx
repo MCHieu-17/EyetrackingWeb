@@ -21,7 +21,7 @@ export function CourseGazeDotToggle({
     <CourseToggle
       icon="ri-eye-line"
       title="Hiển thị điểm nhìn cho sinh viên"
-      description="Bật để sinh viên thấy chấm điểm nhìn của chính mình ở mọi bài giảng và bài tập của khóa học. Dùng để kiểm tra/hiệu chỉnh độ chính xác; mặc định tắt."
+      description="Sinh viên thấy chấm điểm nhìn của mình ở mọi bài giảng và bài tập."
       checked={checked}
       disabled={disabled}
       busy={busy}

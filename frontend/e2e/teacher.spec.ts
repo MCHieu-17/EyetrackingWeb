@@ -53,15 +53,9 @@ test.describe("Teacher", () => {
     await expect(page.getByLabel("Tên bài giảng")).toHaveValue("Bài 1: Giới thiệu");
   });
 
-  test("workspace có 5 tab và tab Thông tin khóa học lưu được thay đổi", async ({ page }) => {
+  test("workspace có 4 tab và tab Thông tin lưu được thay đổi", async ({ page }) => {
     await page.goto("/teacher/courses/course-1?tab=info");
-    for (const label of [
-      "Nội dung",
-      "Thông tin khóa học",
-      "Cài đặt",
-      "Học viên",
-      "Vùng phân tích",
-    ]) {
+    for (const label of ["Nội dung", "Thông tin", "Học viên", "Vùng phân tích"]) {
       await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
     await expect(page.getByRole("heading", { name: "Xuất bản" })).toBeVisible();
@@ -300,8 +294,8 @@ test.describe("Teacher", () => {
     expect((await request).postDataJSON()).toEqual({ title: "Bài 1: Python nhập môn" });
   });
 
-  test("bật hiển thị điểm nhìn ở tab Cài đặt gọi API cập nhật khóa", async ({ page }) => {
-    await page.goto("/teacher/courses/course-1?tab=settings");
+  test("bật hiển thị điểm nhìn ở tab Thông tin gọi API cập nhật khóa", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=info");
     const request = page.waitForRequest(
       (candidate) =>
         candidate.url().includes("/api/teacher/courses/course-1/gaze-dot") &&
@@ -317,8 +311,8 @@ test.describe("Teacher", () => {
     expect((await request).postDataJSON()).toEqual({ showGazeDot: true });
   });
 
-  test("tắt bắt buộc hiệu chỉnh ở tab Cài đặt gọi API cập nhật khóa", async ({ page }) => {
-    await page.goto("/teacher/courses/course-1?tab=settings");
+  test("tắt bắt buộc hiệu chỉnh ở tab Thông tin gọi API cập nhật khóa", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=info");
     const request = page.waitForRequest(
       (candidate) =>
         candidate.url().includes("/api/teacher/courses/course-1/require-calibration") &&

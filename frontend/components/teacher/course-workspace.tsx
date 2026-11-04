@@ -11,19 +11,17 @@ import { AoiEditor } from "@/components/teacher/aoi-editor";
 import { ContentEditor } from "@/components/teacher/content-editor";
 import { NewCourseSetup } from "@/components/teacher/content-editor/new-course-setup";
 import { CourseInfoTab } from "@/components/teacher/course-info-tab";
-import { CourseSettingsTab } from "@/components/teacher/course-settings-tab";
 import { StudentsTab } from "@/components/teacher/students-tab";
 import { UnsavedGuardProvider, useUnsavedGuard } from "@/components/teacher/unsaved-guard";
 import { useTeacherCourses } from "@/hooks/use-teacher";
 import { STATUS_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-type View = "content" | "info" | "settings" | "students" | "aoi";
+type View = "content" | "info" | "students" | "aoi";
 
 const TABS: { key: View; label: string }[] = [
   { key: "content", label: "Nội dung" },
-  { key: "info", label: "Thông tin khóa học" },
-  { key: "settings", label: "Cài đặt" },
+  { key: "info", label: "Thông tin" },
   { key: "students", label: "Học viên" },
   { key: "aoi", label: "Vùng phân tích" },
 ];
@@ -35,11 +33,14 @@ function Workspace({ courseId }: { courseId: string }) {
   const isNew = courseId === "c-new";
   const tabParam = searchParams.get("tab");
   // Khóa mới không có tab: luôn hiển thị trang tạo khóa học một-bước.
+  // "settings" là đường dẫn cũ sau khi gộp tab — chuyển về tab Thông tin.
   const view: View = isNew
     ? "content"
-    : TABS.some((t) => t.key === tabParam)
-      ? (tabParam as View)
-      : "content";
+    : tabParam === "settings"
+      ? "info"
+      : TABS.some((t) => t.key === tabParam)
+        ? (tabParam as View)
+        : "content";
 
   const { data: courses = [], isLoading, isError, refetch } = useTeacherCourses();
   const course = courses.find((c) => c.id === courseId);
@@ -150,9 +151,6 @@ function Workspace({ courseId }: { courseId: string }) {
           />
         ) : null}
         {!isNew && view === "info" && <CourseInfoTab courseId={courseId} canManage={canManage} />}
-        {!isNew && view === "settings" && (
-          <CourseSettingsTab courseId={courseId} canManage={canManage} />
-        )}
         {!isNew && view === "students" && <StudentsTab courseId={courseId} canManage={canManage} />}
         {!isNew && view === "aoi" && <AoiEditor courseId={courseId} />}
       </main>

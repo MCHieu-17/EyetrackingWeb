@@ -284,12 +284,12 @@ export function LessonEditor({
             hưởng tới cách tính mức độ hoàn thành của học viên.
           </p>
           <p className="mt-1 text-xs leading-5 text-black/60">
-            Còn việc cho học viên thấy chấm điểm nhìn là thiết lập cấp khóa học —{" "}
+            Chấm điểm nhìn là thiết lập cấp khóa học —{" "}
             <Link
-              href={`/teacher/courses/${courseId}?tab=settings`}
+              href={`/teacher/courses/${courseId}?tab=info`}
               className="font-medium text-[#3f573c] underline underline-offset-4"
             >
-              mở tab Cài đặt
+              mở tab Thông tin
             </Link>
             .
           </p>

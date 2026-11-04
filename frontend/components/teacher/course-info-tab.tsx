@@ -10,6 +10,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/components/ui/spinner";
 import { useUnsavedGuard } from "@/components/teacher/unsaved-guard";
+import { CourseSettingsSection } from "@/components/teacher/course-settings-section";
 import { useCourseStatus } from "@/hooks/use-course-status";
 import { useCourseTree, useTeacherCourses } from "@/hooks/use-teacher";
 import { deleteCourse, updateCourse } from "@/lib/api/teacher";
@@ -23,18 +24,8 @@ const STATUS_TONE: Record<CourseStatus, string> = {
   archived: "border-black/10 bg-black/5 text-black/55",
 };
 
-/** Ý nghĩa thật của từng trạng thái với sinh viên (giữ nguyên nghiệp vụ backend). */
-const STATUS_HELP: Record<CourseStatus, string> = {
-  draft: "Khóa học chỉ mình bạn thấy. Sinh viên chưa xem và chưa đăng ký được.",
-  published: "Sinh viên thấy khóa học trong danh sách và đăng ký được. Mọi bài giảng/slide đã tải lên hiện ngay.",
-  archived: "Khóa học ẩn khỏi danh sách cho sinh viên mới; sinh viên đã đăng ký vẫn xem được nội dung.",
-};
-
 /**
- * Tab "Thông tin khóa học": sửa tên/mô tả, xuất bản hay thu hồi, xóa khóa học.
- *
- * Không có ô "Trạng thái" dạng select nữa — mỗi hành động nói rõ nó làm gì với
- * trạng thái khóa học, và danh sách "cần hoàn thiện" chỉ ra mục còn thiếu.
+ * Tab "Thông tin": sửa tên/mô tả, thiết lập khóa học, xuất bản và xóa khóa học.
  */
 export function CourseInfoTab({
   courseId,
@@ -127,7 +118,7 @@ export function CourseInfoTab({
   if (!course) return <Alert variant="destructive" title="Không tìm thấy khóa học" />;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <span className={cnBadge(STATUS_TONE[status])}>{STATUS_LABEL[status]}</span>
         <span className="text-sm text-black/60">
@@ -135,7 +126,7 @@ export function CourseInfoTab({
         </span>
       </div>
 
-      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-5 shadow-xs sm:p-7">
+      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
         <div className="space-y-1.5">
           <label htmlFor="course-title" className="block text-sm font-medium text-black">
             Tên khóa học <span className="text-destructive">*</span>
@@ -188,11 +179,10 @@ export function CourseInfoTab({
         )}
       </section>
 
-      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-5 shadow-xs sm:p-7">
-        <div>
-          <h3 className="text-base font-semibold text-black">Xuất bản</h3>
-          <p className="mt-1 text-sm leading-6 text-black/65">{STATUS_HELP[status]}</p>
-        </div>
+      <CourseSettingsSection courseId={courseId} canManage={canManage} />
+
+      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
+        <h3 className="text-base font-semibold text-black">Xuất bản</h3>
 
         {report.issues.length > 0 && (
           <div className="space-y-2">
@@ -253,14 +243,8 @@ export function CourseInfoTab({
       </section>
 
       {canManage && (
-        <section className="space-y-3 rounded-[20px] border border-destructive/20 bg-destructive/5 p-5 sm:p-7">
-          <div>
-            <h3 className="text-base font-semibold text-black">Xóa khóa học</h3>
-            <p className="mt-1 text-sm leading-6 text-black/65">
-              Xóa vĩnh viễn khóa học cùng toàn bộ chương, bài giảng, bài tập, dữ liệu điểm nhìn và
-              đăng ký của học viên. Không thể hoàn tác.
-            </p>
-          </div>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
+          <h3 className="text-base font-semibold text-black">Xóa khóa học</h3>
           <Button
             variant="destructive"
             className="rounded-full"

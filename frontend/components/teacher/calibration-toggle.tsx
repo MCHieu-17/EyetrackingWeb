@@ -21,7 +21,7 @@ export function CourseCalibrationToggle({
     <CourseToggle
       icon="ri-focus-2-line"
       title="Bắt buộc hiệu chỉnh điểm nhìn"
-      description="Bật (mặc định): sinh viên phải kiểm tra camera và hiệu chỉnh trước khi vào học. Tắt: vào học ngay, không bật camera và không ghi gaze — dùng khi dev không có camera."
+      description="Bật: sinh viên phải hiệu chỉnh camera trước khi học. Tắt: vào học ngay, không ghi gaze."
       checked={checked}
       disabled={disabled}
       busy={busy}
