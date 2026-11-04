@@ -32,15 +32,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { INPUT_CLS } from "@/components/teacher/workspace-ui";
+import { KIND_LABEL, QUIZ_STATUS_LABEL } from "@/lib/content-labels";
 import { cn } from "@/lib/utils";
 import type { LessonNode, ModuleNode } from "@/lib/types/domain";
 import { DragHandle, SortableRow } from "./sortable-row";
-
-/** Nhãn loại nội dung dùng xuyên suốt trình soạn. */
-export const KIND_LABEL: Record<string, string> = {
-  lesson: "Bài giảng",
-  quiz: "Trắc nghiệm",
-};
 
 type Tone = "ok" | "missing" | "draft" | "muted";
 
@@ -56,7 +51,7 @@ function StatusPill({ tone, children }: { tone: Tone; children: React.ReactNode 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
         TONE_CLS[tone],
       )}
     >
@@ -69,9 +64,11 @@ function itemStatus(lesson: LessonNode) {
   if (lesson.kind === "quiz") {
     const count = lesson.questionCount ?? 0;
     if (count === 0) return <StatusPill tone="missing">Chưa có câu hỏi</StatusPill>;
-    if (lesson.quizStatus === "draft") return <StatusPill tone="draft">Bản nháp · {count} câu</StatusPill>;
-    if (lesson.quizStatus === "closed") return <StatusPill tone="muted">Đã đóng · {count} câu</StatusPill>;
-    return <StatusPill tone="ok">Đã giao · {count} câu</StatusPill>;
+    if (lesson.quizStatus === "draft")
+      return <StatusPill tone="draft">{QUIZ_STATUS_LABEL.draft} · {count} câu</StatusPill>;
+    if (lesson.quizStatus === "closed")
+      return <StatusPill tone="muted">{QUIZ_STATUS_LABEL.closed} · {count} câu</StatusPill>;
+    return <StatusPill tone="ok">{QUIZ_STATUS_LABEL.published} · {count} câu</StatusPill>;
   }
   return lesson.slides > 0 ? (
     <StatusPill tone="ok">{lesson.slides} trang</StatusPill>
@@ -124,12 +121,13 @@ export function ContentOutline({
   expanded,
   onToggleModule,
   onAddModule,
-  onAddLesson,
-  onAddQuiz,
+  onAddItem,
   onRenameLesson,
   onRenameModule,
-  onDeleteLesson,  onDeleteModule,
+  onDeleteLesson,
+  onDeleteModule,
   onReorder,
+  focusModuleId,
   busy,
 }: {
   tree: ModuleNode[];
@@ -140,17 +138,25 @@ export function ContentOutline({
   expanded: Record<string, boolean>;
   onToggleModule: (moduleId: string) => void;
   onAddModule: () => void;
-  onAddLesson: (moduleId: string) => void;
-  onAddQuiz: (moduleId: string) => void;
+  onAddItem: (moduleId: string, kind: "lesson" | "quiz") => void;
   onRenameLesson: (lesson: LessonNode) => void;
   onRenameModule: (moduleId: string, title: string) => void;
   onDeleteLesson: (lesson: LessonNode) => void;
   onDeleteModule: (module: ModuleNode) => void;
   onReorder: (module: ModuleNode, next: LessonNode[]) => void;
+  focusModuleId?: string | null;
   busy: boolean;
 }) {
   const [activeLesson, setActiveLesson] = useState<LessonNode | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [lastFocusModuleId, setLastFocusModuleId] = useState<string | null>(null);
+
+  // Chương vừa tạo → mở ngay ô đổi tên để giáo viên nhập tên thật.
+  // Điều chỉnh state trong lúc render (React khuyến nghị) thay vì effect.
+  if (focusModuleId && focusModuleId !== lastFocusModuleId) {
+    setLastFocusModuleId(focusModuleId);
+    setRenamingModuleId(focusModuleId);
+  }
   // Tiêu đề dùng cho thông báo aria-live: đọc qua ref để không phụ thuộc vào
   // việc re-render kịp hay không trong lúc kéo.
   const activeTitleRef = useRef("");
@@ -201,7 +207,7 @@ export function ContentOutline({
           >
             <div
               className={cn(
-                "flex items-center gap-2 px-3 py-3",
+                "flex items-center gap-2 px-3 py-2.5",
                 active && !isOpen && "bg-[#e8f1e6]/45",
               )}
             >
@@ -279,7 +285,8 @@ export function ContentOutline({
               <div className="space-y-2 px-2 pb-3">
                 {itemCount === 0 && (
                   <p className="rounded-[18px] border border-dashed border-black/10 bg-[#fdfdfa] px-4 py-4 text-center text-sm text-black/55">
-                    Chương này chưa có mục nào. Thêm bài giảng hoặc trắc nghiệm bên dưới.
+                    Chương này chưa có mục nào. Bấm “Thêm nội dung” để thêm bài giảng hoặc bài tập
+                    trắc nghiệm.
                   </p>
                 )}
 
@@ -331,7 +338,7 @@ export function ContentOutline({
                         >
                           <div
                             className={cn(
-                              "flex items-center gap-2 rounded-[18px] border px-2.5 py-2.5 transition",
+                              "flex items-center gap-2 rounded-[18px] border px-2.5 py-2 transition",
                               isSelected
                                 ? "border-[#6f8f69] bg-[#e8f1e6]/60 shadow-xs"
                                 : "border-[#eeeee9] bg-[#fdfdfa] hover:border-black/15",
@@ -435,26 +442,29 @@ export function ContentOutline({
 
                 {canManage && (
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full border-black/10 bg-white"
-                      onClick={() => onAddLesson(module.id)}
-                      disabled={busy}
-                    >
-                      <Icon name="ri-book-open-line" className="size-4" />
-                      Thêm bài giảng
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full border-black/10 bg-white"
-                      onClick={() => onAddQuiz(module.id)}
-                      disabled={busy}
-                    >
-                      <Icon name="ri-question-line" className="size-4" />
-                      Thêm trắc nghiệm
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-black/10 bg-white"
+                          disabled={busy}
+                        >
+                          <Icon name="ri-add-line" className="size-4" />
+                          Thêm nội dung
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onSelect={() => onAddItem(module.id, "lesson")}>
+                          <Icon name="ri-book-open-line" />
+                          Bài giảng (PDF)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => onAddItem(module.id, "quiz")}>
+                          <Icon name="ri-question-line" />
+                          Bài tập trắc nghiệm
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>

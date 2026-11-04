@@ -52,7 +52,29 @@ const TEACHER_COURSE = {
   requireCalibration: true,
 };
 
-const MODULES = [
+let teacherCourse = { ...TEACHER_COURSE };
+
+interface DemoLesson {
+  id: string;
+  title: string;
+  kind: "lesson" | "quiz";
+  slides: number;
+  attention: number | null;
+  mastery?: number | null;
+  quizId?: string;
+  quizStatus?: string;
+  questionCount?: number;
+  durationMinutes?: number;
+  dueAt?: string | null;
+}
+
+interface DemoModule {
+  id: string;
+  title: string;
+  lessons: DemoLesson[];
+}
+
+const MODULES: DemoModule[] = [
   {
     id: "mod-1",
     title: "Chương 1: Nhập môn",
@@ -265,9 +287,43 @@ export function demoResponse(path: string, method: string, body?: unknown): unkn
   if (clean === "/api/calibrations/config") return { enabled: true, threshold: 0.12 };
 
   // Teacher
-  if (clean === "/api/teacher/courses" && method === "GET") return [TEACHER_COURSE];
-  if (clean === "/api/teacher/courses" && method === "POST") return TEACHER_COURSE;
-  if (/^\/api\/teacher\/courses\/[^/]+$/.test(clean)) return MODULES;
+  if (clean === "/api/teacher/courses" && method === "GET") return [teacherCourse];
+  if (clean === "/api/teacher/courses" && method === "POST") {
+    const input = (body as { title?: string; description?: string } | undefined) ?? {};
+    teacherCourse = {
+      ...teacherCourse,
+      ...input,
+      id: "course-1",
+      status: "draft",
+      students: 0,
+      lessonCount: 0,
+      updatedAt: new Date().toLocaleDateString("vi-VN"),
+    };
+    return teacherCourse;
+  }
+  if (/^\/api\/teacher\/courses\/[^/]+$/.test(clean)) {
+    if (method === "PATCH") {
+      const patch = (body as Record<string, unknown> | undefined) ?? {};
+      teacherCourse = { ...teacherCourse, ...patch };
+      return teacherCourse;
+    }
+    return MODULES;
+  }
+  if (/^\/api\/teacher\/courses\/[^/]+\/modules$/.test(clean) && method === "POST") {
+    const input = (body as { title?: string } | undefined) ?? {};
+    const newModule: DemoModule = {
+      id: `mod-${Date.now()}`,
+      title: input.title ?? "Chương mới",
+      lessons: [],
+    };
+    MODULES.push(newModule);
+    return {
+      id: newModule.id,
+      courseId: "course-1",
+      title: newModule.title,
+      orderIndex: MODULES.length,
+    };
+  }
   if (/^\/api\/teacher\/courses\/[^/]+\/students$/.test(clean)) {
     if (method === "POST") return { ok: true, added: 1 };
     return STUDENTS;
@@ -283,18 +339,66 @@ export function demoResponse(path: string, method: string, body?: unknown): unkn
   }
   if (/^\/api\/teacher\/lessons\/[^/]+\/heatmap$/.test(clean)) return HEATMAP_STATS;
   if (/^\/api\/teacher\/lessons\/[^/]+\/slides$/.test(clean)) return [];
+  if (/^\/api\/teacher\/modules\/[^/]+\/lessons$/.test(clean) && method === "POST") {
+    const moduleId = clean.split("/")[4];
+    const mod = MODULES.find((item) => item.id === moduleId);
+    const input = (body as { title?: string } | undefined) ?? {};
+    const lesson: DemoLesson = {
+      id: `lesson-${Date.now()}`,
+      title: input.title ?? "Bài giảng mới",
+      kind: "lesson",
+      slides: 0,
+      attention: null,
+    };
+    mod?.lessons.push(lesson);
+    return { id: lesson.id, title: lesson.title, orderIndex: mod?.lessons.length ?? 1 };
+  }
+  if (/^\/api\/teacher\/modules\/[^/]+$/.test(clean)) {
+    const moduleId = clean.split("/")[4];
+    const mod = MODULES.find((item) => item.id === moduleId);
+    if (method === "PATCH") {
+      const input = (body as { title?: string } | undefined) ?? {};
+      if (mod && input.title) mod.title = input.title;
+      return { id: moduleId, courseId: "course-1", title: mod?.title ?? "", orderIndex: 1 };
+    }
+    if (method === "DELETE") {
+      const index = MODULES.findIndex((item) => item.id === moduleId);
+      if (index >= 0) MODULES.splice(index, 1);
+      return { ok: true };
+    }
+  }
+  if (/^\/api\/teacher\/lessons\/[^/]+$/.test(clean)) {
+    const lessonId = clean.split("/")[4];
+    const owner = MODULES.find((mod) => mod.lessons.some((lesson) => lesson.id === lessonId));
+    const lesson = owner?.lessons.find((item) => item.id === lessonId);
+    if (method === "PATCH") {
+      const input = (body as { title?: string } | undefined) ?? {};
+      if (lesson && input.title) lesson.title = input.title;
+      return { ok: true };
+    }
+    if (method === "DELETE") {
+      if (owner && lesson) owner.lessons = owner.lessons.filter((item) => item.id !== lessonId);
+      return { ok: true };
+    }
+  }
   if (/^\/api\/teacher\/modules\/[^/]+\/quizzes$/.test(clean) && method === "POST") {
-    return {
+    const moduleId = clean.split("/")[4];
+    const mod = MODULES.find((item) => item.id === moduleId);
+    const input = (body as { title?: string } | undefined) ?? {};
+    const item: DemoLesson = {
       id: "lesson-quiz-new",
-      title: "Bài tập mới",
+      title: input.title ?? "Bài tập mới",
       kind: "quiz",
       slides: 0,
+      attention: null,
       quizId: "quiz-new",
       quizStatus: "draft",
       questionCount: 0,
       durationMinutes: 30,
       dueAt: null,
     };
+    mod?.lessons.push(item);
+    return item;
   }
   if (/^\/api\/teacher\/modules\/[^/]+\/items\/reorder$/.test(clean)) {
     // Demo không có backend: sắp xếp lại ngay trong bộ nhớ để thấy kết quả kéo thả.

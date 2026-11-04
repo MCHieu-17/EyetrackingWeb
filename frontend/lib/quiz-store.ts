@@ -66,6 +66,19 @@ const DEMO_ASSIGNMENT: QuizAssignment = {
   ],
 };
 
+const DEMO_NEW_ASSIGNMENT: QuizAssignment = {
+  ...DEMO_ASSIGNMENT,
+  id: "quiz-new",
+  lessonId: "lesson-quiz-new",
+  lessonTitle: "Bài tập mới",
+  title: "Bài tập mới",
+  instructions: "",
+  durationMinutes: 30,
+  status: "draft",
+  allowRetry: false,
+  questions: [],
+};
+
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   const raw = window.localStorage.getItem(key);
@@ -84,7 +97,7 @@ function writeJson(key: string, value: unknown) {
 function assignments(): QuizAssignment[] {
   const stored = readJson<QuizAssignment[] | null>(ASSIGNMENTS_KEY, null);
   if (stored) return stored;
-  const initial = isDemoMode() ? [DEMO_ASSIGNMENT] : [];
+  const initial = isDemoMode() ? [DEMO_ASSIGNMENT, DEMO_NEW_ASSIGNMENT] : [];
   writeJson(ASSIGNMENTS_KEY, initial);
   return initial;
 }

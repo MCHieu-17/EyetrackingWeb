@@ -4,10 +4,12 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import { FullPageSpinner } from "@/components/ui/spinner";
 import { AoiEditor } from "@/components/teacher/aoi-editor";
 import { ContentEditor } from "@/components/teacher/content-editor";
+import { NewCourseSetup } from "@/components/teacher/content-editor/new-course-setup";
 import { CourseInfoTab } from "@/components/teacher/course-info-tab";
 import { CourseSettingsTab } from "@/components/teacher/course-settings-tab";
 import { StudentsTab } from "@/components/teacher/students-tab";
@@ -39,7 +41,7 @@ function Workspace({ courseId }: { courseId: string }) {
       ? (tabParam as View)
       : "content";
 
-  const { data: courses = [], isLoading } = useTeacherCourses();
+  const { data: courses = [], isLoading, isError, refetch } = useTeacherCourses();
   const course = courses.find((c) => c.id === courseId);
   const canManage = isNew || course?.isOwner === true;
   const title = isNew ? "Khóa học mới" : course?.title ?? "Khóa học";
@@ -53,6 +55,17 @@ function Workspace({ courseId }: { courseId: string }) {
   };
 
   if (!isNew && isLoading) return <FullPageSpinner label="Đang tải khóa học..." />;
+  if (!isNew && isError) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16">
+        <ErrorState
+          title="Không tải được khóa học"
+          description="Vui lòng kiểm tra kết nối và thử lại."
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-[#f5f6f2] text-black">
@@ -123,15 +136,19 @@ function Workspace({ courseId }: { courseId: string }) {
       </header>
 
       <main className="mx-auto min-h-[calc(100dvh-73px)] w-full max-w-[1440px] rounded-t-[28px] border border-b-0 border-[#eeeee9] bg-[#fdfdfa] px-4 py-8 shadow-[0_-1px_12px_rgba(30,35,25,0.025)] sm:px-8 lg:px-12 lg:py-12">
-        {view === "content" && (
+        {isNew ? (
+          <NewCourseSetup
+            onCreated={(id) => router.replace(`/teacher/courses/${id}?tab=content`)}
+            onCancel={() => go("/teacher")}
+          />
+        ) : view === "content" ? (
           <ContentEditor
             courseId={courseId}
-            isNew={isNew}
             canManage={canManage}
             courseTitle={title}
-            onCreated={(id) => router.replace(`/teacher/courses/${id}?tab=content`)}
+            courseStatus={status}
           />
-        )}
+        ) : null}
         {!isNew && view === "info" && <CourseInfoTab courseId={courseId} canManage={canManage} />}
         {!isNew && view === "settings" && (
           <CourseSettingsTab courseId={courseId} canManage={canManage} />

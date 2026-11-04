@@ -4,10 +4,27 @@ import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ErrorState } from "@/components/ui/error-state";
+import { Icon } from "@/components/ui/icon";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useUnsavedGuard } from "@/components/teacher/unsaved-guard";
+import { useCourseStatus } from "@/hooks/use-course-status";
 import { useCourseTree } from "@/hooks/use-teacher";
+import { updateQuizAssignment } from "@/lib/api/quiz";
 import {
   createLesson,
   createModule,
@@ -19,43 +36,48 @@ import {
   updateModule,
 } from "@/lib/api/teacher";
 import { cn } from "@/lib/utils";
-import type { LessonNode, ModuleNode } from "@/lib/types/domain";
+import type { CourseStatus, LessonNode, ModuleNode } from "@/lib/types/domain";
 import { ContentOutline } from "./content-outline";
 import { ItemEditor } from "./item-editor";
-import { NewCourseForm } from "./new-course-form";
 import { PublishChecklistDialog, publishReport } from "./publish-checklist";
 
 /**
  * Tab "Nội dung": mục lục (trái) + trình soạn mục đang chọn (phải).
  *
- * Luồng lưu giữ nguyên như trước: tên chương/bài lưu ngay khi rời ô, thêm mục thì
- * tạo bản nháp trên server rồi mở luôn để soạn, PDF tải ngay khi chọn (có xác nhận
- * khi thay), còn bài tập trắc nghiệm lưu theo nút "Lưu bài tập nháp"/"Giao bài".
+ * Đây là nơi duy nhất để soạn nội dung khóa học — kể cả khóa vừa tạo. Tên
+ * chương/bài lưu ngay khi rời ô, PDF tải ngay khi chọn, còn bài tập trắc nghiệm
+ * lưu theo nút "Lưu bài tập nháp"/"Giao bài".
  */
 export function ContentEditor({
   courseId,
-  isNew,
   canManage,
-  onCreated,
   courseTitle = "",
+  courseStatus,
 }: {
   courseId: string;
-  isNew: boolean;
   canManage: boolean;
-  onCreated: (id: string) => void;
   courseTitle?: string;
+  courseStatus: CourseStatus;
 }) {
   const queryClient = useQueryClient();
   const guard = useUnsavedGuard();
-  const { data: tree = [], isFetching: treeFetching } = useCourseTree(isNew ? "" : courseId);
+  const { changeStatus, saving: publishing } = useCourseStatus(courseId);
+  const {
+    data: tree = [],
+    isFetching: treeFetching,
+    isError: treeError,
+    refetch: refetchTree,
+  } = useCourseTree(courseId);
 
   const [selection, setSelection] = useState<string | null>(null);
   const [focusTitleToken, setFocusTitleToken] = useState(0);
+  const [focusModuleId, setFocusModuleId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [lessonToDelete, setLessonToDelete] = useState<LessonNode | null>(null);
   const [moduleToDelete, setModuleToDelete] = useState<ModuleNode | null>(null);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
@@ -118,10 +140,11 @@ export function ContentEditor({
   const addModule = async () => {
     setSaving(true);
     try {
-      const created = await createModule(courseId, `Chương ${tree.length + 1}: Chưa đặt tên`);
+      const created = await createModule(courseId, `Chương ${tree.length + 1}`);
       setExpanded((prev) => ({ ...prev, [created.id]: true }));
+      setFocusModuleId(created.id);
       refreshTree();
-      flash("ok", "Đã thêm chương. Đổi tên chương ở menu “Thao tác chương”.");
+      flash("ok", "Đã thêm chương. Nhập tên chương rồi nhấn Enter.");
     } catch (e) {
       flash("err", `Không thêm được chương: ${errText(e)}`);
     } finally {
@@ -136,6 +159,7 @@ export function ContentEditor({
       setSelection(created.id);
       setExpanded((prev) => ({ ...prev, [moduleId]: true }));
       setFocusTitleToken((token) => token + 1);
+      setOutlineOpen(false);
       refreshTree();
       flash("ok", "Đã thêm bài giảng — tải PDF lên để sinh viên học được.");
     } catch (e) {
@@ -151,6 +175,8 @@ export function ContentEditor({
       const created = await createModuleQuizItem(moduleId, { title: "Bài tập mới" });
       setSelection(created.id);
       setExpanded((prev) => ({ ...prev, [moduleId]: true }));
+      setFocusTitleToken((token) => token + 1);
+      setOutlineOpen(false);
       refreshTree();
       flash("ok", "Đã thêm bài tập — soạn câu hỏi ở khung bên phải.");
     } catch (e) {
@@ -158,6 +184,19 @@ export function ContentEditor({
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Thêm mục mới làm đổi mục đang chọn → phải hỏi trước nếu trình soạn còn
+   * thay đổi chưa lưu, tránh unmount làm mất câu hỏi đang soạn dở.
+   */
+  const addItem = (moduleId: string, kind: "lesson" | "quiz") => {
+    const proceed = () => {
+      if (kind === "lesson") void addLesson(moduleId);
+      else void addQuiz(moduleId);
+    };
+    if (guard) guard.confirmLeave(proceed);
+    else proceed();
   };
 
   // Kéo thả: gửi lại toàn bộ thứ tự item của chương (backend yêu cầu danh sách
@@ -195,9 +234,13 @@ export function ContentEditor({
     }
   };
 
-  const commitRenameLesson = async (lessonId: string, value: string) => {
+  const commitRenameItem = async (lesson: LessonNode, title: string) => {
     try {
-      await updateLesson(lessonId, { title: value });
+      if (lesson.kind === "quiz" && lesson.quizId) {
+        await updateQuizAssignment(lesson.quizId, { title });
+      } else {
+        await updateLesson(lesson.id, { title });
+      }
       refreshTree();
       flash("ok", "Đã lưu tên mục.");
     } catch (e) {
@@ -205,9 +248,38 @@ export function ContentEditor({
     }
   };
 
-  if (isNew) {
-    return <NewCourseForm onCreated={onCreated} />;
-  }
+  /** Xuất bản từ tab Nội dung — hỏi trước nếu trình soạn còn thay đổi chưa lưu. */
+  const requestPublish = () => {
+    const proceed = () => {
+      if (report.blocking) setChecklistOpen(true);
+      else setConfirmPublish(true);
+    };
+    if (guard) guard.confirmLeave(proceed);
+    else proceed();
+  };
+
+  const outline = (
+    <ContentOutline
+      tree={tree}
+      courseId={courseId}
+      canManage={canManage}
+      selection={activeId}
+      onSelect={(lessonId) => selectItem(lessonId)}
+      expanded={expanded}
+      onToggleModule={(moduleId) =>
+        setExpanded((prev) => ({ ...prev, [moduleId]: !(prev[moduleId] ?? true) }))
+      }
+      onAddModule={() => void addModule()}
+      onAddItem={addItem}
+      onRenameLesson={(lesson) => selectItem(lesson.id, { focusTitle: true })}
+      onRenameModule={(moduleId, title) => void commitRenameModule(moduleId, title)}
+      onDeleteLesson={setLessonToDelete}
+      onDeleteModule={setModuleToDelete}
+      onReorder={(module, next) => void persistOrder(module, next)}
+      focusModuleId={focusModuleId}
+      busy={saving || reordering}
+    />
+  );
 
   return (
     <div className="space-y-5">
@@ -226,18 +298,43 @@ export function ContentEditor({
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full border-black/10 bg-white"
-              onClick={() => setChecklistOpen(true)}
-            >
-              <Icon name="ri-list-check-3" className="size-4" />
-              Kiểm tra nội dung
-            </Button>
-            <Button className="rounded-full" onClick={() => void addModule()} disabled={saving}>
-              <Icon name="ri-add-line" className="size-4" />
-              Thêm chương
-            </Button>
+            {courseStatus === "published" ? (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#cfe0ca] bg-[#e8f1e6] px-3.5 text-xs font-semibold text-[#3f573c]">
+                <Icon name="ri-checkbox-circle-fill" className="size-4" />
+                Đã xuất bản
+              </span>
+            ) : (
+              <Button
+                className="rounded-full"
+                onClick={requestPublish}
+                disabled={publishing || saving || reordering}
+              >
+                <Icon name="ri-rocket-2-line" className="size-4" />
+                {publishing ? "Đang xuất bản…" : "Xuất bản"}
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="rounded-full border-black/10 bg-white"
+                  disabled={saving || reordering}
+                >
+                  <Icon name="ri-more-2-fill" className="size-4" />
+                  Thao tác
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setChecklistOpen(true)}>
+                  <Icon name="ri-list-check-3" />
+                  Kiểm tra nội dung
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void addModule()} disabled={saving}>
+                  <Icon name="ri-add-line" />
+                  Thêm chương
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -249,82 +346,65 @@ export function ContentEditor({
         />
       )}
 
-      {totalItems > 0 && report.issues.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setChecklistOpen(true)}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-[16px] border px-4 py-3 text-left text-sm transition",
-            report.blocking
-              ? "border-destructive/25 bg-destructive/5 hover:bg-destructive/8"
-              : "border-warning/30 bg-warning/8 hover:bg-warning/12",
-          )}
-        >
-          <Icon
-            name={report.blocking ? "ri-error-warning-line" : "ri-information-line"}
-            className={cn("size-4 shrink-0", report.blocking ? "text-destructive" : "text-warning")}
-          />
-          <span className="text-black">
-            {report.issues.length} mục cần hoàn thiện trước khi xuất bản
-            {report.blocking ? "" : " (chỉ là cảnh báo)"} — xem danh sách
-          </span>
-        </button>
-      )}
-
-      <div className="lg:grid lg:grid-cols-[21rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-        <div
-          className={cn(
-            "mb-4 lg:mb-0 lg:sticky lg:top-28",
-            !outlineOpen && "hidden lg:block",
-          )}
-        >
-          <div className="mb-2 flex items-center justify-between lg:hidden">
-            <h3 className="text-sm font-semibold text-black">Mục lục</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-full"
-              onClick={() => setOutlineOpen(false)}
+      {treeError ? (
+        <ErrorState
+          title="Không tải được nội dung khóa học"
+          description="Vui lòng kiểm tra kết nối và thử lại."
+          onRetry={() => void refetchTree()}
+        />
+      ) : (
+        <>
+          {totalItems > 0 && report.issues.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setChecklistOpen(true)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-[16px] border px-4 py-3 text-left text-sm transition",
+                report.blocking
+                  ? "border-destructive/25 bg-destructive/5 hover:bg-destructive/8"
+                  : "border-warning/30 bg-warning/8 hover:bg-warning/12",
+              )}
             >
-              Đóng
-            </Button>
-          </div>
-          <ContentOutline
-            tree={tree}
-            courseId={courseId}
-            canManage={canManage}
-            selection={activeId}
-            onSelect={(lessonId) => selectItem(lessonId)}
-            expanded={expanded}
-            onToggleModule={(moduleId) =>
-              setExpanded((prev) => ({ ...prev, [moduleId]: !(prev[moduleId] ?? true) }))
-            }
-            onAddModule={() => void addModule()}
-            onAddLesson={(moduleId) => void addLesson(moduleId)}
-            onAddQuiz={(moduleId) => void addQuiz(moduleId)}
-            onRenameLesson={(lesson) => selectItem(lesson.id, { focusTitle: true })}
-            onRenameModule={(moduleId, title) => void commitRenameModule(moduleId, title)}
-            onDeleteLesson={setLessonToDelete}
-            onDeleteModule={setModuleToDelete}
-            onReorder={(module, next) => void persistOrder(module, next)}
-            busy={saving || reordering}
-          />
-        </div>
+              <Icon
+                name={report.blocking ? "ri-error-warning-line" : "ri-information-line"}
+                className={cn("size-4 shrink-0", report.blocking ? "text-destructive" : "text-warning")}
+              />
+              <span className="text-black">
+                {report.issues.length} mục cần hoàn thiện trước khi xuất bản
+                {report.blocking ? "" : " (chỉ là cảnh báo)"} — xem danh sách
+              </span>
+            </button>
+          )}
 
-        <div className="min-w-0">
-          <ItemEditor
-            key={selectedLesson?.id ?? "empty"}
-            lesson={selectedLesson}
-            moduleTitle={selectedModule?.title ?? null}
-            courseId={courseId}
-            canManage={canManage}
-            focusTitleToken={focusTitleToken}
-            onRenameTitle={commitRenameLesson}
-            onChanged={refreshTree}
-            onOpenOutline={() => setOutlineOpen(true)}
-          />
-        </div>
-      </div>
+          <div className="lg:grid lg:grid-cols-[21rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+            <div className="hidden lg:sticky lg:top-28 lg:block">{outline}</div>
+
+            <div className="min-w-0">
+              <ItemEditor
+                key={selectedLesson?.id ?? "empty"}
+                lesson={selectedLesson}
+                moduleTitle={selectedModule?.title ?? null}
+                courseId={courseId}
+                canManage={canManage}
+                focusTitleToken={focusTitleToken}
+                onRenameTitle={commitRenameItem}
+                onChanged={refreshTree}
+                onOpenOutline={() => setOutlineOpen(true)}
+              />
+            </div>
+          </div>
+
+          <Sheet open={outlineOpen} onOpenChange={setOutlineOpen}>
+            <SheetContent side="left" className="max-w-sm">
+              <SheetHeader>
+                <SheetTitle>Mục lục</SheetTitle>
+                <SheetDescription>Chọn chương hoặc mục để soạn nội dung.</SheetDescription>
+              </SheetHeader>
+              <SheetBody>{outline}</SheetBody>
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
 
       <PublishChecklistDialog
         open={checklistOpen}
@@ -333,6 +413,21 @@ export function ContentEditor({
         onOpenItem={(lessonId) => {
           setChecklistOpen(false);
           selectItem(lessonId);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmPublish}
+        onOpenChange={setConfirmPublish}
+        title="Xuất bản khóa học?"
+        description="Sinh viên sẽ thấy khóa học trong danh sách và đăng ký được. Mọi bài giảng đã tải lên và bài tập đã giao hiện ngay với học viên."
+        confirmLabel="Xuất bản"
+        loading={publishing}
+        onConfirm={async () => {
+          setConfirmPublish(false);
+          const ok = await changeStatus("published");
+          if (ok) flash("ok", "Đã xuất bản khóa học.");
+          else flash("err", "Không xuất bản được khóa học. Vui lòng thử lại.");
         }}
       />
 

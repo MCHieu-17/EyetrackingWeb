@@ -1,33 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import { Input, Textarea } from "@/components/ui/input";
-import { Alert } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-import { useQuizAssignment, useUpdateQuizAssignment } from "@/hooks/use-quiz";
+import { QuizQuestionEditor, duplicateQuestion, newQuestion } from "@/components/quiz/quiz-question-editor";
 import { useUnsavedGuard } from "@/components/teacher/unsaved-guard";
+import { useQuizAssignment, useUpdateQuizAssignment } from "@/hooks/use-quiz";
+import { QUIZ_STATUS_LABEL, QUIZ_STATUS_TONE } from "@/lib/content-labels";
 import { draftPayload, isQuestionComplete, questionIssues, trimQuestion } from "@/lib/quiz-validation";
 import { cn } from "@/lib/utils";
 import type { QuizAssignmentStatus, QuizQuestion } from "@/lib/types/domain";
-import {
-  QuizQuestionEditor,
-  duplicateQuestion,
-  newQuestion,
-} from "@/components/quiz/quiz-question-editor";
-
-const STATUS_TONE: Record<QuizAssignmentStatus, string> = {
-  draft: "border-black/10 bg-black/5 text-black/65",
-  published: "border-[#cfe0ca] bg-[#e8f1e6] text-[#3f573c]",
-  closed: "border-black/10 bg-black/5 text-black/65",
-};
-
-const QUIZ_STATUS_LABEL: Record<QuizAssignmentStatus, string> = {
-  draft: "Bản nháp",
-  published: "Đã giao",
-  closed: "Đã đóng",
-};
 
 function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -38,43 +24,40 @@ function toLocalInput(iso: string | null | undefined): string {
 }
 
 interface QuizForm {
-  title: string;
   instructions: string;
   durationMinutes: number;
   dueAt: string;
   allowRetry: boolean;
+  allowChatbot: boolean;
   questions: QuizQuestion[];
 }
 
 const serialize = (form: QuizForm) => JSON.stringify(form);
 
 /**
- * Trình soạn bài tập trắc nghiệm: tên bài + danh sách câu hỏi (trái) và vùng sửa
- * câu đang chọn (phải). Câu dở được đánh dấu ngay tại danh sách và tại trường.
+ * Trình soạn bài tập trắc nghiệm: thiết lập bài + danh sách câu hỏi (trái) và
+ * vùng sửa câu đang chọn (phải). Tên bài tập nằm ở header chung của ItemEditor.
  */
 export function LessonQuizEditor({
   quizId,
   canManage,
   onChanged,
-  focusTitleToken = 0,
 }: {
   quizId: string;
   canManage: boolean;
   onChanged: () => void;
-  focusTitleToken?: number;
 }) {
-  const { data: assignment, isLoading } = useQuizAssignment(quizId);
+  const { data: assignment, isLoading, isError, refetch } = useQuizAssignment(quizId);
   const updateAssignment = useUpdateQuizAssignment();
   const guard = useUnsavedGuard();
-  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const [hydratedId, setHydratedId] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [dueAt, setDueAt] = useState("");
   const [status, setStatus] = useState<QuizAssignmentStatus>("draft");
   const [allowRetry, setAllowRetry] = useState(false);
+  const [allowChatbot, setAllowChatbot] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [baseline, setBaseline] = useState("");
@@ -84,28 +67,28 @@ export function LessonQuizEditor({
   // Render-phase hydrate một lần cho mỗi bài tập.
   if (assignment && hydratedId !== assignment.id) {
     const form: QuizForm = {
-      title: assignment.title,
       instructions: assignment.instructions,
       durationMinutes: assignment.durationMinutes,
       dueAt: toLocalInput(assignment.dueAt),
       allowRetry: Boolean(assignment.allowRetry),
+      allowChatbot: Boolean(assignment.allowChatbot),
       questions: assignment.questions,
     };
     setHydratedId(assignment.id);
-    setTitle(form.title);
     setInstructions(form.instructions);
     setDurationMinutes(form.durationMinutes);
     setDueAt(form.dueAt);
     setStatus(assignment.status);
     setAllowRetry(form.allowRetry);
+    setAllowChatbot(form.allowChatbot);
     setQuestions(form.questions);
     setSelectedIndex(0);
     setBaseline(serialize(form));
   }
 
   const form = useMemo<QuizForm>(
-    () => ({ title, instructions, durationMinutes, dueAt, allowRetry, questions }),
-    [title, instructions, durationMinutes, dueAt, allowRetry, questions],
+    () => ({ instructions, durationMinutes, dueAt, allowRetry, allowChatbot, questions }),
+    [instructions, durationMinutes, dueAt, allowRetry, allowChatbot, questions],
   );
   const snapshot = useMemo(() => serialize(form), [form]);
   const dirty = baseline !== "" && snapshot !== baseline;
@@ -154,12 +137,12 @@ export function LessonQuizEditor({
         const saved = await updateAssignment.mutateAsync({
           id: quizId,
           patch: {
-            title: form.title.trim() || "Bài tập mới",
             instructions: form.instructions.trim(),
             durationMinutes: Math.max(1, form.durationMinutes || 1),
             dueAt: dueIso,
             status: target,
             allowRetry: form.allowRetry,
+            allowChatbot: form.allowChatbot,
             // Schema PATCH từ chối mảng rỗng → chỉ gửi khi có câu hợp lệ.
             ...(payload.length ? { questions: payload } : {}),
           },
@@ -192,21 +175,24 @@ export function LessonQuizEditor({
   );
 
   // Cảnh báo "còn thay đổi chưa lưu" khi giáo viên chuyển mục / chuyển tab / rời trang.
+  // Câu dở không lưu được lên server → chặn "Lưu & tiếp tục" để không mất âm thầm.
   useEffect(() => {
     if (!guard || !canManage) return;
     return guard.register({
       label: "bài tập",
       isDirty: () => dirty,
-      save: () => save("draft"),
+      save: async () => {
+        if (incompleteCount > 0) {
+          flash(
+            "err",
+            `Còn ${incompleteCount} câu chưa hoàn thiện. Hoàn thiện hoặc bỏ các câu này trước khi rời đi.`,
+          );
+          return false;
+        }
+        return save("draft");
+      },
     });
-  }, [guard, canManage, dirty, save]);
-
-  // "Đổi tên" từ mục lục: bài tập đổi tên qua ô "Tên bài tập" này.
-  useEffect(() => {
-    if (focusTitleToken === 0 || !titleInputRef.current) return;
-    titleInputRef.current.focus();
-    titleInputRef.current.select();
-  }, [focusTitleToken]);
+  }, [guard, canManage, dirty, incompleteCount, flash, save]);
 
   // Cho phép làm lại: bật/tắt là lưu ngay (không cần bấm Lưu nháp).
   const toggleAllowRetry = async (value: boolean) => {
@@ -214,9 +200,7 @@ export function LessonQuizEditor({
     setAllowRetry(value);
     try {
       await updateAssignment.mutateAsync({ id: quizId, patch: { allowRetry: value } });
-      setBaseline(
-        serialize({ ...form, allowRetry: value, questions }),
-      );
+      setBaseline(serialize({ ...form, allowRetry: value, questions }));
       onChanged();
       flash("ok", value ? "Đã cho phép học viên làm lại bài này." : "Đã tắt cho phép làm lại.");
     } catch {
@@ -257,6 +241,15 @@ export function LessonQuizEditor({
   if (isLoading) {
     return <p className="text-sm text-black/55">Đang tải bài tập…</p>;
   }
+  if (isError) {
+    return (
+      <ErrorState
+        title="Không tải được bài tập"
+        description="Vui lòng kiểm tra kết nối và thử lại."
+        onRetry={() => void refetch()}
+      />
+    );
+  }
   if (!assignment) {
     return <p className="text-sm text-destructive">Không tải được bài tập.</p>;
   }
@@ -265,43 +258,22 @@ export function LessonQuizEditor({
 
   return (
     <div className="space-y-5">
-      {/* Tên bài tập + trạng thái */}
-      <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <label
-              htmlFor={`quiz-title-${assignment.id}`}
-              className="block text-sm font-medium text-black"
-            >
-              Tên bài tập
-            </label>
-            <Input
-              id={`quiz-title-${assignment.id}`}
-              ref={titleInputRef}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              readOnly={!canManage}
-              placeholder="Ví dụ: Kiểm tra chương 1"
-              className="h-11"
-            />
-          </div>
-          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-            <span
-              className={cn(
-                "rounded-full border px-3 py-1 text-[11px] font-semibold",
-                STATUS_TONE[status],
-              )}
-            >
-              {QUIZ_STATUS_LABEL[status]}
-            </span>
-            <span className="text-xs font-medium text-black/60">
-              {questions.length} câu · {totalPoints} điểm
-            </span>
-          </div>
+      {/* Thiết lập bài tập — tên bài đã nằm ở header chung. */}
+      <section className="space-y-3 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-black">Thiết lập bài tập</h3>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+              QUIZ_STATUS_TONE[status],
+            )}
+          >
+            {QUIZ_STATUS_LABEL[status]}
+          </span>
         </div>
 
         {status === "draft" && (
-          <p className="mt-3 flex items-start gap-2 rounded-[14px] border border-warning/30 bg-warning/8 px-3 py-2 text-xs leading-5 text-black/75">
+          <p className="flex items-start gap-2 rounded-[14px] border border-warning/30 bg-warning/8 px-3 py-2 text-xs leading-5 text-black/75">
             <Icon name="ri-information-line" className="mt-0.5 size-3.5 shrink-0 text-warning" />
             Bài tập đang ở bản nháp nên học viên CHƯA thấy. Bấm “Giao bài cho học viên” để đưa vào
             khóa học.
@@ -311,21 +283,10 @@ export function LessonQuizEditor({
         {message && (
           <Alert
             variant={message.tone === "ok" ? "success" : "destructive"}
-            className="mt-3"
             title={message.text}
           />
         )}
 
-        {dirty && (
-          <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-black/60">
-            <span className="size-1.5 rounded-full bg-warning" />
-            Có thay đổi chưa lưu
-          </p>
-        )}
-      </section>
-
-      {/* Thiết lập ít dùng — gập 1 cấp; công tắc "làm lại" luôn hiện. */}
-      <section className="space-y-3 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
         <div className="flex flex-col gap-3 rounded-[16px] border border-[#dfe9dc] bg-[#e8f1e6]/45 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h4 className="flex items-center gap-2 text-sm font-semibold text-black">
@@ -345,9 +306,34 @@ export function LessonQuizEditor({
           />
         </div>
 
+        <div className="flex items-center justify-between gap-4 rounded-[16px] border border-border p-4">
+          <div>
+            <p className="text-sm font-semibold">Cho phép dùng chatbot khi làm bài</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Khi tắt, chatbot bị khóa trong toàn khóa học từ lúc bắt đầu đến khi nộp hoặc hết giờ. Lưu ngay khi bật/tắt.
+            </p>
+          </div>
+          <Switch checked={allowChatbot} disabled={!canManage || updateAssignment.isPending}
+            ariaLabel="Cho phép dùng chatbot khi làm bài"
+            onCheckedChange={async (value) => {
+              try {
+                await updateAssignment.mutateAsync({ id: quizId, patch: { allowChatbot: value } });
+                setAllowChatbot(value);
+                setBaseline((current) => current ? serialize({ ...JSON.parse(current), allowChatbot: value }) : current);
+                onChanged();
+                flash("ok", "Đã cập nhật quyền dùng chatbot.");
+              } catch (error) {
+                flash("err", `Không cập nhật được: ${error instanceof Error ? error.message : "lỗi kết nối"}`);
+              }
+            }} />
+        </div>
+
         <details className="rounded-[16px] border border-black/10 bg-[#fdfdfa] p-4">
           <summary className="cursor-pointer text-sm font-semibold text-black">
             Thời lượng, hạn nộp, hướng dẫn
+            <span className="ml-2 text-xs font-normal text-black/55">
+              {durationMinutes} phút · {dueAt ? "có hạn nộp" : "không hạn nộp"}
+            </span>
           </summary>
           <p className="mt-2 text-xs leading-5 text-black/60">
             Các thay đổi trong mục này chỉ được áp dụng khi bấm “Lưu bài tập nháp” hoặc “Giao bài cho
@@ -413,12 +399,17 @@ export function LessonQuizEditor({
       <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-black">Câu hỏi</h3>
-          {incompleteCount > 0 && (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-warning">
-              <Icon name="ri-error-warning-line" className="size-3.5" />
-              {incompleteCount} câu chưa hoàn thiện
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium text-black/60">
+              {questions.length} câu · {totalPoints} điểm
             </span>
-          )}
+            {incompleteCount > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-warning">
+                <Icon name="ri-error-warning-line" className="size-3.5" />
+                {incompleteCount} câu chưa hoàn thiện
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,270px)_minmax(0,1fr)] lg:items-start">
@@ -514,11 +505,21 @@ export function LessonQuizEditor({
 
       {canManage && (
         <div className="sticky bottom-3 z-10 flex flex-col gap-2 rounded-[20px] border border-[#eeeee9] bg-white/95 p-3 shadow-[0_10px_30px_rgba(30,35,25,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-          <p className="px-1 text-xs text-black/60">
-            {dirty
-              ? "Chưa lưu: thay đổi sẽ mất nếu rời mục này."
-              : "Mọi thay đổi đã được lưu."}
-          </p>
+          <div className="space-y-1 px-1">
+            <p className="text-xs text-black/60">
+              {dirty
+                ? "Chưa lưu: thay đổi sẽ mất nếu rời mục này."
+                : "Mọi thay đổi đã được lưu."}
+            </p>
+            {status !== "published" && questions.length === 0 && (
+              <p className="text-xs text-black/55">Thêm ít nhất một câu hỏi để giao bài.</p>
+            )}
+            {status !== "published" && questions.length > 0 && incompleteCount > 0 && (
+              <p className="text-xs font-medium text-warning">
+                Còn {incompleteCount} câu chưa hoàn thiện — hoàn thiện trước khi giao bài.
+              </p>
+            )}
+          </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
@@ -532,7 +533,12 @@ export function LessonQuizEditor({
             <Button
               type="button"
               className="rounded-full"
-              disabled={saving || status === "published"}
+              disabled={
+                saving ||
+                status === "published" ||
+                questions.length === 0 ||
+                incompleteCount > 0
+              }
               onClick={() => void save("published")}
             >
               {status === "published" ? "Đã giao bài" : saving ? "Đang lưu…" : "Giao bài cho học viên"}

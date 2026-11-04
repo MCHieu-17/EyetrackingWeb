@@ -1,5 +1,25 @@
 import type { Page, Route } from "@playwright/test";
 
+interface MockLesson {
+  id: string;
+  title: string;
+  kind: string;
+  slides: number;
+  attention: number | null;
+  mastery?: number | null;
+  quizId?: string;
+  quizStatus?: string;
+  questionCount?: number;
+  durationMinutes?: number;
+  dueAt?: string | null;
+}
+
+interface MockModule {
+  id: string;
+  title: string;
+  lessons: MockLesson[];
+}
+
 export interface MockUser {
   email: string;
   fullName: string;
@@ -137,6 +157,7 @@ const QUIZ_BASE = {
   status: "published",
   createdAt: "2026-10-14T08:00:00.000Z",
   allowRetry: true,
+  allowChatbot: true,
 };
 
 const QUIZ_QUESTIONS = [
@@ -295,6 +316,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/me/enrollments", (r) => json(r, ENROLLMENTS));
   await page.route("**/api/courses/**", (r) => json(r, OUTLINE));
   // Chat: route cụ thể hơn phải đăng ký SAU route tổng để được ưu tiên.
+  await page.route("**/api/courses/*/chat/access", (r) => json(r, { allowed: true, reason: null, blockedUntil: null }));
   await page.route("**/api/courses/*/chat/sessions", (r) => json(r, []));
   await page.route("**/api/chat/sessions/*/messages", (r) => json(r, []));
   await page.route("**/api/lessons/**/contents", (r) => json(r, SLIDES));
@@ -331,9 +353,38 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     if (r.request().method() === "PATCH") {
       // Giả lập PATCH: trả về bài tập đã ghép thay đổi để UI phản hồi đúng trạng thái.
       const patch = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      if (typeof patch.title === "string") {
+        const quizLesson = courseTree
+          .flatMap((mod) => mod.lessons)
+          .find((lesson) => lesson.id === "lesson-quiz-1");
+        if (quizLesson) quizLesson.title = patch.title;
+      }
       return json(r, { ...QUIZ_REVEALED, ...patch });
     }
     return json(r, quizSubmitted || revealQuizAnswers ? QUIZ_REVEALED : QUIZ_PUBLIC);
+  });
+  let newQuiz = {
+    ...QUIZ_PUBLIC,
+    id: "quiz-new",
+    lessonId: "lesson-quiz-new",
+    lessonTitle: "Bài tập mới",
+    title: "Bài tập mới",
+    status: "draft",
+    questions: [],
+  };
+  await page.route("**/api/assignments/quiz-new", (r) => {
+    if (r.request().method() === "PATCH") {
+      const patch = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      newQuiz = { ...newQuiz, ...patch };
+      if (typeof patch.title === "string") {
+        const quizLesson = courseTree
+          .flatMap((mod) => mod.lessons)
+          .find((lesson) => lesson.id === "lesson-quiz-new");
+        if (quizLesson) quizLesson.title = patch.title;
+      }
+      return json(r, newQuiz);
+    }
+    return json(r, newQuiz);
   });
   await page.route("**/api/assignments/quiz-python-1/attempt", (r) =>
     json(r, quizSubmitted ? QUIZ_ATTEMPT : null),
@@ -362,7 +413,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
 
   // Teacher
   // Bản sao mutable của cây khóa học: kéo thả xong, refetch phải thấy thứ tự mới.
-  const courseTree = MODULES.map((mod) => ({
+  const courseTree: MockModule[] = MODULES.map((mod) => ({
     ...mod,
     lessons: mod.lessons.map((lesson) => ({ ...lesson })),
   }));
@@ -376,8 +427,33 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     return json(r, courseTree);
   });
   await page.route("**/api/teacher/courses", (r) => {
-    if (r.request().method() === "POST") return json(r, TEACHER_COURSE);
+    if (r.request().method() === "POST") {
+      const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      return json(r, {
+        ...TEACHER_COURSE,
+        ...body,
+        id: "course-1",
+        status: "draft",
+        students: 0,
+        lessonCount: 0,
+      });
+    }
     return json(r, [TEACHER_COURSE]);
+  });
+  await page.route("**/api/teacher/courses/*/modules", (r) => {
+    if (r.request().method() !== "POST") return r.fallback();
+    const body = (r.request().postDataJSON() ?? {}) as { title?: string };
+    const newModule = {
+      id: "mod-new",
+      title: body.title ?? "Chương mới",
+      lessons: [] as { id: string; title: string; kind: string; slides: number; attention: number | null }[],
+    };
+    courseTree.push(newModule);
+    return json(
+      r,
+      { id: newModule.id, courseId: "course-1", title: newModule.title, orderIndex: courseTree.length },
+      201,
+    );
   });
   await page.route("**/api/teacher/courses/*/students", (r) => {
     if (r.request().method() === "POST") return json(r, { ok: true, added: 1 });
@@ -391,23 +467,56 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     const body = (r.request().postDataJSON() ?? {}) as { requireCalibration?: boolean };
     return json(r, { ok: true, requireCalibration: body.requireCalibration ?? false });
   });
-  await page.route("**/api/teacher/modules/*/quizzes", (r) =>
-    json(
-      r,
-      {
-        id: "lesson-quiz-new",
-        title: "Bài tập mới",
-        kind: "quiz",
-        slides: 0,
-        quizId: "quiz-new",
-        quizStatus: "draft",
-        questionCount: 0,
-        durationMinutes: 30,
-        dueAt: null,
-      },
-      201,
-    ),
-  );
+  await page.route("**/api/teacher/modules/*/lessons", (r) => {
+    if (r.request().method() !== "POST") return r.fallback();
+    const moduleId = /\/modules\/([^/]+)\/lessons/.exec(r.request().url())?.[1];
+    const mod = courseTree.find((item) => item.id === moduleId);
+    const body = (r.request().postDataJSON() ?? {}) as { title?: string };
+    const lesson = {
+      id: "lesson-new",
+      title: body.title ?? "Bài giảng mới",
+      kind: "lesson",
+      slides: 0,
+      attention: null,
+    };
+    mod?.lessons.push(lesson);
+    return json(r, { id: lesson.id, title: lesson.title, orderIndex: mod?.lessons.length ?? 1 }, 201);
+  });
+  await page.route("**/api/teacher/modules/*", (r) => {
+    const moduleId = /\/modules\/([^/]+)$/.exec(r.request().url())?.[1];
+    const mod = courseTree.find((item) => item.id === moduleId);
+    if (r.request().method() === "PATCH") {
+      const body = (r.request().postDataJSON() ?? {}) as { title?: string };
+      if (mod && body.title) mod.title = body.title;
+      return json(r, { id: moduleId, courseId: "course-1", title: mod?.title ?? "", orderIndex: 1 });
+    }
+    if (r.request().method() === "DELETE") {
+      const index = courseTree.findIndex((item) => item.id === moduleId);
+      if (index >= 0) courseTree.splice(index, 1);
+      return json(r, { ok: true });
+    }
+    return r.fallback();
+  });
+  await page.route("**/api/teacher/modules/*/quizzes", (r) => {
+    if (r.request().method() !== "POST") return r.fallback();
+    const moduleId = /\/modules\/([^/]+)\/quizzes/.exec(r.request().url())?.[1];
+    const mod = courseTree.find((item) => item.id === moduleId);
+    const body = (r.request().postDataJSON() ?? {}) as { title?: string };
+    const item = {
+      id: "lesson-quiz-new",
+      title: body.title ?? "Bài tập mới",
+      kind: "quiz",
+      slides: 0,
+      attention: null,
+      quizId: "quiz-new",
+      quizStatus: "draft",
+      questionCount: 0,
+      durationMinutes: 30,
+      dueAt: null,
+    };
+    mod?.lessons.push(item);
+    return json(r, item, 201);
+  });
   await page.route("**/api/teacher/modules/*/items/reorder", (r) => {
     const moduleId = /\/modules\/([^/]+)\/items\/reorder/.exec(r.request().url())?.[1];
     const items = (r.request().postDataJSON() as { items?: { id: string }[] }).items ?? [];
@@ -430,7 +539,21 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
         : [],
     );
   });
-  await page.route("**/api/teacher/lessons/*", (r) => json(r, { ok: true }));
+  await page.route("**/api/teacher/lessons/*", (r) => {
+    const lessonId = /\/lessons\/([^/]+)$/.exec(r.request().url())?.[1];
+    const owner = courseTree.find((mod) => mod.lessons.some((lesson) => lesson.id === lessonId));
+    const lesson = owner?.lessons.find((item) => item.id === lessonId);
+    if (r.request().method() === "PATCH") {
+      const body = (r.request().postDataJSON() ?? {}) as { title?: string };
+      if (lesson && body.title) lesson.title = body.title;
+      return json(r, { ok: true });
+    }
+    if (r.request().method() === "DELETE") {
+      if (owner && lesson) owner.lessons = owner.lessons.filter((item) => item.id !== lessonId);
+      return json(r, { ok: true });
+    }
+    return json(r, { ok: true });
+  });
   await page.route("**/api/teacher/lessons/*/heatmap**", (r) => json(r, HEATMAP_STATS));
   await page.route("**/api/teacher/lessons/*/slides", (r) => json(r, []));
 

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { open } from "node:fs/promises";
-import { MODULES, json, mockApi, seedAuth } from "./fixtures";
+import { MODULES, TEACHER_COURSE, json, mockApi, seedAuth } from "./fixtures";
 
 const TEACHER = {
   email: "teacher@school.edu.vn",
@@ -94,26 +94,65 @@ test.describe("Teacher", () => {
         candidate.url().includes("/api/teacher/modules/mod-1/quizzes") &&
         candidate.method() === "POST",
     );
-    await page.getByRole("button", { name: "Thêm trắc nghiệm" }).first().click();
+    await page.getByRole("button", { name: "Thêm nội dung" }).first().click();
+    await page.getByRole("menuitem", { name: "Bài tập trắc nghiệm" }).click();
     expect((await request).method()).toBe("POST");
   });
 
-  test("tạo khóa học cho phép chọn học viên để ghi danh", async ({ page }) => {
-    await page.goto("/teacher/courses/c-new?new=1");
-    const searchRequest = page.waitForRequest((request) => {
-      const url = new URL(request.url());
-      return url.pathname === "/api/teacher/students" && url.searchParams.get("q") === "SV003";
-    });
-    await page.getByRole("textbox", { name: "Tìm học viên để thêm vào khóa học" }).fill("SV003");
-    await searchRequest;
-    const student = page.getByRole("checkbox", { name: /Phạm Văn Cường/ });
+  test("thêm chương mới rồi đổi tên ngay tại mục lục", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=content");
+    const createRequest = page.waitForRequest(
+      (candidate) =>
+        new URL(candidate.url()).pathname === "/api/teacher/courses/course-1/modules" &&
+        candidate.method() === "POST",
+    );
+    await page.getByRole("button", { name: "Thêm chương" }).click();
+    expect((await createRequest).postDataJSON()).toEqual({ title: "Chương 2" });
 
-    await expect(student).toBeVisible();
-    await student.check();
-    await expect(page.getByText("Tùy chọn · đã chọn 1")).toBeVisible();
+    const renameInput = page.getByLabel("Đổi tên Chương 2");
+    await expect(renameInput).toBeVisible();
+    await renameInput.fill("Chương mới");
+    const renameRequest = page.waitForRequest(
+      (candidate) =>
+        new URL(candidate.url()).pathname === "/api/teacher/modules/mod-new" &&
+        candidate.method() === "PATCH",
+    );
+    await renameInput.press("Enter");
+    expect((await renameRequest).postDataJSON()).toEqual({ title: "Chương mới" });
+    await expect(page.getByRole("button", { name: "Chương mới", exact: true })).toBeVisible();
   });
 
-  test("tạo khóa học gửi cờ hiển thị điểm nhìn ở cấp khóa", async ({ page }) => {
+  test("đang soạn quiz dở mà thêm bài giảng thì hỏi trước", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=content");
+    await page.getByRole("button", { name: "Mở Bài tập: Kiểm tra nhập môn" }).click();
+    await page.getByLabel("Nội dung câu hỏi 1").fill("Câu hỏi đang sửa");
+
+    await page.getByRole("button", { name: "Thêm nội dung" }).first().click();
+    await page.getByRole("menuitem", { name: "Bài giảng (PDF)" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Còn thay đổi chưa lưu");
+    await dialog.getByRole("button", { name: "Ở lại soạn tiếp" }).click();
+    await expect(page.getByLabel("Nội dung câu hỏi 1")).toHaveValue("Câu hỏi đang sửa");
+  });
+
+  test("đổi tên bài tập từ header chung gọi PATCH assignment", async ({ page }) => {
+    await page.goto("/teacher/courses/course-1?tab=content");
+    await page.getByRole("button", { name: "Mở Bài tập: Kiểm tra nhập môn" }).click();
+
+    const request = page.waitForRequest(
+      (candidate) =>
+        new URL(candidate.url()).pathname === "/api/assignments/quiz-python-1" &&
+        candidate.method() === "PATCH",
+    );
+    const input = page.getByLabel("Tên bài tập");
+    await input.fill("Bài tập đổi tên");
+    await input.press("Enter");
+
+    expect((await request).postDataJSON()).toEqual({ title: "Bài tập đổi tên" });
+  });
+
+  test("tạo khóa học mới tạo bản nháp và mở tab Nội dung", async ({ page }) => {
     let courseBody: unknown = null;
     await page.route("**/api/teacher/courses", async (route) => {
       if (route.request().method() !== "POST") return route.fallback();
@@ -121,44 +160,48 @@ test.describe("Teacher", () => {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ id: "course-new" }),
+        body: JSON.stringify({ id: "course-new", title: "Khóa mới", status: "draft" }),
       });
     });
-    await page.route("**/api/teacher/courses/course-new/modules", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: '{"id":"mod-new"}' }),
-    );
-    await page.route("**/api/teacher/modules/mod-new/lessons", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ id: "lesson-new" }),
-      }),
-    );
-    await page.route("**/api/teacher/lessons/lesson-new/slides/upload", (route) =>
-      route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: '{"ok":true,"slides":1}',
-      }),
+    await page.route("**/api/teacher/courses/course-new", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
     );
 
     await page.goto("/teacher/courses/c-new?new=1");
     await page.getByLabel("Tên khóa học").fill("Khóa mới");
-    await page.getByLabel("Tên chương 1").fill("Chương 1");
-    await page.getByLabel("Tên bài 1").fill("Bài 1");
-    await page.getByLabel("PDF cho bài 1").setInputFiles({
-      name: "lesson.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4"),
-    });
-    // Cờ là cấp KHÓA HỌC (không còn công tắc theo từng bài).
-    await page
-      .getByRole("switch", { name: "Hiển thị điểm nhìn cho sinh viên cho cả khóa học" })
-      .click();
-    await page.getByRole("button", { name: "Tạo và xuất bản" }).click();
+    await page.getByLabel("Mô tả").fill("Mô tả khóa mới");
+    await page.getByRole("button", { name: "Tạo khóa học" }).click();
 
-    await expect.poll(() => courseBody).not.toBeNull();
-    expect(courseBody).toMatchObject({ title: "Khóa mới", showGazeDot: true });
+    await expect(page).toHaveURL(/\/teacher\/courses\/course-new\?tab=content/);
+    await expect(page.getByText("Chưa có chương")).toBeVisible();
+    expect(courseBody).toMatchObject({
+      title: "Khóa mới",
+      description: "Mô tả khóa mới",
+      status: "draft",
+    });
+  });
+
+  test("xuất bản khóa học ngay trong tab Nội dung", async ({ page }) => {
+    await page.route("**/api/teacher/courses", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { ...TEACHER_COURSE, id: "course-new", title: "Khóa mới", status: "draft" },
+        ]),
+      }),
+    );
+    const request = page.waitForRequest(
+      (candidate) =>
+        new URL(candidate.url()).pathname === "/api/teacher/courses/course-new" &&
+        candidate.method() === "PATCH",
+    );
+
+    await page.goto("/teacher/courses/course-new?tab=content");
+    await page.getByRole("button", { name: "Xuất bản" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Xuất bản" }).click();
+
+    expect((await request).postDataJSON()).toEqual({ status: "published" });
   });
 
   test("dialog thêm học viên tìm kiếm trên server", async ({ page }) => {
@@ -175,62 +218,40 @@ test.describe("Teacher", () => {
     await expect(page.getByText("Phạm Văn Cường")).toBeVisible();
   });
 
-  test("từ chối PDF quá lớn trước khi tạo khóa học", async ({ page }, testInfo) => {
-    let createRequests = 0;
-    await page.route("**/api/teacher/courses", async (route) => {
-      if (route.request().method() === "POST") createRequests += 1;
+  test("từ chối PDF quá lớn ngay trong trình soạn bài giảng", async ({ page }, testInfo) => {
+    let uploadRequests = 0;
+    await page.route("**/api/teacher/lessons/lesson-1/slides/upload", async (route) => {
+      uploadRequests += 1;
       await route.fallback();
     });
-    await page.goto("/teacher/courses/c-new?new=1");
-    await page.getByLabel("Tên khóa học").fill("Khóa kiểm tra PDF");
-    await page.getByLabel("Tên chương 1").fill("Chương kiểm tra");
-    await page.getByLabel("Tên bài 1").fill("Bài kiểm tra");
+    await page.goto("/teacher/courses/course-1?tab=content");
+    await page.getByRole("button", { name: "Mở Bài 1: Giới thiệu" }).click();
+
     const oversizedPdf = testInfo.outputPath("too-large.pdf");
     const file = await open(oversizedPdf, "w");
     await file.truncate(50 * 1024 * 1024 + 1);
     await file.close();
-    await page.getByLabel("PDF cho bài 1").setInputFiles(oversizedPdf);
+    await page.locator('input[type="file"]').setInputFiles(oversizedPdf);
 
-    await expect(page.getByText(/PDF vượt quá 50MB: too-large\.pdf/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Tạo và xuất bản" })).toBeDisabled();
-    expect(createRequests).toBe(0);
+    await expect(page.getByText(/vượt quá 50MB/)).toBeVisible();
+    expect(uploadRequests).toBe(0);
   });
 
-  test("giữ liên kết bản nháp khi tạo đầy đủ thất bại", async ({ page }) => {
+  test("hiển thị lỗi khi tạo khóa học thất bại", async ({ page }) => {
     await page.route("**/api/teacher/courses", async (route) => {
       if (route.request().method() !== "POST") return route.fallback();
       return route.fulfill({
-        status: 200,
+        status: 500,
         contentType: "application/json",
-        body: JSON.stringify({ id: "draft-recovery" }),
+        body: JSON.stringify({ detail: "Không tạo được khóa học" }),
       });
     });
-    await page.route("**/api/teacher/courses/draft-recovery/modules", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: '{"id":"mod-recovery"}' }),
-    );
-    await page.route("**/api/teacher/modules/mod-recovery/lessons", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: '{"id":"lesson-recovery"}' }),
-    );
-    await page.route("**/api/teacher/lessons/lesson-recovery/slides/upload", (route) =>
-      route.fulfill({ status: 500, contentType: "application/json", body: '{"detail":"upload failed"}' }),
-    );
     await page.goto("/teacher/courses/c-new?new=1");
-    await page.getByLabel("Tên khóa học").fill("Khóa cần khôi phục");
-    await page.getByLabel("Tên chương 1").fill("Chương 1");
-    await page.getByLabel("Tên bài 1").fill("Bài 1");
-    await page.getByLabel("PDF cho bài 1").setInputFiles({
-      name: "lesson.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4"),
-    });
-    await page.getByRole("button", { name: "Tạo và xuất bản" }).click();
+    await page.getByLabel("Tên khóa học").fill("Khóa lỗi");
+    await page.getByRole("button", { name: "Tạo khóa học" }).click();
 
-    await expect(page.getByRole("alert").filter({ hasText: "Khóa học nháp đã được tạo" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Tiếp tục chỉnh sửa bản nháp" })).toHaveAttribute(
-      "href",
-      "/teacher/courses/draft-recovery?tab=content",
-    );
-    await expect(page.getByRole("button", { name: "Tạo và xuất bản" })).toHaveCount(0);
+    await expect(page.getByRole("alert").filter({ hasText: "Không tạo được khóa học" })).toBeVisible();
+    await expect(page).toHaveURL(/\/teacher\/courses\/c-new/);
   });
 
   test("thay PDF tải lại danh sách slide quản trị", async ({ page }) => {

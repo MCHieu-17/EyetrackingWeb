@@ -10,6 +10,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/components/ui/spinner";
 import { useUnsavedGuard } from "@/components/teacher/unsaved-guard";
+import { useCourseStatus } from "@/hooks/use-course-status";
 import { useCourseTree, useTeacherCourses } from "@/hooks/use-teacher";
 import { deleteCourse, updateCourse } from "@/lib/api/teacher";
 import { STATUS_LABEL } from "@/lib/constants";
@@ -45,6 +46,7 @@ export function CourseInfoTab({
   const queryClient = useQueryClient();
   const router = useRouter();
   const guard = useUnsavedGuard();
+  const { changeStatus, saving: statusSaving } = useCourseStatus(courseId);
   const { data: courses = [], isLoading } = useTeacherCourses();
   const { data: tree = [] } = useCourseTree(courseId);
   const course = useMemo(() => courses.find((c) => c.id === courseId), [courses, courseId]);
@@ -107,17 +109,10 @@ export function CourseInfoTab({
     return guard.register({ label: "thông tin khóa học", isDirty: () => dirty, save });
   }, [guard, canManage, dirty, save]);
 
-  const changeStatus = async (next: CourseStatus, note: string) => {
-    setSaving(true);
-    try {
-      await updateCourse(courseId, { status: next });
-      await queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-      flash("ok", note);
-    } catch (e) {
-      flash("err", `Không đổi được trạng thái: ${e instanceof Error ? e.message : "lỗi không xác định"}`);
-    } finally {
-      setSaving(false);
-    }
+  const changeStatusWithFlash = async (next: CourseStatus, note: string) => {
+    const ok = await changeStatus(next);
+    if (ok) flash("ok", note);
+    else flash("err", "Không đổi được trạng thái khóa học. Vui lòng thử lại.");
   };
 
   const requestPublish = () => {
@@ -213,7 +208,7 @@ export function CourseInfoTab({
             {status !== "published" && (
               <Button
                 className="rounded-full bg-black px-5 text-white hover:bg-black/80"
-                disabled={saving}
+                disabled={statusSaving}
                 onClick={requestPublish}
               >
                 <Icon name="ri-rocket-2-line" className="size-4" />
@@ -225,8 +220,8 @@ export function CourseInfoTab({
                 <Button
                   variant="outline"
                   className="rounded-full border-black/10 bg-white"
-                  disabled={saving}
-                  onClick={() => void changeStatus("draft", "Đã thu hồi khóa học về bản nháp.")}
+                  disabled={statusSaving}
+                  onClick={() => void changeStatusWithFlash("draft", "Đã thu hồi khóa học về bản nháp.")}
                 >
                   <Icon name="ri-eye-off-line" className="size-4" />
                   Thu hồi về bản nháp
@@ -234,7 +229,7 @@ export function CourseInfoTab({
                 <Button
                   variant="ghost"
                   className="rounded-full text-black/65"
-                  disabled={saving}
+                  disabled={statusSaving}
                   onClick={() => setConfirmArchive(true)}
                 >
                   <Icon name="ri-inbox-line" className="size-4" />
@@ -246,8 +241,8 @@ export function CourseInfoTab({
               <Button
                 variant="outline"
                 className="rounded-full border-black/10 bg-white"
-                disabled={saving}
-                onClick={() => void changeStatus("draft", "Đã mở lại khóa học ở dạng bản nháp.")}
+                disabled={statusSaving}
+                onClick={() => void changeStatusWithFlash("draft", "Đã mở lại khóa học ở dạng bản nháp.")}
               >
                 <Icon name="ri-refresh-line" className="size-4" />
                 Mở lại (bản nháp)
@@ -290,10 +285,10 @@ export function CourseInfoTab({
         title="Xuất bản khóa học?"
         description="Sinh viên sẽ thấy khóa học trong danh sách và đăng ký được. Mọi bài giảng đã tải lên và bài tập đã giao hiện ngay với học viên."
         confirmLabel="Xuất bản"
-        loading={saving}
+        loading={statusSaving}
         onConfirm={async () => {
           setConfirmPublish(false);
-          await changeStatus("published", "Đã xuất bản khóa học.");
+          await changeStatusWithFlash("published", "Đã xuất bản khóa học.");
         }}
       />
 
@@ -303,10 +298,10 @@ export function CourseInfoTab({
         title="Lưu trữ khóa học?"
         description="Khóa học sẽ ẩn khỏi danh sách cho sinh viên mới. Học viên đã đăng ký vẫn xem được nội dung."
         confirmLabel="Lưu trữ"
-        loading={saving}
+        loading={statusSaving}
         onConfirm={async () => {
           setConfirmArchive(false);
-          await changeStatus("archived", "Đã lưu trữ khóa học.");
+          await changeStatusWithFlash("archived", "Đã lưu trữ khóa học.");
         }}
       />
 
