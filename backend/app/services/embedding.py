@@ -81,7 +81,7 @@ async def _call(path: str, payload: dict) -> dict:
         except httpx.HTTPStatusError as exc:
             last_error = exc
             # 4xx: lỗi dữ liệu/cấu hình -> retry vô ích.
-            if 400 <= exc.response.status_code < 500:
+            if 400 <= exc.response.status_code < 500 and exc.response.status_code != 429:
                 break
         except httpx.HTTPError as exc:
             last_error = exc

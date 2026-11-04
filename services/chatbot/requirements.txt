@@ -16,6 +16,7 @@ psycopg_pool==3.3.3
 pgvector==0.5.1
 
 # LangChain + provider model (River AI OpenAI-compatible cho LLM + VLM)
+langgraph==1.2.19
 langchain-core==1.6.12
 langchain-openai==1.7.2
 # Import trực tiếp trong app/services/ingest.py (client OpenAI-compatible).

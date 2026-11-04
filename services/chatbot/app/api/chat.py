@@ -7,6 +7,7 @@ service không publish port ra ngoài trong docker-compose.
 import json
 import logging
 import secrets
+from contextlib import aclosing
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -30,6 +31,7 @@ def require_internal_token(x_chatbot_token: str = Header(default="")) -> None:
 def _state_from_request(payload: ChatRequest) -> ChatState:
     return {
         "question": payload.message,
+        "context_key": payload.context_key,
         "course_id": payload.course_id,
         "thread_id": payload.thread_id,
         "history": [item.model_dump() for item in payload.history],
@@ -68,6 +70,8 @@ async def chat(payload: ChatRequest):
         citations=[CitationOut(**citation) for citation in citations],
         intent=intent,
         verified=verified,
+        routes=state.get("routes", []),
+        finish_reason=state.get("finish_reason", "stop"),
     )
 
 
@@ -80,8 +84,9 @@ async def chat_stream(payload: ChatRequest):
     state = _state_from_request(payload)
 
     async def event_stream():
-        async for event in run_chat(state):
-            yield _sse(event["event"], event["data"])
+        async with aclosing(run_chat(state)) as stream:
+            async for event in stream:
+                yield _sse(event["event"], event["data"])
 
     return StreamingResponse(
         event_stream(),

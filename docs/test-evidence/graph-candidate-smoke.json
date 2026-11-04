@@ -1,0 +1,35 @@
+{
+  "label": "graph",
+  "concurrency": 1,
+  "mode": "knowledge",
+  "ingest_during_load": false,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 29.848233756999434,
+      "answer": "Mình chưa tìm được căn cứ chính xác trong tài liệu môn học cho câu hỏi này. Bạn thử hỏi cụ thể hơn hoặc xem lại slide liên quan nhé.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "verification_failed",
+        "citation_count": 3
+      },
+      "total_seconds": 29.858776690000013
+    }
+  ],
+  "summary": {
+    "knowledge": {
+      "count": 1,
+      "completed": 1,
+      "p95_first_content": 29.848233756999434,
+      "p95_total": 29.858776690000013
+    }
+  }
+}

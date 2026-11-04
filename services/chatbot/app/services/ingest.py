@@ -73,9 +73,8 @@ class Ingestion:
 
     def __init__(self):
         vlm = get_vlm(vlm_name())
-        self.slide_to_text_chain = (
-            self._create_chat_messages()
-            | vlm.with_structured_output(VLMOutput, method="function_calling")
+        self.slide_to_text_chain = self._create_chat_messages() | vlm.with_structured_output(
+            VLMOutput, method="function_calling"
         )
         self.embedding = get_embedding(embedding_name())
         self.storage = FileStorage()
@@ -128,8 +127,7 @@ class Ingestion:
         with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    self.SLIDE_QUERY
-                    + " WHERE lc.lesson_id = %s ORDER BY lc.order_index",
+                    self.SLIDE_QUERY + " WHERE lc.lesson_id = %s ORDER BY lc.order_index",
                     (lesson_id,),
                 )
                 return list(cur.fetchall())
@@ -189,16 +187,15 @@ class Ingestion:
 
     def _describe_image(self, b64: str) -> str:
         try:
-            return self.slide_to_text_chain.invoke({"b64": b64}).transcript
+            from app.workflow.workload import ingest_slot
+            with ingest_slot():
+                return self.slide_to_text_chain.invoke({"b64": b64}).transcript
         except openai.APITimeoutError as exc:
-            raise VLMUnavailableError(
-                "VLM (River AI) không phản hồi kịp thời gian."
-            ) from exc
+            raise VLMUnavailableError("VLM (River AI) không phản hồi kịp thời gian.") from exc
         except openai.APIConnectionError as exc:
             base = os.getenv("RIVER_BASE_URL", "https://api.river.ai/v1")
             raise VLMUnavailableError(
-                f"Không kết nối được VLM (River AI) tại {base}. "
-                "Kiểm tra mạng và RIVER_BASE_URL."
+                f"Không kết nối được VLM (River AI) tại {base}. Kiểm tra mạng và RIVER_BASE_URL."
             ) from exc
         except openai.APIStatusError as exc:
             if exc.status_code == 429 or exc.status_code >= 500:
@@ -215,9 +212,7 @@ class Ingestion:
             ("Slide", str(slide.get("slide_index")) if slide.get("slide_index") else None),
         ]
         context = "\n".join(
-            f"{label}: {value.strip()}"
-            for label, value in fields
-            if value and str(value).strip()
+            f"{label}: {value.strip()}" for label, value in fields if value and str(value).strip()
         )
         return f"{context}\n\n{markdown}" if context else markdown
 
@@ -243,8 +238,16 @@ class Ingestion:
             "slide_index": slide.get("slide_index"),
             "image_url": slide.get("image_url"),
         }
-        with self._connection() as conn:
+        with self._connection() as conn, conn.transaction():
             with conn.cursor() as cur:
+                cur.execute(
+                    self.SLIDE_QUERY
+                    + " WHERE lc.id = %s AND lc.image_url = %s AND c.deleted_at IS NULL FOR UPDATE OF lc",
+                    (slide["id"], slide["image_url"]),
+                )
+                current = cur.fetchone()
+                if current is None:
+                    raise LookupError("Slide đã bị xóa hoặc thay thế trong khi ingest")
                 cur.execute(
                     """
                     INSERT INTO lesson_content_embedding (
@@ -277,6 +280,11 @@ class Ingestion:
                     ),
                 )
 
+                cur.execute(
+                    "UPDATE lesson_contents SET embedding_status = 'ready', embedding_error = NULL, embedding_updated_at = now() WHERE id = %s",
+                    (slide["id"],),
+                )
+
     def _embed_slide(self, slide: dict) -> None:
         self._mark(slide["id"], "pending")
         try:
@@ -286,7 +294,6 @@ class Ingestion:
             with self._embed_lock:
                 vector = self.embedding.embed_documents([content])[0]
             self._upsert(slide, content, vector)
-            self._mark(slide["id"], "ready")
         except VLMUnavailableError as exc:
             self._mark(slide["id"], "failed", str(exc)[:500])
             raise
@@ -317,9 +324,9 @@ class Ingestion:
                     errors.append(f"{slide['id']}: {exc}")
 
         # Nếu toàn bộ slide lỗi vì VLM không gọi được -> 503 để backend retry.
-        if slides and vlm_down == len(slides):
+        if vlm_down:
             raise VLMUnavailableError(
-                "VLM (River AI) tạm thời không khả dụng cho toàn bộ slide."
+                "VLM (River AI) tạm thời không khả dụng cho một hoặc nhiều slide."
             )
 
         return processed, failed, errors

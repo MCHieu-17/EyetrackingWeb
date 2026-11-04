@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     course_id: str = Field(min_length=1, max_length=64)
     thread_id: str = Field(min_length=1, max_length=256)
+    context_key: str = Field(default="", max_length=512)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=30)
 
     # Ngữ cảnh LMS: sinh viên đang ở bài/chương nào. `lesson_id` chỉ dùng để
@@ -47,6 +48,8 @@ class ChatResponse(BaseModel):
     citations: list[CitationOut]
     intent: str
     verified: bool = True
+    routes: list[str] = Field(default_factory=list)
+    finish_reason: str = "stop"
 
 
 class IngestSlideRequest(BaseModel):

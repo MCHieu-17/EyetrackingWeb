@@ -1,0 +1,528 @@
+{
+  "label": "graph-final",
+  "concurrency": 30,
+  "mode": "general",
+  "ingest_during_load": false,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.1133331109995197,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.21249610899940308
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.27079234200027713,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.3826797510009783
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.32803757100009534,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44512522100012575
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.32921631799945317,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4479183479998028
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.2211707500009652,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44900165100079903
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.20875546599927475,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44843538500026625
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.2303617369998392,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44910317399990163
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.29262391600059345,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44847549500082096
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.29472588599855953,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4475089499992464
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3388091790002363,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4479955839997274
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3578279670000484,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4637745649997669
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.30711485800020455,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4155951120010286
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3110463779994461,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.41807681399950525
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.240459650000048,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.478081483999631
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3054944900013652,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4203087969999615
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3316735759999574,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.42767681799887214
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.25560697900073137,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.44289368800127704
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.2403892120000819,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5036067450000701
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.36409458100024494,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4471680459992058
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.32867908399930457,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4534295599987672
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3110141750003095,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.45394632200077467
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.22123182799987262,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5129567380008666
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3627819030007231,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5118077040006028
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3473494319987367,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.4541297929990833
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.35290677000011783,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5221900109991111
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.34217365499898733,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.468997361998845
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.34829542999978,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.47144099099932646
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3573966530002508,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5346081259995117
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.3626933049999934,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5350945770005637
+    },
+    {
+      "question": "Xin chào",
+      "route": "general",
+      "first_content_seconds": 0.4630187319999095,
+      "answer": "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ học tập trong khóa học.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.48308712000107334
+    }
+  ],
+  "summary": {
+    "general": {
+      "count": 30,
+      "completed": 30,
+      "p95_first_content": 0.36409458100024494,
+      "p95_total": 0.5346081259995117
+    }
+  }
+}

@@ -41,7 +41,10 @@ async def lifespan(app: FastAPI):
     validate_settings()
     # Warm-up embedding (local: load weights lên GPU) để /ready phản ánh đúng và
     # request đầu không phải chờ load model.
-    await run_in_threadpool(get_embedding)
+    embedding = await run_in_threadpool(get_embedding)
+    await embedding.aembed_query("warm up")
+    from app.workflow.graph import get_graph
+    get_graph()
     get_pool()
 
     try:
@@ -50,6 +53,11 @@ async def lifespan(app: FastAPI):
         close_retriever()
         close_ingestion()
         close_pool()
+        embedding.close()
+        from app.workflow.lms import backend_client
+        from app.workflow.river import get_river
+        await get_river().close()
+        await backend_client().aclose()
 
 
 app = FastAPI(title="LMS Study Chatbot", lifespan=lifespan)

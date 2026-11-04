@@ -1,22 +1,16 @@
-"""Pipeline RAG: route -> retrieve -> answer -> verify -> stream.
+"""Graph orchestration helpers and API collection.
 
 Không dùng checkpointer: backend gửi history theo từng request và là nguồn sự
 thật cho lịch sử hiển thị. Pipeline chỉ giữ state trong bộ nhớ của request.
 
-Streaming: sau khi verify xong mới phát `token`; trước đó phát `status` để
-frontend biết đang ở bước nào. Đây là lựa chọn "status + stream sau verify".
+Streaming emits only complete approved blocks.
 """
 
-import asyncio
 import logging
+import re
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 
-from app.settings import citation_max_attempts
-from app.workflow.answer import RETRIEVAL_INTENTS, answer
-from app.workflow.citations import chunk_text, sanitize_citations
-from app.workflow.guardrails import safe_response, verify_answer
-from app.workflow.retrieval import build_citations, get_retriever
-from app.workflow.router import route
 from app.workflow.state import ChatState
 
 logger = logging.getLogger(__name__)
@@ -26,75 +20,70 @@ def _status(stage: str) -> dict:
     return {"event": "status", "data": {"stage": stage}}
 
 
+def retrieval_query(state: ChatState) -> str:
+    """Resolve references like 'câu cuối' using trusted server quiz prompts."""
+    question = state["question"]
+    prompts = {
+        int(n): prompt
+        for n, prompt in re.findall(
+            r"^Câu (\d+): ([^\n]+)", state.get("assignment_context") or "", re.MULTILINE
+        )
+    }
+    if not prompts:
+        return question
+    requested = {int(n) for n in re.findall(r"câu\s*(\d+)", question, re.IGNORECASE)}
+    lower = question.lower()
+    numbers = sorted(prompts)
+    if "câu cuối" in lower:
+        requested.add(numbers[-1])
+    if "câu đầu" in lower:
+        requested.add(numbers[0])
+    if "câu giữa" in lower:
+        requested.add(numbers[(len(numbers) - 1) // 2])
+    selected = (
+        [prompts[n] for n in numbers if n in requested] if requested else list(prompts.values())
+    )
+    # Only the search query has a bound; the answer/verifier still see ALL quiz data.
+    return question + "\nChủ đề câu hỏi trong bài tập: " + "\n".join(selected)[:8000]
+
+
+def assignment_overview(state: ChatState) -> str | None:
+    """Repeat public question wording exactly; summarizing yes/no questions can leak a conclusion."""
+    context = state.get("assignment_context") or ""
+    prompts = {
+        int(n): prompt for n, prompt in re.findall(r"^Câu (\d+): ([^\n]+)", context, re.MULTILINE)
+    }
+    lower = state["question"].lower()
+    if not prompts or not ("bao nhiêu câu" in lower or "số câu hỏi" in lower):
+        return None
+    numbers = sorted(prompts)
+    lines = [f"Đề có {len(prompts)} câu hỏi."]
+    # Use full question wording, preserving question marks and uncertainty.
+    requested = []
+    for phrase, number in (
+        ("câu đầu", numbers[0]),
+        ("câu giữa", numbers[(len(numbers) - 1) // 2]),
+        ("câu cuối", numbers[-1]),
+    ):
+        if phrase in lower:
+            requested.append(number)
+    for number in dict.fromkeys(requested):
+        lines.append(f"- Câu {number}: {prompts[number]}")
+    return "\n".join(lines)
+
+
 async def run_chat(state: ChatState) -> AsyncIterator[dict]:
-    """Chạy pipeline và yield các SSE event dict."""
+    """Only approved, explicitly selected custom graph events reach callers."""
+    from app.workflow.graph import stream_graph
     try:
-        yield _status("routing")
-        intent = await asyncio.to_thread(route, state)
-        state["intent"] = intent
-
-        if intent in RETRIEVAL_INTENTS:
-            yield _status("retrieving")
-            docs = await asyncio.to_thread(
-                lambda: get_retriever().search(state["question"], state["course_id"])
-            )
-            state["retrieved_docs"] = docs
-            state["citations"] = build_citations(docs)
-        else:
-            state["retrieved_docs"] = []
-            state["citations"] = []
-
-        yield _status("generating")
-        draft = await asyncio.to_thread(answer, state)
-
-        verified = True
-        if intent in RETRIEVAL_INTENTS:
-            max_attempts = citation_max_attempts()
-            for attempt in range(1, max_attempts + 1):
-                yield _status("verifying")
-                verification = await asyncio.to_thread(verify_answer, state, draft)
-                state["verification"] = verification
-                if verification["ok"]:
-                    break
-                logger.info(
-                    "Citation verification thất bại (lần %s): %s",
-                    attempt,
-                    verification.get("feedback", ""),
-                )
-                if attempt >= max_attempts:
-                    logger.info(
-                        "Citation verification thất bại sau %s lần — trả câu an toàn",
-                        attempt,
-                    )
-                    draft = safe_response(intent)
-                    verified = False
-                    break
-                yield _status("retrying")
-                state["attempts"] = attempt
-                state["verification_feedback"] = verification["feedback"]
-                draft = await asyncio.to_thread(answer, state)
-
-        final = sanitize_citations(draft, state["citations"])
-        state["answer"] = final
-        state["verified"] = verified
-
-        yield {"event": "citations", "data": {"citations": state["citations"]}}
-        for chunk in chunk_text(final):
-            yield {"event": "token", "data": {"text": chunk}}
-        yield {
-            "event": "done",
-            "data": {
-                "intent": intent,
-                "verified": verified,
-                "citation_count": len(state["citations"]),
-            },
-        }
+        async with aclosing(stream_graph(state)) as stream:
+            async for event in stream:
+                if event["event"] == "done":
+                    state.update(event["data"])
+                yield event
     except Exception:
-        logger.exception("Chat pipeline lỗi")
-        yield {
-            "event": "error",
-            "data": {"message": "Trợ lý học tập tạm thời không phản hồi."},
-        }
+        logger.exception("Graph request failed")
+        yield {"event": "error", "data": {"message": "Trợ lý tạm thời không thể hoàn tất. Vui lòng gửi lại câu hỏi."}}
 
 
 async def collect_chat(state: ChatState) -> tuple[str, list[dict], str, bool]:

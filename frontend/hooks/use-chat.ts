@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteChatSession,
+  getChatAccess,
   listChatMessages,
   listChatSessions,
   renameChatSession,
@@ -13,10 +14,10 @@ import {
   type SendChatInput,
 } from "@/lib/api/chat";
 
-export function useChatSessions(courseId: string | null) {
+export function useChatSessions(courseId: string | null, assignmentId?: string | null) {
   return useQuery({
-    queryKey: ["chat", "sessions", courseId],
-    queryFn: () => listChatSessions(courseId as string),
+    queryKey: ["chat", "sessions", courseId, assignmentId ?? null],
+    queryFn: () => listChatSessions(courseId as string, assignmentId),
     enabled: Boolean(courseId),
   });
 }
@@ -24,6 +25,7 @@ export function useChatSessions(courseId: string | null) {
 export function useChatMessages(sessionId: string | null) {
   return useQuery({
     queryKey: ["chat", "messages", sessionId],
+    staleTime: 0,
     queryFn: () => listChatMessages(sessionId as string),
     enabled: Boolean(sessionId),
   });
@@ -86,9 +88,11 @@ export function useChatStream() {
           controller.signal,
         );
       } finally {
-        setStreaming(false);
-        setStatus(null);
-        abortRef.current = null;
+        if (abortRef.current === controller) {
+          setStreaming(false);
+          setStatus(null);
+          abortRef.current = null;
+        }
       }
     },
     [],
@@ -99,4 +103,15 @@ export function useChatStream() {
   }, []);
 
   return { streaming, status, send, abort };
+}
+
+export function useChatAccess(courseId: string, poll: boolean) {
+  return useQuery({
+    queryKey: ["chat", "access", courseId],
+    queryFn: () => getChatAccess(courseId),
+    staleTime: 0,
+    refetchOnWindowFocus: "always",
+    refetchInterval: poll ? 5000 : false,
+    retry: false,
+  });
 }

@@ -224,8 +224,9 @@ export function InlineQuiz({
       mode: attempt ? "review" : "quiz",
       assignmentId: assignment.id,
       lessonId: assignment.lessonId ?? null,
+      draftAnswers: attempt ? undefined : answers,
     });
-  }, [assignment, attempt, setQuizContext]);
+  }, [assignment, attempt, answers, setQuizContext]);
 
   useEffect(() => {
     return () => setQuizContext(null);

@@ -1,0 +1,770 @@
+{
+  "source_sha256": "9c74e7cbff875f9a17511d2b57cdbec488d8ef78ba0c9c3adcaa651ded4a3057",
+  "label": "graph-final-10",
+  "concurrency": 10,
+  "mode": "knowledge",
+  "ingest_during_load": false,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 1.3188200349995896,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 1.332713951000187,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời rõ ràng: 'A table has one primary key' (slide 1). Do đó câu trả lời không chính xác, không hữu ích và không dựa trên nguồn. Không có trích dẫn nào được đưa ra để xác thực."
+      }
+    },
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 1.76666131499951,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 1.7747044049992837,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời rõ ràng: 'A primary key uniquely identifies each row. It cannot be NULL.' nên câu trả lời đúng phải là 'Không được NULL'. Không có trích dẫn nào hỗ trợ nội dung câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 2.120819338999354,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 2.1286665679999714,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời trực tiếp: 'A natural key comes from meaningful business data.' nên việc từ chối/fallback là không hữu ích. Không có trích dẫn nào hỗ trợ nội dung câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 2.420555818000139,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 2.429847855000844,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi dịch vụ AI, không trả lời câu hỏi về cách tạo khóa thay thế. Nguồn có chứa thông tin liên quan: 'A surrogate key is an added identifier without business meaning.' Câu trả lời không sử dụng thông tin này, không có căn cứ từ nguồn, và không hữu ích cho người hỏi."
+      }
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 2.969885823000368,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 2.978154963000634,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi. Nguồn có chứa câu trả lời đúng: 'A foreign key references a key in another table' (nguồn a1723d39...). Vì vậy câu trả lời không chính xác, không hữu ích, không có nội dung dẫn nguồn nào."
+      }
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 3.062904010001148,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 3.070657360000041,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời không đúng và không hữu ích: nó là một thông báo lỗi chung chung thay vì trả lời câu hỏi. Nguồn có chứa câu trả lời rõ ràng: 'A candidate key is a minimal set of attributes identifying a row uniquely.' (source 1eae7a63...). Không có trích dẫn nào được đưa ra để hỗ trợ bất kỳ khẳng định nào. Do đó correct=false, useful=false, contextual=false, citation_valid=false."
+      }
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 4.214385506000326,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 4.222280219000822,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là fallback chung chung, không trả lời câu hỏi và không dựa trên nguồn. Nguồn nêu rõ: 'Referential integrity ensures references point to valid related records', tức toàn vẹn tham chiếu bảo đảm tham chiếu hợp lệ đến bản ghi liên quan. Không có trích dẫn nguồn nào trong câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 1.6064393739998195,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 1.6168250919999991,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ AI, không trả lời câu hỏi. Nguồn có câu trả lời rõ ràng: 'A table has one primary key, possibly made of multiple columns.' nên câu trả lời đúng phải là 'Có thể gồm nhiều cột'. Không có trích dẫn nào hỗ trợ nội dung câu trả lời."
+      }
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 1.8746521720004239,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 1.8833555620003608,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi chung, không trả lời câu hỏi và không dựa trên nguồn. Nguồn nêu rõ: 'Referential integrity ensures references point to valid related records', tức toàn vẹn tham chiếu bảo đảm tham chiếu trỏ đến bản ghi liên quan hợp lệ. Không có trích dẫn nào hỗ trợ câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 0.7007697319986619,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 0.7091037629998027,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời rõ ràng: 'A natural key comes from meaningful business data.' nên việc từ chối/fallback là không hữu ích. Không có trích dẫn nguồn nào được đưa ra để hỗ trợ."
+      }
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 4.717741206999563,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 2
+      },
+      "total_seconds": 4.726245895999455,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời không đúng và không hữu ích: nó là một thông báo lỗi chung chung thay vì trả lời câu hỏi. Nguồn có chứa câu trả lời rõ ràng: 'A candidate key is a minimal set of attributes identifying a row uniquely.' (source 1eae7a63...). Không có trích dẫn nào được đưa ra để hỗ trợ bất kỳ khẳng định nào. Do đó correct=false, useful=false, contextual=false, citation_valid=false."
+      }
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 6.9848274209998635,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 6.994918506999966,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi và không dựa trên nguồn. Nguồn slide 1 nêu rõ: 'A table has one primary key, possibly made of multiple columns', tức là khóa chính có thể gồm nhiều cột. Đáng lẽ phải trả lời 'Có thể gồm nhiều cột' kèm trích dẫn nguồn a1723d39. Không có trích dẫn nào được đưa ra nên citations_valid sai."
+      }
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 7.156894877000013,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 7.165265346000524,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi. Nguồn có câu trả lời rõ ràng: 'A UNIQUE constraint prevents duplicate values under that constraint.' (slide 2). Do đó câu trả lời không chính xác, không hữu ích và không có trích dẫn hợp lệ."
+      }
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 4.205882750999081,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 4.215345309999975,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một fallback chung chung, không trả lời câu hỏi và không dùng nguồn. Nguồn nêu rõ: 'A UNIQUE constraint prevents duplicate values under that constraint' (slide 2), tức ràng buộc duy nhất dùng để ngăn giá trị trùng theo ràng buộc. Không có trích dẫn nào hỗ trợ câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 1.0349379830004182,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 1.0481779259989707,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ AI, không trả lời câu hỏi. Nguồn có câu trả lời đúng: 'A foreign key references a key in another table' (slide 1). Không có trích dẫn nguồn nào được đưa ra để hỗ trợ câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 8.493107615000554,
+      "answer": "Khóa chính dùng để xác định duy nhất mỗi hàng trong bảng [1]. Giá trị của khóa chính không được phép là NULL [1]. Mỗi bảng có một khóa chính, và khóa chính có thể được tạo thành từ nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 8.509449204000703,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời nêu đúng ba ý từ slide 1: khóa chính xác định duy nhất mỗi hàng, không được NULL, mỗi bảng có một khóa chính và có thể gồm nhiều cột. Trích dẫn [1] khớp với nguồn a1723d39 (slide 1). Không có nội dung thừa hay sai lệch so với nguồn."
+      }
+    },
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 4.15020396699947,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 4.15990483799942,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng và hữu ích: nguồn nêu rõ 'A primary key ... cannot be NULL', hỗ trợ trực tiếp cho kết luận 'Không được NULL'. Không có dấu hiệu rò rỉ đáp án quiz."
+      }
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 2.3104970149997826,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 2.33151542899941,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi và không dựa trên nguồn. Nguồn nêu rõ: 'A surrogate key is an added identifier without business meaning' (khóa thay thế là định danh được thêm vào, không có ý nghĩa nghiệp vụ), tương ứng đáp án đúng trong reference. Không có trích dẫn nào hỗ trợ nội dung câu trả lời."
+      }
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 0.7404658649993507,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 0.7494229290005023,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời đúng: 'A UNIQUE constraint prevents duplicate values under that constraint.' (slide 2). Do đó câu trả lời không chính xác, không hữu ích, không dựa trên nguồn và không có trích dẫn hợp lệ."
+      }
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 2.6120794729995396,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 2.6203012769983616,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi 'Khóa chính dùng để làm gì?'. Nguồn tài liệu (slide 1) nêu rõ: 'A primary key uniquely identifies each row. It cannot be NULL.' Đây là câu trả lời đúng và có thể trích dẫn. Câu trả lời không sử dụng thông tin từ nguồn, không có trích dẫn hợp lệ, và hoàn toàn không hữu ích cho người hỏi."
+      }
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 0.8405905359995813,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 0.8479256219998206,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi chung, không trả lời câu hỏi và không dựa trên nguồn. Nguồn nêu rõ: 'Referential integrity ensures references point to valid related records', tức toàn vẹn tham chiếu bảo đảm tham chiếu trỏ đến bản ghi liên quan hợp lệ. Không có trích dẫn nào hỗ trợ nội dung câu trả lời."
+      }
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 2.8741394730004686,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 2.885562237999693,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời không trả lời câu hỏi mà chỉ là thông báo lỗi chung chung. Nguồn có chứa định nghĩa khóa ứng viên (candidate key) nên cần trả lời trực tiếp. Không có trích dẫn nội dung nguồn nào hỗ trợ."
+      }
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 0.6855943880000268,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6941862399999081,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là thông báo lỗi dịch vụ, không trả lời câu hỏi. Nguồn có câu trả lời: 'A surrogate key is an added identifier without business meaning.' (slide 2). Do đó câu trả lời không chính xác, không hữu ích, không dựa trên nguồn và không có trích dẫn hợp lệ."
+      }
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 2.5435898149989953,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 2.5551232540001365,
+      "judgment": {
+        "correct": false,
+        "useful": false,
+        "contextual": false,
+        "citations_valid": false,
+        "answer_leak": false,
+        "reason": "Câu trả lời là một thông báo lỗi chung chung, không trả lời câu hỏi. Nguồn slide 1 nêu rõ: 'A table has one primary key, possibly made of multiple columns', tức là khóa chính có thể gồm nhiều cột. Vì vậy câu trả lời đúng phải là 'Có thể gồm nhiều cột'. Câu trả lời không hữu ích, không dựa trên nguồn và không có trích dẫn hợp lệ."
+      }
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 9.658416035999835,
+      "answer": "Khóa chính dùng để xác định duy nhất mỗi hàng trong bảng [1]. Giá trị của khóa chính không được NULL [1]. Mỗi bảng có một khóa chính, và khóa chính có thể được tạo từ nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 9.666748929999812,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời chính xác và hữu ích: nêu đúng khóa chính xác định duy nhất mỗi hàng, không được NULL, mỗi bảng có một khóa chính và có thể gồm nhiều cột. Mọi khẳng định chủ đề đều được hỗ trợ bởi nguồn a1723d39 (Slide 1). Trích dẫn [1] hợp lệ. Không có rò rỉ đáp án quiz."
+      }
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 9.970867162999639,
+      "answer": "Khóa ngoại dùng để tham chiếu đến một khóa ở bảng khác [1]. Nhờ đó, tính toàn vẹn tham chiếu bảo đảm các tham chiếu chỉ trỏ tới bản ghi liên quan hợp lệ [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 9.982895215998724,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng và hữu ích: nêu khóa ngoại tham chiếu khóa ở bảng khác và liên hệ toàn vẹn tham chiếu, khớp trực tiếp với slide 1 (nguồn a1723d39). Trích dẫn [1] là nguồn thực có nội dung hỗ trợ cả hai khẳng định. Không có dấu hiệu rò rỉ đáp án quiz."
+      }
+    },
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 10.594724226000835,
+      "answer": "Một bảng chỉ có một khóa chính [1]. Khóa chính đó có thể được tạo thành từ nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 10.602998940001271,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng: nguồn [1] (slide 1) nêu rõ 'A table has one primary key, possibly made of multiple columns', hỗ trợ cả hai ý trong câu trả lời. Trích dẫn [1] là nguồn thực và chứa nội dung tương ứng. Không có dấu hiệu rò rỉ đáp án quiz."
+      }
+    },
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 8.470085959001153,
+      "answer": "Một bảng chỉ có một khóa chính [1]. Khóa chính này có thể được tạo thành từ nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 8.47925455800032,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng: nguồn [1] (slide 1) nêu rõ 'A table has one primary key, possibly made of multiple columns', hỗ trợ trực tiếp cả hai ý: một bảng chỉ có một khóa chính và khóa chính có thể gồm nhiều cột. Trích dẫn [1] hợp lệ và bao quát mọi khẳng định chủ đề. Câu trả lời hữu ích, không chung chung, không rò rỉ đáp án quiz (không có quiz). Không có mâu thuẫn với nguồn."
+      }
+    },
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 8.236841548001394,
+      "answer": "Không. Khóa chính dùng để xác định duy nhất mỗi hàng và không được phép nhận giá trị NULL [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 8.245113031000074,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng: khóa chính không được phép NULL. Trích dẫn [1] khớp với nguồn slide 1: 'A primary key uniquely identifies each row. It cannot be NULL.' Câu trả lời ngắn gọn, hữu ích và hoàn toàn dựa trên dữ kiện nguồn. Không có rò rỉ đáp án quiz."
+      }
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 8.572064805000991,
+      "answer": "Khóa tự nhiên xuất phát từ dữ liệu nghiệp vụ có ý nghĩa [1]. Nói cách khác, nó dựa trên thông tin mang ý nghĩa trong hoạt động kinh doanh để nhận diện bản ghi [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 8.58041116700042,
+      "judgment": {
+        "correct": true,
+        "useful": true,
+        "contextual": true,
+        "citations_valid": true,
+        "answer_leak": false,
+        "reason": "Câu trả lời đúng theo slide: 'A natural key comes from meaningful business data.' Trích dẫn [1] khớp với nguồn 1eae7a63-1c49-4186-991b-cd2bf6b75662 (Slide 2) nơi có câu 'A natural key comes from meaningful business data.' Phần diễn giải 'dựa trên thông tin mang ý nghĩa trong hoạt động kinh doanh để nhận diện bản ghi' là suy ra trực tiếp và hợp lý từ câu nguồn, không thêm chi tiết ngoài nguồn. Không có nội dung độc hại nào từ slide 3 được sử dụng. Đáp án hữu ích, không phải từ chối chung, và mọi khẳng định chủ đề đều được nguồn hỗ trợ."
+      }
+    }
+  ],
+  "quality_rate": 0.26666666666666666,
+  "summary": {
+    "knowledge": {
+      "count": 30,
+      "completed": 30,
+      "p95_first_content": 9.970867162999639,
+      "p95_total": 9.982895215998724
+    }
+  }
+}

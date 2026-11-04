@@ -1,0 +1,7 @@
+{
+  "candidate": "sha256:24a0992f9c6d7534b424bf6486f56cd12f19537fc9a7093b444d143da2ee87e0",
+  "serving_and_rollback": "sha256:61a26f811eab5da6f898247df6dfd6b5477a81af8bfff60c458f085a4f25da11",
+  "serving_containers_unchanged": true,
+  "benchmark_containers_stopped": true,
+  "benchmark_data_retained": true
+}

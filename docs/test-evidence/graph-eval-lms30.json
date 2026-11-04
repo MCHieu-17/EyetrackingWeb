@@ -1,0 +1,528 @@
+{
+  "label": "graph-final",
+  "concurrency": 30,
+  "mode": "lms",
+  "ingest_during_load": false,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.06997522600067896,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.3672638210009609
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.3762731730002997,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5053134059999138
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.40145958100038115,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5313901730005455
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4164245230003871,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5340545359995303
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.42937318500116817,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5432099580011709
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.37439059000098496,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5486266990010336
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.1485953100000188,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5519178289996489
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.38004232099956425,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5523974199986696
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4533161029994517,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5785810739998851
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4539736469996569,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5818566210000427
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4540943640004116,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5887961179996637
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4556541330002801,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.592389978999563
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.47890805899987754,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.5990926280010171
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.49495822400058387,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6063962429998355
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.5164662770002906,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6186434940009349
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.40952795800149033,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6197255850001966
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4538027009984944,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6203860389996407
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4666390659986064,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6240897979987494
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.43876797699886083,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6272799609996582
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.40088610199927643,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6274972749997687
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.5409189940000942,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6398143910009821
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.48530200499953935,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6423574359996564
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.44752479800081346,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6505866410007002
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.5410047270015639,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6495908070010046
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.5788637989990093,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6538235169991822
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.4571687240004394,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6600959169991256
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.542396987999382,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6714743409993389
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.6238866240000789,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.670738919001451
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.6165388689987594,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6706816070000059
+    },
+    {
+      "question": "thông tin khóa học",
+      "route": "lms",
+      "first_content_seconds": 0.6524643960001413,
+      "answer": "[Cơ sở dữ liệu](/student/courses/0eeb015c-0ff3-41a7-8e08-fcf9d40960fa)\n\n",
+      "status": 200,
+      "done": {
+        "intent": "lms",
+        "verified": true,
+        "routes": [
+          "lms"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 0
+      },
+      "total_seconds": 0.6761094979992777
+    }
+  ],
+  "summary": {
+    "lms": {
+      "count": 30,
+      "completed": 30,
+      "p95_first_content": 0.6238866240000789,
+      "p95_total": 0.6714743409993389
+    }
+  }
+}

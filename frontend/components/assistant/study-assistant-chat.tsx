@@ -1,8 +1,12 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { remarkCitations, normalizeMath } from "@/lib/chat-markdown";
+import { useAuthState } from "@/hooks/use-stored-user";
 import {
   RiAddLine,
   RiChatHistoryLine,
@@ -35,6 +39,7 @@ import { resolveMediaUrl } from "@/lib/api/client";
 import type { ChatCitation } from "@/lib/api/chat";
 import {
   useChatMessages,
+  useChatAccess,
   useChatSessions,
   useChatStream,
   useDeleteChatSession,
@@ -66,10 +71,9 @@ const MARKDOWN_CLASS = cn(
   "[&_a]:font-medium [&_a]:text-[#36533a] [&_a]:underline [&_a]:underline-offset-2",
 );
 
-const CITE_RE = /\[(\d+)\](?!\()/g;
-
 const STATUS_LABEL: Record<string, string> = {
   routing: "Đang phân loại câu hỏi…",
+  waiting: "Đang chờ xử lý và kiểm chứng…",
   retrieving: "Đang tìm trong tài liệu môn học…",
   generating: "Đang soạn câu trả lời…",
   verifying: "Đang kiểm tra trích dẫn…",
@@ -79,11 +83,6 @@ const STATUS_LABEL: Record<string, string> = {
 function newLocalId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-/** Biến `[1]` trong câu trả lời thành liên kết mở citation tương ứng. */
-function withCitationLinks(text: string, messageId: string): string {
-  return text.replace(CITE_RE, `[$1](#chat-cite-${messageId}-$1)`);
 }
 
 function CitationChip({
@@ -107,7 +106,7 @@ function CitationChip({
   );
 }
 
-function Markdown({
+const Markdown = memo(function Markdown({
   text,
   messageId,
   citations,
@@ -121,8 +120,11 @@ function Markdown({
   return (
     <div className={MARKDOWN_CLASS}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath, [remarkCitations, { messageId, count: citations.length }]]}
+        rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false }]]}
+        skipHtml
         components={{
+          table: ({ children }) => <div className="max-w-full overflow-x-auto"><table>{children}</table></div>,
           a: ({ href, children }) => {
             if (href?.startsWith("#chat-cite-")) {
               const index = Number(href.split("-").pop());
@@ -148,11 +150,11 @@ function Markdown({
           },
         }}
       >
-        {withCitationLinks(text, messageId)}
+        {normalizeMath(text)}
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 export function StudyAssistantChat({
   courseId,
@@ -163,7 +165,11 @@ export function StudyAssistantChat({
   open: boolean;
   onClose: () => void;
 }) {
-  const { mode, assignmentId, lessonId } = useAssistant();
+  const { mode, assignmentId, lessonId, draftAnswers } = useAssistant();
+  const { user } = useAuthState();
+  const storageKey = `study-chat:${user?.id ?? "anonymous"}:${courseId}:${assignmentId ?? "reader"}:${mode === "reader" ? "reader" : mode}`;
+  const access = useChatAccess(courseId, open || mode === "quiz");
+  const allowed = access.data?.allowed === true && !access.isError;
   // undefined = chưa chọn (tự mở phiên gần nhất), null = phiên mới chưa lưu.
   const [selectedSessionId, setSelectedSessionId] = useState<string | null | undefined>(
     undefined,
@@ -191,23 +197,48 @@ export function StudyAssistantChat({
     onClose();
   }, [onClose]);
 
-  const sessionsQuery = useChatSessions(courseId);
+  const sessionsQuery = useChatSessions(allowed && open ? courseId : null, assignmentId);
   const sessions = Array.isArray(sessionsQuery.data) ? sessionsQuery.data : [];
   // undefined = chưa chọn -> tự dùng phiên gần nhất; null = phiên mới.
   const effectiveSessionId =
-    selectedSessionId === undefined ? (sessions[0]?.id ?? null) : selectedSessionId;
-  const messagesQuery = useChatMessages(effectiveSessionId);
+    (selectedSessionId === undefined || sessions.some((s) => s.id === selectedSessionId && s.canContinue === false)) ? (sessions.find((session) => session.canContinue !== false)?.id ?? null) : selectedSessionId;
+
   const renameMutation = useRenameChatSession();
   const deleteMutation = useDeleteChatSession();
   const chatStream = useChatStream();
+  const abortStream = chatStream.abort;
+  const generation = useRef(0);
+  const sending = useRef(false);
+  const nearBottom = useRef(true);
+  const messagesQuery = useChatMessages(allowed && open && !chatStream.streaming ? effectiveSessionId : null);
+
+  useEffect(() => {
+    abortStream();
+    generation.current += 1;
+    sending.current = false;
+    sessionIdRef.current = null;
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(storageKey); } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedSessionId(saved === "new" ? null : saved ?? undefined);
+    setMessages([]);
+    setStreamingText("");
+    setStreamingCitations([]);
+    streamingTextRef.current = "";
+    citationsRef.current = [];
+    return () => { generation.current += 1; abortStream(); };
+  }, [storageKey, abortStream]);
+
+  useEffect(() => {
+    if (!allowed) abortStream();
+  }, [allowed, abortStream]);
 
   const currentSession = sessions.find((item) => item.id === effectiveSessionId);
 
   useEffect(() => {
-    if (Array.isArray(messagesQuery.data)) {
+    if (!sending.current && !messagesQuery.isFetching && Array.isArray(messagesQuery.data)) {
       // Đồng bộ lịch sử từ server vào state hiển thị cục bộ (optimistic stream
       // được ghép sau). Đây là sync có chủ đích, không phải derived state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages(
         messagesQuery.data.map((message) => ({
           id: message.id,
@@ -217,7 +248,7 @@ export function StudyAssistantChat({
         })),
       );
     }
-  }, [messagesQuery.data]);
+  }, [messagesQuery.data, messagesQuery.isFetching]);
 
   useEffect(() => {
     if (!open) return;
@@ -226,7 +257,7 @@ export function StudyAssistantChat({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !nearBottom.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [open, messages, streamingText, chatStream.status]);
 
@@ -250,17 +281,28 @@ export function StudyAssistantChat({
   };
 
   const selectSession = (sessionId: string | null) => {
+    abortStream();
+    generation.current += 1;
+    sending.current = false;
+    try { localStorage.setItem(storageKey, sessionId ?? "new"); } catch {}
+    sessionIdRef.current = sessionId;
     setSelectedSessionId(sessionId);
     resetConversation();
   };
 
   const send = async (text: string) => {
     const message = text.trim();
-    if (!message || chatStream.streaming) return;
+    if (!message || sending.current || chatStream.streaming || !allowed) return;
+    sending.current = true;
+    const requestGeneration = generation.current;
+    const active = () => requestGeneration === generation.current;
 
     setInput("");
     setError("");
-    resetConversation();
+    streamingTextRef.current = "";
+    citationsRef.current = [];
+    nearBottom.current = true;
+    if (inputRef.current) inputRef.current.style.height = "40px";
 
     const userMessage: UiMessage = {
       id: newLocalId(),
@@ -284,20 +326,28 @@ export function StudyAssistantChat({
           sessionId: sessionIdRef.current ?? effectiveSessionId,
           lessonId,
           assignmentId,
+          draftAnswers,
         },
         {
           onSession: (sessionId) => {
+            if (!active()) return;
             sessionIdRef.current = sessionId;
+            setSelectedSessionId(sessionId);
+            try { localStorage.setItem(storageKey, sessionId); } catch {}
           },
           onCitations: (citations) => {
+            if (!active()) return;
             citationsRef.current = citations;
             setStreamingCitations(citations);
           },
           onToken: (token) => {
+            if (!active()) return;
             streamingTextRef.current += token;
             setStreamingText(streamingTextRef.current);
+
           },
           onDone: (data) => {
+            if (!active()) return;
             completed = true;
             const finalText = streamingTextRef.current;
             const finalCitations = citationsRef.current;
@@ -322,14 +372,20 @@ export function StudyAssistantChat({
             void sessionsQuery.refetch();
           },
           onError: (message) => {
+            if (!active()) return;
             setError(message);
           },
         },
       );
     } catch (err) {
+      if (!active()) return;
       setError(err instanceof Error ? err.message : "Trợ lý học tập tạm thời không phản hồi");
     } finally {
+      if (!active()) return;
+      sending.current = false;
+
       if (!completed) {
+        setError((previous) => previous || "Kết nối kết thúc trước khi nhận đủ câu trả lời. Hãy gửi lại câu hỏi.");
         setMessages((prev) => prev.filter((item) => item.id !== assistantId));
         setStreamingText("");
         setStreamingCitations([]);
@@ -343,7 +399,7 @@ export function StudyAssistantChat({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void send(input);
     }
@@ -379,14 +435,14 @@ export function StudyAssistantChat({
   const statusLabel = chatStream.status ? STATUS_LABEL[chatStream.status] : null;
   const showEmpty = messages.length === 0 && !streamingText && !chatStream.streaming;
 
-  if (!open) return null;
+  if (!open || !allowed) return null;
 
   return (
     <>
       <div
         id="assistant-panel"
         data-aoi="chatbot"
-        className="@container hidden h-full w-[clamp(240px,18vw,400px)] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fdfdfa] shadow-xs xl:flex"
+        className="@container hidden h-full w-[clamp(360px,28vw,480px)] shrink-0 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fdfdfa] shadow-xs xl:flex"
         role="dialog"
         aria-label="Trợ lý học tập"
       >
@@ -427,6 +483,7 @@ export function StudyAssistantChat({
                 {sessions.map((session) => (
                   <DropdownMenuItem
                     key={session.id}
+                    disabled={session.canContinue === false}
                     onSelect={() => selectSession(session.id)}
                     className="flex items-center justify-between gap-2"
                   >
@@ -467,7 +524,8 @@ export function StudyAssistantChat({
 
           <div
             data-aoi="chat-messages"
-            className="min-h-0 flex-1 overflow-y-auto px-4 py-4 @max-[320px]:px-3"
+            onScroll={(event) => { const el = event.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 @max-[320px]:px-3"
           >
             {showEmpty && (
               <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
@@ -526,24 +584,34 @@ export function StudyAssistantChat({
                   )}
                 >
                   <div
+                    data-aoi-instance={message.id}
                     data-aoi={
                       message.role === "student"
                         ? "chat-user-message"
                         : "chat-ai-message"
                     }
                     className={cn(
-                      "max-w-[92%] rounded-2xl px-3.5 py-2.5",
+                      "min-w-0 max-w-full rounded-2xl px-3.5 py-2.5",
                       message.role === "student"
-                        ? "bg-[#36533a] text-white"
+                        ? "max-w-[92%] bg-[#36533a] text-white"
                         : "border border-border bg-white text-foreground",
                     )}
                   >
                     {message.role === "student" ? (
                       <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
-                    ) : message.pending && !message.content ? (
-                      <p className="text-sm text-muted-foreground">
-                        {statusLabel ?? "Đang xử lý…"}
-                      </p>
+                    ) : message.pending ? (
+                      streamingText ? (
+                        <Markdown
+                          text={streamingText}
+                          messageId={message.id}
+                          citations={streamingCitations}
+                          onCitationClick={setCitationModal}
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {statusLabel ?? "Đang xử lý…"}
+                        </p>
+                      )
                     ) : (
                       <Markdown
                         text={message.content}
@@ -568,28 +636,6 @@ export function StudyAssistantChat({
                 </div>
               ))}
 
-              {chatStream.streaming && (
-                <div className="flex flex-col gap-1.5 items-start">
-                  <div
-                    data-aoi="chat-ai-message"
-                    className="max-w-[92%] rounded-2xl border border-border bg-white px-3.5 py-2.5"
-                  >
-                    {streamingText ? (
-                      <Markdown
-                        text={streamingText}
-                        messageId="streaming"
-                        citations={streamingCitations}
-                        onCitationClick={setCitationModal}
-                      />
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {statusLabel ?? "Đang xử lý…"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {error && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                   {error}
@@ -608,15 +654,14 @@ export function StudyAssistantChat({
               <Textarea
                 ref={inputRef}
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  event.target.style.height = "40px";
+                  event.target.style.height = `${Math.min(128, event.target.scrollHeight)}px`;
+                }}
                 onKeyDown={onKeyDown}
-                placeholder={
-                  mode === "quiz"
-                    ? "Hỏi gợi ý cho bài tập… (Enter để gửi)"
-                    : mode === "review"
-                      ? "Hỏi về bài đã nộp… (Enter để gửi)"
-                      : "Hỏi về nội dung bài học… (Enter để gửi)"
-                }
+                placeholder="Nhập câu hỏi…"
+                aria-label="Câu hỏi cho trợ lý"
                 rows={1}
                 className="max-h-32 min-h-10 flex-1 resize-none rounded-2xl py-2.5"
                 disabled={chatStream.streaming}
@@ -632,9 +677,6 @@ export function StudyAssistantChat({
                 <RiSendPlane2Line className="size-4" />
               </Button>
             </div>
-            <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">
-              Trợ lý không giải bài hộ. Câu trả lời dựa trên tài liệu môn học và có trích dẫn.
-            </p>
           </form>
         </div>
 

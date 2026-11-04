@@ -39,6 +39,7 @@ import {
 } from "@/lib/api/calibration";
 import { ApiError, resolveMediaUrl } from "@/lib/api/client";
 import { InlineQuiz } from "@/components/quiz/inline-quiz";
+import { useChatAccess } from "@/hooks/use-chat";
 import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
 import {
   AssistantProvider,
@@ -99,7 +100,17 @@ function ReaderContent({ courseId }: { courseId: string }) {
   const [viewportError, setViewportError] = useState(false);
   // Chat dock bên phải. Chỉ dùng ở desktop (>= xl); mobile không thiết kế.
   const [chatOpen, setChatOpen] = useState(false);
-  const { setReaderMode, setReaderLessonId } = useAssistant();
+  const { setReaderMode, setReaderLessonId, mode: assistantMode, assignmentId: assistantAssignmentId } = useAssistant();
+  const chatAccess = useChatAccess(courseId, chatOpen || assistantMode === "quiz");
+  const chatAllowed = chatAccess.data?.allowed === true && !chatAccess.isError;
+  const refreshChatAccess = chatAccess.refetch;
+  useEffect(() => {
+    void refreshChatAccess();
+  }, [activeLessonId, assistantAssignmentId, assistantMode, refreshChatAccess]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!chatAllowed) setChatOpen(false);
+  }, [chatAllowed]);
   const assistantButtonRef = useRef<HTMLButtonElement>(null);
   const wasChatOpen = useRef(false);
 
@@ -651,7 +662,12 @@ function ReaderContent({ courseId }: { courseId: string }) {
             data-aoi="chat-open-button"
             variant="outline"
             size="sm"
-            onClick={() => setChatOpen((value) => !value)}
+            onClick={async () => {
+              if (chatOpen) { setChatOpen(false); return; }
+              const result = await chatAccess.refetch();
+              if (result.data?.allowed && !result.isError) setChatOpen(true);
+            }}
+            title={chatAccess.data?.reason ?? (chatAccess.isError ? "Không kiểm tra được quyền dùng chatbot" : "Trợ lý học tập")}
             aria-expanded={chatOpen}
             aria-controls="assistant-panel"
             aria-label={chatOpen ? "Đóng trợ lý học tập" : "Mở trợ lý học tập"}
@@ -661,7 +677,7 @@ function ReaderContent({ courseId }: { courseId: string }) {
             )}
           >
             <Icon name="ri-sparkling-2-line" className="size-4" />
-            <span className="hidden sm:inline">Trợ lý</span>
+            <span className="hidden sm:inline">{chatAccess.data?.allowed === false ? "Trợ lý đang khóa" : "Trợ lý"}</span>
           </Button>
 
           {gazeSource === "real" ? (
@@ -692,6 +708,12 @@ function ReaderContent({ courseId }: { courseId: string }) {
           </Button>
         </div>
       </header>
+
+      {chatAccess.data?.allowed === false && chatAccess.data.reason && (
+        <p role="status" className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2 text-xs text-foreground">
+          {chatAccess.data.reason}
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 gap-3">
         {desktopOutlineOpen && (

@@ -19,12 +19,10 @@ FTS) → sinh câu trả lời → verify citation → SSE.
 ## Luồng xử lý
 
 ```
-route (course_qa | exercise_hints | exercise_review | study_skills | out_of_scope)
-  → retrieve (hybrid, chỉ trong course_id)
-  → answer (DeepSeek qua River AI)
-  → verify (citation + no-solution)
-  → retry tối đa CITATION_MAX_ATTEMPTS
-  → sanitize → SSE
+router → Knowledge QA | LMS Assistant | General Conversation
+Knowledge QA: hybrid retrieval → NDJSON blocks → cumulative verification → approved SSE
+LMS: authenticated backend read tools → Markdown templates
+General: whole-utterance greetings / short scope redirects
 ```
 
 - **Citation**: mỗi claim về môn học phải có `[n]`; verifier trả `evidence_quote`
@@ -33,7 +31,7 @@ route (course_qa | exercise_hints | exercise_review | study_skills | out_of_scop
   chữa bài vì backend chỉ gửi đáp án sau khi sinh viên đã nộp.
 - **General knowledge**: phải nằm dưới label `Ngoài tài liệu môn học:` và không
   được gắn citation.
-- **Streaming**: chỉ phát `token` sau khi verify xong; trước đó phát `status`.
+- **Streaming**: chỉ phát block hoàn chỉnh đã kiểm chứng; hàng đợi tối đa hai block. Phần đã phát được giữ nguyên khi sửa tối đa một lần trong lượt. `route`, `block_id`, `routes`, `finish_reason` bổ sung vào SSE.
 
 ## Cấu hình (biến môi trường)
 
@@ -144,3 +142,47 @@ app/
     ├── prompts.py          prompt router/answer/verifier/VLM
     └── providers.py        LLM/embedding/VLM factories
 ```
+
+### Kiểm thử hồi quy chat và đánh giá AI thật
+
+Chạy `../../scripts/test_chatbot.sh` từ thư mục này (hoặc
+`./scripts/test_chatbot.sh` từ root repo) để tạo PostgreSQL/pgvector tạm,
+kiểm tra HTTP upload/ingest/chat, phân quyền theo lượt làm, Vitest và Playwright.
+Chỉ các provider AI được giả lập trong các test tích hợp ổn định.
+
+Bộ đánh giá AI thật, bằng chứng và các điều kiện nghiệm thu chưa đạt được ghi
+trong [`docs/chatbot-verification.md`](../../docs/chatbot-verification.md).
+Runner `scripts/evaluate_live.py` mặc định chạy 30 tình huống, mỗi tình huống
+3 lần trên database/media riêng. Có thể dùng `--cases` và `--fixture-file`
+để kiểm tra lại các ca bị ảnh hưởng sau một sửa đổi.
+
+
+## Graph runtime and rollout
+
+`workflow/graph.py` compiles one parent and three subgraphs at startup, without a
+checkpointer. The backend remains the only history store. `pipeline.py` is now an
+SSE adapter; the previous whole-answer orchestration is no longer called.
+
+The service uses a shared AsyncOpenAI transport for River, task-specific limits,
+separate generator/verifier capacity, a total limit and request pacing. Configure
+`RIVER_GENERATION_CONCURRENCY` (4), `RIVER_VERIFY_CONCURRENCY` (2),
+`RIVER_TOTAL_CONCURRENCY` (6), `RIVER_REQUESTS_PER_SECOND` (1), and
+`RIVER_QUEUE_TIMEOUT` (30 seconds) against the actual provider quota. Timeout
+budgets exclude time queued. The router has no HTTP retry. Generator/verifier allow one bounded SDK transport retry for transient failures; accepted/raw stream content is never replayed.
+
+`CHATBOT_BACKEND_URL` must point directly to the backend (Compose:
+`http://backend:8001`). The fixed `/internal/chat/lms-query` operations resolve
+student/course from the persisted session and recheck enrollment, teacher locks,
+and assignment version. Nginx rejects `/internal/` and disables buffering for SSE.
+
+One embedding worker owns the Qwen model and serves both chat and ingestion.
+Chat has priority, batches contain at most eight inputs with a 10 ms collection
+window. Only query vectors are cached (1,024 entries / 15 minutes). Existing
+embeddings and selective ingestion endpoints are preserved.
+
+Run `bash scripts/test_graph_stack.sh` from the repository root with the disposable
+PostgreSQL instance configured in that script. `prepare_graph_eval.sh` creates a
+separate eval database; benchmark/evaluation must never share the regression DB,
+whose fixtures are reset. See `docs/chatbot-graph-implementation-status.md` for
+measured acceptance status and rollback image. Do not promote an image until the
+live quality, security and latency acceptance checks pass.

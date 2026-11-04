@@ -1,0 +1,535 @@
+{
+  "source_sha256": "38c4858e8264f64e58b8dc65135ba96ada839eaf975f96863f7fab8b9031ae28",
+  "label": "graph-final",
+  "concurrency": 30,
+  "mode": "knowledge",
+  "ingest_during_load": true,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 3.3484964090002904,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 3.370254624000154
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 3.840083691999098,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 3.8552088999986154
+    },
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 4.1007306200008315,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 4.111018949000936
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 4.448459887998979,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 4.459423373999016
+    },
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 4.709412535999945,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 4.721249967000404
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 4.820176625000386,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 4.829607740999563
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 5.077514271999462,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 5.089039033999143
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 6.041726888000994,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 6.050986975000342
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 6.575743597000837,
+      "answer": "Dịch vụ AI đang quá tải hoặc hết thời gian chờ. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "general",
+        "verified": true,
+        "routes": [
+          "general"
+        ],
+        "finish_reason": "overloaded",
+        "citation_count": 0
+      },
+      "total_seconds": 6.588345875001323
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 6.891014639999412,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 6.90291539700047
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 7.517856906000816,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 7.534308460999455
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 7.697171251998952,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 7.712618838999333
+    },
+    {
+      "question": "Khóa tự nhiên xuất phát từ đâu?",
+      "route": "knowledge",
+      "first_content_seconds": 7.9016364159997465,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 7.919236851999813
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 8.045482944999094,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 8.054319499000485
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 8.406799200000023,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 8.433759595000083
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 9.657387606999691,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 9.670670699999391
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 10.04180035399986,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 10.05476136300058
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 11.066459972000303,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 11.077000511999358
+    },
+    {
+      "question": "Ràng buộc duy nhất dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 11.666453087998889,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 11.67645426299896
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 11.780136204000883,
+      "answer": "Có. Một bảng chỉ có một khóa chính, nhưng khóa chính đó có thể được tạo thành từ nhiều cột [1]. Khóa chính vẫn dùng để định danh duy nhất mỗi hàng và không được chứa giá trị NULL [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 11.792360799001472
+    },
+    {
+      "question": "Khóa thay thế được tạo như thế nào?",
+      "route": "knowledge",
+      "first_content_seconds": 12.034236047000377,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 12.045974116001162
+    },
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 12.355215043999124,
+      "answer": "Một bảng có một khóa chính [1]. Khóa chính đó có thể gồm nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 12.368003097999463
+    },
+    {
+      "question": "Toàn vẹn tham chiếu bảo đảm điều gì?",
+      "route": "knowledge",
+      "first_content_seconds": 12.396791633000248,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 12.411921595001331
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 11.392387975998645,
+      "answer": "**Khóa ứng viên** (candidate key) là một tập thuộc tính tối thiểu có khả năng xác định duy nhất mỗi hàng trong bảng [1].\n\nDịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 12.736038856999585
+    },
+    {
+      "question": "Khóa ngoại dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 12.849452086000383,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 12.861832735999997
+    },
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 13.386678757000482,
+      "answer": "Khóa chính dùng để xác định duy nhất mỗi hàng trong bảng [1]. Mỗi bảng có một khóa chính, và khóa chính có thể được tạo từ nhiều cột [1]. Khóa chính không được nhận giá trị NULL [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 13.396762361000583
+    },
+    {
+      "question": "Khóa chính có thể gồm nhiều cột không?",
+      "route": "knowledge",
+      "first_content_seconds": 13.715451392999967,
+      "answer": "Có. Một bảng chỉ có một khóa chính, nhưng khóa chính đó có thể được tạo thành từ nhiều cột [1]. Khóa chính vẫn dùng để định danh duy nhất mỗi hàng và không được chứa giá trị NULL [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 13.724719535999611
+    },
+    {
+      "question": "NULL trong khóa chính có được chấp nhận không?",
+      "route": "knowledge",
+      "first_content_seconds": 13.739031852999688,
+      "answer": "Dịch vụ AI đang quá tải hoặc chưa thể kiểm chứng phần tiếp theo. Bạn vui lòng thử lại sau.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": false,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "provider_unavailable",
+        "citation_count": 3
+      },
+      "total_seconds": 13.748977867000576
+    },
+    {
+      "question": "Một bảng có bao nhiêu khóa chính?",
+      "route": "knowledge",
+      "first_content_seconds": 15.316865666000012,
+      "answer": "Theo tài liệu, mỗi bảng có một khóa chính [1]. Khóa chính này có thể được tạo thành từ nhiều cột [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 15.331837165000252
+    },
+    {
+      "question": "Khóa ứng viên là gì?",
+      "route": "knowledge",
+      "first_content_seconds": 16.961759490000986,
+      "answer": "Khóa ứng viên là một tập tối thiểu các thuộc tính dùng để xác định duy nhất một dòng trong bảng [1]. Trong đó, tính “tối thiểu” cho biết tập thuộc tính này không chứa thuộc tính dư thừa để bảo đảm việc xác định duy nhất [1].",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "routes": [
+          "knowledge"
+        ],
+        "finish_reason": "stop",
+        "citation_count": 3
+      },
+      "total_seconds": 16.975159003000954
+    }
+  ],
+  "concurrent_ingest_status": 200,
+  "concurrent_ingest_body": {
+    "processed": 3,
+    "failed": 0,
+    "errors": []
+  },
+  "summary": {
+    "knowledge": {
+      "count": 30,
+      "completed": 30,
+      "p95_first_content": 15.316865666000012,
+      "p95_total": 15.331837165000252
+    }
+  }
+}

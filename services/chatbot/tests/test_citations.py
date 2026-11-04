@@ -50,3 +50,8 @@ def test_chunk_text_preserves_spaces():
 
 def test_chunk_text_empty():
     assert chunk_text("") == []
+
+
+def test_sanitizer_preserves_math_code_and_layout():
+    source = '$a[99]$\n\n$$x[99]$$\n\n```python\n    a[99]\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |'
+    assert sanitize_citations(source, []) == source

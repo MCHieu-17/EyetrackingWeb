@@ -13,6 +13,7 @@ export interface QuizAssignmentPatch {
   dueAt?: string | null;
   durationMinutes?: number;
   status?: QuizAssignmentStatus;
+  allowChatbot?: boolean;
   allowRetry?: boolean;
   questions?: QuizQuestion[];
 }

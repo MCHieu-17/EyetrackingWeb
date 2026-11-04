@@ -15,6 +15,7 @@ from app.api.routes import (
     auth,
     calibration,
     chat,
+    chat_internal,
     courses,
     enrollments,
     gaze,
@@ -89,6 +90,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(chat_internal.router)
 app.include_router(assignments.router)
 app.include_router(users.router)
 app.include_router(courses.router)

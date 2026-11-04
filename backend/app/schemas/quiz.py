@@ -50,6 +50,7 @@ class QuizAssignmentCreate(CamelModel):
     due_at: datetime | None = None
     duration_minutes: int = Field(ge=1, le=1440)
     status: str = Field(default="draft", pattern="^(draft|published)$")
+    allow_chatbot: bool = False
     allow_retry: bool = False
     questions: list[QuizQuestion] = Field(min_length=1, max_length=200)
 
@@ -89,6 +90,7 @@ class QuizAssignmentOut(CamelModel):
     status: str
     created_at: datetime
     expires_at: datetime | None = None
+    allow_chatbot: bool = False
     allow_retry: bool = False
     questions: list[dict]
 
@@ -99,6 +101,7 @@ class QuizAssignmentUpdate(CamelModel):
     due_at: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=1, le=1440)
     status: str | None = Field(default=None, pattern="^(draft|published|closed)$")
+    allow_chatbot: bool | None = None
     allow_retry: bool | None = None
     questions: list[QuizQuestion] | None = Field(default=None, min_length=1, max_length=200)
 

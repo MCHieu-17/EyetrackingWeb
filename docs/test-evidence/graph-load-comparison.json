@@ -1,0 +1,26 @@
+{
+  "15": {
+    "summary": {
+      "knowledge": {
+        "count": 30,
+        "completed": 30,
+        "p95_first_content": 13.940806325999802,
+        "p95_total": 13.956150099998922
+      }
+    },
+    "quality_rate": 0.23333333333333334,
+    "normal_verified_finishes": 7
+  },
+  "10": {
+    "summary": {
+      "knowledge": {
+        "count": 30,
+        "completed": 30,
+        "p95_first_content": 9.970867162999639,
+        "p95_total": 9.982895215998724
+      }
+    },
+    "quality_rate": 0.26666666666666666,
+    "normal_verified_finishes": 7
+  }
+}

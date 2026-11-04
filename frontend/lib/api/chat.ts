@@ -23,6 +23,7 @@ export interface ChatReply {
 }
 
 export interface ChatSessionSummary {
+  canContinue?: boolean;
   id: string;
   courseId: string;
   lessonId: string | null;
@@ -51,18 +52,23 @@ export interface SendChatInput {
   lessonId?: string | null;
   /** Bài tập đang làm/chữa. */
   assignmentId?: string | null;
+  draftAnswers?: Record<string, string[]>;
 }
+
+export interface ChatBlockMeta { route?: string; block_id?: string | number; }
 
 export interface ChatStreamHandlers {
   onSession?: (sessionId: string) => void;
   onStatus?: (stage: string) => void;
   onCitations?: (citations: ChatCitation[]) => void;
-  onToken?: (text: string) => void;
+  onToken?: (text: string, meta?: ChatBlockMeta) => void;
   onDone?: (data: {
     sessionId?: string;
     messageId?: string;
     intent?: string;
     verified?: boolean;
+    routes?: string[];
+    finish_reason?: string;
   }) => void;
   onError?: (message: string) => void;
 }
@@ -149,11 +155,11 @@ function demoReply(input: SendChatInput): ChatReply {
 // API thật
 // ---------------------------------------------------------------------------
 
-export async function listChatSessions(courseId: string): Promise<ChatSessionSummary[]> {
+export async function listChatSessions(courseId: string, assignmentId?: string | null): Promise<ChatSessionSummary[]> {
   if (isDemoMode()) {
     return demoState.sessions.filter((item) => item.courseId === courseId);
   }
-  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/sessions`, {
+  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/sessions${assignmentId ? `?assignmentId=${encodeURIComponent(assignmentId)}` : ""}`, {
     credentials: "include",
     headers: getAuthHeaders(),
   });
@@ -248,7 +254,7 @@ export function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
       handlers.onCitations?.((data.citations as ChatCitation[]) ?? []);
       break;
     case "token":
-      handlers.onToken?.(String(data.text ?? ""));
+      handlers.onToken?.(String(data.text ?? ""), { route: typeof data.route === "string" ? data.route : undefined, block_id: typeof data.block_id === "string" || typeof data.block_id === "number" ? data.block_id : undefined });
       break;
     case "done":
       handlers.onDone?.({
@@ -256,6 +262,8 @@ export function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
         messageId: data.messageId ? String(data.messageId) : undefined,
         intent: data.intent ? String(data.intent) : undefined,
         verified: typeof data.verified === "boolean" ? data.verified : undefined,
+        routes: Array.isArray(data.routes) ? data.routes.map(String) : undefined,
+        finish_reason: typeof data.finish_reason === "string" ? data.finish_reason : undefined,
       });
       break;
     case "error":
@@ -275,10 +283,8 @@ export async function streamChatMessage(
     const reply = demoReply(input);
     handlers.onSession?.(reply.sessionId);
     handlers.onCitations?.(reply.citations);
-    for (const word of reply.answer.split(" ")) {
-      handlers.onToken?.(`${word} `);
-      await new Promise((resolve) => setTimeout(resolve, 18));
-    }
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    handlers.onToken?.(reply.answer, { route: "knowledge", block_id: 0 });
     handlers.onDone?.({
       sessionId: reply.sessionId,
       intent: reply.intent ?? undefined,
@@ -307,6 +313,7 @@ export async function streamChatMessage(
   const decoder = new TextDecoder();
   let buffer = "";
 
+  try {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -322,4 +329,23 @@ export async function streamChatMessage(
   }
 
   if (buffer.trim()) parseFrame(buffer, handlers);
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+export interface ChatAccess {
+  allowed: boolean;
+  reason: string | null;
+  blockedUntil: string | null;
+}
+
+export async function getChatAccess(courseId: string): Promise<ChatAccess> {
+  if (isDemoMode()) return { allowed: true, reason: null, blockedUntil: null };
+  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/access`, {
+    credentials: "include", headers: getAuthHeaders(), cache: "no-store",
+  });
+  if (!response.ok) throw new ApiError(response.status, await response.text());
+  return response.json();
 }

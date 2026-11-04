@@ -1,6 +1,7 @@
 """Schema request/response cho API chat."""
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import Field
@@ -26,6 +27,10 @@ class ChatSendIn(CamelModel):
     session_id: UUID | None = None
     lesson_id: UUID | None = None
     assignment_id: UUID | None = None
+    draft_answers: dict[
+        Annotated[str, Field(min_length=1, max_length=100)],
+        Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=12)],
+    ] = Field(default_factory=dict, max_length=200)
 
 
 class ChatReplyOut(CamelModel):
@@ -37,6 +42,7 @@ class ChatReplyOut(CamelModel):
 
 
 class ChatSessionOut(CamelModel):
+    can_continue: bool = True
     id: str
     course_id: str
     lesson_id: str | None = None

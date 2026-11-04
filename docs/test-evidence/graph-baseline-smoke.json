@@ -1,0 +1,36 @@
+{
+  "label": "baseline",
+  "concurrency": 1,
+  "mode": "knowledge",
+  "ingest_during_load": false,
+  "hardware": "NVIDIA GeForce RTX 3060, 12 GB VRAM",
+  "quota": "Provider quota not exposed; model unchanged from .env",
+  "runs": [
+    {
+      "question": "Khóa chính dùng để làm gì?",
+      "route": "knowledge",
+      "first_content_seconds": 12.415774613999929,
+      "answer": "## Khóa chính (Primary Key) dùng để làm gì?\n\n**Mục đích chính: định danh duy nhất mỗi dòng trong bảng.**\n\n- Khóa chính xác định duy nhất từng dòng (row) trong bảng [1].\n- Khóa chính không được phép nhận giá trị NULL [1].\n- Mỗi bảng chỉ có một khóa chính, nhưng khóa chính đó có thể gồm nhiều cột ghép lại [1].\n\n### Ví dụ minh họa\n\nGiả sử có bảng `SinhVien(MaSV, HoTen, NgaySinh)`. Nếu chọn `MaSV` làm khóa chính thì hai sinh viên khác nhau không thể trùng `MaSV`, và không dòng nào được để trống `MaSV` [1]. Còn nếu một bảng điểm danh mà không có cột mã riêng, khóa chính có thể là tổ hợp nhiều cột, ví dụ `(MaSV, MaMon)` [1].\n\n### Liên hệ với các loại khóa khác\n\n- Khóa chính thường được chọn từ một **khóa ứng viên** (candidate key) — tức tập thuộc tính tối thiểu định danh duy nhất một dòng [3].\n- Khóa chính cũng là cái mà **khóa ngoại** (foreign key) ở bảng khác trỏ tới, và ràng buộc toàn vẹn tham chiếu đảm bảo các tham chiếu đó luôn trỏ đến bản ghi hợp lệ [1].\n\n### Câu hỏi gợi mở để bạn tự kiểm tra\n\n1. Nếu một bảng có hai cột đều có thể định danh duy nhất mỗi dòng, thì khóa chính lấy từ đâu và lấy bao nhiêu? [1][3]\n2. Vì sao khóa chính **không** được NULL, trong khi một ràng buộc `UNIQUE` thì lại có thể chấp nhận nhiều giá trị NULL? [1][3]\n\n> Lưu ý: nội dung ghi chú ở slide 3 không phải là hướng dẫn học tập và đã được bỏ qua.",
+      "status": 200,
+      "done": {
+        "intent": "course_qa",
+        "verified": true,
+        "citation_count": 3
+      },
+      "total_seconds": 12.417190051000034
+    }
+  ],
+  "ingest": {
+    "processed": 3,
+    "failed": 0,
+    "errors": []
+  },
+  "summary": {
+    "knowledge": {
+      "count": 1,
+      "completed": 1,
+      "p95_first_content": 12.415774613999929,
+      "p95_total": 12.417190051000034
+    }
+  }
+}

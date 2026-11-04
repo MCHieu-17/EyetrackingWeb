@@ -2,14 +2,15 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access import get_course_or_404
-from app.api.deps import can_access_course, get_current_user, require_roles
+from app.api.deps import can_access_course, can_manage_course, get_current_user, require_roles
 from app.db.session import get_db
 from app.models.auth import User
+from app.models.chat import ChatSession
 from app.models.course import Course, Enrollment, Lesson
 from app.models.quiz import QuizAssignment, QuizAttempt, QuizAttemptSession
 from app.schemas.quiz import (
@@ -118,6 +119,7 @@ async def _assignment_out(
         created_at=assignment.created_at,
         expires_at=expires_at,
         allow_retry=assignment.allow_retry,
+        allow_chatbot=assignment.allow_chatbot,
         questions=questions,
     )
 
@@ -143,6 +145,11 @@ async def update_assignment(
     if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     data = body.model_dump(exclude_unset=True)
+    if "allow_chatbot" in data and not await can_manage_course(db, course, user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Chỉ giáo viên quản lý khóa hoặc quản trị viên được sửa quyền chatbot",
+        )
     if data.get("title") is not None:
         assignment.title = data["title"].strip()
         if assignment.lesson_id:
@@ -157,6 +164,8 @@ async def update_assignment(
         assignment.duration_minutes = data["duration_minutes"]
     if data.get("status") is not None:
         assignment.status = data["status"]
+    if data.get("allow_chatbot") is not None:
+        assignment.allow_chatbot = data["allow_chatbot"]
     if data.get("allow_retry") is not None:
         assignment.allow_retry = data["allow_retry"]
     if data.get("questions") is not None:
@@ -247,6 +256,11 @@ async def retry_attempt(
     # Không cho reset đồng hồ khi chưa từng nộp (tránh gia hạn thời gian làm bài).
     if attempt is None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Bạn chưa nộp bài")
+    await db.execute(
+        update(ChatSession)
+        .where(ChatSession.assignment_id == assignment.id, ChatSession.student_id == user.id)
+        .values(archived_at=datetime.now(timezone.utc))
+    )
     await db.delete(attempt)
     session = await db.get(
         QuizAttemptSession,
@@ -272,8 +286,7 @@ async def submit_attempt(
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Bài tập đã được nộp")
     if assignment.status != "published" or (
-        assignment.due_at is not None
-        and assignment.due_at < datetime.now(timezone.utc)
+        assignment.due_at is not None and assignment.due_at < datetime.now(timezone.utc)
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Bài tập đã đóng")
     session = await db.get(
@@ -282,7 +295,9 @@ async def submit_attempt(
     )
     if session is None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Bài làm chưa được bắt đầu")
-    if session.started_at + timedelta(minutes=assignment.duration_minutes) < datetime.now(timezone.utc):
+    if session.started_at + timedelta(minutes=assignment.duration_minutes) < datetime.now(
+        timezone.utc
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Đã hết thời gian làm bài")
     valid_answers: dict[str, list[str]] = {}
     score = 0
@@ -315,4 +330,3 @@ async def submit_attempt(
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Bài tập đã được nộp")
     await db.refresh(attempt)
     return attempt
-

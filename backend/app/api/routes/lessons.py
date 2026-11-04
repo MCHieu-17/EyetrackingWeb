@@ -296,7 +296,9 @@ async def upload_lesson_pdf(
 
     # Tuần tự hóa việc thay PDF cùng bài học để hai request không ghi đè nhau.
     await db.execute(
-        select(Lesson.id).where(Lesson.id == lesson_id).with_for_update()
+        # NO KEY UPDATE still serializes replacements, while allowing pgvector's
+        # foreign-key KEY SHARE checks to finish before old slides are deleted.
+        select(Lesson.id).where(Lesson.id == lesson_id).with_for_update(key_share=True)
     )
     old_urls = list(
         (

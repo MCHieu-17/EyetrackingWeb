@@ -65,6 +65,7 @@ kw AS (
 )
 SELECT
     e.lesson_content_id AS id,
+    e.course_id,
     e.lesson_id,
     e.content,
     e.metadata,
@@ -127,6 +128,11 @@ class Retriever:
         """Trả về các slide liên quan nhất trong đúng course."""
         vector = Vector(self.embedding.embed_query(query))
         return self._query(vector, query, course_id)
+
+    async def asearch(self, query: str, course_id: str) -> list[dict]:
+        import asyncio
+        vector = Vector(await self.embedding.aembed_query(query))
+        return await asyncio.to_thread(self._query, vector, query, course_id)
 
     def close(self):
         # `self.embedding` là client dùng chung (lru_cache registry) -> KHÔNG đóng.

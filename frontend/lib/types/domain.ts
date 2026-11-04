@@ -215,6 +215,7 @@ export interface QuizAssignment {
   status: QuizAssignmentStatus;
   createdAt: string;
   expiresAt?: string;
+  allowChatbot?: boolean;
   allowRetry?: boolean;   // giáo viên cho phép học viên làm lại
   questions: QuizQuestion[];
 }

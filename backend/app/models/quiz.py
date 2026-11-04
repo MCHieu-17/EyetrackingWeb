@@ -31,6 +31,7 @@ class QuizAssignment(Base):
     duration_minutes: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'draft'"))
     # Giáo viên cho phép học viên làm lại (ghi đè lượt làm cũ).
+    allow_chatbot: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     allow_retry: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     questions: Mapped[list[dict]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

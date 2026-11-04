@@ -119,7 +119,8 @@ def _build_embedding(name: str) -> Embeddings:
 @lru_cache(maxsize=None)
 def get_embedding(name: str | None = None) -> Embeddings:
     """Embedding dùng chung (cache theo tên). Mặc định từ EMBEDDING_NAME."""
-    return _build_embedding(name or embedding_name())
+    from app.workflow.embedding_queue import ManagedEmbedding
+    return ManagedEmbedding(_build_embedding(name or embedding_name()), embedding_model_path())
 
 
 def _build_vlm(name: str) -> BaseChatModel:

@@ -109,3 +109,19 @@ describe("streamChatMessage", () => {
     ).rejects.toThrow();
   });
 });
+
+it("sends draft selections without changing or dropping the last question", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('event: done\ndata: {"verified":true}\n\n'));
+  vi.stubGlobal("fetch", fetchMock);
+  const draftAnswers = { q1: ["a"], q5: ["b"], q10: ["c"] };
+  await streamChatMessage({ courseId: "c", message: "Gợi ý", assignmentId: "quiz", draftAnswers }, {});
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+  expect(body.draftAnswers).toEqual(draftAnswers);
+  expect(body).not.toHaveProperty("supportMode");
+});
+
+it("reports an access revocation SSE error", () => {
+  const onError = vi.fn();
+  parseFrame('event: error\ndata: {"message":"Chatbot bị khóa","status":403}', { onError });
+  expect(onError).toHaveBeenCalledWith("Chatbot bị khóa");
+});

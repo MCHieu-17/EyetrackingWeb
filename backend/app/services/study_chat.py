@@ -10,9 +10,11 @@ Bảo vệ đáp án:
 - Sau khi nộp (`support_mode="review"`): gửi đáp án đúng + giải thích để chữa bài.
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from datetime import datetime, timezone
 
 import httpx
@@ -21,9 +23,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.session import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
-from app.models.course import Course, Lesson, Module
+from app.models.course import Course, Enrollment, Lesson, Module
 from app.models.quiz import QuizAssignment, QuizAttempt
+from app.services.chat_access import active_assignments, context_key, require_chat_access
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,7 @@ def build_assignment_context(
     attempt: QuizAttempt | None,
     *,
     include_answers: bool,
+    draft_answers: dict[str, list[str]] | None = None,
 ) -> str:
     """Chuỗi ngữ cảnh bài tập gửi kèm.
 
@@ -65,12 +70,13 @@ def build_assignment_context(
         f"Chương: {module.title}" if module is not None else "",
         f"Bài học: {lesson.title}" if lesson is not None else "",
         f"Bài tập: {assignment.title}",
+        f"Số câu hỏi: {len(assignment.questions)}",
     ]
     lines = [line for line in lines if line]
     if assignment.instructions.strip():
         lines.append(f"Hướng dẫn: {assignment.instructions.strip()}")
 
-    answers = (attempt.answers if attempt is not None else {}) or {}
+    answers = (attempt.answers if attempt is not None else draft_answers) or {}
     for index, question in enumerate(assignment.questions, start=1):
         lines.append(f"Câu {index}: {question['prompt']}")
         for option in question["options"]:
@@ -78,13 +84,16 @@ def build_assignment_context(
         selected = answers.get(question["id"]) or []
         if isinstance(selected, str):
             selected = [selected]
-        lines.append(
-            f"Học viên chọn: {', '.join(selected) if selected else 'chưa trả lời'}"
-        )
+        lines.append(f"Học viên chọn: {', '.join(selected) if selected else 'chưa trả lời'}")
         if include_answers:
             lines.append(f"Đáp án đúng: {', '.join(question_correct_ids(question))}")
             lines.append(f"Giải thích: {question.get('explanation', '')}")
-    return "\n".join(lines)[:CONTEXT_MAX]
+    context = "\n".join(lines)
+    if len(context) > CONTEXT_MAX:
+        raise HTTPException(
+            422, detail="Ngữ cảnh bài tập vượt giới hạn 30.000 ký tự; cần rút gọn đề để gửi đầy đủ."
+        )
+    return context
 
 
 def _title_from(message: str) -> str:
@@ -136,10 +145,7 @@ async def _history(db: AsyncSession, session_id: str) -> list[dict]:
         .scalars()
         .all()
     )
-    return [
-        {"role": message.role, "content": message.content}
-        for message in reversed(rows)
-    ]
+    return [{"role": message.role, "content": message.content} for message in reversed(rows)]
 
 
 def _payload(
@@ -153,6 +159,7 @@ def _payload(
     assignment: QuizAssignment | None,
     attempt: QuizAttempt | None,
     support_mode: str,
+    draft_answers: dict[str, list[str]] | None = None,
 ) -> dict:
     context = ""
     if assignment is not None:
@@ -163,11 +170,13 @@ def _payload(
             assignment,
             attempt,
             include_answers=support_mode == "review",
+            draft_answers=draft_answers,
         )
     return {
         "message": message,
         "course_id": course.id,
         "thread_id": session.id,
+        "context_key": session.context_key,
         "history": history,
         "lesson_id": lesson.id if lesson is not None else None,
         "lesson_title": lesson.title if lesson is not None else "",
@@ -229,6 +238,40 @@ async def _persist_assistant(
     return message
 
 
+async def _ensure_access(session: ChatSession) -> None:
+    # A separate short transaction sees changes from other tabs.
+    async with SessionLocal() as check:
+        await ensure_access_in_db(check, session)
+
+
+async def ensure_access_in_db(check: AsyncSession, session: ChatSession) -> None:
+    enrolled = (
+        await check.execute(
+            select(Enrollment.id)
+            .join(Course)
+            .where(
+                Enrollment.course_id == session.course_id,
+                Enrollment.student_id == session.student_id,
+                Enrollment.status == "active",
+                Course.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if enrolled is None:
+        raise HTTPException(403, detail="Khóa học không còn khả dụng")
+    await require_chat_access(check, session.course_id, session.student_id)
+    if session.assignment_id is None and await active_assignments(
+        check, session.course_id, session.student_id
+    ):
+        raise HTTPException(
+            403, detail="Bạn đã bắt đầu bài tập. Vui lòng gửi lại câu hỏi để dùng ngữ cảnh mới."
+        )
+    key = await context_key(check, session.assignment_id, session.student_id, session.lesson_id)
+    if key != session.context_key:
+        raise HTTPException(
+            403, detail="Ngữ cảnh bài tập đã thay đổi. Vui lòng gửi lại câu hỏi."
+        )
+
 async def answer_in_session(
     db: AsyncSession,
     *,
@@ -240,6 +283,7 @@ async def answer_in_session(
     assignment: QuizAssignment | None,
     attempt: QuizAttempt | None,
     support_mode: str,
+    draft_answers: dict[str, list[str]] | None = None,
 ) -> tuple[str, list[dict], str | None, bool]:
     """Gọi chatbot cho một lượt hỏi rồi lưu cả câu hỏi lẫn câu trả lời."""
     if not _chatbot_ready():
@@ -259,6 +303,7 @@ async def answer_in_session(
         assignment=assignment,
         attempt=attempt,
         support_mode=support_mode,
+        draft_answers=draft_answers,
     )
 
     db.add(
@@ -280,6 +325,7 @@ async def answer_in_session(
             detail="Trợ lý học tập tạm thời không phản hồi",
         ) from exc
 
+    await _ensure_access(session)
     answer = data.get("answer") or ""
     citations = data.get("citations") or []
     intent = data.get("intent")
@@ -295,6 +341,28 @@ async def answer_in_session(
     return answer, citations, intent, verified
 
 
+async def _guarded_lines(response: httpx.Response, session: ChatSession) -> AsyncIterator[str]:
+    lines = response.aiter_lines().__aiter__()
+    pending = asyncio.create_task(anext(lines))
+    try:
+        while True:
+            done, _ = await asyncio.wait({pending}, timeout=5)
+            if not done:
+                await _ensure_access(session)
+                yield ": heartbeat"
+                continue
+            try:
+                line = pending.result()
+            except StopAsyncIteration:
+                return
+            yield line
+            pending = asyncio.create_task(anext(lines))
+    finally:
+        pending.cancel()
+        with suppress(asyncio.CancelledError, StopAsyncIteration):
+            await pending
+
+
 async def stream_in_session(
     db: AsyncSession,
     *,
@@ -306,6 +374,7 @@ async def stream_in_session(
     assignment: QuizAssignment | None,
     attempt: QuizAttempt | None,
     support_mode: str,
+    draft_answers: dict[str, list[str]] | None = None,
 ) -> AsyncIterator[str]:
     """Proxy SSE từ chatbot, đồng thời lưu assistant message khi nhận `done`."""
     if not _chatbot_ready():
@@ -323,6 +392,7 @@ async def stream_in_session(
         assignment=assignment,
         attempt=attempt,
         support_mode=support_mode,
+        draft_answers=draft_answers,
     )
 
     db.add(
@@ -363,7 +433,10 @@ async def stream_in_session(
 
                 event_name = ""
                 data_lines: list[str] = []
-                async for line in response.aiter_lines():
+                async for line in _guarded_lines(response, session):
+                    if line == ": heartbeat":
+                        yield ": heartbeat\n\n"
+                        continue
                     if line == "":
                         if event_name and data_lines:
                             raw = "\n".join(data_lines)
@@ -371,15 +444,15 @@ async def stream_in_session(
                                 data = json.loads(raw)
                             except json.JSONDecodeError:
                                 data = {}
+                            await _ensure_access(session)
                             if event_name == "token":
                                 answer_parts.append(data.get("text") or "")
                                 yield _sse("token", data)
                             elif event_name == "citations":
                                 citations = [
-                                    _citation_out(item)
-                                    for item in (data.get("citations") or [])
+                                    _citation_out(item) for item in (data.get("citations") or [])
                                 ]
-                                yield _sse("citations", {"citations": citations})
+                                yield _sse("citations", {**data, "citations": citations})
                             elif event_name == "done":
                                 intent = data.get("intent")
                                 assistant = await _persist_assistant(
@@ -400,7 +473,7 @@ async def stream_in_session(
                                 )
                             elif event_name == "error":
                                 yield _sse("error", data)
-                            else:
+                            elif event_name == "status":
                                 yield _sse(event_name, data)
                         event_name = ""
                         data_lines = []
@@ -410,6 +483,8 @@ async def stream_in_session(
                         event_name = line[len("event:") :].strip()
                     elif line.startswith("data:"):
                         data_lines.append(line[len("data:") :].strip())
+    except HTTPException as exc:
+        yield _sse("error", {"message": exc.detail, "status": exc.status_code})
     except httpx.HTTPError:
         logger.warning("Chatbot stream lỗi", exc_info=True)
         yield _sse("error", {"message": "Trợ lý học tập tạm thời không phản hồi"})

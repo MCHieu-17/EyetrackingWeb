@@ -22,6 +22,13 @@ class ChatState(TypedDict, total=False):
     assignment_context: str
     support_mode: Literal["hint", "review"]
 
+    context_key: str
+    plan: dict
+    lms_data: dict
+    lms_text: str
+    routes: list[str]
+    finish_reason: str
+    knowledge_question: str
     # Routing
     intent: str
 
