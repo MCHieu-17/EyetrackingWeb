@@ -33,8 +33,6 @@ class UserSummary(CamelModel):
     email: str
     roles: list[str]
     full_name: str | None = None
-    # true khi user phải đổi mật khẩu trước khi dùng các API khác (lần đăng nhập đầu).
-    must_change_password: bool = False
 
 
 class ChangePasswordRequest(CamelModel):

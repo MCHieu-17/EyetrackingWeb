@@ -16,7 +16,7 @@ INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'admin@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
        'active',
-       true
+       false
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('admin@school.edu.vn')
 );
@@ -40,7 +40,7 @@ INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'teacher@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
        'active',
-       true
+       false
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('teacher@school.edu.vn')
 );
@@ -70,7 +70,7 @@ INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'student@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
        'active',
-       true
+       false
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('student@school.edu.vn')
 );

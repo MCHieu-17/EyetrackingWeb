@@ -57,27 +57,8 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    user = await _authenticate(request, credentials, db)
-    # Tài khoản seed dev phải đổi mật khẩu trước khi dùng các API khác.
-    # Frontend nhận 403 với detail này và chuyển tới trang đổi mật khẩu.
-    if user.must_change_password:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="PASSWORD_CHANGE_REQUIRED",
-        )
-    return user
-
-
-async def get_current_user_allow_password_change(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Như `get_current_user` nhưng KHÔNG chặn khi `must_change_password`.
-
-    Chỉ dùng cho chính endpoint đổi mật khẩu (`POST /api/auth/change-password`)
-    để tránh khoá cứng tài khoản chưa đổi mật khẩu.
-    """
+    # Không còn bắt buộc đổi mật khẩu ở lần đăng nhập đầu. Người dùng vẫn có
+    # thể tự đổi mật khẩu qua /account/change-password nếu muốn.
     return await _authenticate(request, credentials, db)
 
 

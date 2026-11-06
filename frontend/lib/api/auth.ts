@@ -10,8 +10,6 @@ export interface AuthUser {
   roles: Role[];
   fullName: string | null;
   avatarUrl?: string | null;
-  /** true khi phải đổi mật khẩu trước khi dùng các API khác (lần đăng nhập đầu). */
-  mustChangePassword?: boolean;
 }
 
 export interface LoginResult {
@@ -36,7 +34,6 @@ export type AuthChangeReason =
   | "login"
   | "logout"
   | "session-expired"
-  | "password-change-required"
   | "unknown";
 const AUTH_SYNC_KEY = "gaze_auth_sync";
 
@@ -120,7 +117,7 @@ export async function register(
 }
 
 /**
- * Đổi mật khẩu. Dùng cho lần đăng nhập đầu (mustChangePassword) hoặc tự đổi.
+ * Đổi mật khẩu tự nguyện.
  * Backend sẽ thu hồi các phiên đăng nhập khác (giữ phiên hiện tại).
  */
 export async function changePassword(

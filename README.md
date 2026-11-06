@@ -83,7 +83,7 @@ docker compose logs -f chatbot
 | `teacher@school.edu.vn` | Giáo viên |
 | `student@school.edu.vn` | Học sinh |
 
-Lần đăng nhập đầu bị buộc đổi mật khẩu tại `/account/change-password`.
+Có thể tự đổi mật khẩu tại `/account/change-password` (không bắt buộc).
 
 ## Cổng
 

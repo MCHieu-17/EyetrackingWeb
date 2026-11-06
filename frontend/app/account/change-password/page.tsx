@@ -14,7 +14,7 @@ export default function ChangePasswordPage() {
           Đổi mật khẩu
         </h1>
         <p className="text-sm text-muted-foreground">
-          Tài khoản của bạn cần đổi mật khẩu trước khi tiếp tục sử dụng GazeEdu.
+          Cập nhật mật khẩu cho tài khoản GazeEdu của bạn.
         </p>
       </div>
       <ChangePasswordForm />

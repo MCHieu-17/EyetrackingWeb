@@ -62,7 +62,7 @@ Mở <http://localhost:3000>. Backend Swagger: <http://localhost:8001/docs>.
 ./scripts/seed_dev.sh
 ```
 
-Mật khẩu chung: `Password123!`. Lần đầu đăng nhập bắt buộc đổi mật khẩu.
+Mật khẩu chung: `Password123!`. Đổi mật khẩu tại `/account/change-password` nếu muốn (không bắt buộc).
 
 ## 5. Tạo role DB cho chatbot
 

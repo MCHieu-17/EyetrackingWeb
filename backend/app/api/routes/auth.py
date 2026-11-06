@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_allow_password_change
+from app.api.deps import get_current_user
 from app.core import security
 from app.core.config import settings
 from app.core.csrf import new_csrf_token
@@ -48,7 +48,6 @@ def _token_pair(user: User, access: str, refresh: str) -> TokenPair:
             email=user.email,
             roles=user.role_codes,
             full_name=user.profile.full_name if user.profile else None,
-            must_change_password=user.must_change_password,
         ),
     )
 
@@ -257,14 +256,12 @@ async def refresh(
 async def change_password(
     body: ChangePasswordRequest,
     request: Request,
-    user: User = Depends(get_current_user_allow_password_change),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Đổi mật khẩu (dùng cho lần đăng nhập đầu / tự đổi mật khẩu).
+    """Đổi mật khẩu tự nguyện.
 
-    Endpoint này KHÔNG bị chặn bởi cờ `must_change_password` (nếu không sẽ khoá
-    cứng tài khoản). Đổi thành công sẽ thu hồi mọi refresh session khác, giữ lại
-    phiên hiện tại.
+    Đổi thành công sẽ thu hồi mọi refresh session khác, giữ lại phiên hiện tại.
     """
     if not await asyncio.to_thread(
         security.verify_password, body.current_password, user.password_hash
