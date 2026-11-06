@@ -1,15 +1,13 @@
 -- =====================================================================
--- BẢO TRÌ PARTITION gaze_events — tạo partition tháng mới.
--- Function create_gaze_partitions() định nghĩa trong
--- db/migrations/003_gaze_partitions.sql (phải chạy migration trước).
+-- BẢO TRÌ PARTITION gaze_samples — tạo partition tháng mới.
+-- Function create_gaze_sample_partitions() định nghĩa trong
+-- db/migrations/001_baseline.sql (phải chạy baseline trước).
 --
--- Trong docker-compose.yml, service `db-maintenance` gọi function này mỗi 24h
--- (không phụ thuộc cron của host). File này để chạy thủ công:
+-- Chạy thủ công:
 --   psql -d eyetracking -f ops/maintain_partitions.sql
 --
--- LƯU Ý: nếu gaze_events_default đang chứa dữ liệu trùng khoảng của
--- partition mới, CREATE sẽ lỗi (xung đột dữ liệu). Khi đó cần chuyển
--- dữ liệu trong default về đúng partition trước (xem db/README.md).
+-- Không xoá partition cũ. Dữ liệu rơi ngoài các tháng đã tạo vào
+-- gaze_samples_default (không mất, nhưng nên xử lý sớm).
 -- =====================================================================
 
-SELECT create_gaze_partitions(3);
+SELECT create_gaze_sample_partitions(3);

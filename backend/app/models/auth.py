@@ -1,7 +1,17 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, SmallInteger, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    SmallInteger,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import INET, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,41 +21,36 @@ if TYPE_CHECKING:
     from app.models.profile import StudentProfile, TeacherProfile, UserProfile
 
 
-class UserStatus(Base):
-    __tablename__ = "user_statuses"
-
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(30), unique=True)
-    label: Mapped[str | None] = mapped_column(String(100))
-
-
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'suspended', 'banned')",
+            name="users_status_check",
+        ),
+        Index("ux_users_email_lower", text("lower(email)"), unique=True),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255))
-    status_id: Mapped[int] = mapped_column(ForeignKey("user_statuses.id"))
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'active'")
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), server_default=text("now()")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Buộc đổi mật khẩu ở lần đăng nhập đầu (dùng cho tài khoản seed dev —
-    # xem db/seed_dev_users.sql). Khi true, mọi endpoint cần đăng nhập (trừ
-    # /api/auth/change-password) trả 403 PASSWORD_CHANGE_REQUIRED.
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
 
-    status: Mapped[UserStatus] = relationship(lazy="joined")
     roles: Mapped[list["Role"]] = relationship(
         secondary="user_roles", lazy="selectin", viewonly=True
     )
@@ -68,12 +73,13 @@ class Role(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(30), unique=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     label: Mapped[str | None] = mapped_column(String(100))
 
 
 class UserRole(Base):
     __tablename__ = "user_roles"
+    __table_args__ = (Index("idx_user_roles_role", "role_id"),)
 
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -88,15 +94,23 @@ class UserRole(Base):
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
+    __table_args__ = (
+        Index(
+            "ux_auth_sessions_refresh_token_hash",
+            "refresh_token_hash",
+            unique=True,
+        ),
+        Index("idx_auth_sessions_user", "user_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    refresh_token_hash: Mapped[str] = mapped_column(String(255))
+    refresh_token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     user_agent: Mapped[str | None] = mapped_column(Text)
     ip_address: Mapped[str | None] = mapped_column(INET)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

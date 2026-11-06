@@ -1,108 +1,94 @@
 -- =====================================================================
 -- seed_dev_users.sql — TÀI KHOẢN MẪU CHO DEV (KHÔNG chạy tự động).
 --
--- ⚠️ KHÔNG nằm trong db/migrations/ nên Dockerfile.migrations sẽ KHÔNG chạy file
---    này. Chỉ chạy thủ công khi phát triển:
---        ./scripts/seed_dev.sh
+-- Chạy thủ công:
+--     ./scripts/seed_dev.sh
 --
--- Mật khẩu của cả 3 tài khoản là "Password123!" (hash bcrypt bên dưới).
--- Mọi tài khoản được đặt must_change_password = true để buộc đổi mật khẩu ngay
--- lần đăng nhập đầu tiên (xem backend: POST /api/auth/change-password).
---
--- Idempotent: chạy lại sẽ RESET mật khẩu dev về "Password123!" và bật lại
--- must_change_password (tiện cho local testing).
+-- Mật khẩu mặc định: Password123!
+-- Quy tắc: KHÔNG ghi đè mật khẩu của tài khoản đã tồn tại. Chỉ tạo user/profile
+-- còn thiếu; role grant idempotent.
 -- =====================================================================
-
-BEGIN;
 
 -- ---------------------------------------------------------------------
 -- ADMIN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status_id, must_change_password)
+INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'admin@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       s.id,
+       'active',
        true
-FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO UPDATE
-    SET password_hash = EXCLUDED.password_hash,
-        status_id = EXCLUDED.status_id,
-        must_change_password = true;
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE lower(email) = lower('admin@school.edu.vn')
+);
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u JOIN roles r ON r.code = 'admin'
-WHERE u.email = 'admin@school.edu.vn'
+WHERE lower(u.email) = lower('admin@school.edu.vn')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, gender_id)
-SELECT u.id, 'Quản Trị Viên Hệ Thống', g.id
-FROM users u JOIN genders g ON g.code = 'male'
-WHERE u.email = 'admin@school.edu.vn'
+INSERT INTO user_profiles (user_id, full_name, gender)
+SELECT u.id, 'Quản Trị Viên Hệ Thống', 'male'
+FROM users u
+WHERE lower(u.email) = lower('admin@school.edu.vn')
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
 -- GIÁO VIÊN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status_id, must_change_password)
+INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'teacher@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       s.id,
+       'active',
        true
-FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO UPDATE
-    SET password_hash = EXCLUDED.password_hash,
-        status_id = EXCLUDED.status_id,
-        must_change_password = true;
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE lower(email) = lower('teacher@school.edu.vn')
+);
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u JOIN roles r ON r.code = 'teacher'
-WHERE u.email = 'teacher@school.edu.vn'
+WHERE lower(u.email) = lower('teacher@school.edu.vn')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, gender_id)
-SELECT u.id, 'Giáo Viên Mẫu', g.id
-FROM users u JOIN genders g ON g.code = 'female'
-WHERE u.email = 'teacher@school.edu.vn'
+INSERT INTO user_profiles (user_id, full_name, gender)
+SELECT u.id, 'Giáo Viên Mẫu', 'female'
+FROM users u
+WHERE lower(u.email) = lower('teacher@school.edu.vn')
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO teacher_profiles (user_id, teacher_code, department)
 SELECT u.id, 'GV0001', 'Khoa Công Nghệ Thông Tin'
 FROM users u
-WHERE u.email = 'teacher@school.edu.vn'
+WHERE lower(u.email) = lower('teacher@school.edu.vn')
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------
 -- SINH VIÊN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status_id, must_change_password)
+INSERT INTO users (email, password_hash, status, must_change_password)
 SELECT 'student@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       s.id,
+       'active',
        true
-FROM user_statuses s WHERE s.code = 'active'
-ON CONFLICT (email) DO UPDATE
-    SET password_hash = EXCLUDED.password_hash,
-        status_id = EXCLUDED.status_id,
-        must_change_password = true;
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE lower(email) = lower('student@school.edu.vn')
+);
 
 INSERT INTO user_roles (user_id, role_id)
 SELECT u.id, r.id
 FROM users u JOIN roles r ON r.code = 'student'
-WHERE u.email = 'student@school.edu.vn'
+WHERE lower(u.email) = lower('student@school.edu.vn')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, gender_id)
-SELECT u.id, 'Sinh Viên Mẫu', g.id
-FROM users u JOIN genders g ON g.code = 'male'
-WHERE u.email = 'student@school.edu.vn'
+INSERT INTO user_profiles (user_id, full_name, gender)
+SELECT u.id, 'Sinh Viên Mẫu', 'male'
+FROM users u
+WHERE lower(u.email) = lower('student@school.edu.vn')
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO student_profiles (user_id, student_code, program)
 SELECT u.id, 'SV0001', 'Công Nghệ Thông Tin K20'
 FROM users u
-WHERE u.email = 'student@school.edu.vn'
+WHERE lower(u.email) = lower('student@school.edu.vn')
 ON CONFLICT (user_id) DO NOTHING;
-
-COMMIT;

@@ -1,7 +1,7 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, SmallInteger, String, Text, text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -10,33 +10,28 @@ if TYPE_CHECKING:
     from app.models.auth import User
 
 
-class Gender(Base):
-    __tablename__ = "genders"
-
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(20), unique=True)
-    label: Mapped[str | None] = mapped_column(String(50))
-
-
 class UserProfile(Base):
     __tablename__ = "user_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            "gender IN ('male', 'female', 'other')",
+            name="user_profiles_gender_check",
+        ),
+    )
 
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    full_name: Mapped[str] = mapped_column(String(150))
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date)
-    gender_id: Mapped[int | None] = mapped_column(ForeignKey("genders.id"))
+    gender: Mapped[str | None] = mapped_column(String(20))
     phone: Mapped[str | None] = mapped_column(String(20))
     avatar_url: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), server_default=text("now()")
     )
 
     user: Mapped["User"] = relationship(back_populates="profile")  # noqa: F821
-    gender: Mapped[Gender | None] = relationship(lazy="joined")
 
 
 class StudentProfile(Base):
@@ -45,7 +40,7 @@ class StudentProfile(Base):
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    student_code: Mapped[str] = mapped_column(String(30), unique=True)
+    student_code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     program: Mapped[str | None] = mapped_column(String(200))
 
     user: Mapped["User"] = relationship(back_populates="student_profile")  # noqa: F821
@@ -57,7 +52,7 @@ class TeacherProfile(Base):
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    teacher_code: Mapped[str] = mapped_column(String(30), unique=True)
+    teacher_code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     department: Mapped[str | None] = mapped_column(String(150))
 
     user: Mapped["User"] = relationship(back_populates="teacher_profile")  # noqa: F821

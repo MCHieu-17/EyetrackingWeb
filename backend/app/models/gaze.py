@@ -1,194 +1,254 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    REAL,
     BigInteger,
-    Boolean,
+    CHAR,
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     Integer,
+    REAL,
     String,
     UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.calibration import Calibration
+    from app.models.course import CourseVersionItem, Enrollment, LessonVersionSlide
+    from app.models.quiz import QuizAttempt
 
 
 class LearningSession(Base):
     __tablename__ = "learning_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress', 'completed', 'aborted', 'expired')",
+            name="learning_sessions_status_check",
+        ),
+        CheckConstraint(
+            "clock_uncertainty_ms IS NULL OR clock_uncertainty_ms >= 0",
+            name="learning_sessions_clock_uncertainty_check",
+        ),
+        Index(
+            "idx_learning_sessions_enrollment",
+            "enrollment_id",
+            "started_at",
+        ),
+        Index("idx_learning_sessions_item", "course_version_item_id"),
+        Index("idx_learning_sessions_status", "status"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
     enrollment_id: Mapped[str] = mapped_column(
-        ForeignKey("enrollments.id", ondelete="CASCADE")
+        ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=False
     )
-    lesson_id: Mapped[str] = mapped_column(ForeignKey("lessons.id", ondelete="CASCADE"))
-    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"))
-    calibration_param_id: Mapped[str | None] = mapped_column(
-        ForeignKey("calibration_params.id")
+    course_version_item_id: Mapped[str] = mapped_column(
+        ForeignKey("course_version_items.id", ondelete="RESTRICT"), nullable=False
     )
-    status: Mapped[str] = mapped_column(String(20), server_default=text("'in_progress'"))
+    quiz_attempt_id: Mapped[str | None] = mapped_column(
+        ForeignKey("quiz_attempts.id", ondelete="SET NULL")
+    )
+    calibration_id: Mapped[str | None] = mapped_column(
+        ForeignKey("calibrations.id", ondelete="RESTRICT")
+    )
+    pipeline_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    config: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    tracking_consent: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("true")
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'in_progress'")
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    tracking_consent: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
-    # Viewport lúc tạo phiên và viewport lúc calibration. Hai bộ phải bằng nhau
-    # (xem CHECK ở gaze_raw_samples + validate ở route).
-    viewport_width_px: Mapped[int | None] = mapped_column(Integer)
-    viewport_height_px: Mapped[int | None] = mapped_column(Integer)
-    calibration_width_px: Mapped[int | None] = mapped_column(Integer)
-    calibration_height_px: Mapped[int | None] = mapped_column(Integer)
-    device_pixel_ratio: Mapped[float | None] = mapped_column(REAL)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    clock_uncertainty_ms: Mapped[int | None] = mapped_column(Integer)
+
+    enrollment: Mapped["Enrollment"] = relationship()
+    course_version_item: Mapped["CourseVersionItem"] = relationship()
+    quiz_attempt: Mapped["QuizAttempt | None"] = relationship()
+    calibration: Mapped["Calibration | None"] = relationship()
+    presentations: Mapped[list["ContentPresentation"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ContentPresentation.sequence_no",
+        lazy="selectin",
+    )
 
 
-class GazeEvent(Base):
-    __tablename__ = "gaze_events"
+class ContentPresentation(Base):
+    __tablename__ = "content_presentations"
     __table_args__ = (
-        CheckConstraint("gaze_x >= 0 AND gaze_x <= 1", name="gaze_events_gaze_x_check"),
-        CheckConstraint("gaze_y >= 0 AND gaze_y <= 1", name="gaze_events_gaze_y_check"),
-        {"postgresql_partition_by": "RANGE (event_time)"},
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    learning_session_id: Mapped[str] = mapped_column(
-        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
-    )
-    # NULL = bài tập trắc nghiệm (không có slide). Toạ độ khi đó theo viewport.
-    lesson_content_id: Mapped[str | None] = mapped_column(
-        ForeignKey("lesson_contents.id"), nullable=True
-    )
-    event_time: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), primary_key=True, server_default=text("now()")
-    )
-    gaze_x: Mapped[float] = mapped_column(REAL, nullable=False)
-    gaze_y: Mapped[float] = mapped_column(REAL, nullable=False)
-    # Khung toạ độ của gaze_x/gaze_y: 'slide' (theo ảnh slide) | 'quiz' (theo viewport).
-    surface: Mapped[str] = mapped_column(String(8), server_default=text("'slide'"))
-
-
-class GazeSessionStat(Base):
-    """Tổng hợp gaze mức PHIÊN cho bài KHÔNG có slide (bài tập trắc nghiệm).
-
-    `gaze_slide_stats` không dùng được cho bài tập (gắn chặt lesson_content_id),
-    nên tổng số sample / số sample trong màn hình / thời lượng xem của phiên bài
-    tập lưu ở đây. Một dòng cho mỗi phiên học.
-    """
-
-    __tablename__ = "gaze_session_stats"
-
-    learning_session_id: Mapped[str] = mapped_column(
-        ForeignKey("learning_sessions.id", ondelete="CASCADE"), primary_key=True
-    )
-    total_samples: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    on_screen_samples: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    view_ms: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-
-class GazeSlideStat(Base):
-    __tablename__ = "gaze_slide_stats"
-    __table_args__ = (
-        UniqueConstraint("learning_session_id", "lesson_content_id"),
+        UniqueConstraint("session_id", "sequence_no"),
+        UniqueConstraint("id", "session_id"),
+        CheckConstraint(
+            "surface IN ('lesson', 'quiz')",
+            name="content_presentations_surface_check",
+        ),
+        CheckConstraint(
+            "sequence_no >= 0", name="content_presentations_sequence_check"
+        ),
+        Index(
+            "idx_content_presentations_session", "session_id", "started_at"
+        ),
     )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    learning_session_id: Mapped[str] = mapped_column(
-        ForeignKey("learning_sessions.id", ondelete="CASCADE")
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
     )
-    lesson_content_id: Mapped[str] = mapped_column(
-        ForeignKey("lesson_contents.id", ondelete="CASCADE")
+    lesson_version_slide_id: Mapped[str | None] = mapped_column(
+        ForeignKey("lesson_version_slides.id", ondelete="RESTRICT")
     )
-    total_samples: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    on_slide_samples: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    view_ms: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
+    surface: Mapped[str] = mapped_column(String(16), nullable=False)
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
     )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    session: Mapped["LearningSession"] = relationship(back_populates="presentations")
+    lesson_version_slide: Mapped["LessonVersionSlide | None"] = relationship()
 
 
-class GazeRawSample(Base):
-    """Một mẫu gaze RAW theo viewport (đã qua One-Euro smoothing ở AI service).
-
-    Khác `gaze_events`:
-      - Toạ độ chuẩn hoá theo VIEWPORT, không phải ảnh slide.
-      - Cho phép gaze_x/gaze_y < 0 hoặc > 1 khi nhìn ra ngoài màn hình.
-      - Lưu cả viewport lúc lấy mẫu và viewport lúc calibration; hai bộ phải
-        bằng nhau (CHECK ở DB + validate ở route).
-      - `status='no_face'` dùng gaze_x/gaze_y = NULL, không dùng sentinel (-1,-1).
-
-    Partition theo tháng; không xoá partition cũ.
-    """
-
-    __tablename__ = "gaze_raw_samples"
+class GazeBatch(Base):
+    __tablename__ = "gaze_batches"
     __table_args__ = (
+        UniqueConstraint("session_id", "batch_id"),
+        UniqueConstraint("session_id", "batch_no"),
+        UniqueConstraint("id", "session_id"),
+        ForeignKeyConstraint(
+            ["presentation_id", "session_id"],
+            ["content_presentations.id", "content_presentations.session_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("batch_no >= 0", name="gaze_batches_batch_no_check"),
         CheckConstraint(
-            "viewport_width_px = calibration_width_px",
-            name="gaze_raw_samples_viewport_width_check",
+            "sequence_start >= 0", name="gaze_batches_sequence_start_check"
         ),
         CheckConstraint(
-            "viewport_height_px = calibration_height_px",
-            name="gaze_raw_samples_viewport_height_check",
+            "sequence_end >= sequence_start",
+            name="gaze_batches_sequence_range_check",
         ),
         CheckConstraint(
-            "(status = 'ok' AND gaze_x IS NOT NULL AND gaze_y IS NOT NULL) "
-            "OR (status <> 'ok' AND gaze_x IS NULL AND gaze_y IS NULL)",
-            name="gaze_raw_samples_status_coords_check",
+            "payload_hash ~ '^[0-9a-f]{64}$'",
+            name="gaze_batches_payload_hash_check",
         ),
         CheckConstraint(
-            "gaze_x IS NULL OR (gaze_x > -100 AND gaze_x < 100)",
-            name="gaze_raw_samples_gaze_x_check",
+            "received_count >= 0", name="gaze_batches_received_count_check"
         ),
         CheckConstraint(
-            "gaze_y IS NULL OR (gaze_y > -100 AND gaze_y < 100)",
-            name="gaze_raw_samples_gaze_y_check",
+            "stored_count >= 0", name="gaze_batches_stored_count_check"
         ),
+        CheckConstraint(
+            "duplicate_count >= 0", name="gaze_batches_duplicate_count_check"
+        ),
+        CheckConstraint(
+            "rejected_count >= 0", name="gaze_batches_rejected_count_check"
+        ),
+        Index("idx_gaze_batches_session", "session_id", "batch_no"),
+        Index("idx_gaze_batches_presentation", "presentation_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    presentation_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    layout_snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("aoi_layout_snapshots.id", ondelete="SET NULL")
+    )
+    batch_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    batch_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    sequence_start: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sequence_end: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    received_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    stored_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    duplicate_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    rejected_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+
+    session: Mapped["LearningSession"] = relationship()
+    presentation: Mapped["ContentPresentation"] = relationship()
+
+
+class GazeSample(Base):
+    __tablename__ = "gaze_samples"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["batch_id", "session_id"],
+            ["gaze_batches.id", "gaze_batches.session_id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "status IN ('ok', 'no_face', 'error', 'offscreen')",
+            name="gaze_samples_status_check",
+        ),
+        CheckConstraint(
+            "(status = 'ok' AND viewport_x IS NOT NULL AND viewport_y IS NOT NULL) "
+            "OR (status <> 'ok' AND viewport_x IS NULL AND viewport_y IS NULL)",
+            name="gaze_samples_status_coords_check",
+        ),
+        CheckConstraint(
+            "viewport_x IS NULL OR (viewport_x > -100 AND viewport_x < 100)",
+            name="gaze_samples_viewport_x_check",
+        ),
+        CheckConstraint(
+            "viewport_y IS NULL OR (viewport_y > -100 AND viewport_y < 100)",
+            name="gaze_samples_viewport_y_check",
+        ),
+        CheckConstraint("sequence >= 0", name="gaze_samples_sequence_check"),
+        CheckConstraint(
+            "capture_monotonic_ns >= 0",
+            name="gaze_samples_capture_monotonic_check",
+        ),
+        Index("idx_gaze_samples_session", "session_id", "event_time"),
+        Index("idx_gaze_samples_batch", "batch_id", "event_time"),
         {"postgresql_partition_by": "RANGE (event_time)"},
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    learning_session_id: Mapped[str] = mapped_column(
-        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
-    )
-    lesson_content_id: Mapped[str | None] = mapped_column(
-        ForeignKey("lesson_contents.id", ondelete="SET NULL"), nullable=True
-    )
-    layout_snapshot_id: Mapped[str | None] = mapped_column(
-        ForeignKey("aoi_layout_snapshots.id", ondelete="SET NULL"), nullable=True
-    )
+    session_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    batch_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    capture_monotonic_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
     event_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), primary_key=True
     )
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
+    viewport_x: Mapped[float | None] = mapped_column(REAL)
+    viewport_y: Mapped[float | None] = mapped_column(REAL)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    quality_flags: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    client_ts_ms: Mapped[int | None] = mapped_column(BigInteger)
-    gaze_x: Mapped[float | None] = mapped_column(REAL)
-    gaze_y: Mapped[float | None] = mapped_column(REAL)
-    slide_x: Mapped[float | None] = mapped_column(REAL)
-    slide_y: Mapped[float | None] = mapped_column(REAL)
-    status: Mapped[str] = mapped_column(String(16), server_default=text("'ok'"))
-    surface: Mapped[str] = mapped_column(String(16), server_default=text("'lesson'"))
-    viewport_width_px: Mapped[int] = mapped_column(Integer, nullable=False)
-    viewport_height_px: Mapped[int] = mapped_column(Integer, nullable=False)
-    calibration_width_px: Mapped[int] = mapped_column(Integer, nullable=False)
-    calibration_height_px: Mapped[int] = mapped_column(Integer, nullable=False)
-    device_pixel_ratio: Mapped[float] = mapped_column(REAL, nullable=False)
-    layout_key: Mapped[str | None] = mapped_column(String(64))
-    source: Mapped[str] = mapped_column(String(16), server_default=text("'real'"))
-    metadata_: Mapped[dict] = mapped_column(
-        "metadata", JSONB, server_default=text("'{}'::jsonb")
-    )
+
+    batch: Mapped["GazeBatch"] = relationship()

@@ -2,55 +2,64 @@
 # =====================================================================
 # create_chatbot_role.sh — tạo/cập nhật DB role hạn chế cho chatbot.
 #
-# Chatbot chỉ cần đọc course/module/lesson/slide + ghi embedding/status.
-# Role này KHÔNG có quyền đọc quiz_assignments/quiz_attempts/users — lớp bảo
-# vệ thứ hai để chatbot không thể lộ đáp án kể cả khi bị prompt injection.
+# Chatbot chỉ được:
+#   - đọc view công khai `v_chatbot_slide_documents`;
+#   - ghi `slide_documents` (ingest transcript/embedding).
+# KHÔNG được đọc quiz_specs/quiz_attempts/users/chat_*.
 #
-# Chạy SAU khi migrations đã áp (cần các bảng 024):
+# Chạy SAU baseline:
 #   ./ops/create_chatbot_role.sh
+#   POSTGRES_DB_OVERRIDE=eyelearning_refactor_test ./ops/create_chatbot_role.sh
 #
-# Idempotent: chạy lại sẽ ALTER password + grant lại quyền.
-# Script chạy psql trong container `postgres` (không cần psql trên host).
+# Idempotent: kiểm tra role tồn tại trước khi ALTER; revoke toàn bộ quyền cũ
+# trên schema public rồi grant lại đúng phạm vi.
 # =====================================================================
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+DB_NAME="${POSTGRES_DB_OVERRIDE:-}"
 set -a
 # shellcheck disable=SC1091
 source "$ROOT_DIR/.env"
 set +a
+DB_NAME="${DB_NAME:-$POSTGRES_DB}"
 
 : "${POSTGRES_USER:?thiếu POSTGRES_USER}"
-: "${POSTGRES_DB:?thiếu POSTGRES_DB}"
+: "${DB_NAME:?thiếu database đích}"
 : "${CHATBOT_DB_USER:?thiếu CHATBOT_DB_USER}"
 : "${CHATBOT_DB_PASSWORD:?thiếu CHATBOT_DB_PASSWORD}"
 
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${CHATBOT_DB_USER}') THEN
-        CREATE ROLE ${CHATBOT_DB_USER} LOGIN PASSWORD '${CHATBOT_DB_PASSWORD}';
-    ELSE
-        ALTER ROLE ${CHATBOT_DB_USER} WITH LOGIN PASSWORD '${CHATBOT_DB_PASSWORD}';
-    END IF;
-END
-\$\$;
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$DB_NAME" \
+  -v ON_ERROR_STOP=1 \
+  -v role="$CHATBOT_DB_USER" \
+  -v password="$CHATBOT_DB_PASSWORD" \
+  -v dbname="$DB_NAME" \
+  -f - <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'role', :'password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role')
+\gexec
 
-GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${CHATBOT_DB_USER};
-GRANT USAGE ON SCHEMA public TO ${CHATBOT_DB_USER};
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'role', :'password')
+WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role')
+\gexec
 
--- Đọc nội dung môn học + ghi embedding/status.
-GRANT SELECT ON courses, modules, lessons, lesson_contents, lesson_content_embedding
-    TO ${CHATBOT_DB_USER};
-GRANT INSERT, UPDATE, DELETE ON lesson_content_embedding TO ${CHATBOT_DB_USER};
-GRANT UPDATE (embedding_status, embedding_error, embedding_updated_at)
-    ON lesson_contents TO ${CHATBOT_DB_USER};
+GRANT CONNECT ON DATABASE :"dbname" TO :"role";
+GRANT USAGE ON SCHEMA public TO :"role";
 
--- Không cho đọc dữ liệu bài tập/người dùng.
-REVOKE ALL ON quiz_assignments, quiz_attempts, quiz_attempt_sessions, users
-    FROM ${CHATBOT_DB_USER};
+-- Xóa mọi quyền cũ (kể cả grant từ schema cũ) trước khi grant lại.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"role";
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM :"role";
+
+-- Đọc nội dung published qua view; ghi tài liệu ingest.
+GRANT SELECT ON v_chatbot_slide_documents TO :"role";
+GRANT SELECT (slide_version_id) ON slide_documents TO :"role";
+GRANT INSERT, UPDATE, DELETE ON slide_documents TO :"role";
+
+-- Không cho đọc dữ liệu bài tập/người dùng/chat.
+REVOKE ALL ON quiz_specs, quiz_attempts, users, chat_sessions, chat_messages
+    FROM :"role";
 SQL
 
-echo "OK: role ${CHATBOT_DB_USER} đã sẵn sàng (không có quyền đọc bảng quiz/users)."
+echo "OK: role ${CHATBOT_DB_USER} đã sẵn sàng trên ${DB_NAME} (chỉ view published + slide_documents)."

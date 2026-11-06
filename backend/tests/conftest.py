@@ -1,17 +1,37 @@
 import asyncio
 import os
 import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_env_file() -> dict[str, str]:
+    values: dict[str, str] = {}
+    path = ROOT / ".env"
+    if not path.is_file():
+        return values
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+_ENV = _load_env_file()
+_PG_USER = _ENV.get("POSTGRES_USER", "postgres")
+_PG_PASSWORD = _ENV.get("POSTGRES_PASSWORD", "postgres")
 
 os.environ["TESTING"] = "1"
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5435/eyetracking_test",
+    f"postgresql+asyncpg://{_PG_USER}:{_PG_PASSWORD}@localhost:5435/eyelearning_refactor_test",
 )
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-pytest-please-change")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("AI_HTTP_URL", "http://127.0.0.1:8000")
-# Chatbot là service tùy chọn trong compose; test cần URL/token giả để
-# `chatbot_ready` bật, tránh 503 dù không gọi chatbot thật.
 os.environ.setdefault("CHATBOT_URL", "http://localhost:8002")
 os.environ.setdefault("CHATBOT_INTERNAL_TOKEN", "test-chatbot-token")
 os.environ["MEDIA_DIR"] = os.path.join(tempfile.gettempdir(), "eyelearning-test-media")
@@ -25,141 +45,28 @@ for key in (
     os.environ[key] = ""
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.core.ratelimit import _BUCKETS
 from app.core.security import hash_password
+from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.main import app
+import app.models  # noqa: F401  (register all tables)
 
-TRUNCATE = """
-TRUNCATE TABLE users, courses, enrollments, devices, calibration_sessions,
-calibration_params, learning_sessions, gaze_events, gaze_slide_stats,
-gaze_session_stats, gaze_raw_samples, gaze_aoi_hits, aoi_definitions,
-aoi_layout_snapshots, aoi_layout_rects,
-heatmap_aggregates, aoi_regions, aoi_dwell_stats, engagement_scores,
-slide_coverage_stats, lesson_mastery_scores, auth_sessions CASCADE
-"""
-
-# Tự động áp migrations cho DB test (để stack update/recreate vẫn tự migrate)
-# Chạy toàn bộ db/migrations/*.sql, idempotent nên an toàn
-MIGRATIONS_DIR = None
-try:
-    from pathlib import Path as _P
-    _cand = _P(__file__).resolve().parents[2] / "db" / "migrations"
-    if _cand.is_dir():
-        MIGRATIONS_DIR = _cand
-except Exception:
-    pass
-
-
-def _strip_sql_comments(sql: str) -> str:
-    """Bỏ comment `-- ...` và `/* ... */` (không đụng vào chuỗi và $$ ... $$).
-
-    Cần thiết vì comment trong migrations có thể chứa dấu `;` (vd
-    `-- ... tham số kappa; ACTIVE duy nhất ...`), khiến bước tách statement
-    cắt sai và sinh lỗi syntax khi chạy local. psql -f không dính lỗi này.
-    """
-    out: list[str] = []
-    i = 0
-    n = len(sql)
-    in_single = False
-    in_dollar = False
-    while i < n:
-        if not in_single and sql[i : i + 2] == "$$":
-            in_dollar = not in_dollar
-            out.append("$$")
-            i += 2
-            continue
-        if not in_dollar and sql[i] == "'":
-            in_single = not in_single
-            out.append("'")
-            i += 1
-            continue
-        if not in_single and not in_dollar:
-            if sql[i : i + 2] == "--":
-                newline = sql.find("\n", i)
-                i = n if newline == -1 else newline
-                continue
-            if sql[i : i + 2] == "/*":
-                end = sql.find("*/", i + 2)
-                i = n if end == -1 else end + 2
-                continue
-        out.append(sql[i])
-        i += 1
-    return "".join(out)
-
-
-def _split_sql(sql: str) -> list[str]:
-    """Chia file SQL thành từng statement, tôn trọng $$...$$ và '...'."""
-    stmts: list[str] = []
-    buf = ""
-    in_dollar = False
-    in_single = False
-    i = 0
-    import re as _re
-
-    cleaned = _strip_sql_comments(sql)
-    cleaned = _re.sub(r"^\s*BEGIN\s*;\s*", "", cleaned, flags=_re.IGNORECASE)
-    cleaned = _re.sub(r"\s*COMMIT\s*;\s*$", "", cleaned, flags=_re.IGNORECASE)
-    while i < len(cleaned):
-        if not in_single and cleaned[i : i + 2] == "$$":
-            in_dollar = not in_dollar
-            buf += "$$"
-            i += 2
-            continue
-        if not in_dollar and cleaned[i] == "'":
-            if i + 1 < len(cleaned) and cleaned[i + 1] == "'":
-                buf += "''"
-                i += 2
-                continue
-            in_single = not in_single
-            buf += "'"
-            i += 1
-            continue
-        if not in_dollar and not in_single and cleaned[i] == ";":
-            if buf.strip():
-                stmts.append(buf.strip())
-            buf = ""
-            i += 1
-            continue
-        buf += cleaned[i]
-        i += 1
-    if buf.strip():
-        stmts.append(buf.strip())
-    return [s for s in stmts if s.strip()]
-
-
-async def _apply_migrations():
-    if MIGRATIONS_DIR is None:
-        return
-    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    for f in files:
-        raw = f.read_text(encoding="utf-8")
-        if not raw.strip():
-            continue
-        stmts = _split_sql(raw)
-        if not stmts:
-            continue
-        async with engine.begin() as conn:
-            for stmt in stmts:
-                if not stmt.strip():
-                    continue
-                await conn.execute(text(stmt))
+# Giữ reference seed; xóa toàn bộ dữ liệu nghiệp vụ.
+_KEEP = {"schema_migrations", "app_metadata", "roles", "calibration_settings"}
+_TRUNCATE_TABLES = [
+    table.name for table in Base.metadata.sorted_tables if table.name not in _KEEP
+]
+TRUNCATE = "TRUNCATE TABLE " + ", ".join(_TRUNCATE_TABLES) + " CASCADE"
 
 LOOKUPS = """
-INSERT INTO user_statuses (code, label) VALUES ('active', 'Đang hoạt động')
-ON CONFLICT (code) DO NOTHING;
 INSERT INTO roles (code, label) VALUES
     ('admin', 'Quản trị viên'), ('teacher', 'Giáo viên'), ('student', 'Học sinh')
 ON CONFLICT (code) DO NOTHING;
-INSERT INTO genders (code, label) VALUES
-    ('male', 'Nam'), ('female', 'Nữ'), ('other', 'Khác')
-ON CONFLICT (code) DO NOTHING;
-INSERT INTO course_statuses (code, label) VALUES
-    ('draft', 'Bản nháp'), ('published', 'Đã xuất bản'), ('archived', 'Đã lưu trữ')
-ON CONFLICT (code) DO NOTHING;
+INSERT INTO calibration_settings (id, enabled, threshold)
+VALUES (1, true, 0.12)
+ON CONFLICT (id) DO NOTHING;
 """
 
 
@@ -183,19 +90,20 @@ requires_db = pytest.mark.skipif(
 
 
 async def _reset_db():
+    """Xóa dữ liệu test. Schema phải được dựng trước bằng scripts/test_db.sh.
+
+    Không tự chạy migration/replay SQL trong fixture: baseline là nguồn schema
+    duy nhất (PLAN.md Phase 0/1).
+    """
     async with SessionLocal() as session:
         try:
             await session.execute(text(TRUNCATE))
-        except Exception as e:
-            # Bảng mới (008) chưa có trên DB cũ / test DB vừa tạo bằng tay
-            # → tự áp toàn bộ migrations rồi thử lại (idempotent)
+        except Exception as exc:  # noqa: BLE001
             await session.rollback()
-            msg = str(e).lower()
-            if "does not exist" in msg or "undefinedtable" in msg or "slide_coverage" in msg or "lesson_mastery" in msg:
-                await _apply_migrations()
-                await session.execute(text(TRUNCATE))
-            else:
-                raise
+            raise RuntimeError(
+                "Test database chưa được dựng bằng baseline. "
+                "Chạy ./scripts/test_db.sh trước khi pytest."
+            ) from exc
         for stmt in LOOKUPS.strip().split(";"):
             if stmt.strip():
                 await session.execute(text(stmt))
@@ -213,8 +121,8 @@ async def make_user(
         await session.execute(
             text(
                 """
-                INSERT INTO users (email, password_hash, status_id)
-                VALUES (:email, :hash, (SELECT id FROM user_statuses WHERE code = 'active'))
+                INSERT INTO users (email, password_hash, status)
+                VALUES (:email, :hash, 'active')
                 ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
                 """
             ),
@@ -279,11 +187,16 @@ def client():
         pytest.skip("PostgreSQL chưa chạy")
     asyncio.run(_reset_db())
     _BUCKETS.clear()
+    # Import muộn: Phase 1 chỉ cần schema tests; route cũ sẽ được thay ở Phase 2.
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
     with TestClient(app) as c:
         yield c
 
 
-def login(client: TestClient, email: str, password: str = "Password123!") -> dict:
+def login(client, email: str, password: str = "Password123!") -> dict:
     r = client.post(
         "/api/auth/login", json={"email": email, "password": password}
     )
