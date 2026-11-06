@@ -9,21 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     admin,
-    analytics,
-    aoi,
-    assignments,
     auth,
-    calibration,
-    chat,
-    chat_internal,
     courses,
     enrollments,
-    gaze,
     lessons,
     media,
     module_items,
     modules,
     proxy,
+    quiz_specs,
     users,
 )
 from app.core.config import settings
@@ -89,9 +83,6 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(chat.router)
-app.include_router(chat_internal.router)
-app.include_router(assignments.router)
 app.include_router(users.router)
 app.include_router(courses.router)
 app.include_router(admin.router)
@@ -99,12 +90,9 @@ app.include_router(modules.router)
 app.include_router(module_items.router)
 app.include_router(lessons.router)
 app.include_router(enrollments.router)
-app.include_router(gaze.router)
-app.include_router(aoi.router)
-app.include_router(calibration.router)
-app.include_router(analytics.router)
 app.include_router(proxy.router)
 app.include_router(media.router)
+app.include_router(quiz_specs.router)
 
 
 @app.get("/health", tags=["system"])

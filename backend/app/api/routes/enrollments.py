@@ -8,7 +8,13 @@ from app.core.helpers import gradient_for
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, Enrollment, Lesson, Module
+from app.models.course import (
+    Course,
+    CourseVersion,
+    CourseVersionItem,
+    CourseVersionModule,
+    Enrollment,
+)
 from app.models.profile import UserProfile
 from app.schemas.course import CourseSummaryOut, EnrolledCourseOut
 
@@ -20,42 +26,40 @@ async def my_enrollments(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = (
-        select(Enrollment, Course, UserProfile)
-        .join(Course, Course.id == Enrollment.course_id)
-        .outerjoin(UserProfile, UserProfile.user_id == Course.teacher_id)
-        .where(Enrollment.student_id == user.id, Course.deleted_at.is_(None))
-        .order_by(Enrollment.enrolled_at.desc())
-    )
-    rows = (await db.execute(stmt)).all()
+    rows = (
+        await db.execute(
+            select(Enrollment, Course, CourseVersion, UserProfile)
+            .join(Course, Course.id == Enrollment.course_id)
+            .outerjoin(
+                CourseVersion,
+                CourseVersion.id == Course.published_version_id,
+            )
+            .outerjoin(UserProfile, UserProfile.user_id == Course.owner_id)
+            .where(Enrollment.student_id == user.id)
+            .order_by(Enrollment.enrolled_at.desc())
+        )
+    ).all()
     if not rows:
         return []
 
-    course_ids = [c.id for _, c, _ in rows]
-
-    module_counts = dict(
-        (
+    out: list[EnrolledCourseOut] = []
+    for enrollment, course, version, teacher_profile in rows:
+        if version is None:
+            continue
+        module_count = (
             await db.execute(
-                select(Module.course_id, func.count(Module.id))
-                .where(Module.course_id.in_(course_ids))
-                .group_by(Module.course_id)
+                select(func.count(CourseVersionModule.id)).where(
+                    CourseVersionModule.course_version_id == version.id
+                )
             )
-        ).all()
-    )
-    lesson_counts = dict(
-        (
+        ).scalar_one()
+        lesson_count = (
             await db.execute(
-                select(Module.course_id, func.count(Lesson.id))
-                .join(Lesson, Lesson.module_id == Module.id)
-                .where(Module.course_id.in_(course_ids))
-                .group_by(Module.course_id)
+                select(func.count(CourseVersionItem.id)).where(
+                    CourseVersionItem.course_version_id == version.id
+                )
             )
-        ).all()
-    )
-
-    out = []
-    for enrollment, course, teacher_profile in rows:
-        total_lessons = lesson_counts.get(course.id, 0)
+        ).scalar_one()
         out.append(
             EnrolledCourseOut(
                 enrollment_id=enrollment.id,
@@ -63,13 +67,13 @@ async def my_enrollments(
                 status=enrollment.status,
                 course=CourseSummaryOut(
                     id=course.id,
-                    title=course.title,
-                    thumbnail_url=course.thumbnail_url,
+                    title=version.title,
+                    thumbnail_url=None,
                     teacher_name=(
                         teacher_profile.full_name if teacher_profile else "—"
                     ),
-                    module_count=module_counts.get(course.id, 0),
-                    lesson_count=total_lessons,
+                    module_count=int(module_count),
+                    lesson_count=int(lesson_count),
                     gradient=gradient_for(course.id),
                     require_calibration=course.require_calibration,
                 ),
@@ -89,9 +93,9 @@ async def enroll(
     db: AsyncSession = Depends(get_db),
 ):
     course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
+    if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    if course.status.code != "published":
+    if course.archived_at is not None or course.published_version_id is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Khóa học chưa được xuất bản"
         )
@@ -108,7 +112,7 @@ async def enroll(
     db.add(enrollment)
     try:
         await db.commit()
-    except IntegrityError as exc:  # race condition: unique violation
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="Đã đăng ký khóa học này"

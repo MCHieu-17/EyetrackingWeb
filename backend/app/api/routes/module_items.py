@@ -2,59 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.access import get_module_owned
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Lesson
-from app.models.quiz import QuizAssignment
+from app.models.course import CourseVersionItem
 from app.schemas.course import LessonNodeOut, ModuleItemsReorderIn
 from app.schemas.quiz import QuizItemCreate
+from app.services import content
 
 router = APIRouter(tags=["module-items"])
-
-
-async def _module_lessons(db: AsyncSession, module_id: str) -> list[Lesson]:
-    rows = (
-        await db.execute(
-            select(Lesson)
-            .where(Lesson.module_id == module_id)
-            .order_by(Lesson.order_index)
-        )
-    ).scalars().all()
-    return list(rows)
-
-
-async def _renumber(
-    db: AsyncSession, module_id: str, ordered_lesson_ids: list[str]
-) -> None:
-    """Gán lại order_index 1..N cho toàn bộ item của chương.
-
-    Hai lượt để tránh đụng ràng buộc UNIQUE(module_id, order_index): lượt đầu
-    đẩy tất cả về giá trị âm tạm thời, lượt sau gán giá trị cuối.
-    """
-    lessons = await _module_lessons(db, module_id)
-    by_id = {lesson.id: lesson for lesson in lessons}
-    for index, lesson in enumerate(lessons, start=1):
-        lesson.order_index = -index
-    await db.flush()
-    for index, lesson_id in enumerate(ordered_lesson_ids, start=1):
-        by_id[lesson_id].order_index = index
-    await db.flush()
-
-
-def _lesson_node(lesson: Lesson, quiz: QuizAssignment | None) -> LessonNodeOut:
-    return LessonNodeOut(
-        id=lesson.id,
-        title=lesson.title,
-        kind=lesson.kind,
-        slides=len(lesson.contents),
-        quiz_id=quiz.id if quiz else None,
-        quiz_status=quiz.status if quiz else None,
-        question_count=len(quiz.questions) if quiz else 0,
-        duration_minutes=quiz.duration_minutes if quiz else None,
-        due_at=quiz.due_at if quiz else None,
-    )
 
 
 @router.post(
@@ -68,51 +24,56 @@ async def create_quiz_item(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Tạo một item bài tập trắc nghiệm (nháp) trong chương — soạn câu hỏi sau."""
-    module = await get_module_owned(db, module_id, user)
-    lessons = await _module_lessons(db, module_id)
-
-    position = len(lessons)
-    if body.after_id is not None:
-        after_id = str(body.after_id)
-        found = next((i for i, lesson in enumerate(lessons) if lesson.id == after_id), None)
-        if found is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Item mốc không thuộc chương này",
-            )
-        position = found + 1
-
-    lesson = Lesson(
-        module_id=module_id,
-        title=body.title,
-        order_index=len(lessons) + 1,
-        kind="quiz",
-    )
-    db.add(lesson)
-    await db.flush()
-
-    quiz = QuizAssignment(
-        course_id=module.course_id,
-        lesson_id=lesson.id,
-        created_by=user.id,
-        title=body.title,
-        instructions="",
+    course, module = await content.course_of_module(db, module_id)
+    lesson = await content.create_quiz_item(
+        db,
+        course,
+        user,
+        module_id,
+        title=body.title or "Bài tập mới",
+        duration_minutes=body.duration_minutes or 15,
         due_at=body.due_at,
-        duration_minutes=body.duration_minutes,
-        status="draft",
-        questions=[],
     )
-    db.add(quiz)
-    await db.flush()
-
-    ordered_ids = [item.id for item in lessons]
-    ordered_ids.insert(position, lesson.id)
-    await _renumber(db, module_id, ordered_ids)
+    if body.after_id is not None:
+        items = (
+            await db.execute(
+                select(CourseVersionItem)
+                .where(CourseVersionItem.module_id == module.id)
+                .order_by(CourseVersionItem.position)
+            )
+        ).scalars().all()
+        ordered = [item.lesson_id for item in items if item.lesson_id != lesson.id]
+        try:
+            index = ordered.index(str(body.after_id)) + 1
+        except ValueError:
+            index = len(ordered)
+        ordered.insert(index, lesson.id)
+        await content.reorder_items(db, course, user, module_id, ordered)
     await db.commit()
-    await db.refresh(lesson)
-    await db.refresh(quiz)
-    return _lesson_node(lesson, quiz)
+    draft = await content.get_draft_version(db, course, user)
+    assert draft is not None
+    item = (
+        await db.execute(
+            select(CourseVersionItem).where(
+                CourseVersionItem.course_version_id == draft.id,
+                CourseVersionItem.lesson_id == lesson.id,
+            )
+        )
+    ).scalar_one()
+    lesson_version = await content.ensure_draft_lesson_version(db, item, user)
+    return LessonNodeOut(
+        id=lesson.id,
+        title=lesson_version.title,
+        kind="quiz",
+        slides=0,
+        quiz_id=lesson_version.id,
+        quiz_status="draft",
+        question_count=0,
+        duration_minutes=body.duration_minutes or 15,
+        due_at=body.due_at,
+        lesson_version_id=lesson_version.id,
+        item_id=item.id,
+    )
 
 
 @router.post("/teacher/modules/{module_id}/items/reorder", response_model=dict)
@@ -122,23 +83,9 @@ async def reorder_module_items(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Sắp xếp lại toàn bộ item (bài học + bài tập) trong một chương."""
-    await get_module_owned(db, module_id, user)
-    lessons = await _module_lessons(db, module_id)
-    by_id = {lesson.id: lesson for lesson in lessons}
-
-    if len(body.items) != len(lessons) or {item.id for item in body.items} != set(by_id):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Danh sách item không khớp cấu trúc chương",
-        )
-    for item in body.items:
-        if by_id[item.id].kind != item.kind:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Loại item không khớp",
-            )
-
-    await _renumber(db, module_id, [item.id for item in body.items])
+    course, _ = await content.course_of_module(db, module_id)
+    await content.reorder_items(
+        db, course, user, module_id, [item.id for item in body.items]
+    )
     await db.commit()
     return {"ok": True}

@@ -174,7 +174,7 @@ async def login(
     password_valid = bool(
         user
         and user.deleted_at is None
-        and user.status.code == "active"
+        and user.status == "active"
         and await asyncio.to_thread(
             security.verify_password, body.password, user.password_hash
         )
@@ -183,7 +183,7 @@ async def login(
     if (
         user is None
         or user.deleted_at is not None
-        or user.status.code != "active"
+        or user.status != "active"
         or not password_valid
     ):
         logger.info(
@@ -239,7 +239,7 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token không hợp lệ"
         )
     user = await user_crud.get_user_by_id(db, session.user_id)
-    if user is None or user.deleted_at is not None or user.status.code != "active":
+    if user is None or user.deleted_at is not None or user.status != "active":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không hợp lệ"
         )

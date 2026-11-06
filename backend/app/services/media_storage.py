@@ -45,6 +45,21 @@ def public_url(key: str) -> str:
     return f"/media/{quote(key, safe='/')}"
 
 
+def asset_url(asset_id: str, object_key: str, storage_backend: str) -> str:
+    """URL có kiểm tra quyền cho media asset.
+
+    Local: route `/media/assets/{id}` (backend kiểm tra quyền).
+    R2: presigned URL ngắn hạn, không dùng public URL cho draft.
+    """
+    if storage_backend == "r2" and settings.r2_enabled:
+        return _r2_client().generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.r2_bucket_name, "Key": object_key},
+            ExpiresIn=3600,
+        )
+    return f"/media/assets/{asset_id}"
+
+
 def put_bytes(key: str, data: bytes, content_type: str) -> str:
     if not settings.r2_enabled:
         target = _safe_local_path(key)

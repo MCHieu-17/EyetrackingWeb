@@ -1,17 +1,17 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.auth import AuthSession, Role, User, UserRole, UserStatus
+from app.models.auth import AuthSession, Role, User, UserRole
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     stmt = (
         select(User)
         .options(selectinload(User.roles))
-        .where(User.email == email.lower())
+        .where(func.lower(User.email) == email.lower())
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -95,9 +95,6 @@ async def create_student(
     Không tạo student_profile/student_code (do admin cấp sau) — hồ sơ cơ bản
     nằm ở user_profiles.
     """
-    status_id = (
-        await db.execute(select(UserStatus.id).where(UserStatus.code == "active"))
-    ).scalar_one()
     role_id = (
         await db.execute(select(Role.id).where(Role.code == "student"))
     ).scalar_one()
@@ -105,7 +102,7 @@ async def create_student(
     user = User(
         email=email.lower(),
         password_hash=password_hash,
-        status_id=status_id,
+        status="active",
     )
     db.add(user)
     await db.flush()
@@ -114,7 +111,7 @@ async def create_student(
 
     from app.models.profile import UserProfile
 
-    db.add(UserProfile(user_id=user.id, full_name=full_name, email=email.lower()))
+    db.add(UserProfile(user_id=user.id, full_name=full_name))
 
     await db.flush()
     await db.refresh(user)

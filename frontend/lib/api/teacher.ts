@@ -107,6 +107,16 @@ export function deleteCourse(courseId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/teacher/courses/${courseId}`, { method: "DELETE" });
 }
 
+export function publishCourse(
+  courseId: string,
+  expectedGeneration?: number,
+): Promise<{ ok: boolean; courseVersionId: string }> {
+  return apiFetch(`/api/teacher/courses/${courseId}/publish`, {
+    method: "POST",
+    body: { expectedGeneration },
+  });
+}
+
 export function setCourseGazeDot(
   courseId: string,
   showGazeDot: boolean,

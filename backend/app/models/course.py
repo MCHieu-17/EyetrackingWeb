@@ -222,6 +222,7 @@ class CourseVersionModule(Base):
         cascade="all, delete-orphan",
         order_by="CourseVersionItem.position",
         lazy="selectin",
+        overlaps="items",
     )
 
 
@@ -338,10 +339,14 @@ class CourseVersionItem(Base):
     lesson_version_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    course_version: Mapped["CourseVersion"] = relationship(back_populates="items")
-    module: Mapped["CourseVersionModule"] = relationship(back_populates="items")
+    course_version: Mapped["CourseVersion"] = relationship(
+        back_populates="items", overlaps="items"
+    )
+    module: Mapped["CourseVersionModule"] = relationship(
+        back_populates="items", overlaps="course_version,items"
+    )
     lesson: Mapped["Lesson"] = relationship()
-    lesson_version: Mapped["LessonVersion"] = relationship()
+    lesson_version: Mapped["LessonVersion"] = relationship(overlaps="lesson")
 
 
 class Slide(Base):

@@ -45,7 +45,7 @@ async def _authenticate(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không hợp lệ"
         )
     user = await get_user_by_id(db, payload["sub"])
-    if user is None or user.deleted_at is not None or user.status.code != "active":
+    if user is None or user.deleted_at is not None or user.status != "active":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không hợp lệ"
         )
@@ -93,16 +93,14 @@ def require_roles(*roles: str):
 
 
 async def can_manage_course(db: AsyncSession, course, user: User) -> bool:
-    """True nếu user là admin (toàn quyền) hoặc chủ khóa học (teacher_id):
-    được tạo/sửa/xóa khóa học, chương, bài học, thêm học viên, chạy lại analytics."""
+    """True nếu user là admin hoặc chủ khóa học (owner_id)."""
     if "admin" in user.role_codes:
         return True
-    return getattr(course, "teacher_id", None) == user.id
+    return getattr(course, "owner_id", None) == user.id
 
 
 async def can_access_course(db: AsyncSession, course, user: User) -> bool:
-    """True nếu user là admin, chủ khóa học, hoặc giáo viên được admin phân công.
-    Phân công cho quyền XEM nội dung/thống kê, thêm slide, và gỡ học viên."""
+    """True nếu user là admin, chủ khóa, hoặc giáo viên được phân công."""
     if await can_manage_course(db, course, user):
         return True
     if "teacher" not in user.role_codes:

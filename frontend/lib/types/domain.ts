@@ -35,12 +35,16 @@ export interface LessonNode {
   questionCount?: number;
   durationMinutes?: number | null;
   dueAt?: string | null;
+  lessonVersionId?: string | null;
+  itemId?: string | null;
 }
 
 export interface ModuleNode {
   id: string;
   title: string;
   lessons: LessonNode[];
+  moduleKey?: string | null;
+  generation?: number | null;
 }
 
 export interface StudentLesson {

@@ -9,14 +9,15 @@ test("teacher chatbot toggle saves immediately and survives a reload", async ({ 
   const response = page.waitForResponse(r => r.url().endsWith("/api/assignments/quiz-python-1"));
   await page.getByRole("button", { name: "Mở Bài tập: Kiểm tra nhập môn" }).click();
   let saved = await (await response).json();
-  await page.route("**/api/assignments/quiz-python-1", r => {
+  await page.route("**/api/assignments/quiz-python-1", r => json(r, saved));
+  await page.route("**/api/teacher/quiz-specs/quiz-python-1", r => {
     if (r.request().method() === "PATCH") saved = { ...saved, ...r.request().postDataJSON() };
     return json(r, saved);
   });
   const toggle = page.getByRole("switch", { name: "Cho phép dùng chatbot khi làm bài", exact: true });
   await expect(toggle).toBeVisible();
   const before = await toggle.getAttribute("aria-checked");
-  const patch = page.waitForRequest(r => r.url().endsWith("/api/assignments/quiz-python-1") && r.method() === "PATCH");
+  const patch = page.waitForRequest(r => r.url().endsWith("/api/teacher/quiz-specs/quiz-python-1") && r.method() === "PATCH");
   await toggle.click();
   expect((await patch).postDataJSON()).toEqual({ allowChatbot: before !== "true" });
   await expect(toggle).toHaveAttribute("aria-checked", String(before !== "true"));

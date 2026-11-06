@@ -123,7 +123,8 @@ async def make_user(
                 """
                 INSERT INTO users (email, password_hash, status)
                 VALUES (:email, :hash, 'active')
-                ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
+                ON CONFLICT (lower(email)) DO UPDATE
+                SET password_hash = EXCLUDED.password_hash
                 """
             ),
             {"email": email, "hash": hash_password(password)},

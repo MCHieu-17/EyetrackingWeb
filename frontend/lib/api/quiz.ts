@@ -48,7 +48,7 @@ export async function updateQuizAssignment(
   patch: QuizAssignmentPatch,
 ): Promise<QuizAssignment> {
   if (isDemoMode()) return (await demoStore()).updateQuizAssignment(id, patch);
-  return apiFetch<QuizAssignment>(`/api/assignments/${id}`, {
+  return apiFetch<QuizAssignment>(`/api/teacher/quiz-specs/${id}`, {
     method: "PATCH",
     body: patch,
   });

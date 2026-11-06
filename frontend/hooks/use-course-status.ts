@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { updateCourse } from "@/lib/api/teacher";
+import { publishCourse, updateCourse } from "@/lib/api/teacher";
 import type { CourseStatus } from "@/lib/types/domain";
 
 /**
@@ -21,7 +21,11 @@ export function useCourseStatus(courseId: string) {
       setSaving(true);
       setError(null);
       try {
-        await updateCourse(courseId, { status: next });
+        if (next === "published") {
+          await publishCourse(courseId);
+        } else {
+          await updateCourse(courseId, { status: next });
+        }
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] }),
           queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),

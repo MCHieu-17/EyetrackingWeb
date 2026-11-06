@@ -1,6 +1,6 @@
 # PLAN.md — Tái cấu trúc LMS, Eye Tracking và baseline database
 
-**Trạng thái:** Phase 0–1 đã triển khai trên nhánh `refactor/lms-v2`; Phase 2–6 chưa triển khai.
+**Trạng thái:** Phase 0–2 đã triển khai trên nhánh `refactor/lms-v2`; Phase 3–6 chưa triển khai.
 
 **Phạm vi:** Thiết kế lại database và các consumer liên quan; reset riêng database development đã xác minh. Không giữ dữ liệu cũ, không backfill, không duy trì API/schema tương thích ngược.
 
@@ -625,7 +625,7 @@ Dự toán: 20 output/s tương ứng 72.000 samples/giờ/sinh viên; 100 sinh 
 |---|---|---|
 | 0 | Hoàn tất | `docs/refactor/contracts.md`, `docs/refactor/schema-catalog.md`, `docs/refactor/test-isolation.md`; `backend/tests/test_reset_guard.py` (13 passed); reset preview chạy trên Docker local |
 | 1 | Hoàn tất | `db/migrations/001_baseline.sql`, `002_reference_seed.sql`; `db/migrate.sh`; `backend/tests/test_schema.py` (12 passed); `scripts/test_migrations.sh` (7 passed); `scripts/test_db.sh`; grants `chatbot_reader` đã kiểm chứng |
-| 2 | Chưa triển khai | Content/media/versioning test report |
+| 2 | Hoàn tất (content/media/reader) | `backend/app/services/content.py`; routes `courses/modules/module_items/lessons/media/enrollments/quiz_specs`; `backend/tests/test_content_phase2.py` (2 passed); frontend typecheck + 52 unit tests + 62 E2E passed. Quiz attempts/gaze/analytics thuộc Phase 3–5. |
 | 3 | Chưa triển khai | Quiz/session/calibration test report |
 | 4 | Chưa triển khai | Capture/queue/ingestion protocol report |
 | 5 | Chưa triển khai | AOI/analytics/RAG/export và full-stack E2E report |

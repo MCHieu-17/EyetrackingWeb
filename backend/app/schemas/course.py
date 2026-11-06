@@ -103,12 +103,20 @@ class LessonNodeOut(CamelModel):
     question_count: int = 0
     duration_minutes: int | None = None
     due_at: datetime | None = None
+    lesson_version_id: str | None = None
+    item_id: str | None = None
 
 
 class ModuleNodeOut(CamelModel):
     id: str
     title: str
     lessons: list[LessonNodeOut]
+    module_key: str | None = None
+    generation: int | None = None
+
+
+class PublishIn(CamelModel):
+    expected_generation: int | None = None
 
 
 class TeacherCourseOut(CamelModel):

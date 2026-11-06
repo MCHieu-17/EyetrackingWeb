@@ -198,7 +198,7 @@ class GazeBatch(Base):
     )
 
     session: Mapped["LearningSession"] = relationship()
-    presentation: Mapped["ContentPresentation"] = relationship()
+    presentation: Mapped["ContentPresentation"] = relationship(overlaps="session")
 
 
 class GazeSample(Base):

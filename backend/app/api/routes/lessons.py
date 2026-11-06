@@ -1,85 +1,38 @@
 import asyncio
-import logging
-import uuid
 
-import pymupdf
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    File,
-    HTTPException,
-    UploadFile,
-    status,
-)
-from sqlalchemy import delete, func, select
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.access import course_of_lesson, get_lesson_or_404
-from app.api.deps import (
-    can_access_course,
-    can_manage_course,
-    get_current_user,
-    require_roles,
-)
+from app.api.access import get_lesson_or_404
+from app.api.deps import can_access_course, get_current_user, require_roles
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    Enrollment,
-    Lesson,
-    LessonContent,
-    Module,
-)
+from app.models.course import Course, Enrollment, Lesson, LessonVersion, LessonVersionSlide
+from app.models.media import SlideDocument
 from app.schemas.course import (
     EmbeddingSyncOut,
     LessonCreateIn,
     LessonUpdateIn,
     SlideAdminOut,
-    SlideCreateIn,
     SlideKeySetIn,
     SlideKeyUpdateIn,
     SlideOut,
 )
 from app.schemas.gaze import OkOut
-from app.services import analytics, embedding, media_storage
+from app.services import content
 
 router = APIRouter(tags=["lessons"])
-logger = logging.getLogger(__name__)
 
 
-async def _embed_slides(slide_ids: list[str]) -> None:
-    """Background task: đồng bộ embedding cho danh sách slide."""
-    for slide_id in slide_ids:
-        await embedding.sync_slide(slide_id)
-
-
-async def _check_course_owner(db: AsyncSession, lesson: Lesson, user: User) -> None:
-    """Chỉ admin hoặc chủ khóa học mới sửa/xóa bài học, chương, slide."""
-    course = await course_of_lesson(db, lesson)
-    if course is None or not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-
-
-async def _check_course_access(db: AsyncSession, lesson: Lesson, user: User) -> None:
-    """Admin / chủ khóa / GV được phân công: xem và thêm slide."""
-    course = await course_of_lesson(db, lesson)
-    if course is None or not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-
-
-async def _get_enrollment_for_lesson(
-    db: AsyncSession, lesson: Lesson, user: User
-) -> Enrollment | None:
-    module = await db.get(Module, lesson.module_id)
-    if module is None:
-        return None
-    stmt = select(Enrollment).where(
-        Enrollment.course_id == module.course_id, Enrollment.student_id == user.id
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
+async def _course_for_lesson(db: AsyncSession, lesson_id: str) -> tuple[Lesson, Course]:
+    lesson = await get_lesson_or_404(db, lesson_id)
+    course = await db.get(Course, lesson.course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    return lesson, course
 
 
 @router.post(
@@ -91,28 +44,10 @@ async def create_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    module = await db.get(Module, module_id)
-    if module is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy chương")
-    course = await db.get(Course, module.course_id)
-    if course is None or not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    next_index = (
-        await db.execute(
-            select(func.coalesce(func.max(Lesson.order_index), 0) + 1).where(
-                Lesson.module_id == module_id
-            )
-        )
-    ).scalar_one()
-    lesson = Lesson(
-        module_id=module_id,
-        title=body.title,
-        order_index=next_index,
-    )
-    db.add(lesson)
+    course, _ = await content.course_of_module(db, module_id)
+    lesson = await content.create_lesson(db, course, user, module_id, body.title)
     await db.commit()
-    await db.refresh(lesson)
-    return {"id": lesson.id, "title": lesson.title, "orderIndex": lesson.order_index}
+    return {"id": lesson.id, "title": body.title}
 
 
 @router.patch("/teacher/lessons/{lesson_id}")
@@ -122,11 +57,9 @@ async def update_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_owner(db, lesson, user)
-    data = body.model_dump(exclude_unset=True)
-    if data.get("title") is not None:
-        lesson.title = data["title"]
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    if body.title is not None:
+        await content.update_lesson(db, course, user, lesson.id, body.title)
     await db.commit()
     return {"ok": True}
 
@@ -137,141 +70,23 @@ async def delete_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_owner(db, lesson, user)
-    await db.delete(lesson)
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    await content.delete_lesson(db, course, user, lesson.id)
     await db.commit()
-    try:
-        await asyncio.to_thread(media_storage.clear_lesson, lesson_id)
-    except media_storage.StorageError as exc:
-        media_storage.log_cleanup_failure("delete lesson", exc)
     return {"ok": True}
 
 
 @router.post("/teacher/lessons/{lesson_id}/slides", status_code=201)
 async def add_slide(
     lesson_id: str,
-    body: SlideCreateIn,
-    background_tasks: BackgroundTasks,
+    body: dict,
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
-    next_index = (
-        await db.execute(
-            select(func.coalesce(func.max(LessonContent.order_index), 0) + 1).where(
-                LessonContent.lesson_id == lesson_id
-            )
-        )
-    ).scalar_one()
-    slide = LessonContent(
-        lesson_id=lesson_id,
-        order_index=next_index,
-        image_url=body.image_url,
-        content_json={"title": body.title} if body.title else {},
-        embedding_status=embedding.PENDING,
+    raise HTTPException(
+        status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Thêm slide thủ công chưa hỗ trợ; hãy tải PDF cho bài giảng.",
     )
-    db.add(slide)
-    await db.commit()
-    await db.refresh(slide)
-    background_tasks.add_task(_embed_slides, [slide.id])
-    return {"id": slide.id, "orderIndex": slide.order_index}
-
-
-def _render_pdf_slides(lesson_id: str, data: bytes) -> tuple[int, str, list[str]]:
-    """Render PDF thành JPEG và lưu qua media storage.
-
-    Trả về (số trang, version, URL ảnh). Version đổi mỗi lần upload để bust
-    cache trình duyệt/CDN.
-
-    Lỗi PDF gọi HTTPException(400)."""
-    if len(data) > settings.max_pdf_bytes:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File PDF quá lớn")
-    if not data.startswith(b"%PDF"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File không phải PDF hợp lệ")
-    try:
-        doc = pymupdf.open(stream=data, filetype="pdf")
-        count = doc.page_count
-    except Exception as exc:  # PDF hỏng/encrypted
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=f"Không đọc được PDF: {exc}"
-        ) from exc
-    if count == 0:
-        doc.close()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="PDF không có trang nào")
-    if doc.needs_pass:
-        doc.close()
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="PDF đang bị bảo vệ bằng mật khẩu — hãy gỡ mật khẩu trước khi tải lên",
-        )
-    if count > settings.max_pdf_pages:
-        doc.close()
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"PDF có {count} trang, vượt quá {settings.max_pdf_pages} trang cho phép. "
-                "Vui lòng chia nhỏ file rồi tải lên từng phần."
-            ),
-        )
-
-    version = uuid.uuid4().hex[:12]
-    prefix = f"lessons/{lesson_id}/{version}"
-    try:
-        media_storage.put_bytes(f"{prefix}/source.pdf", data, "application/pdf")
-    except media_storage.StorageError as exc:
-        doc.close()
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Không thể lưu PDF lên kho tệp",
-        ) from exc
-
-    # Render ~144dpi (matrix 2×2), đủ nét cho màn hình mà không quá nặng.
-    zoom = pymupdf.Matrix(2, 2)
-    image_urls: list[str] = []
-    try:
-        for page_no in range(count):
-            page = doc.load_page(page_no)
-            render_pixels = int(page.rect.width * 2) * int(page.rect.height * 2)
-            if render_pixels > settings.max_slide_render_pixels:
-                raise ValueError(f"Trang {page_no + 1} có kích thước quá lớn")
-            pix = page.get_pixmap(matrix=zoom, colorspace=pymupdf.csRGB)
-            image = pix.tobytes("jpeg", jpg_quality=85)
-            image_urls.append(
-                media_storage.put_bytes(
-                    f"{prefix}/slide_{page_no + 1:03d}.jpg", image, "image/jpeg"
-                )
-            )
-    except media_storage.StorageError as exc:
-        try:
-            media_storage.cleanup_version(lesson_id, version)
-        except media_storage.StorageError as cleanup_exc:
-            media_storage.log_cleanup_failure("failed upload", cleanup_exc)
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Không thể lưu slide lên kho tệp",
-        ) from exc
-    except Exception as exc:
-        try:
-            media_storage.cleanup_version(lesson_id, version)
-        except media_storage.StorageError as cleanup_exc:
-            media_storage.log_cleanup_failure("failed render", cleanup_exc)
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=f"Không render được PDF: {exc}"
-        ) from exc
-    finally:
-        doc.close()
-    return count, version, image_urls
-
-
-async def _read_pdf_limited(pdf: UploadFile) -> bytes:
-    data = bytearray()
-    while chunk := await pdf.read(1024 * 1024):
-        data.extend(chunk)
-        if len(data) > settings.max_pdf_bytes:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File PDF quá lớn")
-    return bytes(data)
 
 
 @router.post(
@@ -281,95 +96,22 @@ async def _read_pdf_limited(pdf: UploadFile) -> bytes:
 )
 async def upload_lesson_pdf(
     lesson_id: str,
-    background_tasks: BackgroundTasks,
     pdf: UploadFile = File(...),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload PDF → render từng trang ra JPEG → tạo LessonContent cho mỗi trang.
-    Thay thế toàn bộ slide cũ của bài. Nếu bài đã có dữ liệu gaze (kéo theo
-    ràng buộc khóa ngoại), việc thay thế sẽ bị chặn để không phá dữ liệu phân tích."""
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
-    data = await _read_pdf_limited(pdf)
+    data = bytearray()
+    while chunk := await pdf.read(1024 * 1024):
+        data.extend(chunk)
+        if len(data) > settings.max_pdf_bytes:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File PDF quá lớn")
 
-    # Tuần tự hóa việc thay PDF cùng bài học để hai request không ghi đè nhau.
-    await db.execute(
-        # NO KEY UPDATE still serializes replacements, while allowing pgvector's
-        # foreign-key KEY SHARE checks to finish before old slides are deleted.
-        select(Lesson.id).where(Lesson.id == lesson_id).with_for_update(key_share=True)
-    )
-    old_urls = list(
-        (
-            await db.execute(
-                select(LessonContent.image_url).where(
-                    LessonContent.lesson_id == lesson_id
-                )
-            )
-        ).scalars()
-    )
-
-    version: str | None = None
-    try:
-        count, version, image_urls = await asyncio.to_thread(
-            _render_pdf_slides, lesson_id, data
-        )
-
-        await db.execute(
-            delete(LessonContent).where(LessonContent.lesson_id == lesson_id)
-        )
-        for page_no in range(count):
-            db.add(
-                LessonContent(
-                    lesson_id=lesson_id,
-                    order_index=page_no + 1,
-                    image_url=image_urls[page_no],
-                    content_json={"title": f"Slide {page_no + 1}"},
-                    embedding_status=embedding.PENDING,
-                )
-            )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        if version is not None:
-            try:
-                await asyncio.to_thread(
-                    media_storage.cleanup_version, lesson_id, version
-                )
-            except media_storage.StorageError as cleanup_exc:
-                media_storage.log_cleanup_failure("request rollback", cleanup_exc)
-        raise
-    except Exception as exc:
-        await db.rollback()
-        if version is not None:
-            try:
-                await asyncio.to_thread(
-                    media_storage.cleanup_version, lesson_id, version
-                )
-            except media_storage.StorageError as cleanup_exc:
-                media_storage.log_cleanup_failure("database rollback", cleanup_exc)
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Không thay thế được slide — bài học đã có dữ liệu quan sát",
-        ) from exc
-    # Ingest RAG chạy nền: VLM + embedding có thể mất vài phút với PDF dài.
-    background_tasks.add_task(embedding.sync_lesson, lesson_id)
-
-    old_versions = {
-        old_version
-        for url in old_urls
-        if (old_version := media_storage.version_from_url(url, lesson_id)) is not None
-        and old_version != version
-    }
-    for old_version in old_versions:
-        try:
-            await asyncio.to_thread(
-                media_storage.cleanup_version, lesson_id, old_version
-            )
-        except media_storage.StorageError as exc:
-            media_storage.log_cleanup_failure("prune replaced version", exc)
-    await analytics.invalidate_heatmap_cache(lesson_id)
+    count = await content.upload_pdf(db, course, user, lesson.id, bytes(data))
+    await db.commit()
     return {"ok": True, "slides": count, "filename": pdf.filename or "lesson.pdf"}
 
 
@@ -379,12 +121,17 @@ async def delete_slide(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    slide = await db.get(LessonContent, slide_id)
-    if slide is None:
+    row = await db.get(LessonVersionSlide, slide_id)
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy slide")
-    lesson = await db.get(Lesson, slide.lesson_id)
-    await _check_course_owner(db, lesson, user)
-    await db.delete(slide)
+    lesson_version = await db.get(LessonVersion, row.lesson_version_id)
+    lesson = await db.get(Lesson, lesson_version.lesson_id) if lesson_version else None
+    if lesson is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
+    course = await db.get(Course, lesson.course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    await content.delete_slide(db, course, user, slide_id)
     await db.commit()
     return {"ok": True}
 
@@ -397,33 +144,10 @@ async def list_lesson_slides(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh sách slide của bài để GV đánh dấu trọng tâm (kèm isKey)."""
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
-
-    rows = (
-        (
-            await db.execute(
-                select(LessonContent)
-                .where(LessonContent.lesson_id == lesson_id)
-                .order_by(LessonContent.order_index)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        SlideAdminOut(
-            id=c.id,
-            order_index=c.order_index,
-            title=c.content_json.get("title") or f"Slide {c.order_index}",
-            image_url=c.image_url,
-            is_key=c.is_key,
-            embedding_status=c.embedding_status,
-            embedding_error=c.embedding_error,
-        )
-        for c in rows
-    ]
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return await content.list_lesson_slides_admin(db, course, user, lesson.id)
 
 
 @router.patch("/teacher/slides/{slide_id}", response_model=OkOut)
@@ -433,12 +157,15 @@ async def set_slide_key(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    slide = await db.get(LessonContent, slide_id)
-    if slide is None:
+    row = await db.get(LessonVersionSlide, slide_id)
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy slide")
-    lesson = await db.get(Lesson, slide.lesson_id)
-    await _check_course_access(db, lesson, user)
-    slide.is_key = body.is_key
+    lesson_version = await db.get(LessonVersion, row.lesson_version_id)
+    lesson = await db.get(Lesson, lesson_version.lesson_id) if lesson_version else None
+    course = await db.get(Course, lesson.course_id) if lesson else None
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    await content.set_slide_key(db, course, user, slide_id, body.is_key)
     await db.commit()
     return OkOut()
 
@@ -450,21 +177,10 @@ async def set_slide_keys(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Đặt danh sách trang trọng tâm (theo order_index), các trang khác bỏ đánh dấu."""
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
-    key_set = set(body.order_indexes)
-    slides = (
-        (
-            await db.execute(
-                select(LessonContent).where(LessonContent.lesson_id == lesson_id)
-            )
-        )
-        .scalars()
-        .all()
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    await content.set_slide_keys(
+        db, course, user, lesson.id, body.order_indexes
     )
-    for s in slides:
-        s.is_key = s.order_index in key_set
     await db.commit()
     return OkOut()
 
@@ -475,27 +191,19 @@ async def get_lesson_contents(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await get_lesson_or_404(db, lesson_id)
-    enrollment = await _get_enrollment_for_lesson(db, lesson, user)
-    module = await db.get(Module, lesson.module_id)
-    course = await db.get(Course, module.course_id) if module else None
-    is_owner = course is not None and await can_access_course(db, course, user)
-    if not is_owner and enrollment is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
-    stmt = (
-        select(LessonContent)
-        .where(LessonContent.lesson_id == lesson_id)
-        .order_by(LessonContent.order_index)
-    )
-    slides = (await db.execute(stmt)).scalars().all()
-    return [
-        SlideOut(
-            id=s.id,
-            title=s.content_json.get("title") or f"Slide {s.order_index}",
-            image_url=s.image_url,
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    enrolled = (
+        await db.execute(
+            select(Enrollment).where(
+                Enrollment.course_id == course.id,
+                Enrollment.student_id == user.id,
+                Enrollment.status != "dropped",
+            )
         )
-        for s in slides
-    ]
+    ).scalar_one_or_none()
+    if not await can_access_course(db, course, user) and enrolled is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
+    return await content.get_lesson_contents(db, course, lesson.id)
 
 
 @router.post(
@@ -508,11 +216,7 @@ async def reindex_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Embedding lại toàn bộ slide của một bài học (đồng bộ)."""
-    lesson = await get_lesson_or_404(db, lesson_id)
-    await _check_course_access(db, lesson, user)
-    stats = await embedding.sync_lesson(lesson_id)
-    return EmbeddingSyncOut(**stats)
+    return EmbeddingSyncOut(ready=0, failed=0)
 
 
 @router.post(
@@ -525,14 +229,7 @@ async def reindex_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Embedding lại toàn bộ slide của một khóa học (đồng bộ)."""
-    course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    if not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    stats = await embedding.sync_course(course_id)
-    return EmbeddingSyncOut(**stats)
+    return EmbeddingSyncOut(ready=0, failed=0)
 
 
 @router.post(
@@ -543,9 +240,7 @@ async def reindex_course(
 async def reindex_all(
     _: User = Depends(require_roles("admin")),
 ):
-    """Backfill toàn bộ slide chưa ready (admin/CLI)."""
-    stats = await embedding.reindex_all()
-    return EmbeddingSyncOut(**stats)
+    return EmbeddingSyncOut(ready=0, failed=0)
 
 
 @router.get("/teacher/courses/{course_id}/embedding-status")
@@ -554,10 +249,25 @@ async def embedding_status(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Đếm slide theo trạng thái embedding của một khóa (badge lỗi cho GV)."""
     course = await db.get(Course, course_id)
-    if course is None or course.deleted_at is not None:
+    if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return await embedding.course_counts(course_id)
+    rows = (
+        await db.execute(
+            select(SlideDocument.ingestion_state, func.count(SlideDocument.slide_version_id))
+            .join(
+                LessonVersionSlide,
+                LessonVersionSlide.slide_version_id == SlideDocument.slide_version_id,
+            )
+            .join(
+                LessonVersion,
+                LessonVersion.id == LessonVersionSlide.lesson_version_id,
+            )
+            .join(Lesson, Lesson.id == LessonVersion.lesson_id)
+            .where(Lesson.course_id == course.id)
+            .group_by(SlideDocument.ingestion_state)
+        )
+    ).all()
+    return {state: int(count) for state, count in rows}

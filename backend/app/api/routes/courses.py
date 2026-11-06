@@ -1,59 +1,43 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access import (
-    course_lesson_counts,
     escape_like,
     get_course_or_404,
     get_owned_course,
     get_viewable_course,
 )
-from app.api.deps import (
-    get_current_user,
-    require_roles,
-)
-from app.core.helpers import color_for, gradient_for, relative_time_vn
+from app.api.deps import can_access_course, get_current_user, require_roles
+from app.core.helpers import color_for, relative_time_vn
 from app.db.session import get_db
-from app.models.analytics import EngagementScore, LessonMasteryScore
 from app.models.auth import User
 from app.models.course import (
     Course,
-    CourseStatus,
-    CourseTeacher,
+    CourseVersion,
+    CourseVersionItem,
     Enrollment,
     Lesson,
-    Module,
 )
-from app.models.profile import StudentProfile, TeacherProfile, UserProfile
-from app.models.quiz import QuizAssignment
+from app.models.profile import StudentProfile, UserProfile
 from app.schemas.course import (
     CourseCreateIn,
     CourseGazeDotIn,
     CourseOutlineOut,
     CourseRequireCalibrationIn,
     CourseUpdateIn,
-    LessonItemOut,
-    LessonNodeOut,
-    ModuleItemOut,
     ModuleNodeOut,
+    PublishIn,
     StudentDirectoryOut,
-    StudentLessonOut,
     StudentRowOut,
     StudentsAddIn,
     TeacherCourseOut,
 )
-from app.services import course_stats
+from app.services import content
 
 router = APIRouter(tags=["courses"])
-
-
-async def _course_status_id(db: AsyncSession, code: str) -> int:
-    stmt = select(CourseStatus.id).where(CourseStatus.code == code)
-    result = (await db.execute(stmt)).scalar_one_or_none()
-    if result is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Trạng thái không hợp lệ")
-    return result
 
 
 @router.get("/teacher/courses", response_model=list[TeacherCourseOut])
@@ -63,55 +47,9 @@ async def list_teacher_courses(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Admin xem được toàn bộ khóa học; giáo viên xem khóa học mình sở hữu
-    # hoặc được admin phân công vào.
-    if "admin" in user.role_codes:
-        stmt = select(Course).where(Course.deleted_at.is_(None))
-    else:
-        assigned_stmt = select(CourseTeacher.course_id).where(
-            CourseTeacher.teacher_id == user.id
-        )
-        assigned_ids = set((await db.execute(assigned_stmt)).scalars().all())
-        stmt = select(Course).where(
-            or_(
-                Course.teacher_id == user.id,
-                Course.id.in_(assigned_ids) if assigned_ids else False,
-            ),
-            Course.deleted_at.is_(None),
-        )
-    if status_filter:
-        status_id = await _course_status_id(db, status_filter)
-        stmt = stmt.where(Course.status_id == status_id)
-    if q:
-        esc = escape_like(q)
-        stmt = stmt.where(Course.title.ilike(f"%{esc}%", escape="\\"))
-    stmt = stmt.order_by(Course.updated_at.desc())
-    courses = list((await db.execute(stmt)).scalars().all())
-
-    ids = [c.id for c in courses]
-    enroll_counts = await course_stats.enrollment_counts(db, ids)
-    attention = await course_stats.attention_avg_by_course(db, ids)
-    sessions = await course_stats.session_counts_by_course(db, ids)
-    lesson_counts = await course_lesson_counts(db, ids)
-
-    return [
-        TeacherCourseOut(
-            id=c.id,
-            title=c.title,
-            description=c.description or "",
-            gradient=gradient_for(c.id),
-            status=c.status.code,
-            students=enroll_counts.get(c.id, 0),
-            attention=round(attention[c.id], 1) if c.id in attention else None,
-            sessions=sessions.get(c.id, 0),
-            updated_at=c.updated_at,
-            is_owner="admin" in user.role_codes or c.teacher_id == user.id,
-            lesson_count=lesson_counts.get(c.id, 0),
-            show_gaze_dot=c.show_gaze_dot,
-            require_calibration=c.require_calibration,
-        )
-        for c in courses
-    ]
+    return await content.list_teacher_courses(
+        db, user, status_filter=status_filter, q=q
+    )
 
 
 @router.post("/teacher/courses", response_model=TeacherCourseOut, status_code=201)
@@ -120,45 +58,30 @@ async def create_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    teacher = await db.get(TeacherProfile, user.id)
-    if teacher is None and "admin" not in user.role_codes:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="Tài khoản không phải giáo viên"
-        )
-    if teacher is None:
-        # Admin không có teacher_profiles nhưng courses.teacher_id
-        # trỏ tới teacher_profiles(user_id) nên tự cấp hồ sơ giáo viên cho admin.
-        teacher = TeacherProfile(
-            user_id=user.id,
-            teacher_code=f"ADM{user.id[:8].upper()}",
-            department="Quản trị hệ thống",
-        )
-        db.add(teacher)
-        await db.flush()
-    course = Course(
+    course = await content.create_course(
+        db,
+        user,
         title=body.title,
         description=body.description,
-        thumbnail_url=body.thumbnail_url,
-        status_id=await _course_status_id(db, body.status),
-        teacher_id=user.id,
-        created_by=user.id,
         show_gaze_dot=body.show_gaze_dot,
         require_calibration=body.require_calibration,
     )
-    db.add(course)
-    await db.flush()
-    await db.refresh(course)
     await db.commit()
+    await db.refresh(course)
+    draft = await content.get_draft_version(db, course, user)
+    assert draft is not None
     return TeacherCourseOut(
         id=course.id,
-        title=course.title,
-        description=course.description or "",
-        gradient=gradient_for(course.id),
-        status=course.status.code,
+        title=draft.title,
+        description=draft.description or "",
+        gradient="",
+        status="draft",
         students=0,
         attention=None,
         sessions=0,
         updated_at=course.updated_at,
+        is_owner=True,
+        lesson_count=0,
         show_gaze_dot=course.show_gaze_dot,
         require_calibration=course.require_calibration,
     )
@@ -173,36 +96,37 @@ async def update_course(
 ):
     course = await get_owned_course(db, course_id, user)
     data = body.model_dump(exclude_unset=True)
-    if data.get("title") is not None:
-        course.title = data["title"]
-    if "description" in data:
-        course.description = data["description"]
-    if "thumbnail_url" in data:
-        course.thumbnail_url = data["thumbnail_url"]
-    if data.get("status") is not None:
-        course.status_id = await _course_status_id(db, data["status"])
-    if data.get("show_gaze_dot") is not None:
-        course.show_gaze_dot = data["show_gaze_dot"]
-    if data.get("require_calibration") is not None:
-        course.require_calibration = data["require_calibration"]
+    draft = await content.update_course_metadata(
+        db,
+        course,
+        user,
+        title=data.get("title"),
+        description=data.get("description"),
+        show_gaze_dot=data.get("show_gaze_dot"),
+        require_calibration=data.get("require_calibration"),
+        archived=(data.get("status") == "archived") if data.get("status") else None,
+    )
     await db.commit()
     await db.refresh(course)
-    ids = [course.id]
-    enroll_counts = await course_stats.enrollment_counts(db, ids)
-    attention = await course_stats.attention_avg_by_course(db, ids)
-    sessions = await course_stats.session_counts_by_course(db, ids)
-    lesson_counts = await course_lesson_counts(db, ids)
+    published = await content.get_published_version(db, course)
     return TeacherCourseOut(
         id=course.id,
-        title=course.title,
-        description=course.description or "",
-        gradient=gradient_for(course.id),
-        status=course.status.code,
-        students=enroll_counts.get(course.id, 0),
-        attention=round(attention[course.id], 1) if course.id in attention else None,
-        sessions=sessions.get(course.id, 0),
+        title=(published or draft).title,
+        description=(published or draft).description or "",
+        gradient="",
+        status=(
+            "archived"
+            if course.archived_at is not None
+            else "published"
+            if published is not None
+            else "draft"
+        ),
+        students=0,
+        attention=None,
+        sessions=0,
         updated_at=course.updated_at,
-        lesson_count=lesson_counts.get(course.id, 0),
+        is_owner=True,
+        lesson_count=0,
         show_gaze_dot=course.show_gaze_dot,
         require_calibration=course.require_calibration,
     )
@@ -215,11 +139,6 @@ async def set_course_gaze_dot(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bật/tắt 'hiển thị điểm nhìn cho sinh viên' cho cả khóa học.
-
-    Nguồn sự thật duy nhất là `courses.show_gaze_dot` — áp cho MỌI bài giảng và
-    bài tập của khóa (không còn cờ theo từng bài).
-    """
     course = await get_owned_course(db, course_id, user)
     course.show_gaze_dot = body.show_gaze_dot
     await db.commit()
@@ -233,11 +152,6 @@ async def set_course_require_calibration(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bật/tắt yêu cầu hiệu chỉnh điểm nhìn cho cả khóa học.
-
-    Tắt = sinh viên vào thẳng trang học, không bật camera và không ghi gaze.
-    Nguồn sự thật duy nhất là `courses.require_calibration`.
-    """
     course = await get_owned_course(db, course_id, user)
     course.require_calibration = body.require_calibration
     await db.commit()
@@ -250,10 +164,8 @@ async def delete_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    from datetime import datetime, timezone
-
     course = await get_owned_course(db, course_id, user)
-    course.deleted_at = datetime.now(timezone.utc)
+    course.archived_at = datetime.now(timezone.utc)
     await db.commit()
     return {"ok": True}
 
@@ -265,54 +177,81 @@ async def get_course_tree(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
+    return await content.get_draft_tree(db, course, user)
 
-    attention_stmt = (
-        select(EngagementScore.lesson_id, func.avg(EngagementScore.score))
-        .join(Enrollment, Enrollment.id == EngagementScore.enrollment_id)
-        .where(Enrollment.course_id == course.id)
-        .group_by(EngagementScore.lesson_id)
+
+@router.get("/teacher/courses/{course_id}/draft", response_model=list[ModuleNodeOut])
+async def get_course_draft(
+    course_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_viewable_course(db, course_id, user)
+    return await content.get_draft_tree(db, course, user)
+
+
+@router.post("/teacher/courses/{course_id}/publish")
+async def publish_course(
+    course_id: str,
+    body: PublishIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_owned_course(db, course_id, user)
+    version = await content.publish_course(
+        db, course, user, body.expected_generation
     )
-    attention = {r[0]: float(r[1]) for r in await db.execute(attention_stmt)}
+    await db.commit()
+    return {"ok": True, "courseVersionId": version.id}
 
-    mastery_stmt = (
-        select(LessonMasteryScore.lesson_id, func.avg(LessonMasteryScore.score))
-        .join(Enrollment, Enrollment.id == LessonMasteryScore.enrollment_id)
-        .where(Enrollment.course_id == course.id)
-        .group_by(LessonMasteryScore.lesson_id)
-    )
-    mastery = {r[0]: float(r[1]) for r in await db.execute(mastery_stmt)}
 
-    quiz_rows = (
+@router.get("/teacher/courses/{course_id}/versions")
+async def list_course_versions(
+    course_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_viewable_course(db, course_id, user)
+    rows = (
         await db.execute(
-            select(QuizAssignment).where(QuizAssignment.course_id == course.id)
+            select(CourseVersion)
+            .where(CourseVersion.course_id == course.id)
+            .order_by(CourseVersion.version_no.desc())
         )
     ).scalars().all()
-    quizzes = {q.lesson_id: q for q in quiz_rows if q.lesson_id}
-
-    def _lesson_node(lesson: Lesson) -> LessonNodeOut:
-        quiz = quizzes.get(lesson.id)
-        return LessonNodeOut(
-            id=lesson.id,
-            title=lesson.title,
-            kind=lesson.kind,
-            slides=len(lesson.contents),
-            attention=round(attention[lesson.id], 1) if lesson.id in attention else None,
-            mastery=round(mastery[lesson.id], 1) if lesson.id in mastery else None,
-            quiz_id=quiz.id if quiz else None,
-            quiz_status=quiz.status if quiz else None,
-            question_count=len(quiz.questions) if quiz else 0,
-            duration_minutes=quiz.duration_minutes if quiz else None,
-            due_at=quiz.due_at if quiz else None,
-        )
-
     return [
-        ModuleNodeOut(
-            id=m.id,
-            title=m.title,
-            lessons=[_lesson_node(lesson) for lesson in m.lessons],
-        )
-        for m in course.modules
+        {
+            "id": row.id,
+            "versionNo": row.version_no,
+            "state": row.state,
+            "title": row.title,
+            "generation": row.generation,
+            "createdAt": row.created_at,
+            "publishedAt": row.published_at,
+        }
+        for row in rows
     ]
+
+
+@router.post("/teacher/courses/{course_id}/restore")
+async def restore_course_version(
+    course_id: str,
+    body: dict,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_owned_course(db, course_id, user)
+    version_id = body.get("versionId")
+    source = await db.get(CourseVersion, version_id) if version_id else None
+    if source is None or source.course_id != course.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên bản")
+    existing = await content.get_draft_version(db, course, user, create=False)
+    if existing is not None:
+        await db.delete(existing)
+        await db.flush()
+    draft = await content.clone_course_version(db, source, user)
+    await db.commit()
+    return {"ok": True, "courseVersionId": draft.id}
 
 
 @router.get("/teacher/courses/{course_id}/students", response_model=list[StudentRowOut])
@@ -322,86 +261,7 @@ async def get_course_students(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
-
-    lessons = list(
-        (
-            await db.execute(
-                select(Lesson)
-                .join(Module, Module.id == Lesson.module_id)
-                .where(Module.course_id == course.id)
-                .order_by(Module.order_index, Lesson.order_index)
-            )
-        ).scalars().all()
-    )
-    enroll_stmt = (
-        select(Enrollment, User, UserProfile, StudentProfile)
-        .join(User, User.id == Enrollment.student_id)
-        .outerjoin(UserProfile, UserProfile.user_id == User.id)
-        .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-        .where(Enrollment.course_id == course.id)
-        .order_by(Enrollment.enrolled_at)
-    )
-    rows = (await db.execute(enroll_stmt)).all()
-    if not rows:
-        return []
-
-    enrollment_ids = [e.id for e, *_ in rows]
-
-    engagement_stmt = select(EngagementScore).where(
-        EngagementScore.enrollment_id.in_(enrollment_ids)
-    )
-    engagement_rows = (await db.execute(engagement_stmt)).scalars().all()
-    engagement_map = {(s.enrollment_id, s.lesson_id): s for s in engagement_rows}
-
-    mastery_stmt = select(LessonMasteryScore).where(
-        LessonMasteryScore.enrollment_id.in_(enrollment_ids)
-    )
-    mastery_rows = (await db.execute(mastery_stmt)).scalars().all()
-    mastery_map = {(m.enrollment_id, m.lesson_id): m for m in mastery_rows}
-
-    from app.models.gaze import LearningSession
-
-    last_active_stmt = (
-        select(LearningSession.enrollment_id, func.max(LearningSession.started_at))
-        .where(LearningSession.enrollment_id.in_(enrollment_ids))
-        .group_by(LearningSession.enrollment_id)
-    )
-    last_active = {r[0]: r[1] for r in await db.execute(last_active_stmt)}
-
-    out: list[StudentRowOut] = []
-    for enrollment, student, profile, sp in rows:
-        scores = [
-            s.score
-            for lesson in lessons
-            if (s := engagement_map.get((enrollment.id, lesson.id))) is not None
-        ]
-        lesson_outs = []
-        for lesson in lessons:
-            eng = engagement_map.get((enrollment.id, lesson.id))
-            m = mastery_map.get((enrollment.id, lesson.id))
-            lesson_outs.append(
-                StudentLessonOut(
-                    lesson_id=lesson.id,
-                    attention=round(eng.score, 1) if eng else None,
-                    mastery=round(m.score, 1) if m else None,
-                    key_done=m.key_done if m else 0,
-                    key_total=m.key_total if m else 0,
-                )
-            )
-        out.append(
-            StudentRowOut(
-                id=student.id,
-                name=profile.full_name if profile else student.email,
-                code=sp.student_code if sp else "",
-                color=color_for(student.id),
-                avatar_url=profile.avatar_url if profile else None,
-                attention=round(sum(scores) / len(scores), 1) if scores else None,
-                last_active=relative_time_vn(last_active.get(enrollment.id)),
-                status=enrollment.status,
-                lessons=lesson_outs,
-            )
-        )
-    return out
+    return await content.get_course_students(db, course)
 
 
 @router.get("/teacher/students", response_model=list[StudentDirectoryOut])
@@ -410,14 +270,13 @@ async def list_student_directory(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh mục học viên để thêm vào khóa học (tìm theo tên / mã SV / email)."""
     stmt = (
         select(User, UserProfile, StudentProfile)
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
         .where(
             User.deleted_at.is_(None),
-            User.status.has(code="active"),
+            User.status == "active",
             User.roles.any(code="student"),
         )
         .order_by(UserProfile.full_name)
@@ -461,7 +320,7 @@ async def add_course_students(
     valid_stmt = select(User.id).where(
         User.id.in_(ids),
         User.deleted_at.is_(None),
-        User.status.has(code="active"),
+        User.status == "active",
         User.roles.any(code="student"),
     )
     valid_ids = set((await db.execute(valid_stmt)).scalars().all())
@@ -523,43 +382,9 @@ async def get_course_outline(
             )
         )
     ).scalar_one_or_none()
-    is_owner = course.teacher_id == user.id or "admin" in user.role_codes
-    if not is_owner and enrolled is None and course.status.code != "published":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-
-    quiz_rows = (
-        await db.execute(
-            select(QuizAssignment).where(QuizAssignment.course_id == course.id)
-        )
-    ).scalars().all()
-    quizzes = {q.lesson_id: q for q in quiz_rows if q.lesson_id}
-
-    def _lesson_item(lesson: Lesson) -> LessonItemOut:
-        quiz = quizzes.get(lesson.id)
-        return LessonItemOut(
-            id=lesson.id,
-            title=lesson.title,
-            kind=lesson.kind,
-            slide_count=len(lesson.contents),
-            quiz_id=quiz.id if quiz else None,
-            quiz_status=quiz.status if quiz else None,
-            question_count=len(quiz.questions) if quiz else 0,
-            duration_minutes=quiz.duration_minutes if quiz else None,
-            due_at=quiz.due_at if quiz else None,
-        )
-
-    return CourseOutlineOut(
-        id=course.id,
-        title=course.title,
-        show_gaze_dot=course.show_gaze_dot,
-        require_calibration=course.require_calibration,
-        modules=[
-            ModuleItemOut(
-                id=m.id,
-                order_index=m.order_index,
-                title=m.title,
-                lessons=[_lesson_item(lesson) for lesson in m.lessons],
-            )
-            for m in course.modules
-        ],
-    )
+    is_owner = await can_access_course(db, course, user)
+    if not is_owner and enrolled is None:
+        # Khóa đã publish được phép xem outline để sinh viên quyết định đăng ký.
+        if course.published_version_id is None or course.archived_at is not None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return await content.get_published_outline(db, course)

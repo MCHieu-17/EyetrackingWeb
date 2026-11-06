@@ -27,7 +27,7 @@ async def _build_profile(db: AsyncSession, user: User) -> ProfileOut:
         email=user.email,
         full_name=profile.full_name,
         date_of_birth=profile.date_of_birth,
-        gender=profile.gender.code if profile.gender else None,
+        gender=profile.gender,
         phone=profile.phone,
         avatar_url=profile.avatar_url,
         created_at=user.created_at,
@@ -58,18 +58,12 @@ async def update_my_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    gender_id = None
-    if body.gender:
-        gender = await profile_crud.get_gender_by_code(db, body.gender)
-        if gender is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Gender không hợp lệ")
-        gender_id = gender.id
     await profile_crud.upsert_user_profile(
         db,
         user_id=user.id,
         full_name=body.full_name,
         date_of_birth=body.date_of_birth,
-        gender_id=gender_id,
+        gender=body.gender,
         phone=body.phone,
         avatar_url=body.avatar_url,
     )

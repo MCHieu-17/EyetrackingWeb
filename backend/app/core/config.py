@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     app_name: str = "GazeEdu API"
     debug: bool = False
     testing: bool = False
+    # Namespace cho media/Redis; Phase 6 sẽ đọc từ app_metadata.db_instance_id.
+    app_instance_id: str = "dev"
 
     # Bắt buộc — phải có trong .env (không nhúng mẫu trong code).
     database_url: str

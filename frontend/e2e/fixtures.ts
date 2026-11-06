@@ -349,7 +349,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   // Giáo viên/quản trị luôn thấy đáp án đúng (giống backend: reveal theo role).
   const revealQuizAnswers = user.role === "teacher" || user.role === "admin";
   // Route cụ thể đăng ký sau route tổng để được ưu tiên (last match wins).
-  await page.route("**/api/assignments/quiz-python-1", (r) => {
+  const handleQuizPythonPatch = (r: Route) => {
     if (r.request().method() === "PATCH") {
       // Giả lập PATCH: trả về bài tập đã ghép thay đổi để UI phản hồi đúng trạng thái.
       const patch = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
@@ -362,7 +362,9 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
       return json(r, { ...QUIZ_REVEALED, ...patch });
     }
     return json(r, quizSubmitted || revealQuizAnswers ? QUIZ_REVEALED : QUIZ_PUBLIC);
-  });
+  };
+  await page.route("**/api/assignments/quiz-python-1", handleQuizPythonPatch);
+  await page.route("**/api/teacher/quiz-specs/quiz-python-1", handleQuizPythonPatch);
   let newQuiz = {
     ...QUIZ_PUBLIC,
     id: "quiz-new",
@@ -372,7 +374,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     status: "draft",
     questions: [],
   };
-  await page.route("**/api/assignments/quiz-new", (r) => {
+  const handleQuizNew = (r: Route) => {
     if (r.request().method() === "PATCH") {
       const patch = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
       newQuiz = { ...newQuiz, ...patch };
@@ -385,7 +387,9 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
       return json(r, newQuiz);
     }
     return json(r, newQuiz);
-  });
+  };
+  await page.route("**/api/assignments/quiz-new", handleQuizNew);
+  await page.route("**/api/teacher/quiz-specs/quiz-new", handleQuizNew);
   await page.route("**/api/assignments/quiz-python-1/attempt", (r) =>
     json(r, quizSubmitted ? QUIZ_ATTEMPT : null),
   );

@@ -136,7 +136,7 @@ test.describe("Teacher", () => {
 
     const request = page.waitForRequest(
       (candidate) =>
-        new URL(candidate.url()).pathname === "/api/assignments/quiz-python-1" &&
+        new URL(candidate.url()).pathname === "/api/teacher/quiz-specs/quiz-python-1" &&
         candidate.method() === "PATCH",
     );
     const input = page.getByLabel("Tên bài tập");
@@ -185,17 +185,25 @@ test.describe("Teacher", () => {
         ]),
       }),
     );
+    await page.route("**/api/teacher/courses/course-new/publish", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, courseVersionId: "version-1" }),
+      }),
+    );
     const request = page.waitForRequest(
       (candidate) =>
-        new URL(candidate.url()).pathname === "/api/teacher/courses/course-new" &&
-        candidate.method() === "PATCH",
+        new URL(candidate.url()).pathname ===
+          "/api/teacher/courses/course-new/publish" &&
+        candidate.method() === "POST",
     );
 
     await page.goto("/teacher/courses/course-new?tab=content");
     await page.getByRole("button", { name: "Xuất bản" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Xuất bản" }).click();
 
-    expect((await request).postDataJSON()).toEqual({ status: "published" });
+    expect((await request).postDataJSON()).toEqual({});
   });
 
   test("dialog thêm học viên tìm kiếm trên server", async ({ page }) => {
@@ -364,7 +372,7 @@ test.describe("Teacher", () => {
 
     const request = page.waitForRequest(
       (candidate) =>
-        candidate.url().includes("/api/assignments/quiz-python-1") &&
+        candidate.url().includes("/api/teacher/quiz-specs/quiz-python-1") &&
         candidate.method() === "PATCH",
     );
     await toggle.click();
@@ -382,7 +390,7 @@ test.describe("Teacher", () => {
 
     const request = page.waitForRequest(
       (candidate) =>
-        candidate.url().includes("/api/assignments/quiz-python-1") &&
+        candidate.url().includes("/api/teacher/quiz-specs/quiz-python-1") &&
         candidate.method() === "PATCH",
     );
     await page.getByRole("button", { name: "Lưu bài tập nháp" }).click();

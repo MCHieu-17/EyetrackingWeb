@@ -36,7 +36,7 @@ async def list_teachers(
         select(User, UserProfile, TeacherProfile)
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .join(TeacherProfile, TeacherProfile.user_id == User.id)
-        .where(User.deleted_at.is_(None), User.status.has(code="active"))
+        .where(User.deleted_at.is_(None), User.status == "active")
         .order_by(UserProfile.full_name)
         .limit(500)
     )
@@ -72,7 +72,7 @@ async def list_course_teachers(
     )
     assigned_ids = set((await db.execute(assigned_ids_stmt)).scalars().all())
 
-    all_ids = assigned_ids | {course.teacher_id}
+    all_ids = assigned_ids | {course.owner_id}
     if not all_ids:
         return []
 
@@ -86,7 +86,7 @@ async def list_course_teachers(
     by_id = {u.id: (u, p, tp) for u, p, tp in rows}
 
     out: list[CourseTeacherOut] = []
-    owner = by_id.get(course.teacher_id)
+    owner = by_id.get(course.owner_id)
     if owner:
         u, p, tp = owner
         out.append(
@@ -99,7 +99,7 @@ async def list_course_teachers(
             )
         )
     for tid in sorted(assigned_ids):
-        if tid == course.teacher_id or tid not in by_id:
+        if tid == course.owner_id or tid not in by_id:
             continue
         u, p, tp = by_id[tid]
         out.append(
@@ -133,7 +133,7 @@ async def assign_teachers(
 
     added = 0
     for tid in ids:
-        if tid == course.teacher_id or tid in existing:
+        if tid == course.owner_id or tid in existing:
             continue
         await _teacher_or_404(db, tid)
         db.add(CourseTeacher(course_id=course_id, teacher_id=tid, assigned_by=user.id))
@@ -151,7 +151,7 @@ async def unassign_teacher(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_course_or_404(db, course_id)
-    if teacher_id == course.teacher_id:
+    if teacher_id == course.owner_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Không thể gỡ chủ khóa học khỏi danh sách giảng viên",

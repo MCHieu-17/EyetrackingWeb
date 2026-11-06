@@ -135,8 +135,14 @@ function notifyAuthChange(
 }
 
 function extractError(status: number, data: unknown): string {
-  const d = data as { detail?: string; message?: string } | null;
-  return d?.detail ?? d?.message ?? `HTTP ${status}`;
+  const d = data as
+    | { detail?: string | { code?: string; message?: string }; message?: string }
+    | null;
+  if (typeof d?.detail === "string") return d.detail;
+  if (d?.detail && typeof d.detail === "object") {
+    return d.detail.message ?? d.detail.code ?? `HTTP ${status}`;
+  }
+  return d?.message ?? `HTTP ${status}`;
 }
 
 /**
