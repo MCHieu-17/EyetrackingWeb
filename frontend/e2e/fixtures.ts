@@ -332,10 +332,14 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
       trackingConsent: true,
     });
   });
+  await page.route("**/api/learning-sessions/*/contents", (r) => json(r, SLIDES));
   await page.route("**/api/lessons/**/gaze-samples", (r) => json(r, { ok: true, inserted: 1 }));
 
   // Quiz / bài tập trắc nghiệm (nhúng trong bài học)
   let quizSubmitted = false;
+  await page.route("**/api/quiz-specs/*", (r) =>
+    json(r, quizSubmitted || revealQuizAnswers ? QUIZ_REVEALED : QUIZ_PUBLIC),
+  );
   await page.route("**/api/assignments/*", (r) =>
     json(r, {
       ...QUIZ_PUBLIC,
@@ -364,6 +368,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     return json(r, quizSubmitted || revealQuizAnswers ? QUIZ_REVEALED : QUIZ_PUBLIC);
   };
   await page.route("**/api/assignments/quiz-python-1", handleQuizPythonPatch);
+  await page.route("**/api/quiz-specs/quiz-python-1", handleQuizPythonPatch);
   await page.route("**/api/teacher/quiz-specs/quiz-python-1", handleQuizPythonPatch);
   let newQuiz = {
     ...QUIZ_PUBLIC,
@@ -389,6 +394,7 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
     return json(r, newQuiz);
   };
   await page.route("**/api/assignments/quiz-new", handleQuizNew);
+  await page.route("**/api/quiz-specs/quiz-new", handleQuizNew);
   await page.route("**/api/teacher/quiz-specs/quiz-new", handleQuizNew);
   await page.route("**/api/assignments/quiz-python-1/attempt", (r) =>
     json(r, quizSubmitted ? QUIZ_ATTEMPT : null),
@@ -400,6 +406,42 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/assignments/quiz-python-1/retry", (r) => {
     quizSubmitted = false;
     return json(r, QUIZ_PUBLIC);
+  });
+  await page.route("**/api/lessons/*/attempts", (r) => {
+    if (r.request().method() === "POST") {
+      return json(
+        r,
+        quizSubmitted
+          ? QUIZ_ATTEMPT
+          : {
+              ...QUIZ_ATTEMPT,
+              id: "attempt-in-progress",
+              submittedAt: new Date().toISOString(),
+              score: 0,
+              maxScore: 0,
+            },
+        201,
+      );
+    }
+    return json(r, quizSubmitted ? [QUIZ_ATTEMPT] : []);
+  });
+  await page.route("**/api/attempts/*/submit", (r) => {
+    quizSubmitted = true;
+    return json(r, QUIZ_ATTEMPT);
+  });
+  await page.route("**/api/attempts/*/retry", (r) => {
+    quizSubmitted = false;
+    return json(
+      r,
+      {
+        ...QUIZ_ATTEMPT,
+        id: "attempt-2",
+        submittedAt: new Date().toISOString(),
+        score: 0,
+        maxScore: 0,
+      },
+      201,
+    );
   });
 
   // Calibrations

@@ -222,9 +222,13 @@ test.describe("Student", () => {
     const created: string[] = [];
     const closed: string[] = [];
     await page.route("**/api/learning-sessions**", async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
       if (route.request().method() === "PATCH") {
         closed.push(route.request().url().split("/").at(-1) ?? "");
         return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+      }
+      if (route.request().method() !== "POST" || pathname !== "/api/learning-sessions") {
+        return route.fallback();
       }
       const input = route.request().postDataJSON() as { enrollmentId: string; lessonId: string };
       const id = `session-${created.length + 1}`;

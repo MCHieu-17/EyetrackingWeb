@@ -16,6 +16,11 @@ export interface LearningSession {
   calibrationWidthPx?: number | null;
   calibrationHeightPx?: number | null;
   devicePixelRatio?: number | null;
+  courseVersionItemId?: string | null;
+  calibrationId?: string | null;
+  quizAttemptId?: string | null;
+  expiresAt?: string | null;
+  pipelineVersion?: string | null;
 }
 
 export interface CreateLearningSessionInput {
@@ -29,6 +34,7 @@ export interface CreateLearningSessionInput {
   calibrationHeightPx: number;
   devicePixelRatio: number;
   trackingConsent?: boolean;
+  quizAttemptId?: string | null;
 }
 
 const DEVICE_KEY = "gaze_device_fingerprint";
@@ -76,6 +82,10 @@ export function fetchCourseOutline(courseId: string): Promise<CourseOutline> {
 
 export function fetchLessonSlides(lessonId: string): Promise<Slide[]> {
   return apiFetch<Slide[]>(`/api/lessons/${lessonId}/contents`);
+}
+
+export function fetchSessionContents(sessionId: string): Promise<Slide[]> {
+  return apiFetch<Slide[]>(`/api/learning-sessions/${sessionId}/contents`);
 }
 
 export function createLearningSession(input: CreateLearningSessionInput): Promise<LearningSession> {

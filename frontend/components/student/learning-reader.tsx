@@ -202,19 +202,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
     setOpenModules((prev) => ({ ...prev, [activeModule.id]: true }));
   }
 
-  const { data: slides = [], isLoading: slidesLoading } = useLessonSlides(
-    activeIsQuiz ? "" : activeLessonId,
-  );
-  const total = slides.length;
-  // Render-phase adjust: đổi bài có ít slide hơn → quay về slide đầu.
-  if (total > 0 && currentSlide > total - 1) setCurrentSlide(0);
-  const currentContent = slides[currentSlide];
-
-  const slideImageUrl = useMemo(
-    () => resolveMediaUrl(currentContent?.imageUrl),
-    [currentContent],
-  );
-
   const flatLessonIndex = allItems.findIndex((lesson) => lesson.id === activeLessonId);
   const nextLesson = allItems[flatLessonIndex + 1];
 
@@ -275,7 +262,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
     const calibrationHeight = calibrationScreen?.h ?? viewportHeight;
 
     let cancelled = false;
-    let createdSessionId: string | null = null;
     createLearningSession({
       enrollmentId,
       lessonId,
@@ -289,7 +275,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
       trackingConsent: calibrationRequired,
     })
       .then((session) => {
-        createdSessionId = session.id;
         if (cancelled) {
           endLearningSession(session.id, "completed").catch(() => {});
           return;
@@ -305,7 +290,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
 
     return () => {
       cancelled = true;
-      if (createdSessionId) closeLearningSession(lessonId, createdSessionId);
     };
   }, [
     courseReady,
@@ -318,7 +302,30 @@ function ReaderContent({ courseId }: { courseId: string }) {
     viewportError,
   ]);
 
+  const previousLessonRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousLessonRef.current;
+    if (previous && previous !== activeLessonId) {
+      closeLearningSession(previous);
+    }
+    previousLessonRef.current = activeLessonId;
+  }, [activeLessonId, closeLearningSession]);
+
   const learningSessionId = learningSessionIds[activeLessonId];
+  const { data: slides = [], isLoading: slidesLoading } = useLessonSlides(
+    activeIsQuiz ? "" : activeLessonId,
+    learningSessionId,
+  );
+  const total = slides.length;
+  // Render-phase adjust: đổi bài có ít slide hơn → quay về slide đầu.
+  if (total > 0 && currentSlide > total - 1) setCurrentSlide(0);
+  const currentContent = slides[currentSlide];
+
+  const slideImageUrl = useMemo(
+    () => resolveMediaUrl(currentContent?.imageUrl),
+    [currentContent],
+  );
+
   // Chỉ thu gaze khi khóa bật theo dõi VÀ backend cho phép (trackingConsent=true).
   const trackingAllowed =
     calibrationRequired &&

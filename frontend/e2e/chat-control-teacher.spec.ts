@@ -6,10 +6,11 @@ test("teacher chatbot toggle saves immediately and survives a reload", async ({ 
   await seedAuth(page, teacher);
   await mockApi(page, { user: teacher });
   await page.goto("/teacher/courses/course-1?tab=content");
-  const response = page.waitForResponse(r => r.url().endsWith("/api/assignments/quiz-python-1"));
+  const response = page.waitForResponse(r => r.url().endsWith("/api/quiz-specs/quiz-python-1"));
   await page.getByRole("button", { name: "Mở Bài tập: Kiểm tra nhập môn" }).click();
   let saved = await (await response).json();
   await page.route("**/api/assignments/quiz-python-1", r => json(r, saved));
+  await page.route("**/api/quiz-specs/quiz-python-1", r => json(r, saved));
   await page.route("**/api/teacher/quiz-specs/quiz-python-1", r => {
     if (r.request().method() === "PATCH") saved = { ...saved, ...r.request().postDataJSON() };
     return json(r, saved);

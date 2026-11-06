@@ -5,6 +5,7 @@ import {
   fetchMyEnrollments,
   fetchCourseOutline,
   fetchLessonSlides,
+  fetchSessionContents,
 } from "@/lib/api/student";
 
 export function useMyEnrollments() {
@@ -19,10 +20,16 @@ export function useCourseOutline(courseId: string) {
   });
 }
 
-export function useLessonSlides(lessonId: string) {
+export function useLessonSlides(lessonId: string, sessionId?: string | null) {
   return useQuery({
-    queryKey: ["student", "lesson-slides", lessonId],
-    queryFn: () => (lessonId ? fetchLessonSlides(lessonId) : Promise.resolve([])),
+    queryKey: ["student", "lesson-slides", lessonId, sessionId ?? null],
+    queryFn: () =>
+      sessionId
+        ? fetchSessionContents(sessionId)
+        : lessonId
+          ? fetchLessonSlides(lessonId)
+          : Promise.resolve([]),
     enabled: Boolean(lessonId),
+    placeholderData: (previous) => previous,
   });
 }

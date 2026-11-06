@@ -24,12 +24,29 @@ async function demoStore() {
 
 export async function getQuizAssignment(id: string): Promise<QuizAssignment | null> {
   if (isDemoMode()) return (await demoStore()).getQuizAssignment(id);
-  return apiFetch<QuizAssignment>(`/api/assignments/${id}`);
+  return apiFetch<QuizAssignment>(`/api/quiz-specs/${id}`);
 }
 
-export async function getQuizAttempt(assignmentId: string): Promise<QuizAttempt | null> {
-  if (isDemoMode()) return (await demoStore()).getQuizAttempt(assignmentId);
-  return apiFetch<QuizAttempt | null>(`/api/assignments/${assignmentId}/attempt`);
+export async function getQuizAttempt(lessonId: string): Promise<QuizAttempt | null> {
+  if (isDemoMode()) return (await demoStore()).getQuizAttempt(lessonId);
+  const attempts = await apiFetch<QuizAttempt[]>(`/api/lessons/${lessonId}/attempts`);
+  return attempts[0] ?? null;
+}
+
+export async function startQuizAttempt(lessonId: string): Promise<QuizAttempt> {
+  if (isDemoMode()) {
+    return {
+      id: `demo-attempt-${lessonId}`,
+      assignmentId: lessonId,
+      answers: {},
+      submittedAt: new Date().toISOString(),
+      score: 0,
+      maxScore: 0,
+    };
+  }
+  return apiFetch<QuizAttempt>(`/api/lessons/${lessonId}/attempts`, {
+    method: "POST",
+  });
 }
 
 export async function submitQuizAttempt(
@@ -37,7 +54,9 @@ export async function submitQuizAttempt(
   answers: Record<string, string[]>,
 ): Promise<QuizAttempt> {
   if (isDemoMode()) return (await demoStore()).submitQuizAttempt(assignment, answers);
-  return apiFetch<QuizAttempt>(`/api/assignments/${assignment.id}/attempts`, {
+  if (!assignment.lessonId) throw new Error("Bài tập thiếu lessonId");
+  const attempt = await startQuizAttempt(assignment.lessonId);
+  return apiFetch<QuizAttempt>(`/api/attempts/${attempt.id}/submit`, {
     method: "POST",
     body: { answers },
   });
@@ -54,10 +73,19 @@ export async function updateQuizAssignment(
   });
 }
 
-/** Xoá lượt làm cũ để làm lại (chỉ khi giáo viên cho phép). Trả bài tập kèm hạn mới. */
-export async function retryQuizAttempt(assignmentId: string): Promise<QuizAssignment> {
-  if (isDemoMode()) return (await demoStore()).retryQuizAttempt(assignmentId);
-  return apiFetch<QuizAssignment>(`/api/assignments/${assignmentId}/retry`, {
+/** Tạo lượt làm mới; lượt cũ được giữ trong lịch sử. */
+export async function retryQuizAttempt(attemptId: string): Promise<QuizAttempt> {
+  if (isDemoMode()) {
+    return {
+      id: `demo-retry-${attemptId}`,
+      assignmentId: attemptId,
+      answers: {},
+      submittedAt: new Date().toISOString(),
+      score: 0,
+      maxScore: 0,
+    };
+  }
+  return apiFetch<QuizAttempt>(`/api/attempts/${attemptId}/retry`, {
     method: "POST",
   });
 }

@@ -291,6 +291,9 @@ export async function saveCalibrationToBackend(params: {
         modelUbjBase64: params.modelUbjBase64,
         screenWidthPx: params.screenWidth,
         screenHeightPx: params.screenHeight,
+        viewportWidthPx: params.screenWidth,
+        viewportHeightPx: params.screenHeight,
+        devicePixelRatio: globalThis.devicePixelRatio || 1,
         maePx: params.maePx,
       },
     });

@@ -15,6 +15,7 @@ class LearningSessionCreateIn(CamelModel):
     calibration_height_px: int = Field(gt=0)
     device_pixel_ratio: float = Field(gt=0)
     tracking_consent: bool = True
+    quiz_attempt_id: str | None = None
 
 
 class LearningSessionOut(CamelModel):
@@ -34,6 +35,11 @@ class LearningSessionOut(CamelModel):
     calibration_width_px: int | None = None
     calibration_height_px: int | None = None
     device_pixel_ratio: float | None = None
+    course_version_item_id: str | None = None
+    calibration_id: str | None = None
+    quiz_attempt_id: str | None = None
+    expires_at: str | None = None
+    pipeline_version: str | None = None
 
 
 class LearningSessionEndIn(CamelModel):

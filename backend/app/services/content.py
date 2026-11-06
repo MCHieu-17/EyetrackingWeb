@@ -1226,6 +1226,36 @@ async def get_published_outline(
     )
 
 
+async def get_lesson_version_contents(
+    db: AsyncSession, lesson_version_id: str
+) -> list[SlideOut]:
+    rows = (
+        await db.execute(
+            select(LessonVersionSlide)
+            .where(LessonVersionSlide.lesson_version_id == lesson_version_id)
+            .order_by(LessonVersionSlide.position)
+        )
+    ).scalars().all()
+    out: list[SlideOut] = []
+    for row in rows:
+        slide_version = await db.get(SlideVersion, row.slide_version_id)
+        asset = await db.get(MediaAsset, slide_version.image_asset_id) if slide_version else None
+        out.append(
+            SlideOut(
+                id=row.id,
+                title=row.title or f"Slide {row.position + 1}",
+                image_url=(
+                    media_storage.asset_url(
+                        asset.id, asset.object_key, asset.storage_backend
+                    )
+                    if asset
+                    else None
+                ),
+            )
+        )
+    return out
+
+
 async def get_lesson_contents(
     db: AsyncSession, course: Course, lesson_id: str
 ) -> list[SlideOut]:

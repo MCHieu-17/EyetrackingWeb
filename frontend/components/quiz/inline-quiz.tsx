@@ -12,6 +12,7 @@ import {
   useQuizAssignment,
   useQuizAttempt,
   useRetryQuizAttempt,
+  useStartQuizAttempt,
   useSubmitQuizAttempt,
 } from "@/hooks/use-quiz";
 import { cn } from "@/lib/utils";
@@ -204,7 +205,9 @@ export function InlineQuiz({
   hasNext?: boolean;
 }) {
   const assignmentQuery = useQuizAssignment(quizId);
-  const attemptQuery = useQuizAttempt(quizId);
+  const assignment = assignmentQuery.data;
+  const attemptQuery = useQuizAttempt(assignment?.lessonId ?? "");
+  const startAttempt = useStartQuizAttempt();
   const submitAttempt = useSubmitQuizAttempt();
   const retryAttempt = useRetryQuizAttempt();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -212,12 +215,23 @@ export function InlineQuiz({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [expired, setExpired] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const expiresAt = assignmentQuery.data?.expiresAt;
-  const assignment = assignmentQuery.data;
+  const expiresAt = assignment?.expiresAt;
   const attempt = attemptQuery.data;
   const { setQuizContext } = useAssistant();
 
   // Chat panel ở reader root đọc context này để chuyển sang mode quiz/review.
+  useEffect(() => {
+    if (
+      assignment?.lessonId &&
+      assignment.status === "published" &&
+      attemptQuery.isSuccess &&
+      attemptQuery.data === null &&
+      !startAttempt.isPending
+    ) {
+      startAttempt.mutate({ lessonId: assignment.lessonId });
+    }
+  }, [assignment, attemptQuery.isSuccess, attemptQuery.data, startAttempt]);
+
   useEffect(() => {
     if (!assignment) return;
     setQuizContext({
@@ -271,15 +285,17 @@ export function InlineQuiz({
             : undefined
         }
         onRetry={() =>
-          retryAttempt.mutate(quizId, {
-            onSuccess: () => {
-              // Lượt làm cũ đã bị xoá: dựng lại bài từ đầu (state cục bộ không
-              // tự reset vì component không unmount).
-              setCurrentIndex(0);
-              setAnswers({});
-              setExpired(false);
+          retryAttempt.mutate(
+            { attemptId: attempt.id, lessonId: assignment.lessonId ?? "" },
+            {
+              onSuccess: () => {
+                // Lượt làm cũ vẫn còn trong lịch sử; dựng lại UI từ đầu.
+                setCurrentIndex(0);
+                setAnswers({});
+                setExpired(false);
+              },
             },
-          })
+          )
         }
       />
     );

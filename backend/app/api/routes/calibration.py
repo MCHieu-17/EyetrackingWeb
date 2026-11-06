@@ -1,16 +1,16 @@
 import base64
 import binascii
+import hashlib
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.access import active_calibration_param, upsert_device
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.calibration import CalibrationParam, CalibrationSession, CalibrationSettings, Device
+from app.models.calibration import Calibration, CalibrationSettings, Device
 from app.schemas.calibration import (
     CalibrationActiveOut,
     CalibrationCreateIn,
@@ -21,49 +21,8 @@ from app.schemas.calibration import (
 
 router = APIRouter(prefix="/api/calibrations", tags=["calibrations"])
 
-# Nhãn phiên bản cho mô hình ánh xạ (pitch, yaw) -> (x, y) hiện tại. Ghi kèm mỗi
-# bản ghi để phân biệt model cũ/mới. v2 = gaze service serialize thuần hệ số
-# (ubjson, không pickle); model v1 (pickle) không còn tương thích.
-#
-# Hậu tố `-b16` = backbone UniGaze đang chạy (services/gaze/app/services/pipeline.py).
-# Hệ số (pitch, yaw) -> (x, y) đặc thù từng backbone, nên ĐỔI MODEL UniGaze thì
-# phải đổi nhãn này: bản ghi cũ sẽ mismatch -> client tự yêu cầu hiệu chỉnh lại
-# (`calibrated=false`, `/active/model` trả 409) thay vì nạp nhầm hệ số cũ.
 MAPPING_MODEL_VERSION = "ubj-linreg-v2-b16"
-
-# Chặn trên kích thước model .ubj nhận từ client (model thật ~1-3KB).
 MAX_MODEL_UBJ_BYTES = 256 * 1024
-
-
-async def _latest_param(
-    db: AsyncSession, user_id: str, device_id: str
-) -> CalibrationParam | None:
-    """Bản ghi calibration duy nhất của (user, device).
-
-    Ưu tiên dòng active; nếu không có (dữ liệu cũ) thì lấy dòng mới nhất.
-    """
-    stmt = (
-        select(CalibrationParam)
-        .where(
-            CalibrationParam.user_id == user_id,
-            CalibrationParam.device_id == device_id,
-        )
-        .order_by(
-            CalibrationParam.is_active.desc(), CalibrationParam.valid_from.desc()
-        )
-        .limit(1)
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
-async def _find_device(
-    db: AsyncSession, user_id: str, fingerprint: str
-) -> Device | None:
-    stmt = select(Device).where(
-        Device.user_id == user_id,
-        Device.device_fingerprint == fingerprint,
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 def _decode_model(model_ubj_base64: str) -> bytes:
@@ -86,76 +45,63 @@ def _decode_model(model_ubj_base64: str) -> bytes:
     return raw
 
 
+async def _find_device(
+    db: AsyncSession, user_id: str, fingerprint: str
+) -> Device | None:
+    stmt = select(Device).where(
+        Device.owner_id == user_id,
+        Device.fingerprint == fingerprint,
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _current_calibration(
+    db: AsyncSession, device: Device
+) -> Calibration | None:
+    if not device.current_calibration_id:
+        return None
+    return await db.get(Calibration, device.current_calibration_id)
+
+
 @router.post("", response_model=CalibrationOut, status_code=201)
 async def save_calibration_params(
     body: CalibrationCreateIn,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lưu model hiệu chỉnh (.ubj) từ gaze service cho (user, device).
-
-    Mỗi cặp (user, device) chỉ giữ ĐÚNG MỘT bản ghi: bộ mới GHI ĐÈ bộ cũ tại
-    chỗ (cập nhật cả calibration_session đi kèm) thay vì thêm dòng mới rồi
-    deactivate — tránh tích luỹ .ubj (~1-3KB/bản) theo thời gian.
-    """
     model_ubj = _decode_model(body.model_ubj_base64)
-
-    device = await upsert_device(
-        db,
-        user_id=user.id,
-        fingerprint=body.device_fingerprint,
-        screen_width_px=body.screen_width_px,
-        screen_height_px=body.screen_height_px,
-    )
-    now = datetime.now(timezone.utc)
-    num_points = max(1, min(body.num_points, 64))
-
-    param = await _latest_param(db, user.id, device.id)
-    if param is None:
-        cal_session = CalibrationSession(
-            user_id=user.id,
-            device_id=device.id,
-            num_points=num_points,
-            status="completed",
-            finished_at=now,
-        )
-        db.add(cal_session)
+    device = await _find_device(db, user.id, body.device_fingerprint)
+    if device is None:
+        device = Device(owner_id=user.id, fingerprint=body.device_fingerprint)
+        db.add(device)
         await db.flush()
-        param = CalibrationParam(
-            calibration_session_id=cal_session.id,
-            user_id=user.id,
-            device_id=device.id,
-            params=None,  # protocol 6 tham số kappa đã bỏ
-            model_ubj=model_ubj,
-            mae_px=body.mae_px,
-            mapping_model_version=MAPPING_MODEL_VERSION,
-            is_active=True,
-            valid_from=now,
-            valid_to=None,
-        )
-        db.add(param)
-    else:
-        cal_session = await db.get(CalibrationSession, param.calibration_session_id)
-        if cal_session is not None:
-            cal_session.num_points = num_points
-            cal_session.status = "completed"
-            cal_session.finished_at = now
-        param.params = None
-        param.model_ubj = model_ubj
-        param.mae_px = body.mae_px
-        param.mapping_model_version = MAPPING_MODEL_VERSION
-        param.is_active = True
-        param.valid_from = now
-        param.valid_to = None
 
+    calibration = Calibration(
+        device_id=device.id,
+        model_ubj=model_ubj,
+        model_hash=hashlib.sha256(model_ubj).hexdigest(),
+        model_version=MAPPING_MODEL_VERSION,
+        mae_px=body.mae_px,
+        viewport_width_px=body.viewport_width_px or body.screen_width_px or 1,
+        viewport_height_px=body.viewport_height_px or body.screen_height_px or 1,
+        device_pixel_ratio=body.device_pixel_ratio or 1.0,
+        config={"num_points": body.num_points},
+    )
+    db.add(calibration)
+    await db.flush()
+    device.current_calibration_id = calibration.id
     await db.commit()
-    await db.refresh(param)
+    await db.refresh(calibration)
     return CalibrationOut(
-        id=param.id,
-        mae_px=param.mae_px,
-        num_points=num_points,
-        device_fingerprint=device.device_fingerprint,
-        valid_from=param.valid_from,
+        id=calibration.id,
+        mae_px=calibration.mae_px,
+        num_points=body.num_points,
+        device_fingerprint=device.fingerprint,
+        valid_from=calibration.created_at,
+        viewport_width_px=calibration.viewport_width_px,
+        viewport_height_px=calibration.viewport_height_px,
+        device_pixel_ratio=calibration.device_pixel_ratio,
+        model_version=calibration.model_version,
     )
 
 
@@ -170,16 +116,20 @@ async def get_active_calibration(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
         )
-    param = await active_calibration_param(db, user.id, device.id)
-    if param is None:
+    calibration = await _current_calibration(db, device)
+    if calibration is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
         )
     return CalibrationActiveOut(
-        # Model cũ (khác version) coi như chưa hiệu chỉnh -> UI sẽ yêu cầu làm lại.
-        calibrated=param.has_model and param.mapping_model_version == MAPPING_MODEL_VERSION,
-        mae_px=param.mae_px,
-        calibrated_at=param.valid_from,
+        calibrated=calibration.model_version == MAPPING_MODEL_VERSION,
+        mae_px=calibration.mae_px,
+        calibrated_at=calibration.created_at,
+        calibration_id=calibration.id,
+        viewport_width_px=calibration.viewport_width_px,
+        viewport_height_px=calibration.viewport_height_px,
+        device_pixel_ratio=calibration.device_pixel_ratio,
+        model_version=calibration.model_version,
     )
 
 
@@ -189,34 +139,27 @@ async def get_active_calibration_model(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trả model .ubj đang active (base64) để client nạp lại vào gaze service
-    qua `POST /session/{sid}/import` mà không cần hiệu chỉnh lại."""
     device = await _find_device(db, user.id, device_fingerprint)
     if device is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Chưa có calibration cho thiết bị này"
         )
-    param = await active_calibration_param(db, user.id, device.id)
-    if param is None or not param.has_model:
+    calibration = await _current_calibration(db, device)
+    if calibration is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail="Chưa có model calibration cho thiết bị này",
         )
-    if param.model_ubj is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Bản ghi calibration cũ không có model .ubj — hãy hiệu chỉnh lại",
-        )
-    if param.mapping_model_version != MAPPING_MODEL_VERSION:
-        # Model cũ (vd pickle v1) không còn nạp được vào gaze service -> buộc
-        # hiệu chỉnh lại để tránh client import lỗi lặp lại.
+    if calibration.model_version != MAPPING_MODEL_VERSION:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Model hiệu chỉnh đã lỗi thời — hãy hiệu chỉnh lại",
         )
     return CalibrationModelOut(
-        model_ubj_base64=base64.b64encode(param.model_ubj).decode("ascii"),
-        mae_px=param.mae_px,
+        model_ubj_base64=base64.b64encode(calibration.model_ubj).decode("ascii"),
+        mae_px=calibration.mae_px,
+        model_version=calibration.model_version,
+        model_hash=calibration.model_hash,
     )
 
 
@@ -225,8 +168,11 @@ async def get_calibration_config(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Học viên/try-flow đọc ngưỡng hiện tại để quyết định pass/fail. Public cho mọi role đã đăng nhập."""
     row = await db.get(CalibrationSettings, 1)
     if row is None:
         return CalibrationSettingsOut(enabled=True, threshold=0.12, updated_at=None)
-    return CalibrationSettingsOut(enabled=row.enabled, threshold=float(row.threshold), updated_at=row.updated_at)
+    return CalibrationSettingsOut(
+        enabled=row.enabled,
+        threshold=float(row.threshold),
+        updated_at=row.updated_at,
+    )

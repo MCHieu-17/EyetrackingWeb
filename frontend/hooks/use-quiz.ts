@@ -5,6 +5,7 @@ import {
   getQuizAssignment,
   getQuizAttempt,
   retryQuizAttempt,
+  startQuizAttempt,
   submitQuizAttempt,
   updateQuizAssignment,
   type QuizAssignmentPatch,
@@ -19,11 +20,24 @@ export function useQuizAssignment(id: string) {
   });
 }
 
-export function useQuizAttempt(assignmentId: string) {
+export function useQuizAttempt(lessonId: string) {
   return useQuery({
-    queryKey: ["quiz", "attempt", assignmentId],
-    queryFn: () => getQuizAttempt(assignmentId),
-    enabled: Boolean(assignmentId),
+    queryKey: ["quiz", "attempt", lessonId],
+    queryFn: () => getQuizAttempt(lessonId),
+    enabled: Boolean(lessonId),
+  });
+}
+
+export function useStartQuizAttempt() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lessonId }: { lessonId: string }) => startQuizAttempt(lessonId),
+    onSuccess: async (attempt, variables) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["quiz", "attempt", variables.lessonId] }),
+        client.invalidateQueries({ queryKey: ["quiz", "assignment", attempt.assignmentId] }),
+      ]);
+    },
   });
 }
 
@@ -37,10 +51,14 @@ export function useSubmitQuizAttempt() {
       assignment: QuizAssignment;
       answers: Record<string, string[]>;
     }) => submitQuizAttempt(assignment, answers),
-    onSuccess: async (attempt) => {
+    onSuccess: async (attempt, variables) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: ["quiz", "attempt", attempt.assignmentId] }),
-        client.invalidateQueries({ queryKey: ["quiz", "assignment", attempt.assignmentId] }),
+        client.invalidateQueries({
+          queryKey: ["quiz", "attempt", variables.assignment.lessonId],
+        }),
+        client.invalidateQueries({
+          queryKey: ["quiz", "assignment", variables.assignment.id],
+        }),
       ]);
     },
   });
@@ -57,15 +75,16 @@ export function useUpdateQuizAssignment() {
   });
 }
 
-/** Xoá lượt làm cũ để học viên làm lại (giáo viên phải bật "cho phép làm lại"). */
+/** Tạo lượt làm mới; lượt cũ vẫn còn trong lịch sử. */
 export function useRetryQuizAttempt() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (assignmentId: string) => retryQuizAttempt(assignmentId),
-    onSuccess: async (assignment) => {
+    mutationFn: ({ attemptId }: { attemptId: string; lessonId: string }) =>
+      retryQuizAttempt(attemptId),
+    onSuccess: async (attempt, variables) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: ["quiz", "attempt", assignment.id] }),
-        client.invalidateQueries({ queryKey: ["quiz", "assignment", assignment.id] }),
+        client.invalidateQueries({ queryKey: ["quiz", "attempt", variables.lessonId] }),
+        client.invalidateQueries({ queryKey: ["quiz", "assignment", attempt.assignmentId] }),
       ]);
     },
   });

@@ -10,13 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     admin,
     auth,
+    calibration,
     courses,
     enrollments,
+    learning_sessions,
     lessons,
     media,
     module_items,
     modules,
     proxy,
+    quiz_attempts,
     quiz_specs,
     users,
 )
@@ -93,6 +96,9 @@ app.include_router(enrollments.router)
 app.include_router(proxy.router)
 app.include_router(media.router)
 app.include_router(quiz_specs.router)
+app.include_router(quiz_attempts.router)
+app.include_router(calibration.router)
+app.include_router(learning_sessions.router)
 
 
 @app.get("/health", tags=["system"])
