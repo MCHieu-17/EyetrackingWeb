@@ -88,17 +88,6 @@ Tạo/cập nhật role sau khi migrations đã áp:
 Đây là lớp bảo vệ thứ hai: kể cả khi prompt injection yêu cầu lộ đáp án, chatbot
 cũng không đọc được bảng quiz.
 
-## Chạy test
-
-```bash
-cd services/chatbot
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest -q
-```
-
-Test không cần DB/LLM thật: các node được cắm fake (mock / monkeypatch).
-
 ## Chạy local (không Docker)
 
 ```bash
@@ -143,20 +132,6 @@ app/
     └── providers.py        LLM/embedding/VLM factories
 ```
 
-### Kiểm thử hồi quy chat và đánh giá AI thật
-
-Chạy `../../scripts/test_chatbot.sh` từ thư mục này (hoặc
-`./scripts/test_chatbot.sh` từ root repo) để tạo PostgreSQL/pgvector tạm,
-kiểm tra HTTP upload/ingest/chat, phân quyền theo lượt làm, Vitest và Playwright.
-Chỉ các provider AI được giả lập trong các test tích hợp ổn định.
-
-Bộ đánh giá AI thật, bằng chứng và các điều kiện nghiệm thu chưa đạt được ghi
-trong [`docs/chatbot-verification.md`](../../docs/chatbot-verification.md).
-Runner `scripts/evaluate_live.py` mặc định chạy 30 tình huống, mỗi tình huống
-3 lần trên database/media riêng. Có thể dùng `--cases` và `--fixture-file`
-để kiểm tra lại các ca bị ảnh hưởng sau một sửa đổi.
-
-
 ## Graph runtime and rollout
 
 `workflow/graph.py` compiles one parent and three subgraphs at startup, without a
@@ -179,10 +154,3 @@ One embedding worker owns the Qwen model and serves both chat and ingestion.
 Chat has priority, batches contain at most eight inputs with a 10 ms collection
 window. Only query vectors are cached (1,024 entries / 15 minutes). Existing
 embeddings and selective ingestion endpoints are preserved.
-
-Run `bash scripts/test_graph_stack.sh` from the repository root with the disposable
-PostgreSQL instance configured in that script. `prepare_graph_eval.sh` creates a
-separate eval database; benchmark/evaluation must never share the regression DB,
-whose fixtures are reset. See `docs/chatbot-graph-implementation-status.md` for
-measured acceptance status and rollback image. Do not promote an image until the
-live quality, security and latency acceptance checks pass.

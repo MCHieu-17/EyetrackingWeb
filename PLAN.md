@@ -2,6 +2,8 @@
 
 **Trạng thái:** Phase 0–6 đã triển khai trên nhánh `refactor/lms-v2`; development DB đã reset có guard và stack mới đang chạy.
 
+> Ghi chú: các mục test/evidence trong tài liệu này là lịch sử; test suite và evidence đã được dọn khỏi repo.
+
 **Phạm vi:** Thiết kế lại database và các consumer liên quan; reset riêng database development đã xác minh. Không giữ dữ liệu cũ, không backfill, không duy trì API/schema tương thích ngược.
 
 **Hai quyết định đã được xác nhận:**

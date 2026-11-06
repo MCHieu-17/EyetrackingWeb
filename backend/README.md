@@ -72,7 +72,6 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
 | `R2_ACCOUNT_ID` / `R2_BUCKET_NAME` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_PUBLIC_URL` | Không | Điền đủ 5 để lưu slide trên Cloudflare R2; để trống dùng volume local |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
-| `TESTING` | - | `1` = dùng NullPool (cho pytest) |
 
 ## Endpoints chính
 
@@ -142,18 +141,6 @@ Backend dựng ngữ cảnh bài tập: trước khi nộp chỉ gửi đề + o
 ### AI service — kết nối trực tiếp
 - WebSocket `/session/{sid}/stream` và toàn bộ `POST /session...` của gaze service **gọi trực tiếp** (frontend → nginx `/gaze/*` → gaze; backend không proxy). Backend chỉ lưu model `.ubj` và kiểm soát quyền.
 - `GET /ai/health` — backend probe ML service còn sống không.
-
-## Tests
-
-Tests chạy trên DB riêng `eyelearning_refactor_test`:
-
-```bash
-./scripts/test_db.sh          # tạo nếu chưa có, chạy baseline 001/002
-./scripts/test_backend.sh -v
-```
-
-Không dùng `Base.metadata.create_all()` và không replay migration trong pytest
-fixture; schema test DB do runner chung dựng.
 
 ## Thiết kế đáng chú ý
 

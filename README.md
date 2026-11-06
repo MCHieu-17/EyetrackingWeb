@@ -40,7 +40,7 @@ trung) cho giáo viên.
 | `db/` | Migrations PostgreSQL (001 → 024) |
 | `nginx/` | Reverse proxy local: web :3000 → frontend/backend/gaze |
 | `ops/` | Script build AI base, tạo role chatbot, bảo trì partition, dọn Docker |
-| `scripts/` | Seed tài khoản dev, reset DB, chạy backend tests |
+| `scripts/` | Seed tài khoản dev, reset DB, tạo partition |
 
 ## Chạy nhanh (Full Docker)
 
@@ -187,32 +187,15 @@ Sau khi migrations chạy, tạo role DB hạn chế cho chatbot:
 - Không có GPU: đặt `DEVICE=cpu` trong `.env`, bỏ `gpus: all` ở service `gaze`
   trong `docker-compose.yml`; chatbot đặt `EMBEDDING_DEVICE=cpu` và bỏ `gpus: all`.
 
-## Tests & lint
+## Lint
 
 ```bash
-# Dựng DB test riêng (idempotent; --reset để drop/recreate có guard)
-./scripts/test_db.sh
-
-# Backend
-./scripts/test_backend.sh -v
-
-# Migration runner
-./scripts/test_migrations.sh
-
-# Chatbot + backend chat/AOI + frontend
-./scripts/test_chatbot.sh
-
 # Frontend
-cd frontend && npm run lint && npm run typecheck && npm test
-
-# Gaze protocol
-PYTHONPATH=services/gaze python3 -m pytest services/gaze/tests -q
+cd frontend && npm run lint && npm run typecheck
 
 # Ruff
 ruff check backend services/gaze
 ```
-
-DB test mặc định: `eyelearning_refactor_test` (không dùng `eyetracking_test` cũ).
 
 ## Bảo trì partition
 

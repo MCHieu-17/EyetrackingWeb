@@ -155,30 +155,14 @@ partition cũ** — dữ liệu raw được giữ để phân tích lại.
   (`reader-chat` / `quiz-chat`) và snapshot AOI mới; không có animation width
   để tránh chụp snapshot giữa lúc chuyển layout.
 
-## 9. Tests & lint
+## 9. Lint
 
 ```bash
-# Backend
-./scripts/test_backend.sh -v
-
 # Frontend
-cd frontend && npm run lint && npm run typecheck && npm test
-
-# Chatbot
-cd services/chatbot && .venv/bin/python -m pytest tests -q
-
-# Gaze
-cd services/gaze && python -m pytest tests -q
+cd frontend && npm run lint && npm run typecheck
 
 # Ruff
 ruff check backend services/gaze
-```
-
-Tạo DB test một lần:
-
-```bash
-docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
-docker compose run --rm -e PGDATABASE=eyetracking_test migrate
 ```
 
 ## 10. Tuỳ chọn — hot reload trên host

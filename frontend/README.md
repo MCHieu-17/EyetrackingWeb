@@ -39,9 +39,6 @@ backend. Che do nay chi dung cho phat trien va trinh dien.
 | `npm run start` | Chay production server tai port 3000 |
 | `npm run lint` | Kiem tra ESLint |
 | `npm run typecheck` | Kiem tra TypeScript |
-| `npm test` | Chay unit test bang Vitest |
-| `npm run test:e2e` | Chay Playwright E2E |
-| `npm run test:e2e:demo` | Chay Playwright E2E trong demo mode |
 
 ## Cau truc
 
@@ -59,8 +56,6 @@ components/
   ui/                   # Radix UI primitives
 hooks/                  # TanStack Query, gaze, calibration, AOI snapshot hooks
 lib/                    # API client, types, constants, AOI measure utilities
-tests/                  # Vitest unit tests
-e2e/                    # Playwright tests
 ```
 
 ## Routes chinh
@@ -178,8 +173,7 @@ gọn sau nút **Mục lục** nhưng thanh trên vẫn hiện tên mục đang 
   **chỉ những câu hợp lệ được gửi lên** (thông báo ghi rõ "N câu chưa hoàn thiện…").
   Chỉ **Giao bài cho học viên** mới bắt buộc mọi câu hợp lệ.
 - Ràng buộc câu hỏi tập trung ở `lib/quiz-validation.ts` (khớp `schemas/quiz.py`), dùng
-  chung cho việc báo lỗi tại chỗ và luồng lưu nháp; có unit test ở
-  `tests/quiz-validation.test.ts`.
+  chung cho việc báo lỗi tại chỗ và luồng lưu nháp.
 - Trước khi xuất bản, **Kiểm tra nội dung** (tab Nội dung) hoặc danh sách ngay trong tab
   Thông tin khóa học liệt kê mục còn thiếu; vấn đề bắt buộc giữ nguyên quy tắc cũ
   (cần tên + có chương + có ít nhất một mục), phần còn lại chỉ là cảnh báo.

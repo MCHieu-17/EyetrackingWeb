@@ -482,8 +482,7 @@ app/
     ├── calibration.py  hồi quy tuyến tính (pitch, yaw) -> (x, y) + serialize .ubj v2
     └── sessions.py     Session / SessionManager (RAM, TTL, giới hạn, thread-safe)
 scripts/download_weights.py   tải weights lúc khởi động (entrypoint.sh)
-tests/                        test dev-only (pytest), không nằm trong image
-requirements.txt              runtime; requirements-dev.txt: pytest/ruff/httpx
+requirements.txt              runtime; requirements-dev.txt: ruff/httpx
 Dockerfile                    FROM image nền dùng chung docker/ai-base (torch cu124)
 ```
 

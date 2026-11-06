@@ -44,16 +44,6 @@ Guard kiểm tra Docker local socket, Compose project/service/config/working dir
 database đích, DSN backend, ownership và kết nối còn lại. Không dùng
 `docker compose down -v`, không xóa volume, không đụng database khác.
 
-## Test database
-
-```bash
-./scripts/test_db.sh          # tạo nếu chưa có, chạy baseline
-./scripts/test_db.sh --reset  # drop/recreate có kiểm tra ownership
-```
-
-Database test mặc định: `eyelearning_refactor_test`. Không dùng
-`eyetracking_test` cũ.
-
 ## Seed development
 
 ```bash
@@ -80,4 +70,3 @@ partition cũ.
 - Baseline đã khóa checksum; mọi thay đổi schema phải là migration mới.
 - Không sửa file đã áp.
 - Không dùng `Base.metadata.create_all()` thay baseline.
-- Không chạy migration tự động trong pytest fixture.
