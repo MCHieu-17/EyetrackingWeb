@@ -1,7 +1,7 @@
 # Runtime dependencies cho backend FastAPI.
 #
 # Version được PIN (trước đây để trôi nổi `>=` → build không tái lập được).
-# Dev/test deps tách ở requirements-dev.txt (không cài vào image production).
+# Dev deps tách ở requirements-dev.txt (không cài vào image production).
 
 fastapi==0.143.1
 uvicorn[standard]==0.54.0

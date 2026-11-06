@@ -320,7 +320,7 @@ class ResetGuard:
         if database != DEFAULT_DATABASE:
             raise GuardError(
                 f"Script này chỉ reset development database {DEFAULT_DATABASE!r}; "
-                f"nhận {database!r}. Dùng scripts/test_db.sh cho test database."
+                f"nhận {database!r}. Không dùng cho test database."
             )
 
     def _validate_dsn(self, database: str, env: Mapping[str, str]) -> str:

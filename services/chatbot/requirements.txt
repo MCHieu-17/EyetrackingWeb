@@ -3,7 +3,7 @@
 #
 # Embedding local (Qwen3-Embedding-0.6B) cần thêm stack nặng
 # (torch/sentence-transformers/langchain-huggingface) — tách ở
-# requirements-embedding.txt để unit test không phải kéo torch.
+# requirements-embedding.txt để dev không phải kéo torch.
 
 # Web service
 fastapi==0.146.0

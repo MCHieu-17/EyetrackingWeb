@@ -1,6 +1,0 @@
-ARG CHATBOT_IMAGE=eyelearning-chatbot:graph-candidate
-FROM ${CHATBOT_IMAGE}
-USER root
-RUN pip install --no-cache-dir pytest==9.1.1
-USER appuser
-ENTRYPOINT ["python", "-m", "pytest", "/tests", "-q", "-p", "no:cacheprovider"]

@@ -6,15 +6,7 @@ npm-debug.log*
 Dockerfile
 .dockerignore
 
-# Test & tooling — không cần trong image production.
-tests
-e2e
-playwright.config.ts
-playwright.demo.config.ts
-vitest.config.ts
-coverage
-test-results
-playwright-report
+# Tooling — không cần trong image production.
 tsconfig.tsbuildinfo
 
 # Tài liệu / hướng dẫn agent.
