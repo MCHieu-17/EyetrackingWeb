@@ -1,6 +1,0 @@
-=== Phase 6 Redis fallback ===
-- Stopped Redis container.
-- Sent one gaze batch to an existing in-progress session.
-- Backend ACK: 200 {"ok":true,"stored":1,"duplicate":0,"rejected":0}.
-- Started Redis; PING -> PONG.
-- Raw sample was persisted without Redis.

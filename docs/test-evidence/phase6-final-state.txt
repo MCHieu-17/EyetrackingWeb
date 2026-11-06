@@ -1,7 +1,0 @@
-=== Phase 6 final development state ===
-- Guarded reset applied twice: first for smoke/load, final reset for clean handoff.
-- Final DB: eyelearning baseline 2 migrations, 3 seed users, 0 courses, 0 gaze samples.
-- Final DB instance ID: c6083e0a-f706-4c01-a3f8-7a158c170c80.
-- Backend /health: schemaGeneration=1, dbInstanceId matches app_metadata.
-- Runtime: backend/chatbot/frontend/gaze/nginx/postgres/redis/worker healthy.
-- Load-test data was removed by the final guarded reset; evidence remains in phase6-load.txt.

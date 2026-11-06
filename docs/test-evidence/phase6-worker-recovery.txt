@@ -1,5 +1,0 @@
-=== Phase 6 worker recovery ===
-- Inserted analysis_runs row with status='pending' for an existing session/AOI set.
-- Restarted worker container.
-- Worker log: "processed 1 analysis runs".
-- Row status after restart: completed, completed_at set.
