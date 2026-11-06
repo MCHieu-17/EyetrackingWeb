@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// E2E phải chạy với backend test riêng, KHÔNG mặc định gọi backend development
+// (cổng 8001). Xem docs/refactor/test-isolation.md.
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3012";
+const apiURL = process.env.E2E_API_URL ?? "http://localhost:8011";
+const gazeURL = process.env.E2E_GAZE_URL ?? "http://localhost:8010";
+
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: ["**/demo.spec.ts"],
@@ -10,7 +16,7 @@ export default defineConfig({
   reporter: [["list"]],
   timeout: 30_000,
   use: {
-    baseURL: "http://localhost:3012",
+    baseURL,
     trace: "off",
     screenshot: "only-on-failure",
   },
@@ -21,13 +27,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npx next dev --port 3012",
-    url: "http://localhost:3012/account/login",
+    command: `npx next dev --port ${new URL(baseURL).port || "3012"}`,
+    url: `${baseURL}/account/login`,
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      NEXT_PUBLIC_API_URL: "http://localhost:8001",
-      NEXT_PUBLIC_GAZE_URL: "http://localhost:8000",
+      NEXT_PUBLIC_API_URL: apiURL,
+      NEXT_PUBLIC_GAZE_URL: gazeURL,
       NEXT_PUBLIC_DEMO: "0",
     },
   },
