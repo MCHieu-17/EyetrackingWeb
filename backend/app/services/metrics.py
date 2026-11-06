@@ -32,6 +32,7 @@ from app.models.profile import StudentProfile, UserProfile
 from app.schemas.analytics import HotspotOut, SlideStatOut
 from app.schemas.course import StudentLessonOut, StudentRowOut
 
+DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v1"
 GRID_SIZE = 24
 FIXATION_RADIUS = 0.03
 MIN_FIXATION_POINTS = 2
@@ -313,7 +314,10 @@ async def _published_item_for_lesson(
 
 
 async def lesson_heatmap(
-    db: AsyncSession, lesson_id: str, student_id: str | None = None
+    db: AsyncSession,
+    lesson_id: str,
+    student_id: str | None = None,
+    algorithm_version: str = DEFAULT_ALGORITHM_VERSION,
 ) -> list[SlideStatOut]:
     resolved = await _published_item_for_lesson(db, lesson_id)
     if resolved is None:
@@ -343,7 +347,10 @@ async def lesson_heatmap(
                 ContentPresentation,
                 ContentPresentation.id == PresentationMetric.presentation_id,
             )
-            .where(ContentPresentation.lesson_version_slide_id == slide.id)
+            .where(
+                ContentPresentation.lesson_version_slide_id == slide.id,
+                PresentationMetric.algorithm_version == algorithm_version,
+            )
         )
         if student_id:
             stmt = stmt.join(
@@ -356,41 +363,66 @@ async def lesson_heatmap(
             await db.execute(stmt)
         ).one()
 
-        grids = (
-            await db.execute(
-                select(PresentationMetric.heatmap_grid)
-                .join(
-                    ContentPresentation,
-                    ContentPresentation.id == PresentationMetric.presentation_id,
-                )
-                .where(ContentPresentation.lesson_version_slide_id == slide.id)
+        grid_stmt = (
+            select(PresentationMetric.heatmap_grid)
+            .join(
+                ContentPresentation,
+                ContentPresentation.id == PresentationMetric.presentation_id,
             )
-        ).scalars().all()
+            .where(
+                ContentPresentation.lesson_version_slide_id == slide.id,
+                PresentationMetric.algorithm_version == algorithm_version,
+            )
+        )
+        if student_id:
+            grid_stmt = (
+                grid_stmt.join(
+                    LearningSession,
+                    LearningSession.id == ContentPresentation.session_id,
+                )
+                .join(
+                    Enrollment, Enrollment.id == LearningSession.enrollment_id
+                )
+                .where(Enrollment.student_id == student_id)
+            )
+        grids = (await db.execute(grid_stmt)).scalars().all()
         grid = _merge_grids(list(grids))
 
         points: list[list[float]] = []
+        point_stmt = (
+            select(
+                GazeSample.viewport_x,
+                GazeSample.viewport_y,
+                AoiLayoutSnapshot.image_transform,
+            )
+            .join(GazeBatch, GazeBatch.id == GazeSample.batch_id)
+            .join(
+                ContentPresentation,
+                ContentPresentation.id == GazeBatch.presentation_id,
+            )
+            .outerjoin(
+                AoiLayoutSnapshot,
+                AoiLayoutSnapshot.id == GazeBatch.layout_snapshot_id,
+            )
+            .where(
+                ContentPresentation.lesson_version_slide_id == slide.id,
+                GazeSample.status == "ok",
+            )
+        )
+        if student_id:
+            point_stmt = (
+                point_stmt.join(
+                    LearningSession,
+                    LearningSession.id == ContentPresentation.session_id,
+                )
+                .join(
+                    Enrollment, Enrollment.id == LearningSession.enrollment_id
+                )
+                .where(Enrollment.student_id == student_id)
+            )
         point_rows = (
             await db.execute(
-                select(
-                    GazeSample.viewport_x,
-                    GazeSample.viewport_y,
-                    AoiLayoutSnapshot.image_transform,
-                )
-                .join(GazeBatch, GazeBatch.id == GazeSample.batch_id)
-                .join(
-                    ContentPresentation,
-                    ContentPresentation.id == GazeBatch.presentation_id,
-                )
-                .outerjoin(
-                    AoiLayoutSnapshot,
-                    AoiLayoutSnapshot.id == GazeBatch.layout_snapshot_id,
-                )
-                .where(
-                    ContentPresentation.lesson_version_slide_id == slide.id,
-                    GazeSample.status == "ok",
-                )
-                .order_by(GazeSample.event_time)
-                .limit(5000)
+                point_stmt.order_by(GazeSample.event_time).limit(5000)
             )
         ).all()
         for viewport_x, viewport_y, transform in point_rows:
@@ -526,6 +558,8 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
                         .where(
                             ContentPresentation.lesson_version_slide_id == slide.id,
                             LearningSession.enrollment_id == enrollment.id,
+                            PresentationMetric.algorithm_version
+                            == DEFAULT_ALGORITHM_VERSION,
                         )
                     )
                 ).one()

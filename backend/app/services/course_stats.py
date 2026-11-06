@@ -48,7 +48,10 @@ async def attention_avg_by_course(
             PresentationMetric,
             PresentationMetric.presentation_id == ContentPresentation.id,
         )
-        .where(CourseVersion.course_id.in_(course_ids))
+        .where(
+            CourseVersion.course_id.in_(course_ids),
+            PresentationMetric.algorithm_version == "gaze-metrics-v1",
+        )
         .group_by(CourseVersion.course_id)
     )
     out: dict[str, float] = {}

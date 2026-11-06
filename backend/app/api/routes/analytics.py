@@ -21,11 +21,16 @@ router = APIRouter(tags=["analytics"])
 async def get_lesson_heatmap(
     lesson_id: str,
     student_id: str | None = Query(default=None),
+    algorithm_version: str = Query(
+        default=metrics.DEFAULT_ALGORITHM_VERSION, alias="algorithmVersion"
+    ),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     await get_lesson_viewable(db, lesson_id, user)
-    return await metrics.lesson_heatmap(db, lesson_id, student_id)
+    return await metrics.lesson_heatmap(
+        db, lesson_id, student_id, algorithm_version
+    )
 
 
 @router.post(
