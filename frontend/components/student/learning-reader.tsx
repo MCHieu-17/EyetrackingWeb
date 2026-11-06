@@ -15,7 +15,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { cn } from "@/lib/utils";
-import { useGazeTracker } from "@/hooks/use-gaze-tracker";
+import { useGazeTracker, type GazeFrameResult } from "@/hooks/use-gaze-tracker";
 import { useAoiSnapshot } from "@/hooks/use-aoi-snapshot";
 import {
   useCourseOutline,
@@ -26,15 +26,15 @@ import {
   createLearningSession,
   endLearningSession,
   getDeviceFingerprint,
-  postGazeSamples,
+  type GazeBatchInput,
   type GazeSample,
 } from "@/lib/api/student";
+import { flushGazeQueue, queueGazeBatch } from "@/lib/gaze-sender";
+import { createPresentation } from "@/lib/api/aoi";
 import {
   getCalibrationScreenSnapshot,
-  getContainedImageRect,
   getStoredGazeSessionId,
   isCalibrationScreenStale,
-  screenGazeToSlide,
   subscribeCalibrationScreen,
 } from "@/lib/api/calibration";
 import { ApiError, resolveMediaUrl } from "@/lib/api/client";
@@ -62,6 +62,21 @@ const SLIDE_FALLBACK_IMAGE =
 // (tracker phát ~20 điểm/giây; gửi lẻ từng điểm sẽ chạm trần gần như ngay lập tức).
 const GAZE_FLUSH_MS = 1500;
 const GAZE_MAX_BATCH = 40;
+
+function hashPayload(value: unknown): string {
+  const text = JSON.stringify(value);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ code, 0x85ebca6b) >>> 0;
+  }
+  return (
+    h1.toString(16).padStart(8, "0").repeat(4) +
+    h2.toString(16).padStart(8, "0").repeat(4)
+  );
+}
 
 export function LearningReader({ courseId }: { courseId: string }) {
   return (
@@ -122,6 +137,11 @@ function ReaderContent({ courseId }: { courseId: string }) {
   const aoiSnapshotIdRef = useRef<string | null>(null);
   const aoiReadyRef = useRef(false);
   const layoutKeyRef = useRef("reader");
+  const [presentationId, setPresentationId] = useState<string | null>(null);
+  const presentationIdRef = useRef<string | null>(null);
+  const presentationSequenceRef = useRef(0);
+  const layoutGenerationRef = useRef(0);
+  const batchNoRef = useRef<Record<string, number>>({});
 
   const allItems = useMemo(
     () => course?.modules.flatMap((module) => module.lessons) ?? [],
@@ -212,17 +232,24 @@ function ReaderContent({ courseId }: { courseId: string }) {
     if (gazeBufferLessonRef.current !== lessonId) return;
     const sid = sessionId ?? sessionsRef.current[lessonId];
     const buf = gazeBufferRef.current;
-    if (!sid || buf.length === 0) return;
+    const presentation = presentationIdRef.current;
+    if (!sid || !presentation || buf.length === 0) return;
     gazeBufferRef.current = [];
     gazeBufferLessonRef.current = null;
-    postGazeSamples(lessonId, buf, sid, "real", keepalive, {
-      viewportWidthPx: window.innerWidth,
-      viewportHeightPx: window.innerHeight,
+    const batchNo = batchNoRef.current[sid] ?? 0;
+    batchNoRef.current[sid] = batchNo + 1;
+    const sequences = buf.map((sample) => sample.sequence);
+    const input: GazeBatchInput = {
+      batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}-${batchNo}`,
+      batchNo,
+      presentationId: presentation,
       layoutSnapshotId: aoiSnapshotIdRef.current,
-      layoutKey: layoutKeyRef.current,
-    }).catch((error) => {
-      if (error instanceof ApiError && error.status === 409) setViewportError(true);
-    });
+      sequenceStart: Math.min(...sequences),
+      sequenceEnd: Math.max(...sequences),
+      payloadHash: hashPayload(buf),
+      samples: buf,
+    };
+    void queueGazeBatch(sid, input, keepalive);
   }, []);
 
   const closeLearningSession = useCallback((lessonId: string, expectedSessionId?: string, keepalive = false) => {
@@ -302,6 +329,10 @@ function ReaderContent({ courseId }: { courseId: string }) {
     viewportError,
   ]);
 
+  useEffect(() => {
+    void flushGazeQueue();
+  }, []);
+
   const previousLessonRef = useRef<string | null>(null);
   useEffect(() => {
     const previous = previousLessonRef.current;
@@ -358,12 +389,47 @@ function ReaderContent({ courseId }: { courseId: string }) {
     layoutKeyRef.current = layoutKey;
   }, [layoutKey]);
 
+  // Mỗi slide/quiz là một presentation riêng. Đổi presentation phải flush
+  // batch cũ trước để batch không trộn context.
+  const presentationKeyRef = useRef("");
+  useEffect(() => {
+    if (!learningSessionId || !activeLessonId) return;
+    if (!activeIsQuiz && !slides[currentSlide]) return;
+    const key = `${learningSessionId}:${activeLessonId}:${activeIsQuiz ? "quiz" : currentSlide}`;
+    if (presentationKeyRef.current === key) return;
+    presentationKeyRef.current = key;
+    flushGazeForLesson(activeLessonId);
+    const sequenceNo = presentationSequenceRef.current;
+    presentationSequenceRef.current += 1;
+    createPresentation(learningSessionId, {
+      lessonVersionSlideId: activeIsQuiz ? null : slides[currentSlide]?.id ?? null,
+      surface: activeIsQuiz ? "quiz" : "lesson",
+      sequenceNo,
+    })
+      .then((presentation) => {
+        presentationIdRef.current = presentation.id;
+        setPresentationId(presentation.id);
+      })
+      .catch(() => {
+        presentationIdRef.current = null;
+        setPresentationId(null);
+      });
+  }, [
+    learningSessionId,
+    activeLessonId,
+    activeIsQuiz,
+    currentSlide,
+    slides,
+    flushGazeForLesson,
+  ]);
+
   // Đo layout DOM và tạo snapshot AOI. Tạm dừng ghi gaze trong lúc đo để
   // sample không bị gán sang layout mới.
   const aoiSnapshot = useAoiSnapshot({
     sessionId: learningSessionId ?? null,
+    presentationId,
     enabled: Boolean(
-      learningSessionId && trackingAllowed && (total > 0 || activeIsQuiz),
+      learningSessionId && presentationId && trackingAllowed && (total > 0 || activeIsQuiz),
     ),
     layoutKey,
     onBeforeSnapshot: pauseAndFlushGaze,
@@ -372,7 +438,8 @@ function ReaderContent({ courseId }: { courseId: string }) {
   useEffect(() => {
     aoiSnapshotIdRef.current = aoiSnapshot.snapshotId;
     aoiReadyRef.current = aoiSnapshot.ready;
-  }, [aoiSnapshot.snapshotId, aoiSnapshot.ready]);
+    layoutGenerationRef.current = aoiSnapshot.layoutGeneration;
+  }, [aoiSnapshot.snapshotId, aoiSnapshot.ready, aoiSnapshot.layoutGeneration]);
 
   const enqueueGaze = useCallback(
     (sample: GazeSample) => {
@@ -398,74 +465,45 @@ function ReaderContent({ courseId }: { courseId: string }) {
   }, [learningSessionId, flushGaze]);
 
   const { source: gazeSource } = useGazeTracker({
-    // Bài giảng: cần có slide. Bài tập: không có slide nhưng vẫn thu gaze để ghi
-    // nhận (và để hiện chấm nếu khóa bật "hiển thị điểm nhìn cho sinh viên").
+    // Bài giảng: cần có slide. Bài tập: không có slide nhưng vẫn thu gaze.
     enabled: Boolean(
       activeLessonId && trackingAllowed && (total > 0 || activeIsQuiz),
     ),
     calibrated: gazeCalibrated,
     allowSimulation: false,
+    getContext: () => ({
+      presentationId: presentationIdRef.current,
+      layoutGeneration: layoutGenerationRef.current,
+      surface: activeIsQuiz ? "quiz" : "lesson",
+    }),
     onPoint: useCallback(
       (x: number, y: number, source: string) => {
         if (source !== "real") return;
-        // (-1, -1) là sentinel "mất khuôn mặt" (no_face) → không lưu toạ độ.
         const faceDetected = !(x === -1 && y === -1);
         if (showGazeDot) {
-          // Toạ độ gaze chuẩn hoá theo viewport có thể < 0 hoặc > 1 khi nhìn ra
-          // ngoài màn hình → cho chấm đi hẳn ra ngoài thay vì kẹp lại bên trong.
           if (!faceDetected) setGazeDot(null);
           else setGazeDot({ x, y, key: `${activeLessonId}:${currentSlide}` });
         }
+      },
+      [showGazeDot, activeLessonId, currentSlide],
+    ),
+    onFrame: useCallback(
+      (frame: GazeFrameResult) => {
         if (!learningSessionId || !trackingAllowed) return;
-        // Đang đo/tạo snapshot AOI mới → tạm bỏ sample để không gán sai layout.
-        // Không tắt useGazeTracker vì sẽ làm camera restart mỗi lần layout đổi.
-        if (!aoiReadyRef.current) return;
-
-        if (activeIsQuiz) {
-          // Bài tập: không có ảnh slide để map toạ độ → gửi thẳng toạ độ viewport.
-          enqueueGaze({
-            lessonContentId: null,
-            x: faceDetected ? x : null,
-            y: faceDetected ? y : null,
-            slideX: null,
-            slideY: null,
-            faceDetected,
-            ts: Date.now(),
-          });
-          return;
-        }
-
-        const slide = slides[currentSlide];
-        const img = slideImgRef.current;
-        const containerRect = img?.getBoundingClientRect();
-
-        let mapped: { x: number; y: number } | null = null;
-        if (faceDetected && img && containerRect) {
-          const paintedRect = getContainedImageRect(
-            {
-              left: containerRect.left,
-              top: containerRect.top,
-              width: containerRect.width,
-              height: containerRect.height,
-            },
-            img.naturalWidth,
-            img.naturalHeight,
-          );
-          if (paintedRect) mapped = screenGazeToSlide(x, y, paintedRect);
-        }
-
-        if (!slide) return;
+        if (!aoiReadyRef.current || !presentationIdRef.current) return;
+        const faceDetected = frame.status === "ok";
         enqueueGaze({
-          lessonContentId: slide.id,
-          x: faceDetected ? x : null,
-          y: faceDetected ? y : null,
-          slideX: mapped?.x ?? null,
-          slideY: mapped?.y ?? null,
-          faceDetected,
-          ts: Date.now(),
+          sequence: frame.sequence ?? 0,
+          captureMonotonicNs:
+            frame.captureMonotonicNs ?? Math.round(performance.now() * 1e6),
+          eventTime: frame.eventTime,
+          viewportX: faceDetected ? frame.x : null,
+          viewportY: faceDetected ? frame.y : null,
+          status: frame.status,
+          qualityFlags: {},
         });
       },
-      [currentSlide, slides, learningSessionId, enqueueGaze, trackingAllowed, showGazeDot, activeLessonId, activeIsQuiz],
+      [learningSessionId, trackingAllowed, enqueueGaze],
     ),
   });
 

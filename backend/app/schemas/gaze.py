@@ -85,3 +85,71 @@ class GazeBatchOut(CamelModel):
 
 class OkOut(CamelModel):
     ok: bool = True
+
+
+class PresentationCreateIn(CamelModel):
+    lesson_version_slide_id: str | None = None
+    surface: str = Field(pattern="^(lesson|quiz)$")
+    sequence_no: int = Field(ge=0)
+
+
+class PresentationOut(CamelModel):
+    id: str
+    session_id: str
+    lesson_version_slide_id: str | None = None
+    surface: str
+    sequence_no: int
+    started_at: str
+
+
+class LayoutRectIn(CamelModel):
+    semantic_code: str = Field(min_length=1, max_length=64)
+    element_key: str = Field(default="", max_length=128)
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+
+class LayoutCreateIn(CamelModel):
+    sequence_no: int = Field(ge=0)
+    layout_generation: int = Field(ge=0)
+    image_transform: dict = Field(default_factory=dict)
+    rects: list[LayoutRectIn] = Field(default_factory=list)
+
+
+class LayoutOut(CamelModel):
+    id: str
+    presentation_id: str
+    layout_generation: int
+    captured_at: str
+
+
+class GazeSampleBatchIn(CamelModel):
+    sequence: int = Field(ge=0)
+    capture_monotonic_ns: int = Field(ge=0)
+    event_time: str
+    viewport_x: float | None = None
+    viewport_y: float | None = None
+    status: str = Field(pattern="^(ok|no_face|error|offscreen)$")
+    quality_flags: dict = Field(default_factory=dict)
+
+
+class GazeBatchCreateIn(CamelModel):
+    batch_id: str
+    batch_no: int = Field(ge=0)
+    presentation_id: str
+    layout_snapshot_id: str | None = None
+    sequence_start: int = Field(ge=0)
+    sequence_end: int = Field(ge=0)
+    payload_hash: str = Field(min_length=64, max_length=64)
+    samples: list[GazeSampleBatchIn] = Field(min_length=1, max_length=2000)
+
+
+class GazeBatchAckOut(CamelModel):
+    ok: bool = True
+    batch_id: str
+    received: int
+    stored: int
+    duplicate: int
+    rejected: int

@@ -68,6 +68,16 @@ async def increment(key: str) -> int | None:
         return None
 
 
+async def expire(key: str, ttl: int) -> None:
+    client = await get_redis()
+    if client is None:
+        return
+    try:
+        await client.expire(key, ttl)
+    except Exception:  # noqa: BLE001
+        report_failure()
+
+
 async def try_acquire_lock(key: str, ttl: int) -> bool:
     """SET NX EX — chốt chống chạy lặp. Lỗi Redis -> True (fail-open, bỏ throttle)."""
     client = await get_redis()

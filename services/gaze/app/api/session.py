@@ -25,6 +25,7 @@ from app.schemas import (
     SessionStatus,
     TrainResult,
 )
+from app.protocol import parse_frame
 from app.services import inference
 from app.services.sessions import SessionManager
 from app.settings import (
@@ -37,23 +38,6 @@ from app.settings import (
 logger = logging.getLogger("app.gaze")
 
 router = APIRouter(tags=["session"])
-
-sessions = SessionManager(ttl=SESSION_TTL_SECONDS, max_sessions=MAX_SESSIONS)
-
-
-def _get_or_404(sid: str):
-    session = sessions.get(sid)
-    if session is None:
-        raise HTTPException(404, "session not found")
-    return session
-
-
-async def _read_limited(upload: UploadFile, limit: int = MAX_UPLOAD_BYTES) -> bytes:
-    """Đọc tối đa `limit` bytes; vượt -> 413 (không nạp cả file khổng lồ vào RAM)."""
-    data = await upload.read(limit + 1)
-    if len(data) > limit:
-        raise HTTPException(413, "file quá lớn")
-    return data
 
 
 @router.get("/session/{sid}", response_model=SessionStatus)
@@ -176,16 +160,28 @@ async def stream(ws: WebSocket, sid: str):
         if session.processing:  # drop frame, không xếp hàng
             continue
         session.processing = True
+        header, jpeg = parse_frame(data)
         try:
             error, point = await inference.run_inference(
-                inference.predict, session, data
+                inference.predict, session, jpeg
             )
+            response: dict = {
+                "ok": not error,
+                "status": "ok" if not error else error,
+            }
+            if header is not None:
+                response["frameId"] = header.get("frameId")
+                response["sequence"] = header.get("sequence")
+                response["captureMonotonicNs"] = header.get("captureMonotonicNs")
+                response["presentationId"] = header.get("presentationId")
+                response["layoutGeneration"] = header.get("layoutGeneration")
             if error:
-                await ws.send_json({"ok": False, "error": error})
+                response["error"] = error
             else:
-                await ws.send_json({"ok": True, "x": point[0], "y": point[1]})
+                response["x"], response["y"] = point
+            await ws.send_json(response)
         except Exception:
             # Lỗi suy luận 1 frame không được ngắt phiên stream.
-            await ws.send_json({"ok": False, "error": "internal"})
+            await ws.send_json({"ok": False, "error": "internal", "status": "error"})
         finally:
             session.processing = False

@@ -52,24 +52,33 @@ export function getDeviceFingerprint(): string {
 }
 
 export interface GazeSample {
-  /** null = bài tập trắc nghiệm (không có slide). */
-  lessonContentId: string | null;
-  /** Toạ độ RAW theo viewport, có thể < 0 hoặc > 1 khi nhìn ra ngoài màn hình. */
-  x: number | null;
-  y: number | null;
-  /** Toạ độ theo ảnh slide (nếu map được). */
-  slideX?: number | null;
-  slideY?: number | null;
-  /** false = AI service báo no_face; x/y sẽ được backend lưu NULL. */
-  faceDetected: boolean;
-  ts: number;
+  sequence: number;
+  captureMonotonicNs: number;
+  eventTime: string;
+  viewportX: number | null;
+  viewportY: number | null;
+  status: "ok" | "no_face" | "error" | "offscreen";
+  qualityFlags?: Record<string, unknown>;
 }
 
-export interface GazeBatchMeta {
-  viewportWidthPx: number;
-  viewportHeightPx: number;
+export interface GazeBatchInput {
+  batchId: string;
+  batchNo: number;
+  presentationId: string;
   layoutSnapshotId?: string | null;
-  layoutKey?: string | null;
+  sequenceStart: number;
+  sequenceEnd: number;
+  payloadHash: string;
+  samples: GazeSample[];
+}
+
+export interface GazeBatchAck {
+  ok: boolean;
+  batchId: string;
+  received: number;
+  stored: number;
+  duplicate: number;
+  rejected: number;
 }
 
 export function fetchMyEnrollments(): Promise<EnrolledCourse[]> {
@@ -108,25 +117,13 @@ export function endLearningSession(
   });
 }
 
-export function postGazeSamples(
-  lessonId: string,
-  samples: GazeSample[],
-  learningSessionId?: string,
-  source: "real" | "simulated" = "real",
+export function postGazeBatch(
+  sessionId: string,
+  input: GazeBatchInput,
   keepalive = false,
-  meta?: GazeBatchMeta,
-): Promise<{ ok: boolean; inserted?: number }> {
-  return apiFetch<{ ok: boolean; inserted?: number }>(`/api/lessons/${lessonId}/gaze-samples`, {
-    method: "POST",
-    body: {
-      learningSessionId,
-      samples,
-      source,
-      viewportWidthPx: meta?.viewportWidthPx ?? window.innerWidth,
-      viewportHeightPx: meta?.viewportHeightPx ?? window.innerHeight,
-      layoutSnapshotId: meta?.layoutSnapshotId ?? null,
-      layoutKey: meta?.layoutKey ?? null,
-    },
-    keepalive,
-  });
+): Promise<GazeBatchAck> {
+  return apiFetch<GazeBatchAck>(
+    `/api/learning-sessions/${sessionId}/gaze-batches`,
+    { method: "POST", body: input, keepalive },
+  );
 }

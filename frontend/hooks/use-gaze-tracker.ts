@@ -5,10 +5,28 @@ import { gazeStreamUrl, getStoredGazeSessionId } from "@/lib/api/calibration";
 
 export type GazeSource = "real" | "simulated" | "off";
 
+export interface GazeFrameContext {
+  presentationId: string | null;
+  layoutGeneration: number;
+  surface: "lesson" | "quiz";
+}
+
+export interface GazeFrameResult {
+  frameId: string | null;
+  sequence: number | null;
+  captureMonotonicNs: number | null;
+  eventTime: string;
+  x: number | null;
+  y: number | null;
+  status: "ok" | "no_face" | "error" | "offscreen";
+}
+
 export interface UseGazeTrackerOptions {
   enabled: boolean;
   calibrated: boolean;
   onPoint: (x: number, y: number, source: GazeSource) => void;
+  onFrame?: (frame: GazeFrameResult) => void;
+  getContext?: () => GazeFrameContext | null;
   allowSimulation?: boolean;
 }
 
@@ -29,15 +47,21 @@ export function useGazeTracker({
   enabled,
   calibrated,
   onPoint,
+  onFrame,
+  getContext,
   allowSimulation = true,
 }: UseGazeTrackerOptions): GazeTrackerState {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [source, setSource] = useState<GazeSource>("off");
 
   const onPointRef = useRef(onPoint);
+  const onFrameRef = useRef(onFrame);
+  const getContextRef = useRef(getContext);
 
   useEffect(() => {
     onPointRef.current = onPoint;
+    onFrameRef.current = onFrame;
+    getContextRef.current = getContext;
   });
 
   useEffect(() => {
@@ -77,6 +101,7 @@ export function useGazeTracker({
       return new Promise<"retry" | "abort">((resolve) => {
         const ws = new WebSocket(url);
         let sendTimer = 0;
+        let sequence = 0;
 
         const scheduleSend = () => {
           if (disposed) {
@@ -87,7 +112,33 @@ export function useGazeTracker({
             if (disposed || ws.readyState !== WebSocket.OPEN) return;
             const blob = await captureFrame(video);
             if (blob && ws.readyState === WebSocket.OPEN) {
-              ws.send(blob);
+              const context = getContextRef.current?.() ?? null;
+              const frameId =
+                globalThis.crypto?.randomUUID?.() ??
+                `frame-${Date.now()}-${sequence}`;
+              const captureMonotonicNs = Math.round(performance.now() * 1e6);
+              const eventTime = new Date().toISOString();
+              const header = {
+                v: 2,
+                frameId,
+                sequence,
+                captureMonotonicNs,
+                eventTime,
+                presentationId: context?.presentationId ?? null,
+                layoutGeneration: context?.layoutGeneration ?? 0,
+                surface: context?.surface ?? "lesson",
+                viewportWidth: window.innerWidth,
+                viewportHeight: window.innerHeight,
+                dpr: window.devicePixelRatio || 1,
+              };
+              const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+              const jpegBytes = new Uint8Array(await blob.arrayBuffer());
+              const frame = new Uint8Array(4 + headerBytes.length + jpegBytes.length);
+              new DataView(frame.buffer).setUint32(0, headerBytes.length);
+              frame.set(headerBytes, 4);
+              frame.set(jpegBytes, 4 + headerBytes.length);
+              ws.send(frame);
+              sequence += 1;
             }
             scheduleSend();
           }, FRAME_INTERVAL_MS);
@@ -110,14 +161,33 @@ export function useGazeTracker({
             const data = JSON.parse(String(event.data)) as {
               ok?: boolean;
               error?: string;
+              status?: string;
               x?: number;
               y?: number;
+              frameId?: string;
+              sequence?: number;
+              captureMonotonicNs?: number;
             };
-            if (data.ok && typeof data.x === "number" && typeof data.y === "number") {
-              onPointRef.current(data.x, data.y, "real");
-            } else if (data.error === "no_face") {
+            const status =
+              data.status === "no_face" || data.error === "no_face"
+                ? "no_face"
+                : data.ok && typeof data.x === "number" && typeof data.y === "number"
+                  ? "ok"
+                  : "error";
+            if (status === "ok") {
+              onPointRef.current(data.x as number, data.y as number, "real");
+            } else if (status === "no_face") {
               onPointRef.current(-1, -1, "real");
             }
+            onFrameRef.current?.({
+              frameId: data.frameId ?? null,
+              sequence: data.sequence ?? null,
+              captureMonotonicNs: data.captureMonotonicNs ?? null,
+              eventTime: new Date().toISOString(),
+              x: status === "ok" ? (data.x as number) : null,
+              y: status === "ok" ? (data.y as number) : null,
+              status,
+            });
           } catch {
             /* ignore */
           }

@@ -1,42 +1,44 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createAoiLayoutSnapshot } from "@/lib/api/aoi";
+import { createPresentationLayout } from "@/lib/api/aoi";
 import { aoiRectsKey, measureAoiRects } from "@/lib/aoi/measure";
 
 export interface AoiSnapshotState {
   snapshotId: string | null;
+  presentationId: string | null;
+  layoutGeneration: number;
   /** false trong lúc đang đo/tạo snapshot mới → tạm dừng ghi gaze. */
   ready: boolean;
 }
 
 /**
- * Đo layout DOM và tạo `aoi_layout_snapshots` khi layout thay đổi.
+ * Đo layout DOM và tạo `aoi_layout_snapshots` cho presentation hiện tại.
  *
- * Theo dõi:
- *   - resize (nhưng nếu viewport đổi, backend sẽ trả 409 viewport_mismatch)
- *   - scroll (rect thay đổi khi cuộn)
- *   - mutation DOM (mở/đóng chatbot, mục lục, tin nhắn mới, đổi slide)
- *
- * Trước khi tạo snapshot mới, gọi `onBeforeSnapshot` để flush batch gaze cũ,
- * tránh gán sample cũ sang layout mới.
+ * Presentation do reader tạo khi đổi slide/quiz. Hook này chỉ tạo layout
+ * snapshot mới khi DOM/viewport/layoutKey đổi.
  */
 export function useAoiSnapshot({
   sessionId,
+  presentationId,
   enabled,
   layoutKey,
   onBeforeSnapshot,
 }: {
   sessionId: string | null;
+  presentationId: string | null;
   enabled: boolean;
   layoutKey?: string | null;
   onBeforeSnapshot?: () => void;
 }): AoiSnapshotState {
   const [state, setState] = useState<AoiSnapshotState>({
     snapshotId: null,
+    presentationId: null,
+    layoutGeneration: 0,
     ready: false,
   });
   const lastKeyRef = useRef("");
+  const generationRef = useRef(0);
   const onBeforeRef = useRef(onBeforeSnapshot);
 
   useEffect(() => {
@@ -44,8 +46,9 @@ export function useAoiSnapshot({
   });
 
   useEffect(() => {
-    if (!sessionId || !enabled) {
+    if (!sessionId || !presentationId || !enabled) {
       lastKeyRef.current = "";
+      generationRef.current = 0;
       return;
     }
 
@@ -57,7 +60,6 @@ export function useAoiSnapshot({
     const run = async () => {
       if (disposed) return;
       if (inFlight) {
-        // Layout đổi trong lúc đang tạo snapshot → chạy lại sau khi xong.
         pending = true;
         return;
       }
@@ -72,20 +74,31 @@ export function useAoiSnapshot({
       setState((prev) => ({ ...prev, ready: false }));
       onBeforeRef.current?.();
       try {
-        const snapshot = await createAoiLayoutSnapshot(sessionId, {
-          viewportWidthPx: window.innerWidth,
-          viewportHeightPx: window.innerHeight,
-          layoutKey: layoutKey ?? null,
+        const generation = generationRef.current;
+        const snapshot = await createPresentationLayout(presentationId, {
+          sequenceNo: generation,
+          layoutGeneration: generation,
+          imageTransform: {},
           rects,
         });
         if (disposed) return;
         lastKeyRef.current = key;
-        setState({ snapshotId: snapshot.id, ready: true });
+        generationRef.current = generation + 1;
+        setState({
+          snapshotId: snapshot.id,
+          presentationId,
+          layoutGeneration: snapshot.layoutGeneration,
+          ready: true,
+        });
       } catch {
         if (disposed) return;
-        // Vẫn cho ghi raw (snapshotId=null) để không mất dữ liệu. AOI mapping
-        // có thể rebuild sau nếu snapshot được tạo lại.
-        setState({ snapshotId: null, ready: true });
+        // Vẫn cho ghi raw (snapshotId=null) để không mất dữ liệu.
+        setState({
+          snapshotId: null,
+          presentationId,
+          layoutGeneration: generationRef.current,
+          ready: true,
+        });
       } finally {
         inFlight = false;
         if (pending && !disposed) {
@@ -118,9 +131,14 @@ export function useAoiSnapshot({
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
     };
-  }, [sessionId, enabled, layoutKey]);
+  }, [sessionId, presentationId, enabled, layoutKey]);
 
-  // Khi tắt, trả trạng thái rỗng thay vì setState trong effect (tránh cascading
-  // render). State nội bộ có thể còn snapshot cũ nhưng không được dùng.
-  return sessionId && enabled ? state : { snapshotId: null, ready: false };
+  return sessionId && presentationId && enabled
+    ? state
+    : {
+        snapshotId: null,
+        presentationId: null,
+        layoutGeneration: 0,
+        ready: false,
+      };
 }

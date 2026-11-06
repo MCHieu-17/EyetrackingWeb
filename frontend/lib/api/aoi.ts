@@ -37,7 +37,18 @@ export interface AoiRect {
 
 export interface AoiLayoutSnapshot {
   id: string;
+  presentationId: string;
+  layoutGeneration: number;
   capturedAt: string;
+}
+
+export interface ContentPresentation {
+  id: string;
+  sessionId: string;
+  lessonVersionSlideId: string | null;
+  surface: "lesson" | "quiz";
+  sequenceNo: number;
+  startedAt: string;
 }
 
 export function fetchAoiDefinitions(includeInactive = false): Promise<AoiDefinition[]> {
@@ -67,19 +78,33 @@ export function deleteAoiDefinition(id: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/aoi-definitions/${id}`, { method: "DELETE" });
 }
 
-export function createAoiLayoutSnapshot(
+export function createPresentation(
   sessionId: string,
   input: {
-    viewportWidthPx: number;
-    viewportHeightPx: number;
-    layoutKey?: string | null;
+    lessonVersionSlideId?: string | null;
+    surface: "lesson" | "quiz";
+    sequenceNo: number;
+  },
+): Promise<ContentPresentation> {
+  return apiFetch<ContentPresentation>(
+    `/api/learning-sessions/${sessionId}/presentations`,
+    { method: "POST", body: input },
+  );
+}
+
+export function createPresentationLayout(
+  presentationId: string,
+  input: {
+    sequenceNo: number;
+    layoutGeneration: number;
+    imageTransform?: Record<string, unknown>;
     rects: AoiRect[];
   },
 ): Promise<AoiLayoutSnapshot> {
-  return apiFetch<AoiLayoutSnapshot>(`/api/learning-sessions/${sessionId}/aoi-layout`, {
-    method: "POST",
-    body: input,
-  });
+  return apiFetch<AoiLayoutSnapshot>(
+    `/api/presentations/${presentationId}/layouts`,
+    { method: "POST", body: input },
+  );
 }
 
 export function rebuildAoiHits(input: {

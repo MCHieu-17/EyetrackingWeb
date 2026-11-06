@@ -13,6 +13,7 @@ from app.api.routes import (
     calibration,
     courses,
     enrollments,
+    gaze_ingest,
     learning_sessions,
     lessons,
     media,
@@ -99,6 +100,7 @@ app.include_router(quiz_specs.router)
 app.include_router(quiz_attempts.router)
 app.include_router(calibration.router)
 app.include_router(learning_sessions.router)
+app.include_router(gaze_ingest.router)
 
 
 @app.get("/health", tags=["system"])
