@@ -13,22 +13,19 @@ export interface AoiSnapshotState {
 }
 
 function paintedImageTransform(): Record<string, number> {
-  const img = document.querySelector<HTMLImageElement>('[data-aoi="slide"] img');
-  if (!img) return {};
-  const rect = img.getBoundingClientRect();
-  const naturalWidth = img.naturalWidth || rect.width;
-  const naturalHeight = img.naturalHeight || rect.height;
-  if (!naturalWidth || !naturalHeight) return {};
-  const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
-  const width = naturalWidth * scale;
-  const height = naturalHeight * scale;
-  const left = rect.left + (rect.width - width) / 2;
-  const top = rect.top + (rect.height - height) / 2;
+  // PDF.js vẽ đúng vùng ảnh vào canvas; canvas đã được fit theo container nên
+  // rect của canvas chính là vùng ảnh đã vẽ (không có letterbox bên trong).
+  const canvas = document.querySelector<HTMLCanvasElement>(
+    '[data-aoi="slide"] canvas',
+  );
+  if (!canvas) return {};
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return {};
   return {
-    left: left / window.innerWidth,
-    top: top / window.innerHeight,
-    width: width / window.innerWidth,
-    height: height / window.innerHeight,
+    left: rect.left / window.innerWidth,
+    top: rect.top / window.innerHeight,
+    width: rect.width / window.innerWidth,
+    height: rect.height / window.innerHeight,
   };
 }
 

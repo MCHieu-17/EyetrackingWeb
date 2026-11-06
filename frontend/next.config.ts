@@ -39,9 +39,10 @@ const connectSrc = [
   .filter(Boolean)
   .join(" ");
 
+// PDF.js dùng WebAssembly cho một số bộ giải mã ảnh (JPX...).
 const scriptSrc = isDev
-  ? "'self' 'unsafe-inline' 'unsafe-eval'"
-  : "'self' 'unsafe-inline'";
+  ? "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
+  : "'self' 'unsafe-inline' 'wasm-unsafe-eval'";
 
 const contentSecurityPolicy = [
   "default-src 'self'",

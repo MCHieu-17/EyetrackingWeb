@@ -210,9 +210,9 @@ const OUTLINE = {
 };
 
 const SLIDES = [
-  { id: "c1", title: "Trang 1", imageUrl: null },
-  { id: "c2", title: "Trang 2", imageUrl: null },
-  { id: "c3", title: "Trang 3", imageUrl: null },
+  { id: "c1", title: "Trang 1", pdfUrl: null, pageNumber: 1, pageCount: 3 },
+  { id: "c2", title: "Trang 2", pdfUrl: null, pageNumber: 2, pageCount: 3 },
+  { id: "c3", title: "Trang 3", pdfUrl: null, pageNumber: 3, pageCount: 3 },
 ];
 
 const HEATMAP_STATS = [

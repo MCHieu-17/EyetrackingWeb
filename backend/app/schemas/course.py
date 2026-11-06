@@ -185,7 +185,10 @@ class EnrolledCourseOut(CamelModel):
 class SlideOut(CamelModel):
     id: str
     title: str
-    image_url: str | None = None
+    pdf_url: str | None = None
+    page_number: int = 1
+    page_count: int = 1
+    source_format: str | None = None
     slide_version_id: str | None = None
     lesson_version_id: str | None = None
 
@@ -194,12 +197,25 @@ class SlideAdminOut(CamelModel):
     id: str
     order_index: int
     title: str
-    image_url: str | None = None
+    pdf_url: str | None = None
+    page_number: int = 1
+    page_count: int = 1
+    source_format: str | None = None
     is_key: bool = False
     embedding_status: str = "none"
     embedding_error: str | None = None
     slide_version_id: str | None = None
     lesson_version_id: str | None = None
+
+
+class SlideImportJobOut(CamelModel):
+    id: str
+    status: str
+    filename: str
+    page_count: int | None = None
+    error: str | None = None
+    created_at: datetime
+    finished_at: datetime | None = None
 
 
 class EmbeddingSyncOut(CamelModel):

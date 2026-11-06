@@ -121,6 +121,38 @@ services:
       retries: 5
       start_period: 20s
 
+  # Worker chuyển đổi slide upload (LibreOffice) và tạo slide_version.
+  content-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: eyelearning-backend:local
+    container_name: eyetracking-content-worker
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["python", "-m", "app.content_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
+      REDIS_URL: ${REDIS_URL_DOCKER}
+      AI_HTTP_URL: http://gaze:8000
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      CONTENT_WORKER_POLL_SECONDS: ${CONTENT_WORKER_POLL_SECONDS:-3}
+      LIBREOFFICE_TIMEOUT_SECONDS: ${LIBREOFFICE_TIMEOUT_SECONDS:-120}
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      - backend-media:/app/media
+
   # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B.
   # Build từ ./services/chatbot (FROM image nền docker/ai-base có torch CUDA).
   worker:

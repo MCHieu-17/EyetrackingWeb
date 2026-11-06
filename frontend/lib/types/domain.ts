@@ -100,7 +100,10 @@ export interface EnrolledCourse {
 export interface Slide {
   id: string;
   title: string;
-  imageUrl: string | null;
+  pdfUrl: string | null;
+  pageNumber: number;
+  pageCount: number;
+  sourceFormat?: string | null;
 }
 
 // Slide trọng tâm + điểm hoàn thành theo độ bao phủ nội dung (teacher)
@@ -109,7 +112,10 @@ export interface SlideAdmin {
   id: string;
   orderIndex: number;
   title: string;
-  imageUrl: string | null;
+  pdfUrl: string | null;
+  pageNumber: number;
+  pageCount: number;
+  sourceFormat?: string | null;
   isKey: boolean;
   /** Trạng thái ingest RAG: none | pending | ready | failed. */
   embeddingStatus?: "none" | "pending" | "ready" | "failed";

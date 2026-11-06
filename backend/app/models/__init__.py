@@ -35,7 +35,7 @@ from app.models.gaze import (
     GazeSample,
     LearningSession,
 )
-from app.models.media import MediaAsset, SlideDocument
+from app.models.media import MediaAsset, SlideDocument, SlideImportJob
 from app.models.metadata import AppMetadata
 from app.models.profile import StudentProfile, TeacherProfile, UserProfile
 from app.models.quiz import QuizAttempt, QuizSpec
@@ -75,6 +75,7 @@ __all__ = [
     "Role",
     "Slide",
     "SlideDocument",
+    "SlideImportJob",
     "SlideVersion",
     "StudentProfile",
     "TeacherProfile",

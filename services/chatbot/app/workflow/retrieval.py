@@ -55,10 +55,11 @@ SELECT
     d.lesson_version_id,
     d.lesson_version_slide_id AS membership_id,
     d.slide_id,
-    d.image_asset_id AS asset_id,
-    d.image_object_key,
-    d.image_storage_backend,
-    d.image_mime_type,
+    d.pdf_asset_id AS asset_id,
+    d.pdf_object_key,
+    d.pdf_storage_backend,
+    d.pdf_mime_type,
+    d.source_page,
     d.transcript AS content,
     d.slide_title,
     d.module_title,
@@ -157,6 +158,11 @@ def build_citations(docs: list[dict]) -> list[dict]:
     for doc in docs:
         content = doc.get("content") or ""
         asset_id = doc.get("asset_id")
+        page_number = doc.get("source_page")
+        pdf_url = f"/media/assets/{asset_id}/file" if asset_id else ""
+        location = doc.get("pdf_object_key") or ""
+        if location and page_number:
+            location = f"{location}#page={page_number}"
         citations.append(
             {
                 "document_id": str(doc["id"]),
@@ -172,12 +178,14 @@ def build_citations(docs: list[dict]) -> list[dict]:
                 else None,
                 "asset_id": str(asset_id) if asset_id else None,
                 "title": f"{doc['module_title']} - {doc['lesson_title']}",
-                "location": doc.get("image_object_key") or "",
+                "location": location,
                 "lesson_id": str(doc["lesson_id"]) if doc.get("lesson_id") else None,
                 "lesson_title": doc.get("lesson_title") or "",
                 "slide_id": str(doc["slide_id"]) if doc.get("slide_id") else None,
                 "slide_index": doc.get("slide_index"),
-                "image_url": f"/media/assets/{asset_id}" if asset_id else "",
+                "image_url": pdf_url,
+                "pdf_url": pdf_url,
+                "page_number": page_number,
                 "snippet": content[:300],
                 "score": float(doc.get("score") or 0.0),
             }

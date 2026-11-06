@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { PdfPage } from "@/components/pdf/pdf-page";
 import { resolveMediaUrl } from "@/lib/api/client";
 import type { SlideAdmin } from "@/lib/types/domain";
 
@@ -11,7 +12,6 @@ import type { SlideAdmin } from "@/lib/types/domain";
  * nguồn dữ liệu duy nhất cho cả xem trước và phần "Cài đặt nâng cao").
  */
 export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
-  const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<number | null>(null);
 
   useEffect(() => {
@@ -34,14 +34,14 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
     <>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
         {slides.map((slide, index) => {
-          const url = resolveMediaUrl(slide.imageUrl);
-          if (!url || failed[slide.id]) {
+          const url = resolveMediaUrl(slide.pdfUrl);
+          if (!url) {
             return (
               <div
                 key={slide.id}
                 className="flex aspect-[4/3] items-center justify-center rounded-[18px] border border-[#eeeee9] bg-[#fdfdfa] text-xs font-medium tabular-nums text-black/40"
               >
-                {slide.orderIndex}
+                {slide.orderIndex + 1}
               </div>
             );
           }
@@ -50,16 +50,16 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
               key={slide.id}
               type="button"
               onClick={() => setPreview(index)}
-              aria-label={`Xem trước trang ${slide.orderIndex}`}
+              aria-label={`Xem trước trang ${slide.orderIndex + 1}`}
               className="group relative overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white p-1 outline-none transition hover:border-black/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-black/20"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Trang ${slide.orderIndex}`}
-                loading="lazy"
-                onError={() => setFailed((c) => ({ ...c, [slide.id]: true }))}
-                className="aspect-[4/3] w-full object-contain transition group-hover:scale-[1.02]"
+              <PdfPage
+                url={url}
+                pageNumber={slide.pageNumber}
+                lazy
+                alt={`Trang ${slide.orderIndex + 1}`}
+                className="aspect-[4/3] w-full overflow-hidden rounded-[14px] bg-white"
+                canvasClassName="transition group-hover:scale-[1.02]"
               />
               {slide.embeddingStatus === "failed" && (
                 <span
@@ -85,25 +85,25 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
           <div className="relative flex max-h-full w-full max-w-4xl flex-col rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold tabular-nums text-foreground">
-                Trang {previewSlide.orderIndex} / {slides.length}
+                Trang {previewSlide.orderIndex + 1} / {slides.length}
               </p>
               <Button variant="ghost" size="icon-sm" onClick={() => setPreview(null)} aria-label="Đóng">
                 <Icon name="ri-close-line" className="size-5" />
               </Button>
             </div>
             {(() => {
-              const url = resolveMediaUrl(previewSlide.imageUrl);
+              const url = resolveMediaUrl(previewSlide.pdfUrl);
               return url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
+                <PdfPage
                   key={previewSlide.id}
-                  src={url}
-                  alt={`Trang ${previewSlide.orderIndex}`}
-                  className="mt-3 max-h-[70dvh] w-full rounded-lg bg-white object-contain"
+                  url={url}
+                  pageNumber={previewSlide.pageNumber}
+                  alt={`Trang ${previewSlide.orderIndex + 1}`}
+                  className="mt-3 h-[70dvh] w-full overflow-hidden rounded-lg bg-white"
                 />
               ) : (
                 <p className="mt-3 rounded-[18px] border border-[#eeeee9] bg-[#fdfdfa] px-3 py-8 text-center text-sm text-muted-foreground">
-                  Không tải được ảnh trang {previewSlide.orderIndex}.
+                  Không tải được trang {previewSlide.orderIndex + 1}.
                 </p>
               );
             })()}
@@ -122,7 +122,9 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPreview((v) => (v === null ? v : (v + 1) % slides.length))}
+                onClick={() =>
+                  setPreview((v) => (v === null ? v : (v + 1) % slides.length))
+                }
                 disabled={slides.length <= 1}
               >
                 Trang sau

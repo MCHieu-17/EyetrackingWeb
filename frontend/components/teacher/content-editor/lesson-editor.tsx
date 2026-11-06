@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useLessonSlidesAdmin } from "@/hooks/use-teacher";
-import { MAX_PDF_PAGES, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/api/client";
-import { uploadLessonPdf } from "@/lib/api/teacher";
+import { MAX_SLIDE_PAGES, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/api/client";
+import {
+  fetchSlideImportJob,
+  uploadLessonSlides,
+  type SlideImportJob,
+} from "@/lib/api/teacher";
 import { cn } from "@/lib/utils";
 import type { LessonNode } from "@/lib/types/domain";
 import { KeySlideControls } from "./key-slide-controls";
@@ -22,7 +26,27 @@ type UploadState =
   | { status: "success"; fileName: string; pages: number }
   | { status: "error"; fileName: string; message: string };
 
-const LIMITS_HINT = `PDF · tối đa ${MAX_UPLOAD_LABEL} · tối đa ${MAX_PDF_PAGES} trang — mỗi trang thành 1 slide.`;
+const ALLOWED_EXTENSIONS = [".pdf", ".pptx", ".ppt", ".odp"];
+const LIMITS_HINT = `PDF, PPTX, PPT, ODP · tối đa ${MAX_UPLOAD_LABEL} · tối đa ${MAX_SLIDE_PAGES} trang — mỗi trang thành 1 slide.`;
+
+async function waitForImportJob(
+  lessonId: string,
+  jobId: string,
+): Promise<SlideImportJob> {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const job = await fetchSlideImportJob(lessonId, jobId);
+    if (
+      job.status === "ready" ||
+      job.status === "failed" ||
+      job.status === "cancelled"
+    ) {
+      return job;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  }
+  throw new Error("Quá thời gian chờ xử lý tài liệu. Hãy thử lại.");
+}
 
 export function LessonEditor({
   lesson,
@@ -52,10 +76,13 @@ export function LessonEditor({
   const failedSlides = slides.filter((slide) => slide.embeddingStatus === "failed");
 
   const validate = (file: File): string | null => {
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) return `"${file.name}" không phải file PDF. Hãy chọn file .pdf.`;
+    const lower = file.name.toLowerCase();
+    const extension = lower.slice(lower.lastIndexOf("."));
+    if (!ALLOWED_EXTENSIONS.includes(extension)) {
+      return `"${file.name}" không phải tài liệu slide hợp lệ. Hãy chọn PDF, PPTX, PPT hoặc ODP.`;
+    }
     if (file.size > MAX_UPLOAD_BYTES)
-      return `File PDF "${file.name}" vượt quá ${MAX_UPLOAD_LABEL} cho phép.`;
+      return `File "${file.name}" vượt quá ${MAX_UPLOAD_LABEL} cho phép.`;
     return null;
   };
 
@@ -63,7 +90,16 @@ export function LessonEditor({
     setLastFile(file);
     setUpload({ status: "uploading", fileName: file.name });
     try {
-      const result = await uploadLessonPdf(lesson.id, file, file.name);
+      const result = await uploadLessonSlides(lesson.id, file);
+      const job = await waitForImportJob(lesson.id, result.jobId);
+      if (job.status !== "ready") {
+        throw new Error(
+          job.error ||
+            (job.status === "cancelled"
+              ? "Lần tải lên này đã bị thay thế bởi lần tải mới hơn."
+              : "Không tạo được slide từ tài liệu."),
+        );
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["teacher", "lesson-slides", lesson.id] }),
         queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
@@ -72,13 +108,16 @@ export function LessonEditor({
       setUpload({
         status: "success",
         fileName: file.name,
-        pages: result.slides ?? 0,
+        pages: job.pageCount ?? 0,
       });
     } catch (error) {
       setUpload({
         status: "error",
         fileName: file.name,
-        message: error instanceof Error ? error.message : "Không tải được PDF lên hệ thống.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Không tải được tài liệu lên hệ thống.",
       });
     }
   };
@@ -109,9 +148,9 @@ export function LessonEditor({
       <input
         ref={fileRef}
         type="file"
-        accept="application/pdf"
+        accept=".pdf,.pptx,.ppt,.odp"
         className="sr-only"
-        aria-label={`Chọn PDF cho ${lesson.title}`}
+        aria-label={`Chọn tài liệu slide cho ${lesson.title}`}
         onChange={(event) => {
           if (event.target.files) chooseFile(event.target.files);
           event.target.value = "";
@@ -125,8 +164,8 @@ export function LessonEditor({
             <h3 className="text-base font-semibold text-black">Tài liệu bài giảng</h3>
             <p className="mt-1 text-sm leading-6 text-black/65">
               {hasSlides
-                ? `Đang dùng ${slideCount} trang slide. Tải PDF mới để tạo lại toàn bộ.`
-                : "Tải PDF lên để tạo slide cho bài giảng này."}
+                ? `Đang dùng ${slideCount} trang slide. Tải tài liệu mới để tạo lại toàn bộ.`
+                : "Tải PDF/PPTX/PPT/ODP lên để tạo slide cho bài giảng này."}
             </p>
             <p className="mt-1 text-xs leading-5 text-black/55">{LIMITS_HINT}</p>
           </div>
@@ -142,7 +181,7 @@ export function LessonEditor({
                 name={uploading ? "ri-loader-4-line" : "ri-upload-cloud-2-line"}
                 className={cn("size-4", uploading && "animate-spin")}
               />
-              {uploading ? "Đang xử lý…" : hasSlides ? "Thay PDF" : "Chọn PDF"}
+              {uploading ? "Đang xử lý…" : hasSlides ? "Thay tài liệu" : "Chọn tài liệu"}
             </Button>
           )}
         </div>
@@ -176,14 +215,17 @@ export function LessonEditor({
                   Đang tải và xử lý “{upload.fileName}”…
                 </span>
                 <span className="text-xs text-black/60">
-                  File nhiều trang có thể mất 1–2 phút. Vui lòng không đóng trang.
+                  PPTX/PPT/ODP được chuyển sang PDF; file nhiều trang có thể mất
+                  1–2 phút. Vui lòng không đóng trang.
                 </span>
               </>
             ) : (
               <>
                 <Icon name="ri-file-text-line" className="size-6 text-muted-foreground" />
                 <span className="mt-1 text-sm font-medium text-black">
-                  {hasSlides ? "Kéo PDF mới vào đây hoặc bấm để chọn" : "Kéo PDF vào đây hoặc bấm để chọn"}
+                  {hasSlides
+                    ? "Kéo tài liệu mới vào đây hoặc bấm để chọn"
+                    : "Kéo PDF/PPTX/PPT/ODP vào đây hoặc bấm để chọn"}
                 </span>
                 <span className="text-xs text-black/55">{LIMITS_HINT}</span>
               </>

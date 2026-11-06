@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { resolveMediaUrl } from "@/lib/api/client";
+import { PdfPage } from "@/components/pdf/pdf-page";
 import type { ChatCitation } from "@/lib/api/chat";
 import {
   useChatMessages,
@@ -695,21 +696,24 @@ export function StudyAssistantChat({
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-auto px-6 pb-6">
-            {citationModal?.imageUrl || citationModal?.location ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={
-                  resolveMediaUrl(citationModal.imageUrl || citationModal.location) ?? undefined
-                }
-                alt={citationModal.title}
-                className="w-full rounded-xl border border-border"
-              />
-            ) : (
-              <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-                {citationModal?.snippet || "Không có ảnh slide cho nguồn này."}
-              </p>
-            )}
-            {citationModal?.snippet && (citationModal?.imageUrl || citationModal?.location) && (
+            {(() => {
+              const pdfUrl = resolveMediaUrl(
+                citationModal?.pdfUrl || citationModal?.imageUrl,
+              );
+              return pdfUrl ? (
+                <PdfPage
+                  url={pdfUrl}
+                  pageNumber={citationModal?.pageNumber ?? 1}
+                  alt={citationModal?.title ?? "Trang trích dẫn"}
+                  className="h-[55vh] w-full overflow-hidden rounded-xl border border-border bg-white"
+                />
+              ) : (
+                <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                  {citationModal?.snippet || "Không có ảnh slide cho nguồn này."}
+                </p>
+              );
+            })()}
+            {citationModal?.snippet && (citationModal?.pdfUrl || citationModal?.imageUrl) && (
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
                 {citationModal.snippet}
               </p>

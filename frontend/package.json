@@ -6,7 +6,9 @@
     "node": ">=20"
   },
   "scripts": {
+    "predev": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -30,6 +32,7 @@
     "clsx": "^2.1.1",
     "katex": "^0.16.47",
     "next": "16.3.1",
+    "pdfjs-dist": "^5.4.624",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",

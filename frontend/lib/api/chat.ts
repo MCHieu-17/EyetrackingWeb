@@ -15,6 +15,8 @@ export interface ChatCitation {
   slideId?: string | null;
   slideIndex?: number | null;
   imageUrl?: string;
+  pdfUrl?: string;
+  pageNumber?: number | null;
   snippet?: string;
   score?: number;
 }
@@ -137,6 +139,8 @@ function demoReply(input: SendChatInput): ChatReply {
     slideId: "demo-slide-1",
     slideIndex: 1,
     imageUrl: "",
+    pdfUrl: "",
+    pageNumber: 1,
     snippet: "Nội dung demo của slide.",
     score: 0.9,
   };

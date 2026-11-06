@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { PdfPage } from "@/components/pdf/pdf-page";
 import { useCourseStudents, useCourseTree, useHeatmap } from "@/hooks/use-teacher";
 import { useLessonSlides } from "@/hooks/use-student";
 import { resolveMediaUrl } from "@/lib/api/client";
@@ -44,7 +45,7 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 });
   const [slideAspectRatio, setSlideAspectRatio] = useState(DEFAULT_SLIDE_ASPECT_RATIO);
-  const [imgFailed, setImgFailed] = useState(false);
+  const [pdfFailed, setPdfFailed] = useState(false);
 
   const { data: modules = [] } = useCourseTree(courseId);
   const { data: students = [] } = useCourseStudents(courseId);
@@ -65,8 +66,9 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
   const { data: slides = [] } = useLessonSlides(lesson.id);
   const pageCount = stats.length || slides.length || lesson.slides || 1;
   const activePageIdx = Math.min(pageCount - 1, Math.max(0, pageIdx));
-  const slideImageRaw = slides[activePageIdx]?.imageUrl ?? null;
-  const slideImageUrl = useMemo(() => resolveMediaUrl(slideImageRaw), [slideImageRaw]);
+  const slidePdfRaw = slides[activePageIdx]?.pdfUrl ?? null;
+  const slidePdfUrl = useMemo(() => resolveMediaUrl(slidePdfRaw), [slidePdfRaw]);
+  const slidePageNumber = slides[activePageIdx]?.pageNumber ?? 1;
   const current = useMemo(
     () =>
       stats[activePageIdx] ?? stats[0] ?? {
@@ -114,7 +116,7 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
 
   const switchLesson = (id: string) => {
     setPageIdx(0);
-    setImgFailed(false);
+    setPdfFailed(false);
     setSlideAspectRatio(DEFAULT_SLIDE_ASPECT_RATIO);
     router.replace(heatmapHref(id, scope), { scroll: false });
   };
@@ -476,21 +478,20 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
                   className="relative max-h-full max-w-full overflow-hidden rounded-[18px] border border-black/20 bg-[#181a17] shadow-xl shadow-black/10"
                   style={fittedStageSize ?? { width: "100%", aspectRatio: DEFAULT_SLIDE_ASPECT_RATIO }}
                 >
-                  {slideImageUrl && !imgFailed ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={slideImageUrl}
-                      src={slideImageUrl}
+                  {slidePdfUrl && !pdfFailed ? (
+                    <PdfPage
+                      key={`${slidePdfUrl}:${slidePageNumber}`}
+                      url={slidePdfUrl}
+                      pageNumber={slidePageNumber}
                       alt={slides[activePageIdx]?.title ?? `Trang ${activePageIdx + 1}`}
-                      onLoad={(event) => {
-                        const image = event.currentTarget;
-                        if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-                          setSlideAspectRatio(image.naturalWidth / image.naturalHeight);
+                      className="absolute inset-0"
+                      onPageSize={(size) => {
+                        if (size.width > 0 && size.height > 0) {
+                          setSlideAspectRatio(size.width / size.height);
                         }
-                        setImgFailed(false);
+                        setPdfFailed(false);
                       }}
-                      onError={() => setImgFailed(true)}
-                      className="absolute inset-0 h-full w-full object-fill"
+                      onError={() => setPdfFailed(true)}
                     />
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-white px-[8%] text-center">

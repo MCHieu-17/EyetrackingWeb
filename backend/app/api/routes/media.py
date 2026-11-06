@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +50,7 @@ async def _asset_published(db: AsyncSession, asset_id: str) -> bool:
             )
             .join(Course, Course.published_version_id == CourseVersion.id)
             .where(
-                SlideVersion.image_asset_id == asset_id,
+                SlideVersion.source_pdf_asset_id == asset_id,
                 CourseVersion.state == "published",
             )
             .limit(1)
@@ -59,12 +59,9 @@ async def _asset_published(db: AsyncSession, asset_id: str) -> bool:
     return row is not None
 
 
-@router.get("/media/assets/{asset_id}")
-async def get_asset(
-    asset_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def _get_asset_for_user(
+    db: AsyncSession, asset_id: str, user: User
+) -> MediaAsset:
     asset = await db.get(MediaAsset, asset_id)
     if asset is None or asset.state != "ready":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
@@ -86,6 +83,16 @@ async def get_asset(
         allowed = enrolled is not None and await _asset_published(db, asset.id)
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return asset
+
+
+@router.get("/media/assets/{asset_id}")
+async def get_asset(
+    asset_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    asset = await _get_asset_for_user(db, asset_id, user)
 
     if asset.storage_backend == "r2" and settings.r2_enabled:
         return RedirectResponse(
@@ -96,3 +103,34 @@ async def get_asset(
     if not file_path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
     return FileResponse(str(file_path), media_type=asset.mime_type)
+
+
+@router.get("/media/assets/{asset_id}/file")
+async def get_asset_file(
+    asset_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Proxy PDF same-origin cho PDF.js (tránh CORS và presigned URL hết hạn)."""
+    asset = await _get_asset_for_user(db, asset_id, user)
+    headers = {
+        "Cache-Control": "private, max-age=3600",
+        "Accept-Ranges": "none",
+    }
+
+    if asset.storage_backend == "r2" and settings.r2_enabled:
+        headers["Content-Length"] = str(asset.byte_size)
+        return StreamingResponse(
+            media_storage.iter_bytes(asset.object_key),
+            media_type=asset.mime_type,
+            headers=headers,
+        )
+
+    file_path = _ensure_media_in_root(settings.media_path / asset.object_key)
+    if not file_path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
+    return FileResponse(
+        str(file_path),
+        media_type=asset.mime_type,
+        headers=headers,
+    )

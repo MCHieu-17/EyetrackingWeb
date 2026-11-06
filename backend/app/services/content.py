@@ -11,16 +11,18 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Iterable
 
-import pymupdf
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.session import SessionLocal
 from app.models.auth import User
 from app.models.course import (
     ContentAuditEvent,
@@ -34,7 +36,7 @@ from app.models.course import (
     Slide,
     SlideVersion,
 )
-from app.models.media import MediaAsset, SlideDocument
+from app.models.media import MediaAsset, SlideDocument, SlideImportJob
 from app.models.profile import TeacherProfile
 from app.models.quiz import QuizSpec
 from app.schemas.course import (
@@ -48,7 +50,9 @@ from app.schemas.course import (
     StudentRowOut,
     TeacherCourseOut,
 )
-from app.services import media_storage
+from app.services import media_storage, slide_import
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -699,18 +703,6 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _image_size(data: bytes) -> tuple[int | None, int | None]:
-    try:
-        doc = pymupdf.open(stream=data, filetype="jpeg")
-        page = doc.load_page(0)
-        width = int(page.rect.width)
-        height = int(page.rect.height)
-        doc.close()
-        return width, height
-    except Exception:  # noqa: BLE001
-        return None, None
-
-
 async def _asset_for_bytes(
     db: AsyncSession,
     *,
@@ -718,7 +710,8 @@ async def _asset_for_bytes(
     data: bytes,
     mime_type: str,
     object_key: str,
-    image: bool,
+    kind: str = "normalized",
+    metadata: dict | None = None,
 ) -> MediaAsset:
     digest = _sha256(data)
     existing = (
@@ -731,10 +724,11 @@ async def _asset_for_bytes(
         )
     ).scalar_one_or_none()
     if existing is not None:
+        if metadata:
+            existing.metadata_ = {**(existing.metadata_ or {}), **metadata}
         return existing
 
     await asyncio.to_thread(media_storage.put_bytes, object_key, data, mime_type)
-    width, height = _image_size(data) if image else (None, None)
     asset = MediaAsset(
         course_id=course.id,
         storage_backend="r2" if settings.r2_enabled else "local",
@@ -742,130 +736,258 @@ async def _asset_for_bytes(
         sha256=digest,
         mime_type=mime_type,
         byte_size=len(data),
-        image_width=width,
-        image_height=height,
         state="ready",
+        kind=kind,
+        metadata_=metadata or {},
     )
     db.add(asset)
     await db.flush()
     return asset
 
 
-def _render_pdf(data: bytes) -> list[bytes]:
-    if len(data) > settings.max_pdf_bytes:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File PDF quá lớn")
-    if not data.startswith(b"%PDF"):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="File không phải PDF hợp lệ"
-        )
-    try:
-        doc = pymupdf.open(stream=data, filetype="pdf")
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail=f"Không đọc được PDF: {exc}"
-        ) from exc
-    try:
-        if doc.needs_pass:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="PDF đang bị bảo vệ bằng mật khẩu — hãy gỡ mật khẩu trước khi tải lên",
-            )
-        if doc.page_count == 0:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail="PDF không có trang nào"
-            )
-        if doc.page_count > settings.max_pdf_pages:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"PDF có {doc.page_count} trang, vượt quá "
-                    f"{settings.max_pdf_pages} trang cho phép."
-                ),
-            )
-        zoom = pymupdf.Matrix(2, 2)
-        images: list[bytes] = []
-        for page_no in range(doc.page_count):
-            page = doc.load_page(page_no)
-            render_pixels = int(page.rect.width * 2) * int(page.rect.height * 2)
-            if render_pixels > settings.max_slide_render_pixels:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    detail=f"Trang {page_no + 1} có kích thước quá lớn",
-                )
-            pix = page.get_pixmap(matrix=zoom, colorspace=pymupdf.csRGB)
-            images.append(pix.tobytes("jpeg", jpg_quality=85))
-        return images
-    finally:
-        doc.close()
-
-
-async def upload_pdf(
+async def create_slide_import(
     db: AsyncSession,
     course: Course,
     user: User,
     lesson_id: str,
     data: bytes,
-) -> int:
+    filename: str,
+    mime: str | None,
+) -> SlideImportJob:
+    """Nhận file upload, lưu tạm và tạo job chuyển đổi bất đồng bộ."""
+    if len(data) > settings.max_upload_bytes:
+        limit = settings.max_upload_bytes // (1024 * 1024)
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"File vượt quá {limit}MB cho phép.",
+        )
+
+    try:
+        fmt = slide_import.detect_format(filename, mime, data)
+        if fmt == "pdf":
+            slide_import.validate_pdf(data)
+    except slide_import.SlideImportError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     draft, item = await _draft_item(db, course, lesson_id, user)
     lesson_version = await ensure_draft_lesson_version(db, item, user)
-    images = await asyncio.to_thread(_render_pdf, data)
 
-    version_key = uuid.uuid4().hex[:12]
-    prefix = (
-        f"instances/{settings.app_instance_id}/courses/{course.id}/"
-        f"lessons/{lesson_id}/{version_key}"
-    )
-    pdf_asset = await _asset_for_bytes(
-        db,
-        course=course,
-        data=data,
-        mime_type="application/pdf",
-        object_key=f"{prefix}/source.pdf",
-        image=False,
-    )
-
-    # Gỡ membership cũ; slide version/asset cũ vẫn giữ trong lịch sử.
-    await db.execute(
-        delete(LessonVersionSlide).where(
-            LessonVersionSlide.lesson_version_id == lesson_version.id
-        )
-    )
-    for page_no, image in enumerate(images, start=1):
-        image_asset = await _asset_for_bytes(
-            db,
-            course=course,
-            data=image,
-            mime_type="image/jpeg",
-            object_key=f"{prefix}/slide_{page_no:03d}.jpg",
-            image=True,
-        )
-        slide = Slide(lesson_id=lesson_id)
-        db.add(slide)
-        await db.flush()
-        slide_version = SlideVersion(
-            slide_id=slide.id,
-            revision_no=1,
-            image_asset_id=image_asset.id,
-            source_pdf_asset_id=pdf_asset.id,
-            source_page=page_no,
-            render_metadata={"renderer": "pymupdf", "zoom": 2},
-            created_by=user.id,
-        )
-        db.add(slide_version)
-        await db.flush()
-        db.add(
-            LessonVersionSlide(
-                lesson_version_id=lesson_version.id,
-                slide_id=slide.id,
-                slide_version_id=slide_version.id,
-                position=page_no - 1,
-                title=f"Slide {page_no}",
-                is_key=False,
+    # Upload mới thay thế các job còn chờ của cùng lesson version.
+    old_jobs = (
+        await db.execute(
+            select(SlideImportJob).where(
+                SlideImportJob.lesson_version_id == lesson_version.id,
+                SlideImportJob.status.in_(("queued", "processing")),
             )
         )
+    ).scalars().all()
+    queued_staging_keys = [
+        old.source_object_key for old in old_jobs if old.status == "queued"
+    ]
+    for old in old_jobs:
+        old.status = "cancelled"
+        old.finished_at = _now()
+
+    job_id = str(uuid.uuid4())
+    suffix = Path(filename or "").suffix.lower() or f".{fmt}"
+    staging_key = (
+        f"instances/{settings.app_instance_id}/courses/{course.id}/"
+        f"lessons/{lesson_id}/imports/{job_id}/upload{suffix}"
+    )
+    job = SlideImportJob(
+        id=job_id,
+        course_id=course.id,
+        lesson_id=lesson_id,
+        lesson_version_id=lesson_version.id,
+        created_by=user.id,
+        status="queued",
+        source_filename=filename or f"slides{suffix}",
+        source_mime=slide_import.mime_for_format(fmt),
+        source_size=len(data),
+        source_sha256=_sha256(data),
+        source_object_key=staging_key,
+    )
+    db.add(job)
+    await db.flush()
+
+    try:
+        await asyncio.to_thread(
+            media_storage.put_bytes, staging_key, data, job.source_mime
+        )
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Không lưu được file tạm để xử lý.",
+        ) from exc
+
+    for key in queued_staging_keys:
+        try:
+            await asyncio.to_thread(media_storage.delete_key, key)
+        except Exception:  # noqa: BLE001
+            logger.warning("Không xoá được staging cũ %s", key)
+
     bump_generation(draft)
     await db.flush()
-    return len(images)
+    return job
+
+
+async def get_slide_import_job(
+    db: AsyncSession, course: Course, lesson_id: str, job_id: str
+) -> SlideImportJob:
+    job = await db.get(SlideImportJob, job_id)
+    if job is None or job.course_id != course.id or job.lesson_id != lesson_id:
+        raise _not_found("Không tìm thấy job tải tài liệu")
+    return job
+
+
+async def process_slide_import(job_id: str) -> None:
+    """Worker: convert file staging -> PDF, tạo slide_version cho từng trang."""
+    async with SessionLocal() as db:
+        job = await db.get(SlideImportJob, job_id)
+        if job is None or job.status != "processing":
+            return
+        source_key = job.source_object_key
+
+        try:
+            data = await asyncio.to_thread(media_storage.get_bytes, source_key)
+            fmt = slide_import.detect_format(
+                job.source_filename, job.source_mime, data
+            )
+            pdf_bytes = await asyncio.to_thread(
+                slide_import.convert_to_pdf, data, fmt, job.source_filename
+            )
+            page_count = slide_import.validate_pdf(pdf_bytes)
+
+            course = await db.get(Course, job.course_id)
+            user = await db.get(User, job.created_by)
+            lesson_version = await db.get(LessonVersion, job.lesson_version_id)
+            if course is None or user is None or lesson_version is None:
+                raise RuntimeError("Job thiếu course/user/lesson version")
+
+            await db.refresh(job)
+            if job.status != "processing":
+                return
+            if lesson_version.state != "draft":
+                raise RuntimeError(
+                    "Bản nháp đã được xuất bản trong lúc xử lý; hãy tải lại và thử lại."
+                )
+
+            prefix = (
+                f"instances/{settings.app_instance_id}/courses/{course.id}/"
+                f"lessons/{job.lesson_id}/{uuid.uuid4().hex[:12]}"
+            )
+            pdf_asset = await _asset_for_bytes(
+                db,
+                course=course,
+                data=pdf_bytes,
+                mime_type="application/pdf",
+                object_key=f"{prefix}/source.pdf",
+                kind="normalized",
+                metadata={
+                    "page_count": page_count,
+                    "source_format": fmt,
+                    "converter": "libreoffice",
+                },
+            )
+
+            # Gỡ membership cũ; slide version/asset cũ vẫn giữ trong lịch sử.
+            await db.execute(
+                delete(LessonVersionSlide).where(
+                    LessonVersionSlide.lesson_version_id == lesson_version.id
+                )
+            )
+            for page_no in range(1, page_count + 1):
+                slide = Slide(lesson_id=job.lesson_id)
+                db.add(slide)
+                await db.flush()
+                slide_version = SlideVersion(
+                    slide_id=slide.id,
+                    revision_no=1,
+                    source_pdf_asset_id=pdf_asset.id,
+                    source_page=page_no,
+                    render_metadata={
+                        "converter": "libreoffice",
+                        "source_format": fmt,
+                        "page_count": page_count,
+                    },
+                    created_by=job.created_by,
+                )
+                db.add(slide_version)
+                await db.flush()
+                db.add(
+                    LessonVersionSlide(
+                        lesson_version_id=lesson_version.id,
+                        slide_id=slide.id,
+                        slide_version_id=slide_version.id,
+                        position=page_no - 1,
+                        title=f"Slide {page_no}",
+                        is_key=False,
+                    )
+                )
+
+            draft = await get_draft_version(db, course, user, create=False)
+            if draft is not None:
+                bump_generation(draft)
+
+            job.status = "ready"
+            job.pdf_asset_id = pdf_asset.id
+            job.page_count = page_count
+            job.finished_at = _now()
+            await db.commit()
+        except Exception as exc:  # noqa: BLE001
+            await db.rollback()
+            failed = await db.get(SlideImportJob, job_id)
+            if failed is not None:
+                failed.status = "failed"
+                failed.error = str(exc)[:1000]
+                failed.finished_at = _now()
+                await db.commit()
+            logger.exception("Slide import job %s thất bại", job_id)
+        finally:
+            try:
+                await asyncio.to_thread(media_storage.delete_key, source_key)
+            except Exception:  # noqa: BLE001
+                logger.warning("Không xoá được file staging %s", source_key)
+
+
+async def process_pending_slide_imports(limit: int = 1) -> int:
+    """Lấy job queued và xử lý; trả về số job đã nhận."""
+    async with SessionLocal() as db:
+        stale_before = _now() - timedelta(
+            seconds=settings.content_worker_stale_seconds
+        )
+        await db.execute(
+            update(SlideImportJob)
+            .where(
+                SlideImportJob.status == "processing",
+                SlideImportJob.started_at < stale_before,
+            )
+            .values(status="queued", started_at=None)
+        )
+        await db.commit()
+
+        jobs = (
+            await db.execute(
+                select(SlideImportJob)
+                .where(SlideImportJob.status == "queued")
+                .order_by(SlideImportJob.created_at)
+                .with_for_update(skip_locked=True)
+                .limit(limit)
+            )
+        ).scalars().all()
+        if not jobs:
+            return 0
+
+        job_ids = [job.id for job in jobs]
+        for job in jobs:
+            job.status = "processing"
+            job.started_at = _now()
+        await db.commit()
+
+    for job_id in job_ids:
+        await process_slide_import(job_id)
+    return len(job_ids)
 
 
 async def list_lesson_slides_admin(
@@ -883,20 +1005,24 @@ async def list_lesson_slides_admin(
     out: list[SlideAdminOut] = []
     for row in rows:
         slide_version = await db.get(SlideVersion, row.slide_version_id)
-        asset = await db.get(MediaAsset, slide_version.image_asset_id) if slide_version else None
+        asset = (
+            await db.get(MediaAsset, slide_version.source_pdf_asset_id)
+            if slide_version
+            else None
+        )
         document = await db.get(SlideDocument, row.slide_version_id)
+        metadata = (asset.metadata_ if asset else {}) or {}
         out.append(
             SlideAdminOut(
                 id=row.id,
                 order_index=row.position,
                 title=row.title or f"Slide {row.position + 1}",
-                image_url=(
-                    media_storage.asset_url(
-                        asset.id, asset.object_key, asset.storage_backend
-                    )
-                    if asset
-                    else None
+                pdf_url=(
+                    media_storage.asset_file_url(asset.id) if asset else None
                 ),
+                page_number=slide_version.source_page if slide_version else 1,
+                page_count=int(metadata.get("page_count") or 1),
+                source_format=metadata.get("source_format"),
                 is_key=row.is_key,
                 embedding_status=document.ingestion_state if document else "none",
                 embedding_error=document.ingestion_error if document else None,
@@ -1051,7 +1177,7 @@ async def validate_draft(db: AsyncSession, draft: CourseVersion) -> None:
             for slide in slides:
                 slide_version = await db.get(SlideVersion, slide.slide_version_id)
                 asset = (
-                    await db.get(MediaAsset, slide_version.image_asset_id)
+                    await db.get(MediaAsset, slide_version.source_pdf_asset_id)
                     if slide_version
                     else None
                 )
@@ -1251,6 +1377,24 @@ async def get_published_outline(
     )
 
 
+def _slide_out(
+    row: LessonVersionSlide,
+    slide_version: SlideVersion | None,
+    asset: MediaAsset | None,
+) -> SlideOut:
+    metadata = (asset.metadata_ if asset else {}) or {}
+    return SlideOut(
+        id=row.id,
+        title=row.title or f"Slide {row.position + 1}",
+        pdf_url=media_storage.asset_file_url(asset.id) if asset else None,
+        page_number=slide_version.source_page if slide_version else 1,
+        page_count=int(metadata.get("page_count") or 1),
+        source_format=metadata.get("source_format"),
+        slide_version_id=row.slide_version_id,
+        lesson_version_id=row.lesson_version_id,
+    )
+
+
 async def get_lesson_version_contents(
     db: AsyncSession, lesson_version_id: str
 ) -> list[SlideOut]:
@@ -1264,22 +1408,12 @@ async def get_lesson_version_contents(
     out: list[SlideOut] = []
     for row in rows:
         slide_version = await db.get(SlideVersion, row.slide_version_id)
-        asset = await db.get(MediaAsset, slide_version.image_asset_id) if slide_version else None
-        out.append(
-            SlideOut(
-                id=row.id,
-                title=row.title or f"Slide {row.position + 1}",
-                image_url=(
-                    media_storage.asset_url(
-                        asset.id, asset.object_key, asset.storage_backend
-                    )
-                    if asset
-                    else None
-                ),
-                slide_version_id=row.slide_version_id,
-                lesson_version_id=row.lesson_version_id,
-            )
+        asset = (
+            await db.get(MediaAsset, slide_version.source_pdf_asset_id)
+            if slide_version
+            else None
         )
+        out.append(_slide_out(row, slide_version, asset))
     return out
 
 
@@ -1309,22 +1443,12 @@ async def get_lesson_contents(
     out: list[SlideOut] = []
     for row in rows:
         slide_version = await db.get(SlideVersion, row.slide_version_id)
-        asset = await db.get(MediaAsset, slide_version.image_asset_id) if slide_version else None
-        out.append(
-            SlideOut(
-                id=row.id,
-                title=row.title or f"Slide {row.position + 1}",
-                image_url=(
-                    media_storage.asset_url(
-                        asset.id, asset.object_key, asset.storage_backend
-                    )
-                    if asset
-                    else None
-                ),
-                slide_version_id=row.slide_version_id,
-                lesson_version_id=row.lesson_version_id,
-            )
+        asset = (
+            await db.get(MediaAsset, slide_version.source_pdf_asset_id)
+            if slide_version
+            else None
         )
+        out.append(_slide_out(row, slide_version, asset))
     return out
 
 

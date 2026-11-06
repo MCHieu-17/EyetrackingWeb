@@ -27,6 +27,7 @@ from app.schemas.course import (
     LessonCreateIn,
     LessonUpdateIn,
     SlideAdminOut,
+    SlideImportJobOut,
     SlideKeySetIn,
     SlideKeyUpdateIn,
     SlideOut,
@@ -107,12 +108,12 @@ async def add_slide(
 
 @router.post(
     "/teacher/lessons/{lesson_id}/slides/upload",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(rate_limit(15, 60, "upload"))],
 )
-async def upload_lesson_pdf(
+async def upload_lesson_slides(
     lesson_id: str,
-    pdf: UploadFile = File(...),
+    file: UploadFile = File(...),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -121,14 +122,51 @@ async def upload_lesson_pdf(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
     data = bytearray()
-    while chunk := await pdf.read(1024 * 1024):
+    while chunk := await file.read(1024 * 1024):
         data.extend(chunk)
-        if len(data) > settings.max_pdf_bytes:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File PDF quá lớn")
+        if len(data) > settings.max_upload_bytes:
+            limit = settings.max_upload_bytes // (1024 * 1024)
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"File vượt quá {limit}MB cho phép.",
+            )
 
-    count = await content.upload_pdf(db, course, user, lesson.id, bytes(data))
+    job = await content.create_slide_import(
+        db,
+        course,
+        user,
+        lesson.id,
+        bytes(data),
+        file.filename or "slides",
+        file.content_type,
+    )
     await db.commit()
-    return {"ok": True, "slides": count, "filename": pdf.filename or "lesson.pdf"}
+    return {"ok": True, "jobId": job.id, "status": job.status}
+
+
+@router.get(
+    "/teacher/lessons/{lesson_id}/slides/imports/{job_id}",
+    response_model=SlideImportJobOut,
+)
+async def get_slide_import_job(
+    lesson_id: str,
+    job_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    job = await content.get_slide_import_job(db, course, lesson.id, job_id)
+    return SlideImportJobOut(
+        id=job.id,
+        status=job.status,
+        filename=job.source_filename,
+        page_count=job.page_count,
+        error=job.error,
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+    )
 
 
 @router.delete("/teacher/slides/{slide_id}")

@@ -23,6 +23,8 @@ class ChatCitation(CamelModel):
     slide_id: str | None = None
     slide_index: int | None = None
     image_url: str = ""
+    pdf_url: str = ""
+    page_number: int | None = None
     snippet: str = ""
     score: float = 0.0
 

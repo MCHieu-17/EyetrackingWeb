@@ -69,6 +69,8 @@ export function AoiEditor({ courseId }: { courseId: string }) {
   useEffect(() => {
     const source = draftSet ?? publishedSet;
     if (!source) return;
+    // Đồng bộ draft từ server khi query trả về; đây là external-store sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDefinitions(
       source.definitions.map((item) => ({
         code: item.code,

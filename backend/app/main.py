@@ -161,6 +161,6 @@ async def health():
     }
 
 
-# Slide ảnh render từ PDF (đường dẫn trong lesson_contents.image_url bắt đầu /media).
-# Tạo thư mục tránh lỗi khi không có file nào. /media giờ qua router có auth (media.py)
+# PDF nguồn của slide (đường dẫn trong slide.pdf_url bắt đầu /media).
+# Tạo thư mục tránh lỗi khi không có file nào. /media qua router có auth (media.py).
 settings.media_path.mkdir(parents=True, exist_ok=True)

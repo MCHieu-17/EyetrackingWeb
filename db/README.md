@@ -5,7 +5,8 @@ Từ Phase 1, schema chuẩn là **một baseline sạch**:
 ```
 db/migrations/
 ├── 001_baseline.sql        # toàn bộ schema, constraint, index, trigger, view, partition
-└── 002_reference_seed.sql  # roles + cấu hình hệ thống; KHÔNG có tài khoản mẫu
+├── 002_reference_seed.sql  # roles + cấu hình hệ thống; KHÔNG có tài khoản mẫu
+└── 003_slide_pdf_storage.sql # slide lưu PDF gốc + job queue upload/convert
 ```
 
 Các migration lịch sử 001–030 đã được xóa khỏi cây chạy; lịch sử vẫn còn trong
@@ -24,6 +25,13 @@ Git. Không có chuỗi “drop legacy rồi dựng lại”, không tự baseli
 
 ```bash
 docker compose run --rm migrate
+```
+
+Sau migration `003_slide_pdf_storage.sql`, view `v_published_course_outline` và
+`v_chatbot_slide_documents` được tạo lại. Chạy lại grant cho chatbot:
+
+```bash
+./ops/create_chatbot_role.sh
 ```
 
 ## Reset development

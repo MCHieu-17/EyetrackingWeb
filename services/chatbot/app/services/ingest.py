@@ -9,6 +9,7 @@ import base64
 import logging
 import os
 import threading
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openai
@@ -46,6 +47,7 @@ class Ingestion:
     PREFETCH = 4
     MAX_WORKERS = 4
     PDF_RENDER_DPI = 150
+    PDF_CACHE_SIZE = 3
 
     SLIDE_QUERY = """
         SELECT
@@ -59,10 +61,11 @@ class Ingestion:
             o.slide_position,
             o.module_title,
             o.lesson_title,
-            o.image_asset_id,
-            o.image_object_key,
-            o.image_storage_backend,
-            o.image_mime_type
+            o.pdf_asset_id,
+            o.pdf_object_key,
+            o.pdf_storage_backend,
+            o.pdf_mime_type,
+            o.source_page
         FROM v_published_course_outline o
     """
 
@@ -75,6 +78,8 @@ class Ingestion:
         self.storage = FileStorage()
         self._pool = None
         self._embed_lock = threading.Lock()
+        self._pdf_lock = threading.Lock()
+        self._pdf_cache: OrderedDict[str, bytes] = OrderedDict()
         self._verify_vector_dim()
 
     def _connection(self):
@@ -172,13 +177,31 @@ class Ingestion:
             ]
         )
 
-    def _load_image(self, source: str) -> str:
-        file_bytes = self.storage.load(source)
-        with pymupdf.open(stream=file_bytes) as doc:
-            if doc.is_pdf:
-                pix = doc[0].get_pixmap(dpi=self.PDF_RENDER_DPI, alpha=False)
-            else:
-                pix = doc[0].get_pixmap(alpha=False)
+    def _pdf_bytes(self, key: str) -> bytes:
+        with self._pdf_lock:
+            cached = self._pdf_cache.get(key)
+            if cached is not None:
+                self._pdf_cache.move_to_end(key)
+                return cached
+        data = self.storage.load(key)
+        with self._pdf_lock:
+            self._pdf_cache[key] = data
+            self._pdf_cache.move_to_end(key)
+            while len(self._pdf_cache) > self.PDF_CACHE_SIZE:
+                self._pdf_cache.popitem(last=False)
+        return data
+
+    def _load_image(self, slide: dict) -> str:
+        key = slide["pdf_object_key"]
+        page_no = int(slide["source_page"])
+        pdf_bytes = self._pdf_bytes(key)
+        with pymupdf.open(stream=pdf_bytes) as doc:
+            if page_no < 1 or page_no > doc.page_count:
+                raise ValueError(
+                    f"Trang {page_no} nằm ngoài PDF {doc.page_count} trang"
+                )
+            page = doc[page_no - 1]
+            pix = page.get_pixmap(dpi=self.PDF_RENDER_DPI, alpha=False)
             return base64.b64encode(pix.tobytes("png")).decode("ascii")
 
     def _describe_image(self, b64: str) -> str:
@@ -249,7 +272,7 @@ class Ingestion:
         slide_version_id = slide["slide_version_id"]
         self._mark(slide_version_id, "pending")
         try:
-            b64 = self._load_image(slide["image_object_key"])
+            b64 = self._load_image(slide)
             transcript = self._describe_image(b64)
             with self._embed_lock:
                 vector = self.embedding.embed_documents([transcript])[0]

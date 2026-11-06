@@ -379,11 +379,15 @@ class SlideVersion(Base):
         UniqueConstraint("id", "slide_id"),
         CheckConstraint("revision_no > 0", name="slide_versions_revision_no_check"),
         CheckConstraint(
-            "source_page IS NULL OR source_page > 0",
+            "source_page > 0",
             name="slide_versions_source_page_check",
         ),
         Index("idx_slide_versions_slide", "slide_id"),
-        Index("idx_slide_versions_image_asset", "image_asset_id"),
+        Index(
+            "idx_slide_versions_source_pdf",
+            "source_pdf_asset_id",
+            "source_page",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -393,13 +397,10 @@ class SlideVersion(Base):
         ForeignKey("slides.id", ondelete="CASCADE"), nullable=False
     )
     revision_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    image_asset_id: Mapped[str] = mapped_column(
+    source_pdf_asset_id: Mapped[str] = mapped_column(
         ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=False
     )
-    source_pdf_asset_id: Mapped[str | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="RESTRICT")
-    )
-    source_page: Mapped[int | None] = mapped_column(Integer)
+    source_page: Mapped[int] = mapped_column(Integer, nullable=False)
     render_metadata: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -411,11 +412,8 @@ class SlideVersion(Base):
     )
 
     slide: Mapped["Slide"] = relationship(back_populates="versions")
-    image_asset: Mapped["MediaAsset"] = relationship(
-        foreign_keys=[image_asset_id], lazy="joined"
-    )
-    source_pdf_asset: Mapped["MediaAsset | None"] = relationship(
-        foreign_keys=[source_pdf_asset_id]
+    source_pdf_asset: Mapped["MediaAsset"] = relationship(
+        foreign_keys=[source_pdf_asset_id], lazy="joined"
     )
 
 

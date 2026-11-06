@@ -203,14 +203,32 @@ export function deleteLesson(lessonId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/teacher/lessons/${lessonId}`, { method: "DELETE" });
 }
 
-export function uploadLessonPdf(
+export interface SlideImportJob {
+  id: string;
+  status: "queued" | "processing" | "ready" | "failed" | "cancelled";
+  filename: string;
+  pageCount: number | null;
+  error: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export function uploadLessonSlides(
   lessonId: string,
-  pdf: Blob,
-  filename: string,
-): Promise<{ ok: boolean; slides: number }> {
+  file: File,
+): Promise<{ ok: boolean; jobId: string; status: string }> {
   const form = new FormData();
-  form.append("pdf", pdf, filename);
+  form.append("file", file, file.name);
   return apiFetchMultipart(`/api/teacher/lessons/${lessonId}/slides/upload`, form, "POST");
+}
+
+export function fetchSlideImportJob(
+  lessonId: string,
+  jobId: string,
+): Promise<SlideImportJob> {
+  return apiFetch<SlideImportJob>(
+    `/api/teacher/lessons/${lessonId}/slides/imports/${jobId}`,
+  );
 }
 
 export function fetchLessonSlidesAdmin(lessonId: string): Promise<SlideAdmin[]> {

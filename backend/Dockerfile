@@ -7,6 +7,21 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# LibreOffice + font cho chuyển đổi PPTX/PPT/ODP -> PDF.
+# Font Noto/Liberation/Carlito/Caladea giữ đúng dấu tiếng Việt và layout.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libreoffice-impress \
+        libreoffice-core \
+        libreoffice-common \
+        fonts-noto-core \
+        fonts-noto-extra \
+        fonts-dejavu-core \
+        fonts-liberation \
+        fonts-crosextra-carlito \
+        fonts-crosextra-caladea \
+    && rm -rf /var/lib/apt/lists/*
+
 # Cài dependencies trước (tận dụng layer cache).
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -39,24 +39,13 @@ import {
 } from "@/lib/api/calibration";
 import { ApiError, resolveMediaUrl } from "@/lib/api/client";
 import { InlineQuiz } from "@/components/quiz/inline-quiz";
+import { PdfPage } from "@/components/pdf/pdf-page";
 import { useChatAccess } from "@/hooks/use-chat";
 import { StudyAssistantChat } from "@/components/assistant/study-assistant-chat";
 import {
   AssistantProvider,
   useAssistant,
 } from "@/components/assistant/assistant-context";
-
-const SLIDE_FALLBACK_IMAGE =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">` +
-      `<rect width="100%" height="100%" fill="#e2e8f0"/>` +
-      `<g fill="#94a3b8"><circle cx="400" cy="170" r="64"/>` +
-      `<line x1="300" y1="265" x2="500" y2="265" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>` +
-      `<line x1="320" y1="300" x2="480" y2="300" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round"/>` +
-      `<line x1="320" y1="330" x2="480" y2="330" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round"/>` +
-      `</g></svg>`,
-  );
 
 // Gom gaze sample rồi gửi theo batch — tránh vượt rate limit 60 req/phút của backend
 // (tracker phát ~20 điểm/giây; gửi lẻ từng điểm sẽ chạm trần gần như ngay lập tức).
@@ -129,7 +118,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
   const assistantButtonRef = useRef<HTMLButtonElement>(null);
   const wasChatOpen = useRef(false);
 
-  const slideImgRef = useRef<HTMLImageElement>(null);
   const gazeBufferRef = useRef<GazeSample[]>([]);
   const gazeBufferLessonRef = useRef<string | null>(null);
   const flushTimerRef = useRef<number>(0);
@@ -352,8 +340,8 @@ function ReaderContent({ courseId }: { courseId: string }) {
   if (total > 0 && currentSlide > total - 1) setCurrentSlide(0);
   const currentContent = slides[currentSlide];
 
-  const slideImageUrl = useMemo(
-    () => resolveMediaUrl(currentContent?.imageUrl),
+  const slidePdfUrl = useMemo(
+    () => resolveMediaUrl(currentContent?.pdfUrl),
     [currentContent],
   );
 
@@ -883,20 +871,14 @@ function ReaderContent({ courseId }: { courseId: string }) {
               <div className="mx-auto w-full max-w-[min(1120px,calc((100dvh-10.5rem)*16/9))]">
               {slidesLoading ? (
                 <Skeleton className="aspect-video w-full rounded-2xl" />
-              ) : slideImageUrl ? (
+              ) : slidePdfUrl ? (
                 <div data-aoi="slide" className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    ref={slideImgRef}
-                    src={slideImageUrl}
-                    alt={currentContent.title}
-                    onError={(event) => {
-                      const img = event.currentTarget;
-                      if (img.dataset.fallback) return;
-                      img.dataset.fallback = "1";
-                      img.src = SLIDE_FALLBACK_IMAGE;
-                    }}
-                    className="absolute inset-0 block h-full w-full bg-white object-contain"
+                  <PdfPage
+                    key={`${slidePdfUrl}:${currentContent?.pageNumber ?? 1}`}
+                    url={slidePdfUrl}
+                    pageNumber={currentContent?.pageNumber ?? 1}
+                    alt={currentContent?.title ?? "Trang bài học"}
+                    className="absolute inset-0"
                   />
                 </div>
               ) : (

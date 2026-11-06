@@ -39,7 +39,13 @@ COMPOSE_PROJECT = "eyelearning"
 COMPOSE_SERVICE = "postgres"
 CONTAINER_NAME = "eyetracking-postgres"
 LOCAL_DOCKER_PREFIXES = ("unix://", "npipe://")
-RUNTIME_SERVICES = ("backend", "chatbot", "worker", "db-maintenance")
+RUNTIME_SERVICES = (
+    "backend",
+    "chatbot",
+    "worker",
+    "content-worker",
+    "db-maintenance",
+)
 
 
 class GuardError(RuntimeError):

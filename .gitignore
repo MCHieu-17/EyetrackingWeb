@@ -27,3 +27,6 @@ backend/media/
 
 # Next.js
 frontend/.next
+# PDF.js worker/assets được copy từ node_modules khi dev/build
+frontend/public/pdf.worker.min.mjs
+frontend/public/pdfjs/

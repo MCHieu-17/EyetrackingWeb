@@ -75,12 +75,22 @@ class Settings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
     r2_public_url: str = ""
-    # Dung lượng tối đa một file PDF upload (bytes). 50MB khớp giới hạn FE
-    # (MAX_UPLOAD_BYTES) và đảm bảo render xong < ngưỡng ~100s của Cloudflare.
-    max_pdf_bytes: int = 50 * 1024 * 1024
-    # Trần số trang: render đồng bộ nên chặn sớm để không vượt timeout CF (524).
-    max_pdf_pages: int = 150
+    # Dung lượng tối đa một file slide upload (bytes). 50MB khớp nginx/FE.
+    max_upload_bytes: int = 50 * 1024 * 1024
+    # PDF sau chuyển đổi có thể lớn hơn file nguồn (ảnh/font nhúng).
+    max_pdf_bytes: int = 100 * 1024 * 1024
+    # Trần số trang PDF sau khi chuyển đổi.
+    max_slide_pages: int = 150
     max_slide_render_pixels: int = 25_000_000
+
+    # Chuyển đổi PPTX/PPT/ODP -> PDF bằng LibreOffice headless.
+    libreoffice_binary: str = "soffice"
+    libreoffice_timeout_seconds: int = 120
+
+    # Worker xử lý slide_import_jobs.
+    content_worker_poll_seconds: float = 3.0
+    # Job processing quá lâu (worker chết) sẽ được đưa lại hàng đợi.
+    content_worker_stale_seconds: int = 600
 
     # Tính điểm hoàn thành bài học theo tỷ lệ gaze trên trang.
     mastery_coverage_threshold: float = 0.85      # tỷ lệ gaze trên trang >= 85% → đủ trang

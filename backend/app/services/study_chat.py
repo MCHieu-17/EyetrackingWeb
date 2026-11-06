@@ -130,6 +130,8 @@ def _citation_out(citation: dict) -> dict:
         "slideId": citation.get("slide_id"),
         "slideIndex": citation.get("slide_index"),
         "imageUrl": citation.get("image_url") or "",
+        "pdfUrl": citation.get("pdf_url") or citation.get("image_url") or "",
+        "pageNumber": citation.get("page_number"),
         "snippet": citation.get("snippet") or "",
         "score": citation.get("score") or 0.0,
     }

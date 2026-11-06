@@ -10,6 +10,8 @@ WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# postinstall ở stage deps không copy sang builder; tạo lại worker PDF.js.
+RUN node scripts/copy-pdf-worker.mjs
 
 # URL nội bộ cho rewrite phía server (không inlay vào client bundle).
 ARG API_INTERNAL_URL=http://backend:8001

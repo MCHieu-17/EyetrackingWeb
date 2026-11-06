@@ -1,17 +1,13 @@
-import logging
-import re
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 class StorageError(RuntimeError):
@@ -58,6 +54,11 @@ def asset_url(asset_id: str, object_key: str, storage_backend: str) -> str:
             ExpiresIn=3600,
         )
     return f"/media/assets/{asset_id}"
+
+
+def asset_file_url(asset_id: str) -> str:
+    """URL same-origin để PDF.js tải file PDF (có kiểm tra quyền)."""
+    return f"/media/assets/{asset_id}/file"
 
 
 def put_bytes(key: str, data: bytes, content_type: str) -> str:
@@ -132,14 +133,6 @@ def delete_prefix(prefix: str) -> None:
         raise StorageError("Không thể xóa tệp khỏi volume") from exc
 
 
-def clear_lesson(lesson_id: str) -> None:
-    delete_prefix(f"lessons/{lesson_id}/")
-
-
-def cleanup_version(lesson_id: str, version: str) -> None:
-    delete_prefix(f"lessons/{lesson_id}/{version}/")
-
-
 def _get_r2_bytes(key: str) -> bytes | None:
     try:
         response = _r2_client().get_object(Bucket=settings.r2_bucket_name, Key=key)
@@ -152,63 +145,53 @@ def _get_r2_bytes(key: str) -> bytes | None:
         raise StorageError("Không thể đọc tệp từ R2") from exc
 
 
-def load_source_pdf(lesson_id: str, version: str | None = None) -> bytes | None:
-    prefix = f"lessons/{lesson_id}/"
+def get_bytes(key: str) -> bytes:
+    """Đọc toàn bộ object (dùng cho PDF cần render/convert)."""
     if settings.r2_enabled:
-        if version is not None:
-            source = _get_r2_bytes(f"{prefix}{version}/source.pdf")
-            if source is not None:
-                return source
-
-    lesson_dir = _safe_local_path(prefix)
-    if version is not None:
-        exact = lesson_dir / version / "source.pdf"
-        if exact.is_file():
-            try:
-                return exact.read_bytes()
-            except OSError as exc:
-                raise StorageError("Không thể đọc PDF nguồn từ volume") from exc
-        return None
-    if settings.r2_enabled:
-        candidates = [
-            item for item in _r2_keys(prefix) if item["Key"].endswith("/source.pdf")
-        ]
-        if candidates:
-            latest = max(candidates, key=lambda item: item["LastModified"])
-            return _get_r2_bytes(latest["Key"])
-    if not lesson_dir.is_dir():
-        return None
-    candidates = [path for path in lesson_dir.rglob("source.pdf") if path.is_file()]
-    if not candidates:
-        return None
-    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        data = _get_r2_bytes(key)
+        if data is None:
+            raise StorageError("Không tìm thấy tệp trên R2")
+        return data
+    path = _safe_local_path(key)
     try:
-        return candidates[0].read_bytes()
+        return path.read_bytes()
     except OSError as exc:
-        raise StorageError("Không thể đọc PDF nguồn từ volume") from exc
+        raise StorageError("Không thể đọc tệp từ volume") from exc
 
 
-def key_from_url(url: str) -> str | None:
-    if url.startswith("/media/"):
-        return unquote(url.removeprefix("/media/"))
+def iter_bytes(key: str, chunk_size: int = 1024 * 1024):
+    """Stream object để proxy PDF, tránh nạp cả file vào RAM."""
     if settings.r2_enabled:
-        public = urlparse(settings.r2_public_url)
-        parsed = urlparse(url)
-        if parsed.scheme == public.scheme and parsed.netloc == public.netloc:
-            return unquote(parsed.path.lstrip("/"))
-    return None
+        try:
+            response = _r2_client().get_object(
+                Bucket=settings.r2_bucket_name, Key=key
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError("Không thể đọc tệp từ R2") from exc
+        body = response["Body"]
+        try:
+            yield from body.iter_chunks(chunk_size)
+        finally:
+            body.close()
+        return
+
+    path = _safe_local_path(key)
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(chunk_size):
+                yield chunk
+    except OSError as exc:
+        raise StorageError("Không thể đọc tệp từ volume") from exc
 
 
-def version_from_url(url: str, lesson_id: str) -> str | None:
-    key = key_from_url(url)
-    if key is None:
-        return None
-    match = re.fullmatch(
-        rf"lessons/{re.escape(lesson_id)}/([0-9a-f]{{12}})/slide_\d{{3}}\.jpg",
-        key,
-    )
-    return match.group(1) if match else None
-
-
-def log_cleanup_failure(action: str, exc: Exception) -> None:
-    logger.warning("Media cleanup failed during %s: %s", action, type(exc).__name__)
+def delete_key(key: str, backend: str | None = None) -> None:
+    """Xóa object theo backend của asset (mặc định theo cấu hình hiện tại)."""
+    use_r2 = settings.r2_enabled if backend is None else backend == "r2"
+    if use_r2:
+        _delete_r2_keys([key])
+        return
+    path = _safe_local_path(key)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise StorageError("Không thể xóa tệp khỏi volume") from exc

@@ -159,6 +159,19 @@ Reset DB development (mặc định chỉ preview):
 
 Quy tắc: **không sửa file migration đã áp** — thêm file mới (`003_...`).
 
+## Slide storage
+
+- Upload nhận **PDF, PPTX, PPT, ODP**; mọi định dạng được chuẩn hóa thành một
+  `source.pdf` duy nhất cho mỗi lần upload.
+- Không lưu JPG: frontend dùng **PDF.js** render đúng trang từ PDF; mỗi trang là
+  một `slide_version` với `source_page` tương ứng.
+- Chuyển đổi chạy bất đồng bộ qua `slide_import_jobs` + service `content-worker`
+  (LibreOffice headless trong image backend).
+- PDF được phục vụ same-origin qua `GET /media/assets/{id}/file` để tránh CORS
+  và presigned URL hết hạn.
+- Asset JPG cũ được migration 003 đánh dấu `deleted`; xóa storage bằng:
+  `python -m app.scripts.cleanup_legacy_media --apply`.
+
 ## Chatbot RAG
 
 Sau khi migrations chạy, tạo role DB hạn chế cho chatbot:
@@ -172,7 +185,7 @@ Sau khi migrations chạy, tạo role DB hạn chế cho chatbot:
 - Model: DeepSeek V4.1 Flash qua River AI cho router/answer/verifier/VLM;
   embedding local `Qwen3-Embedding-0.6B` (1024 chiều).
 - Citation chứa `courseVersionId`, `lessonVersionId`, `slideVersionId`,
-  `membershipId`, `assetId`; verifier kiểm tra evidence quote.
+  `membershipId`, `assetId`, `pdfUrl`, `pageNumber`; verifier kiểm tra evidence quote.
 - Streaming SSE: `status → citations → token → done`.
 - Chat quiz dùng đúng `attemptId`; attempt đã nộp cũ không mở quyền attempt mới.
 

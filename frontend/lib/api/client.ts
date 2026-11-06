@@ -28,8 +28,8 @@ export class ApiError extends Error {
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 export const MAX_UPLOAD_LABEL = `${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`;
-/** Số trang PDF tối đa backend chấp nhận (settings.max_pdf_pages). */
-export const MAX_PDF_PAGES = 150;
+/** Số trang PDF tối đa backend chấp nhận (settings.max_slide_pages). */
+export const MAX_SLIDE_PAGES = 150;
 
 export interface ApiRequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -248,13 +248,12 @@ export async function apiFetchMultipart<T>(
     if (res.status === 413) {
       throw new ApiError(413, `File tải lên vượt quá ${MAX_UPLOAD_LABEL} cho phép.`);
     }
-    // Cloudflare cắt request xử lý quá lâu: 524. Xử lý đồng bộ ở backend nên
-    // file quá lớn/nhiều trang có thể vượt ngưỡng ~100s → báo rõ để chia nhỏ.
+    // Upload đã chuyển sang job queue; 524/504 thường do mạng/proxy, không phải
+    // do chờ LibreOffice. Vẫn báo rõ để người dùng thử lại.
     if (res.status === 524 || res.status === 504) {
       throw new ApiError(
         res.status,
-        "Xử lý tệp mất quá nhiều thời gian (quá tải hoặc file quá lớn). " +
-          "Vui lòng thử lại với file nhỏ hơn hoặc ít trang hơn.",
+        "Máy chủ phản hồi quá lâu. Vui lòng thử lại với file nhỏ hơn.",
       );
     }
     let message = `HTTP ${res.status}`;
