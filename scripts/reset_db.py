@@ -465,7 +465,10 @@ END;
 
     def _start_runtime(self, services: Sequence[str]) -> None:
         if services:
-            self.runner.run(self._compose("start", *services))
+            # Dùng image/config mới nhất, không start lại container cũ.
+            self.runner.run(
+                self._compose("up", "-d", "--force-recreate", *services)
+            )
 
     def _check_connections(self, database: str) -> None:
         sql = """

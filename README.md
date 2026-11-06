@@ -132,11 +132,17 @@ docker compose down -v
 
 ## Migrations
 
+Schema chuẩn là baseline sạch:
+
+- `db/migrations/001_baseline.sql` — toàn bộ schema/constraint/index/trigger/view.
+- `db/migrations/002_reference_seed.sql` — roles + cấu hình hệ thống.
+
 Service `migrate` tự chạy mỗi lần `docker compose up`. Runner `db/migrate.sh`:
 
-- Ghi file đã áp vào bảng `schema_migrations`.
-- Chỉ chạy file chưa áp.
-- Từ chối chạy nếu file đã áp bị sửa nội dung.
+- Một kết nối giữ advisory lock suốt lượt chạy.
+- Ghi file đã áp + checksum vào `schema_migrations` trong cùng transaction.
+- Chỉ chạy file chưa áp; file đã áp bị sửa → fail.
+- DB có lịch sử migration cũ / schema cũ → fail, yêu cầu reset có guard.
 
 Chạy tay:
 
@@ -144,13 +150,14 @@ Chạy tay:
 docker compose run --rm migrate
 ```
 
-Reset DB local (giữ weights):
+Reset DB development (mặc định chỉ preview):
 
 ```bash
 ./scripts/reset_db.sh
+./scripts/reset_db.sh --apply --database eyetracking --confirm-reset eyetracking --seed-dev
 ```
 
-Quy tắc: **không sửa file migration đã áp** — thêm file mới (`025_...`).
+Quy tắc: **không sửa file migration đã áp** — thêm file mới (`003_...`).
 
 ## Chatbot RAG
 
@@ -160,55 +167,64 @@ Sau khi migrations chạy, tạo role DB hạn chế cho chatbot:
 ./ops/create_chatbot_role.sh
 ```
 
-- Retrieval chỉ trong đúng `course_id`; hybrid BM25 (Postgres FTS) + vector
-  (pgvector HNSW), fuse bằng RRF.
+- Retrieval lọc `course_id` + `course_version_id` **trước LIMIT**; hybrid BM25
+  (Postgres FTS) + vector (pgvector HNSW), fuse bằng RRF.
 - Model: DeepSeek V4.1 Flash qua River AI cho router/answer/verifier/VLM;
   embedding local `Qwen3-Embedding-0.6B` (1024 chiều).
-- Citation: mỗi claim về môn học phải có `[n]`; verifier kiểm tra evidence quote.
+- Citation chứa `courseVersionId`, `lessonVersionId`, `slideVersionId`,
+  `membershipId`, `assetId`; verifier kiểm tra evidence quote.
 - Streaming SSE: `status → citations → token → done`.
+- Chat quiz dùng đúng `attemptId`; attempt đã nộp cũ không mở quyền attempt mới.
 
 ## Gaze
 
-- Calibration 16 điểm → train model `.ubj` theo phiên → lưu vào
-  `calibration_params` (một bản active / user+device).
-- WebSocket `/session/{sid}/stream` (qua nginx `/gaze/...`).
+- Calibration 16 điểm → train model `.ubj` → lưu bất biến vào `calibrations`;
+  `devices.current_calibration_id` trỏ bản mới nhất.
+- WebSocket `/session/{sid}/stream` (qua nginx `/gaze/...`), protocol v2:
+  4-byte header length + JSON header + JPEG; echo `frameId`/`sequence`.
+- Frontend gửi batch idempotent vào `gaze_samples` (partition theo tháng);
+  IndexedDB queue giữ batch tới khi ACK.
 - Không có GPU: đặt `DEVICE=cpu` trong `.env`, bỏ `gpus: all` ở service `gaze`
   trong `docker-compose.yml`; chatbot đặt `EMBEDDING_DEVICE=cpu` và bỏ `gpus: all`.
 
 ## Tests & lint
 
 ```bash
-# Backend (cần postgres + DB test)
+# Dựng DB test riêng (idempotent; --reset để drop/recreate có guard)
+./scripts/test_db.sh
+
+# Backend
 ./scripts/test_backend.sh -v
+
+# Migration runner
+./scripts/test_migrations.sh
+
+# Chatbot + backend chat/AOI + frontend
+./scripts/test_chatbot.sh
 
 # Frontend
 cd frontend && npm run lint && npm run typecheck && npm test
 
-# Chatbot
-cd services/chatbot && .venv/bin/python -m pytest tests -q
-
-# Gaze
-cd services/gaze && python -m pytest tests -q
+# Gaze protocol
+PYTHONPATH=services/gaze python3 -m pytest services/gaze/tests -q
 
 # Ruff
 ruff check backend services/gaze
 ```
 
-Tạo DB test một lần:
-
-```bash
-docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
-docker compose run --rm -e PGDATABASE=eyetracking_test migrate
-```
+DB test mặc định: `eyelearning_refactor_test` (không dùng `eyetracking_test` cũ).
 
 ## Bảo trì partition
 
-Migration `003` tạo partition cho 12 tháng đầu. Khi cần tạo thêm:
+Baseline tạo partition tháng trước/current/3 tháng tới + default partition.
+Khi cần tạo thêm:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-  -c "SELECT create_gaze_partitions(3);"
+./scripts/create_partitions.sh 3
 ```
+
+Worker `worker` chạy `analysis_runs` pending; watermark/trạng thái nằm trong
+PostgreSQL nên restart không mất việc.
 
 ## Dọn dung lượng Docker
 

@@ -1,0 +1,12 @@
+=== Phase 6 rebuild verification ===
+date: 2026-11-06T17:49:03+07:00
+schema diff (normalized): identical
+reference seed diff: identical
+database list diff: identical
+--- seed ---
+generation=1
+roles=3
+settings=1
+--- migrations ---
+001_baseline.sql|7eb8233c74a227f54ffbb2dd8a794999b8845024ddeb9b9b61011c836a3661c9
+002_reference_seed.sql|caa92febdd1291fd52febf2728bc35598d9b1830a99d9f76a9815b2562c608ba

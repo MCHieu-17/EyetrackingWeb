@@ -1,6 +1,6 @@
 # PLAN.md — Tái cấu trúc LMS, Eye Tracking và baseline database
 
-**Trạng thái:** Phase 0–4 đã triển khai trên nhánh `refactor/lms-v2`; Phase 5–6 chưa triển khai.
+**Trạng thái:** Phase 0–6 đã triển khai trên nhánh `refactor/lms-v2`; development DB đã reset có guard và stack mới đang chạy.
 
 **Phạm vi:** Thiết kế lại database và các consumer liên quan; reset riêng database development đã xác minh. Không giữ dữ liệu cũ, không backfill, không duy trì API/schema tương thích ngược.
 
@@ -628,8 +628,8 @@ Dự toán: 20 output/s tương ứng 72.000 samples/giờ/sinh viên; 100 sinh 
 | 2 | Hoàn tất (content/media/reader) | `backend/app/services/content.py`; routes `courses/modules/module_items/lessons/media/enrollments/quiz_specs`; `backend/tests/test_content_phase2.py` (2 passed); frontend typecheck + 52 unit tests + 62 E2E passed. Quiz attempts/gaze/analytics thuộc Phase 3–5. |
 | 3 | Hoàn tất (quiz/session/calibration) | `quiz_attempts.py`, `learning_sessions.py`, `calibration.py`; `backend/tests/test_quiz_phase3.py` + `test_session_phase3.py` (2 passed); frontend typecheck + 52 unit + 62 E2E passed. Gaze ingestion thuộc Phase 4. |
 | 4 | Hoàn tất lõi (protocol/ingestion/queue) | `gaze_ingest.py` (presentation/layout/batch idempotent), `services/gaze/app/protocol.py` + `test_protocol.py` (4 passed), `backend/tests/test_gaze_phase4.py` (1 passed), frontend `use-gaze-tracker` protocol v2 + `gaze-queue` IndexedDB + `gaze-sender`; typecheck + 52 unit + 62 E2E passed. |
-| 5 | Chưa triển khai | AOI/analytics/RAG/export và full-stack E2E report |
-| 6 | Chưa triển khai | Reset manifest, smoke/E2E/load/recovery report |
+| 5 | Hoàn tất (AOI/analytics/RAG/export) | `services/aoi.py`, `analysis.py`, `metrics.py`; routes `aoi.py`, `analytics.py`, `chat.py`, `chat_internal.py`; chatbot ingest/retrieval versioned; `backend/tests/test_aoi_phase5.py` + `test_chat_phase5.py` (3 passed); chatbot tests 89 passed; frontend typecheck + 52 unit + 62 E2E passed; chatbot role không đọc được `quiz_specs`/`users`/`quiz_attempts` |
+| 6 | Hoàn tất | `docs/test-evidence/phase6-rebuild.txt` (schema/seed identical sau 2 lần rebuild, DB khác không đổi); `phase6-smoke.txt` (course→publish→enroll→calibration→session→gaze→AOI→analysis→heatmap→export→chat access); `phase6-worker-recovery.txt`; `phase6-redis-fallback.txt`; `phase6-export-stream.txt`; `phase6-load.log` (2.000 samples/s × 30 phút = 3.600.000 samples, p50 136ms, p95 219ms, max 277ms, DB ~970MB); backend 63 passed, chatbot 89 passed, frontend 52 unit + 62 E2E, typecheck pass |
 
 ### 5.5. Kiểm thử bắt buộc
 
@@ -697,4 +697,4 @@ Dự toán: 20 output/s tương ứng 72.000 samples/giờ/sinh viên; 100 sinh 
 
 **Ngoài V1:** event sourcing, ngân hàng câu hỏi độc lập, polygon AOI, tự chuyển AOI giữa hai ảnh khác nhau, lưu video, cold storage và tự động purge dữ liệu nghiên cứu.
 
-**Điểm dừng:** Chỉ lưu tài liệu kế hoạch. Chưa thực hiện bất kỳ phase triển khai, migration hay reset database nào. Việc triển khai cần được người dùng phê duyệt riêng.
+**Điểm dừng:** Phase 0–6 đã triển khai và nghiệm thu trên development. Baseline checksum đã khóa; mọi thay đổi schema sau đây phải là migration mới. Các hạn chế còn lại: benchmark inference GPU thực tế chưa chạy trong môi trường này; load test đo ingestion/ACK/DB, không chứng minh GPU đủ cho cùng số người; R2/local media cũ được giữ nguyên, không xóa bucket/volume.

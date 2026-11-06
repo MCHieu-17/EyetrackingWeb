@@ -145,23 +145,23 @@ Backend dựng ngữ cảnh bài tập: trước khi nộp chỉ gửi đề + o
 
 ## Tests
 
-Tests chạy trên DB riêng `eyetracking_test` (tạo 1 lần):
+Tests chạy trên DB riêng `eyelearning_refactor_test`:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE eyetracking_test;"
-# áp migration vào DB test qua runner chung (bảng schema_migrations: chỉ chạy file chưa áp)
-docker compose run --rm -e PGDATABASE=eyetracking_test migrate
-```
-
-```bash
+./scripts/test_db.sh          # tạo nếu chưa có, chạy baseline 001/002
 ./scripts/test_backend.sh -v
 ```
+
+Không dùng `Base.metadata.create_all()` và không replay migration trong pytest
+fixture; schema test DB do runner chung dựng.
 
 ## Thiết kế đáng chú ý
 
 - **JWT access ngắn hạn + refresh token** lưu dạng SHA-256 hash trong `auth_sessions`, rotation khi refresh.
-- **RBAC**: role trong JWT + kiểm tra `user_roles`; ownership khóa học theo `courses.teacher_id`.
-- **Gaze**: `gaze_events` giữ tọa độ slide chuẩn hóa [0,1] cho heatmap/mastery; chỉ ghi event khi nằm trong [0,1]. `gaze_raw_samples` lưu **raw viewport** (có thể <0/>1), `status='no_face'` với `gaze_x/gaze_y=NULL`, downsample theo `GAZE_RAW_HZ`. Viewport lúc lấy mẫu phải bằng viewport lúc calibration (F11/zoom → 409, phải hiệu chỉnh lại).
-- **AOI DOM-anchored**: frontend đo `getBoundingClientRect()` của mọi `[data-aoi]` và gửi layout snapshot; backend lưu rect thật. `gaze_aoi_hits` là derived, rebuild từ raw + snapshot + catalog nên thêm AOI mới sau khi đã thu dữ liệu vẫn map lại được.
+- **RBAC**: role trong JWT + kiểm tra `user_roles`; ownership khóa học theo `courses.owner_id`.
+- **Content versioning**: course/lesson/slide version bất biến sau publish; draft copy-on-write; `expectedGeneration` chống lost update.
+- **Gaze**: một nguồn `gaze_samples` (viewport raw, partition theo tháng); `gaze_batches` giữ ACK/idempotency; metadata calibration/viewport/pipeline nằm ở session/batch, không lặp trên từng sample.
+- **AOI/analysis**: `aoi_sets` versioned; `analysis_runs` chốt watermark + time range; `aoi_hits`/`presentation_metrics` là derived, rebuild theo run.
+- **Chat/RAG**: retrieval lọc `course_version_id` trước LIMIT; citation chứa version/membership/asset IDs; quiz hint/review theo đúng `attemptId`.
 - **Heatmap**: fixation detection (dispersion) + hotspot clustering (grid 24×24 + local maxima) tính on-the-fly từ `gaze_events`; `heatmap_aggregates`/`engagement_scores` được tự refresh gần thời gian thực sau mỗi batch gaze-sample (incremental, chỉ chạm slide của batch) + endpoint recompute (batch) để chạy lại toàn bài.
 - **camelCase**: toàn bộ response dùng alias generator `to_camel` — khớp `frontend/lib/types/domain.ts`, UI không cần sửa.

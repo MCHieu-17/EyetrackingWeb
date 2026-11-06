@@ -123,6 +123,31 @@ services:
 
   # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B.
   # Build từ ./services/chatbot (FROM image nền docker/ai-base có torch CUDA).
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: eyelearning-backend:local
+    container_name: eyetracking-worker
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER}
+      REDIS_URL: ${REDIS_URL_DOCKER}
+      AI_HTTP_URL: http://gaze:8000
+      CHATBOT_URL: http://chatbot:8000
+      CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      DEBUG: ${DEBUG:-false}
+
   chatbot:
     build:
       context: ./services/chatbot
@@ -182,6 +207,7 @@ services:
       RIVER_QUEUE_TIMEOUT: ${RIVER_QUEUE_TIMEOUT:-30}
       CITATION_MAX_ATTEMPTS: ${CITATION_MAX_ATTEMPTS:-2}
       LOCAL_MEDIA_DIR: /app/media
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_HTTP_ALLOWED_HOSTS: ${STORAGE_HTTP_ALLOWED_HOSTS:-}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}

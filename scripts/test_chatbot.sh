@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chatbot/backend chat tests trên PostgreSQL tạm, không dùng DB development.
+# Chatbot + backend chat/AOI tests trên PostgreSQL tạm, không dùng DB development.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 repo_root="$PWD"
@@ -25,11 +25,18 @@ docker exec -e PGHOST=127.0.0.1 -e PGUSER=postgres -e PGPASSWORD=postgres \
 export DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:${test_port}/${test_db}"
 export CHATBOT_INTEGRATION_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:${test_port}/${test_db}"
 export CHATBOT_TEST_PYTHON="$repo_root/services/chatbot/.venv/bin/python"
+export CHATBOT_URL="http://127.0.0.1:9"
+export CHATBOT_INTERNAL_TOKEN="test-chatbot-token"
 
 (
   cd backend
-  .venv/bin/python -m pytest tests/test_chat.py tests/test_assignments.py \
-    tests/test_embedding_retry.py tests/test_chatbot_integration.py -q
+  .venv/bin/python -m pytest \
+    tests/test_chat_phase5.py \
+    tests/test_aoi_phase5.py \
+    tests/test_content_phase2.py \
+    tests/test_quiz_phase3.py \
+    tests/test_session_phase3.py \
+    tests/test_gaze_phase4.py -q
 )
 (
   cd services/chatbot

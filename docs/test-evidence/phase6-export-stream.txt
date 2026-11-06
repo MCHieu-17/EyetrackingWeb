@@ -1,0 +1,5 @@
+=== Phase 6 export streaming ===
+- Analysis run on load-test session (3.6M samples, non-matching AOI -> 0 hits).
+- Run completed in 30.6s.
+- Export endpoint returned first 5 JSONL lines in 0.04s while streaming.
+- Manifest includes run/session/calibration/AOI/layout/presentation IDs.

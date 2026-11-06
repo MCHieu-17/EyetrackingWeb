@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "courseId": "7a815edf-f0e6-4cb9-aa2d-255ffeb88fd3",
+  "lessonId": "1ed5b935-e784-47cd-9c43-8857f560e2b8",
+  "sessionId": "cffebc52-0ed4-4464-ae08-94f3033093d6",
+  "analysisRunId": "cbc5a8d2-bfda-4868-adf4-fc5e8f55e217",
+  "hitCount": 3,
+  "metrics": 1,
+  "heatmapSlides": 1,
+  "exportLines": 5,
+  "chatAllowed": true
+}
