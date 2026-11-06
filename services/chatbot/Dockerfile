@@ -12,8 +12,15 @@ WORKDIR /app
 
 # Cài dependencies trước để tận dụng cache layer. Assert ngay trong build để
 # phát hiện sớm nếu pip chọn nhầm wheel torch (CPU thay vì cu124).
+#
+# Cache wheel của pip bằng BuildKit cache mount: wheel được giữ ngoài image
+# (không làm tăng size) và tái sử dụng khi requirements thay đổi, tránh phải
+# tải lại toàn bộ thư viện mỗi lần rebuild. Base image đặt PIP_NO_CACHE_DIR=1;
+# pip luôn tắt cache khi biến này tồn tại (kể cả giá trị 0/false), nên phải
+# `env -u PIP_NO_CACHE_DIR` cho riêng lệnh pip.
 COPY requirements.txt requirements-embedding.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-embedding.txt \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR pip install -r requirements.txt -r requirements-embedding.txt \
     && pip check \
     && python -c "import torch; assert torch.version.cuda == '12.4', torch.version.cuda"
 
