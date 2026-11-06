@@ -167,3 +167,75 @@ def test_calibration_and_learning_session(client, teacher, student):
     )
     assert mismatch.status_code == 409
     assert mismatch.json()["detail"]["code"] == "viewport_mismatch"
+
+
+def test_archive_blocks_new_session_but_keeps_history(client, teacher, student):
+    course_id, lesson_id = _published_lesson(client, teacher)
+    student_headers = auth(student)
+    enroll = client.post(f"/api/courses/{course_id}/enroll", headers=student_headers)
+    assert enroll.status_code == 201, enroll.text
+    enrollment_id = enroll.json()["enrollmentId"]
+
+    fingerprint = "device-archive"
+    calibration = client.post(
+        "/api/calibrations",
+        json={
+            "deviceFingerprint": fingerprint,
+            "numPoints": 16,
+            "modelUbjBase64": base64.b64encode(b"fake-model").decode(),
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "devicePixelRatio": 1,
+        },
+        headers=student_headers,
+    )
+    assert calibration.status_code == 201, calibration.text
+    session = client.post(
+        "/api/learning-sessions",
+        json={
+            "enrollmentId": enrollment_id,
+            "lessonId": lesson_id,
+            "deviceFingerprint": fingerprint,
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
+            "trackingConsent": True,
+        },
+        headers=student_headers,
+    )
+    assert session.status_code == 201, session.text
+    session_id = session.json()["id"]
+    closed = client.patch(
+        f"/api/learning-sessions/{session_id}",
+        json={"status": "completed"},
+        headers=student_headers,
+    )
+    assert closed.status_code == 200, closed.text
+
+    archived = client.delete(
+        f"/teacher/courses/{course_id}", headers=auth(teacher)
+    )
+    assert archived.status_code == 200, archived.text
+
+    blocked = client.post(
+        "/api/learning-sessions",
+        json={
+            "enrollmentId": enrollment_id,
+            "lessonId": lesson_id,
+            "deviceFingerprint": fingerprint,
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1,
+            "trackingConsent": True,
+        },
+        headers=student_headers,
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "course_archived"
+
+    history = client.get(f"/api/courses/{course_id}", headers=student_headers)
+    assert history.status_code == 200, history.text

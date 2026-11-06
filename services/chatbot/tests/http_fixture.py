@@ -52,9 +52,8 @@ providers.get_vlm = lambda *a, **kw: Model()
 providers.get_llm = lambda *a, **kw: Model()
 
 from app.main import app  # noqa: E402,F401
+from app.workflow import lms, river
 
-
-from app.workflow import river, lms
 
 class RiverFixture:
     async def structured(self, purpose, prompt, schema):

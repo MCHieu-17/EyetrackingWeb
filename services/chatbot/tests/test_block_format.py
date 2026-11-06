@@ -1,5 +1,7 @@
 import pytest
+
 from app.workflow.answer import complete_block
+
 
 @pytest.mark.parametrize('text',['```python\nx=1\n```','$$x^2$$','| A | B |\n|---|---|\n| 1 | 2 |'])
 def test_complete_markdown(text):

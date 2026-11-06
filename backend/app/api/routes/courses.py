@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access import (
@@ -11,15 +11,12 @@ from app.api.access import (
     get_viewable_course,
 )
 from app.api.deps import can_access_course, get_current_user, require_roles
-from app.core.helpers import color_for, relative_time_vn
+from app.core.helpers import color_for
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import (
-    Course,
     CourseVersion,
-    CourseVersionItem,
     Enrollment,
-    Lesson,
 )
 from app.models.profile import StudentProfile, UserProfile
 from app.schemas.course import (
@@ -35,7 +32,7 @@ from app.schemas.course import (
     StudentsAddIn,
     TeacherCourseOut,
 )
-from app.services import content
+from app.services import content, embedding
 
 router = APIRouter(tags=["courses"])
 
@@ -194,6 +191,7 @@ async def get_course_draft(
 async def publish_course(
     course_id: str,
     body: PublishIn,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -202,6 +200,7 @@ async def publish_course(
         db, course, user, body.expected_generation
     )
     await db.commit()
+    background_tasks.add_task(embedding.sync_course_version, version.id)
     return {"ok": True, "courseVersionId": version.id}
 
 

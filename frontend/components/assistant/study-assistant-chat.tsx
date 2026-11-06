@@ -165,9 +165,9 @@ export function StudyAssistantChat({
   open: boolean;
   onClose: () => void;
 }) {
-  const { mode, assignmentId, lessonId, draftAnswers } = useAssistant();
+  const { mode, assignmentId, attemptId, lessonId, draftAnswers } = useAssistant();
   const { user } = useAuthState();
-  const storageKey = `study-chat:${user?.id ?? "anonymous"}:${courseId}:${assignmentId ?? "reader"}:${mode === "reader" ? "reader" : mode}`;
+  const storageKey = `study-chat:${user?.id ?? "anonymous"}:${courseId}:${assignmentId ?? "reader"}:${attemptId ?? "no-attempt"}:${mode === "reader" ? "reader" : mode}`;
   const access = useChatAccess(courseId, open || mode === "quiz");
   const allowed = access.data?.allowed === true && !access.isError;
   // undefined = chưa chọn (tự mở phiên gần nhất), null = phiên mới chưa lưu.
@@ -197,7 +197,11 @@ export function StudyAssistantChat({
     onClose();
   }, [onClose]);
 
-  const sessionsQuery = useChatSessions(allowed && open ? courseId : null, assignmentId);
+  const sessionsQuery = useChatSessions(
+    allowed && open ? courseId : null,
+    assignmentId,
+    attemptId,
+  );
   const sessions = Array.isArray(sessionsQuery.data) ? sessionsQuery.data : [];
   // undefined = chưa chọn -> tự dùng phiên gần nhất; null = phiên mới.
   const effectiveSessionId =
@@ -326,6 +330,7 @@ export function StudyAssistantChat({
           sessionId: sessionIdRef.current ?? effectiveSessionId,
           lessonId,
           assignmentId,
+          attemptId,
           draftAnswers,
         },
         {

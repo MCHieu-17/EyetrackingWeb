@@ -6,11 +6,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.routes import (
     admin,
+    analytics,
+    aoi,
     auth,
     calibration,
+    chat,
+    chat_internal,
     courses,
     enrollments,
     gaze_ingest,
@@ -26,14 +31,53 @@ from app.api.routes import (
 )
 from app.core.config import settings
 from app.db.redis import close_redis, init_redis
+from app.db.session import SessionLocal
+
+EXPECTED_SCHEMA_GENERATION = "1"
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     if "*" in settings.cors_origin_list:
         raise RuntimeError("CORS_ORIGINS không được chứa '*' khi allow_credentials=True — hãy liệt kê origin cụ thể")
     _ = settings.r2_enabled  # validate partial R2 configuration at startup
     settings.media_path.mkdir(parents=True, exist_ok=True)
+
+    # Fail-fast nếu DB không phải baseline đã nghiệm thu. Không cho backend cũ
+    # chạy trên schema mới hoặc ngược lại.
+    try:
+        async with SessionLocal() as session:
+            generation = (
+                await session.execute(
+                    text(
+                        "SELECT value FROM app_metadata "
+                        "WHERE key = 'schema_generation'"
+                    )
+                )
+            ).scalar_one_or_none()
+            instance_id = (
+                await session.execute(
+                    text(
+                        "SELECT value FROM app_metadata "
+                        "WHERE key = 'db_instance_id'"
+                    )
+                )
+            ).scalar_one_or_none()
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "Database chưa có baseline mới (app_metadata). "
+            "Chạy scripts/reset_db.sh có guard trước khi khởi động backend."
+        ) from exc
+    if generation != EXPECTED_SCHEMA_GENERATION:
+        raise RuntimeError(
+            f"Schema generation không khớp: DB={generation!r}, "
+            f"backend={EXPECTED_SCHEMA_GENERATION!r}. Cần reset/migrate có guard."
+        )
+    if instance_id:
+        settings.app_instance_id = instance_id
+    app.state.schema_generation = generation
+    app.state.db_instance_id = instance_id
+
     await init_redis()
     yield
     await close_redis()
@@ -101,11 +145,20 @@ app.include_router(quiz_attempts.router)
 app.include_router(calibration.router)
 app.include_router(learning_sessions.router)
 app.include_router(gaze_ingest.router)
+app.include_router(aoi.router)
+app.include_router(analytics.router)
+app.include_router(chat.router)
+app.include_router(chat_internal.router)
 
 
 @app.get("/health", tags=["system"])
 async def health():
-    return {"status": "ok", "app": settings.app_name}
+    return {
+        "status": "ok",
+        "app": settings.app_name,
+        "schemaGeneration": getattr(app.state, "schema_generation", None),
+        "dbInstanceId": getattr(app.state, "db_instance_id", None),
+    }
 
 
 # Slide ảnh render từ PDF (đường dẫn trong lesson_contents.image_url bắt đầu /media).

@@ -135,6 +135,7 @@ class QuizAttemptCreate(CamelModel):
 class QuizAttemptOut(CamelModel):
     id: str
     assignment_id: str
+    status: str = "in_progress"
     answers: Answers
     submitted_at: datetime
     score: int

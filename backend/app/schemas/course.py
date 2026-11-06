@@ -186,6 +186,8 @@ class SlideOut(CamelModel):
     id: str
     title: str
     image_url: str | None = None
+    slide_version_id: str | None = None
+    lesson_version_id: str | None = None
 
 
 class SlideAdminOut(CamelModel):
@@ -196,6 +198,8 @@ class SlideAdminOut(CamelModel):
     is_key: bool = False
     embedding_status: str = "none"
     embedding_error: str | None = None
+    slide_version_id: str | None = None
+    lesson_version_id: str | None = None
 
 
 class EmbeddingSyncOut(CamelModel):

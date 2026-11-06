@@ -1,12 +1,14 @@
 import asyncio
 import functools
 
+
 def async_test(fn):
     @functools.wraps(fn)
     def run(*args, **kwargs):
         return asyncio.run(fn(*args, **kwargs))
     return run
 from app.workflow import blocks
+
 
 @async_test
 async def test_first_block_before_generation_finishes(monkeypatch):

@@ -1,5 +1,7 @@
 import concurrent.futures
+
 from app.workflow.embedding_queue import ManagedEmbedding
+
 
 class Model:
     def __init__(self): self.calls=[]

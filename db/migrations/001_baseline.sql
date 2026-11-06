@@ -313,7 +313,8 @@ CREATE TABLE slide_documents (
     pipeline_version  VARCHAR(64) NOT NULL,
     model_version     VARCHAR(64) NOT NULL,
     transcript        TEXT NOT NULL DEFAULT '',
-    embedding         VECTOR(1024) NOT NULL,
+    -- NULL khi pending/failed: chỉ ghi vector sau khi ingest thành công.
+    embedding         VECTOR(1024),
     content_tsv       TSVECTOR GENERATED ALWAYS AS (
         to_tsvector('simple', immutable_unaccent(transcript))
     ) STORED,
@@ -870,8 +871,12 @@ SELECT
     o.course_version_id,
     o.lesson_id,
     o.lesson_version_id,
+    o.lesson_version_slide_id,
     o.slide_id,
     o.image_asset_id,
+    o.image_object_key,
+    o.image_storage_backend,
+    o.image_mime_type,
     o.slide_title,
     o.module_title,
     o.lesson_title,
@@ -1454,6 +1459,64 @@ $$;
 CREATE TRIGGER trg_analysis_run_scope
 BEFORE INSERT OR UPDATE ON analysis_runs
 FOR EACH ROW EXECUTE FUNCTION check_analysis_run_scope();
+
+CREATE OR REPLACE FUNCTION prevent_published_aoi_set_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.state = 'published' THEN
+            RAISE EXCEPTION 'cannot delete published AOI set %', OLD.id;
+        END IF;
+        RETURN OLD;
+    END IF;
+    IF OLD.state = 'published' THEN
+        IF NEW.state = 'archived'
+           AND NEW.scope = OLD.scope
+           AND NEW.slide_version_id IS NOT DISTINCT FROM OLD.slide_version_id
+           AND NEW.ui_schema_version IS NOT DISTINCT FROM OLD.ui_schema_version
+           AND NEW.revision = OLD.revision THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'cannot modify published AOI set %', OLD.id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_aoi_sets_immutable
+BEFORE UPDATE OR DELETE ON aoi_sets
+FOR EACH ROW EXECUTE FUNCTION prevent_published_aoi_set_mutation();
+
+CREATE OR REPLACE FUNCTION prevent_published_aoi_definition_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    old_state VARCHAR(16);
+    new_state VARCHAR(16);
+BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        SELECT state INTO old_state FROM aoi_sets WHERE id = OLD.aoi_set_id;
+        IF old_state <> 'draft' THEN
+            RAISE EXCEPTION 'cannot modify definitions of non-draft AOI set %', OLD.aoi_set_id;
+        END IF;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        SELECT state INTO new_state FROM aoi_sets WHERE id = NEW.aoi_set_id;
+        IF new_state <> 'draft' THEN
+            RAISE EXCEPTION 'cannot add definitions to non-draft AOI set %', NEW.aoi_set_id;
+        END IF;
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_aoi_definitions_immutable
+BEFORE INSERT OR UPDATE OR DELETE ON aoi_definitions
+FOR EACH ROW EXECUTE FUNCTION prevent_published_aoi_definition_mutation();
 
 CREATE OR REPLACE FUNCTION check_quiz_spec_lesson_kind()
 RETURNS trigger

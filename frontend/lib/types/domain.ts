@@ -227,6 +227,7 @@ export interface QuizAssignment {
 export interface QuizAttempt {
   id: string;
   assignmentId: string;
+  status?: "in_progress" | "submitted" | "expired";
   answers: Record<string, string[]>;
   submittedAt: string;
   score: number;

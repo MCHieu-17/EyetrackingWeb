@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    REAL,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -9,7 +10,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
-    REAL,
     String,
     Text,
     UniqueConstraint,
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.course import ContentPresentation, LessonVersionSlide, SlideVersion
+    from app.models.course import ContentPresentation, SlideVersion
     from app.models.gaze import GazeBatch, GazeSample, LearningSession
 
 

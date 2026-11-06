@@ -48,6 +48,7 @@ async def _asset_published(db: AsyncSession, asset_id: str) -> bool:
                 CourseVersion,
                 CourseVersion.id == CourseVersionItem.course_version_id,
             )
+            .join(Course, Course.published_version_id == CourseVersion.id)
             .where(
                 SlideVersion.image_asset_id == asset_id,
                 CourseVersion.state == "published",

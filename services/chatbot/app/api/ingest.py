@@ -1,4 +1,4 @@
-"""API nạp (ingest) slide vào pgvector.
+"""API nạp (ingest) slide version vào pgvector.
 
 `Ingestion` là tiến trình nặng: gọi VLM mô tả ảnh rồi embedding. Vì vậy ở đây
 dùng lazy singleton (chỉ khởi tạo khi có request đầu tiên) và một khóa để các
@@ -34,7 +34,6 @@ _job_lock = threading.Lock()
 
 
 def get_ingestion() -> Ingestion:
-    """Khởi tạo Ingestion một lần duy nhất (lazy)."""
     global _ingestion
     if _ingestion is None:
         with _init_lock:
@@ -66,43 +65,46 @@ def _result(stats: tuple[int, int, list[str]]) -> IngestResult:
 
 @router.post("/slide", response_model=IngestResult)
 async def embed_slide(payload: IngestSlideRequest):
-    """Embedding (hoặc cập nhật) một slide đơn lẻ."""
     try:
-        stats = await _run_async(get_ingestion().embed_slide, payload.lesson_content_id)
+        stats = await _run_async(
+            get_ingestion().embed_slide, payload.slide_version_id
+        )
     except LookupError:
         raise HTTPException(
             status_code=404,
-            detail=f"Không tìm thấy slide: {payload.lesson_content_id}",
+            detail=f"Không tìm thấy slide version: {payload.slide_version_id}",
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return _result(stats)
 
 
-@router.post("/lesson", response_model=IngestResult)
-async def embed_lesson(payload: IngestLessonRequest):
-    """Embedding toàn bộ slide của một bài học."""
+@router.post("/lesson-version", response_model=IngestResult)
+async def embed_lesson_version(payload: IngestLessonRequest):
     try:
-        stats = await _run_async(get_ingestion().embed_lesson, payload.lesson_id)
+        stats = await _run_async(
+            get_ingestion().embed_lesson_version, payload.lesson_version_id
+        )
     except LookupError:
         raise HTTPException(
             status_code=404,
-            detail=f"Không tìm thấy bài học: {payload.lesson_id}",
+            detail=f"Không tìm thấy lesson version: {payload.lesson_version_id}",
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return _result(stats)
 
 
-@router.post("/course", response_model=IngestResult)
-async def embed_course(payload: IngestCourseRequest):
-    """Embedding toàn bộ slide của một khóa học."""
+@router.post("/course-version", response_model=IngestResult)
+async def embed_course_version(payload: IngestCourseRequest):
     try:
-        stats = await _run_async(get_ingestion().embed_course, payload.course_id)
+        stats = await _run_async(
+            get_ingestion().embed_course_version, payload.course_version_id
+        )
     except LookupError:
         raise HTTPException(
             status_code=404,
-            detail=f"Không tìm thấy khóa học: {payload.course_id}",
+            detail=f"Không tìm thấy course version: {payload.course_version_id}",
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -111,7 +113,6 @@ async def embed_course(payload: IngestCourseRequest):
 
 @router.post("/reindex-all", response_model=IngestResult)
 async def reindex_all():
-    """Backfill các slide chưa ready (dùng cho admin/CLI)."""
     try:
         stats = await _run_async(get_ingestion().reindex_all)
     except VLMUnavailableError as exc:

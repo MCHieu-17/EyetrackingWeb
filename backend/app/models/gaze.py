@@ -2,15 +2,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    BigInteger,
     CHAR,
+    REAL,
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
-    REAL,
     String,
     UniqueConstraint,
     text,

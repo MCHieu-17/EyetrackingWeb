@@ -1,17 +1,27 @@
-import asyncio
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access import get_lesson_or_404
-from app.api.deps import can_access_course, get_current_user, require_roles
+from app.api.deps import (
+    can_access_course,
+    can_manage_course,
+    get_current_user,
+    require_roles,
+)
 from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, Enrollment, Lesson, LessonVersion, LessonVersionSlide
-from app.models.media import SlideDocument
+from app.models.course import (
+    Course,
+    CourseVersionItem,
+    Enrollment,
+    Lesson,
+    LessonVersion,
+    LessonVersionSlide,
+)
 from app.schemas.course import (
     EmbeddingSyncOut,
     LessonCreateIn,
@@ -22,7 +32,7 @@ from app.schemas.course import (
     SlideOut,
 )
 from app.schemas.gaze import OkOut
-from app.services import content
+from app.services import content, embedding
 
 router = APIRouter(tags=["lessons"])
 
@@ -45,6 +55,8 @@ async def create_lesson(
     db: AsyncSession = Depends(get_db),
 ):
     course, _ = await content.course_of_module(db, module_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     lesson = await content.create_lesson(db, course, user, module_id, body.title)
     await db.commit()
     return {"id": lesson.id, "title": body.title}
@@ -58,6 +70,8 @@ async def update_lesson(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     if body.title is not None:
         await content.update_lesson(db, course, user, lesson.id, body.title)
     await db.commit()
@@ -71,6 +85,8 @@ async def delete_lesson(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.delete_lesson(db, course, user, lesson.id)
     await db.commit()
     return {"ok": True}
@@ -101,7 +117,7 @@ async def upload_lesson_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_access_course(db, course, user):
+    if not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
     data = bytearray()
@@ -131,6 +147,8 @@ async def delete_slide(
     course = await db.get(Course, lesson.course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.delete_slide(db, course, user, slide_id)
     await db.commit()
     return {"ok": True}
@@ -165,6 +183,8 @@ async def set_slide_key(
     course = await db.get(Course, lesson.course_id) if lesson else None
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.set_slide_key(db, course, user, slide_id, body.is_key)
     await db.commit()
     return OkOut()
@@ -178,6 +198,8 @@ async def set_slide_keys(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.set_slide_keys(
         db, course, user, lesson.id, body.order_indexes
     )
@@ -216,7 +238,23 @@ async def reindex_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    return EmbeddingSyncOut(ready=0, failed=0)
+    lesson, course = await _course_for_lesson(db, lesson_id)
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    if course.published_version_id is None:
+        return EmbeddingSyncOut(ready=0, failed=0)
+    item = (
+        await db.execute(
+            select(CourseVersionItem).where(
+                CourseVersionItem.course_version_id == course.published_version_id,
+                CourseVersionItem.lesson_id == lesson.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        return EmbeddingSyncOut(ready=0, failed=0)
+    result = await embedding.sync_lesson_version(item.lesson_version_id)
+    return EmbeddingSyncOut(**result)
 
 
 @router.post(
@@ -229,7 +267,15 @@ async def reindex_course(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    return EmbeddingSyncOut(ready=0, failed=0)
+    course = await db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    if course.published_version_id is None:
+        return EmbeddingSyncOut(ready=0, failed=0)
+    result = await embedding.sync_course_version(course.published_version_id)
+    return EmbeddingSyncOut(**result)
 
 
 @router.post(
@@ -240,7 +286,8 @@ async def reindex_course(
 async def reindex_all(
     _: User = Depends(require_roles("admin")),
 ):
-    return EmbeddingSyncOut(ready=0, failed=0)
+    result = await embedding.reindex_all()
+    return EmbeddingSyncOut(**result)
 
 
 @router.get("/teacher/courses/{course_id}/embedding-status")
@@ -254,20 +301,6 @@ async def embedding_status(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    rows = (
-        await db.execute(
-            select(SlideDocument.ingestion_state, func.count(SlideDocument.slide_version_id))
-            .join(
-                LessonVersionSlide,
-                LessonVersionSlide.slide_version_id == SlideDocument.slide_version_id,
-            )
-            .join(
-                LessonVersion,
-                LessonVersion.id == LessonVersionSlide.lesson_version_id,
-            )
-            .join(Lesson, Lesson.id == LessonVersion.lesson_id)
-            .where(Lesson.course_id == course.id)
-            .group_by(SlideDocument.ingestion_state)
-        )
-    ).all()
-    return {state: int(count) for state, count in rows}
+    if course.published_version_id is None:
+        return {}
+    return await embedding.course_counts(course.published_version_id)

@@ -9,12 +9,6 @@ from fastapi import HTTPException
 import app.db.redis as rdb
 from app.core import rediscache
 from app.core.ratelimit import _BUCKETS, _memory_check, rate_limit
-from app.schemas.analytics import HotspotOut, SlideStatOut
-from app.services.analytics import (
-    cache_slide_stats,
-    get_cached_slide_stats,
-    invalidate_heatmap_cache,
-)
 
 
 class _FakeRequest:
@@ -43,19 +37,6 @@ def _install_fake_redis():
 def _uninstall_redis():
     rdb._client = None
     rdb._available = False
-
-
-def _sample_stats() -> list[SlideStatOut]:
-    return [
-        SlideStatOut(
-            idx=0,
-            on_slide=90.5,
-            fixations=3,
-            view_sec=4.2,
-            hotspots=[HotspotOut(x=0.1, y=0.2, r=0.05, w=0.5)],
-            points=[[0.1, 0.2], [0.3, 0.4]],
-        )
-    ]
 
 
 # ---------------------------------------------------------------- rate-limit
@@ -160,40 +141,6 @@ def test_redis_try_acquire_lock():
         _uninstall_redis()
 
 
-def test_heatmap_cache_generation_roundtrip():
-    _install_fake_redis()
-    try:
-        lesson = "lesson-1"
-        assert asyncio.run(get_cached_slide_stats(lesson, None)) is None
-
-        asyncio.run(cache_slide_stats(lesson, None, _sample_stats()))
-        cached = asyncio.run(get_cached_slide_stats(lesson, None))
-        assert cached is not None
-        assert SlideStatOut.model_validate(cached[0]).on_slide == 90.5
-
-        # Invalidate (bump gen) → miss.
-        asyncio.run(invalidate_heatmap_cache(lesson))
-        assert asyncio.run(get_cached_slide_stats(lesson, None)) is None
-    finally:
-        _uninstall_redis()
-
-
-def test_heatmap_cache_scope_independent():
-    _install_fake_redis()
-    try:
-        lesson = "lesson-2"
-        asyncio.run(cache_slide_stats(lesson, None, _sample_stats()))
-        asyncio.run(cache_slide_stats(lesson, "s1", _sample_stats()))
-        assert asyncio.run(get_cached_slide_stats(lesson, None)) is not None
-        assert asyncio.run(get_cached_slide_stats(lesson, "s1")) is not None
-
-        asyncio.run(invalidate_heatmap_cache(lesson))
-        assert asyncio.run(get_cached_slide_stats(lesson, None)) is None
-        assert asyncio.run(get_cached_slide_stats(lesson, "s1")) is None
-    finally:
-        _uninstall_redis()
-
-
 def test_fallback_when_redis_absent():
     _uninstall_redis()
     assert rdb._available is False
@@ -201,4 +148,3 @@ def test_fallback_when_redis_absent():
     assert asyncio.run(rediscache.json_get("anything")) is None
     assert asyncio.run(rediscache.get_int("anything")) is None
     assert asyncio.run(rediscache.try_acquire_lock("lock:1", 60)) is True
-    assert asyncio.run(get_cached_slide_stats("lesson-3", None)) is None

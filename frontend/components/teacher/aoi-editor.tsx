@@ -5,32 +5,32 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FullPageSpinner } from "@/components/ui/spinner";
 import { AoiPreview } from "@/components/teacher/aoi-preview";
 import { useTeacherCourses } from "@/hooks/use-teacher";
 import {
-  createAoiDefinition,
-  deleteAoiDefinition,
-  fetchAoiDefinitions,
+  createAoiSet,
+  fetchAoiSets,
+  publishAoiSet,
   rebuildAoiHits,
-  updateAoiDefinition,
-  type AoiDefinition,
+  updateAoiSet,
+  type AoiDefinitionInput,
   type AoiRect,
 } from "@/lib/api/aoi";
 import { measureAoiRects } from "@/lib/aoi/measure";
 import { cn } from "@/lib/utils";
 
-const EMPTY_FORM = {
-  code: "",
-  name: "",
-  description: "",
-  parentId: "",
-  selector: "",
+const UI_SCHEMA_VERSION = "reader-v1";
+
+type FormState = {
+  code: string;
+  name: string;
+  parentCode: string;
 };
 
-type FormState = typeof EMPTY_FORM;
+const EMPTY_FORM: FormState = { code: "", name: "", parentCode: "" };
 
 function selectorFor(code: string): string {
   return code ? `[data-aoi="${code}"]` : "";
@@ -44,21 +44,40 @@ export function AoiEditor({ courseId }: { courseId: string }) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<"reader" | "quiz">("reader");
   const [rects, setRects] = useState<AoiRect[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [definitions, setDefinitions] = useState<AoiDefinitionInput[]>([]);
+  const [editingCode, setEditingCode] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [message, setMessage] = useState<{ tone: "ok" | "err"; text: string } | null>(
     null,
   );
 
-  const { data: definitions = [], isLoading: definitionsLoading } = useQuery({
-    queryKey: ["aoi-definitions"],
-    queryFn: () => fetchAoiDefinitions(true),
+  const { data: sets = [], isLoading: setsLoading } = useQuery({
+    queryKey: ["aoi-sets", "ui", UI_SCHEMA_VERSION],
+    queryFn: () =>
+      fetchAoiSets({ scope: "ui", uiSchemaVersion: UI_SCHEMA_VERSION }),
   });
 
-  const activeDefinitions = useMemo(
-    () => definitions.filter((item) => item.isActive),
-    [definitions],
+  const draftSet = useMemo(
+    () => sets.find((item) => item.state === "draft") ?? null,
+    [sets],
   );
+  const publishedSet = useMemo(
+    () => sets.find((item) => item.state === "published") ?? null,
+    [sets],
+  );
+
+  useEffect(() => {
+    const source = draftSet ?? publishedSet;
+    if (!source) return;
+    setDefinitions(
+      source.definitions.map((item) => ({
+        code: item.code,
+        name: item.name,
+        parentId: item.parentId,
+        geometry: item.geometry,
+      })),
+    );
+  }, [draftSet, publishedSet]);
 
   const measure = () => {
     if (!previewRef.current) return;
@@ -71,53 +90,50 @@ export function AoiEditor({ courseId }: { courseId: string }) {
   }, [mode]);
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["aoi-definitions"] });
+    queryClient.invalidateQueries({ queryKey: ["aoi-sets"] });
 
-  const createMutation = useMutation({
-    mutationFn: createAoiDefinition,
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (draftSet) {
+        return updateAoiSet(draftSet.id, definitions);
+      }
+      return createAoiSet({
+        scope: "ui",
+        uiSchemaVersion: UI_SCHEMA_VERSION,
+        definitions,
+      });
+    },
     onSuccess: async () => {
       await invalidate();
-      setMessage({ tone: "ok", text: "Đã tạo AOI." });
-      setForm(EMPTY_FORM);
-      setEditingId(null);
+      setMessage({ tone: "ok", text: "Đã lưu bản nháp AOI." });
     },
     onError: (error) => {
       setMessage({
         tone: "err",
-        text: error instanceof Error ? error.message : "Không tạo được AOI.",
+        text: error instanceof Error ? error.message : "Không lưu được AOI.",
       });
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof updateAoiDefinition>[1] }) =>
-      updateAoiDefinition(id, input),
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      const saved = draftSet
+        ? await updateAoiSet(draftSet.id, definitions)
+        : await createAoiSet({
+            scope: "ui",
+            uiSchemaVersion: UI_SCHEMA_VERSION,
+            definitions,
+          });
+      return publishAoiSet(saved.id);
+    },
     onSuccess: async () => {
       await invalidate();
-      setMessage({ tone: "ok", text: "Đã cập nhật AOI." });
-      setForm(EMPTY_FORM);
-      setEditingId(null);
+      setMessage({ tone: "ok", text: "Đã publish bộ AOI. Bộ cũ được giữ lịch sử." });
     },
     onError: (error) => {
       setMessage({
         tone: "err",
-        text: error instanceof Error ? error.message : "Không cập nhật được AOI.",
-      });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteAoiDefinition,
-    onSuccess: async () => {
-      await invalidate();
-      setMessage({ tone: "ok", text: "Đã tắt AOI (soft delete)." });
-      setForm(EMPTY_FORM);
-      setEditingId(null);
-    },
-    onError: (error) => {
-      setMessage({
-        tone: "err",
-        text: error instanceof Error ? error.message : "Không xoá được AOI.",
+        text: error instanceof Error ? error.message : "Không publish được AOI.",
       });
     },
   });
@@ -127,25 +143,23 @@ export function AoiEditor({ courseId }: { courseId: string }) {
     onSuccess: (result) => {
       setMessage({
         tone: "ok",
-        text: `Đã tính lại AOI hits cho khóa học: ${result.inserted} dòng.`,
+        text: `Đã tạo ${result.runs} analysis run (${result.completed} xong, ${result.failed} lỗi).`,
       });
     },
     onError: (error) => {
       setMessage({
         tone: "err",
-        text: error instanceof Error ? error.message : "Không rebuild được AOI hits.",
+        text: error instanceof Error ? error.message : "Không rebuild được AOI.",
       });
     },
   });
 
-  const startEdit = (definition: AoiDefinition) => {
-    setEditingId(definition.id);
+  const startEdit = (definition: AoiDefinitionInput) => {
+    setEditingCode(definition.code);
     setForm({
       code: definition.code,
       name: definition.name,
-      description: definition.description ?? "",
-      parentId: definition.parentId ?? "",
-      selector: definition.selector ?? selectorFor(definition.code),
+      parentCode: definition.parentId ?? "",
     });
     setMessage(null);
   };
@@ -156,14 +170,8 @@ export function AoiEditor({ courseId }: { courseId: string }) {
       startEdit(existing);
       return;
     }
-    setEditingId(null);
-    setForm({
-      code: rect.code,
-      name: rect.code,
-      description: "",
-      parentId: "",
-      selector: selectorFor(rect.code),
-    });
+    setEditingCode(null);
+    setForm({ code: rect.code, name: rect.code, parentCode: "" });
     setMessage(null);
   };
 
@@ -177,41 +185,49 @@ export function AoiEditor({ courseId }: { courseId: string }) {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(code)) {
       setMessage({
         tone: "err",
-        text: "Mã AOI chỉ gồm chữ thường, số và dấu gạch ngang (vd: chat-user-message).",
+        text: "Mã AOI chỉ gồm chữ thường, số và dấu gạch ngang.",
       });
       return;
     }
-    const payload = {
+    const rect = rects.find((item) => item.code === code);
+    const geometry = rect
+      ? {
+          selector: selectorFor(code),
+          xMin: rect.xMin,
+          yMin: rect.yMin,
+          xMax: rect.xMax,
+          yMax: rect.yMax,
+        }
+      : { selector: selectorFor(code) };
+    const next: AoiDefinitionInput = {
       code,
       name,
-      description: form.description.trim() || null,
-      parentId: form.parentId || null,
-      selector: form.selector.trim() || selectorFor(code),
-      scope: "viewport" as const,
+      parentId: form.parentCode || null,
+      geometry,
     };
-    if (editingId) {
-      updateMutation.mutate({
-        id: editingId,
-        input: {
-          name: payload.name,
-          description: payload.description,
-          parentId: payload.parentId,
-          selector: payload.selector,
-        },
-      });
-    } else {
-      createMutation.mutate(payload);
+    setDefinitions((prev) => {
+      const index = prev.findIndex((item) => item.code === code);
+      if (index >= 0) {
+        const copy = [...prev];
+        copy[index] = next;
+        return copy;
+      }
+      return [...prev, next];
+    });
+    setEditingCode(null);
+    setForm(EMPTY_FORM);
+    setMessage({ tone: "ok", text: "Đã cập nhật danh sách (chưa lưu)." });
+  };
+
+  const remove = (code: string) => {
+    setDefinitions((prev) => prev.filter((item) => item.code !== code));
+    if (editingCode === code) {
+      setEditingCode(null);
+      setForm(EMPTY_FORM);
     }
   };
 
-  const toggleActive = (definition: AoiDefinition) => {
-    updateMutation.mutate({
-      id: definition.id,
-      input: { isActive: !definition.isActive },
-    });
-  };
-
-  if (coursesLoading || definitionsLoading) {
+  if (coursesLoading || setsLoading) {
     return <FullPageSpinner label="Đang tải AOI…" />;
   }
   if (!course) {
@@ -219,9 +235,8 @@ export function AoiEditor({ courseId }: { courseId: string }) {
   }
 
   const busy =
-    createMutation.isPending ||
-    updateMutation.isPending ||
-    deleteMutation.isPending ||
+    saveMutation.isPending ||
+    publishMutation.isPending ||
     rebuildMutation.isPending;
 
   return (
@@ -255,9 +270,15 @@ export function AoiEditor({ courseId }: { courseId: string }) {
             Vùng phân tích (AOI)
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-black/65">
-            AOI áp dụng <strong>toàn hệ thống</strong> vì cấu trúc các khóa học giống nhau.
-            Vùng được gắn với phần tử DOM qua <code className="rounded bg-black/5 px-1">data-aoi</code>;
-            toạ độ thật do trình duyệt đo khi sinh viên học.
+            Bộ AOI giao diện được version hóa. Bản published bất biến; sửa tạo
+            revision nháp mới. Toạ độ thật do trình duyệt đo khi sinh viên học.
+          </p>
+          <p className="mt-1 text-xs text-black/45">
+            {draftSet
+              ? `Đang sửa revision ${draftSet.revision} (draft)`
+              : publishedSet
+                ? `Đang xem revision ${publishedSet.revision} (published)`
+                : "Chưa có bộ AOI giao diện"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -281,6 +302,23 @@ export function AoiEditor({ courseId }: { courseId: string }) {
             Đo lại
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => saveMutation.mutate()}
+            disabled={busy || definitions.length === 0}
+          >
+            Lưu nháp
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => publishMutation.mutate()}
+            disabled={busy || definitions.length === 0}
+          >
+            <Icon name="ri-upload-cloud-2-line" />
+            Publish AOI
+          </Button>
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => rebuildMutation.mutate()}
             disabled={busy}
@@ -308,9 +346,7 @@ export function AoiEditor({ courseId }: { courseId: string }) {
               <h3 className="text-sm font-semibold text-black">
                 Phần tử DOM phát hiện ({rects.length})
               </h3>
-              <p className="text-[11px] text-black/45">
-                Click để điền sẵn mã AOI
-              </p>
+              <p className="text-[11px] text-black/45">Click để điền sẵn mã AOI</p>
             </div>
             <div className="mt-3 max-h-64 overflow-auto">
               <table className="w-full text-left text-xs">
@@ -355,27 +391,22 @@ export function AoiEditor({ courseId }: { courseId: string }) {
         <div className="space-y-4">
           <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
             <h3 className="text-sm font-semibold text-black">
-              {editingId ? "Sửa AOI" : "Thêm AOI"}
+              {editingCode ? "Sửa AOI" : "Thêm AOI"}
             </h3>
             <div className="mt-3 space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="aoi-code">Mã (data-aoi)</Label>
+              <div>
+                <Label htmlFor="aoi-code">Mã AOI</Label>
                 <Input
                   id="aoi-code"
                   value={form.code}
-                  disabled={Boolean(editingId)}
                   onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      code: event.target.value,
-                      selector: selectorFor(event.target.value),
-                    }))
+                    setForm((prev) => ({ ...prev, code: event.target.value }))
                   }
                   placeholder="chat-user-message"
-                  className="font-mono text-xs"
+                  className="mt-1"
                 />
               </div>
-              <div className="space-y-1.5">
+              <div>
                 <Label htmlFor="aoi-name">Tên hiển thị</Label>
                 <Input
                   id="aoi-name"
@@ -383,148 +414,79 @@ export function AoiEditor({ courseId }: { courseId: string }) {
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, name: event.target.value }))
                   }
-                  placeholder="Tin nhắn người dùng"
+                  placeholder="Tin nhắn người học"
+                  className="mt-1"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="aoi-parent">AOI cha</Label>
-                <select
-                  id="aoi-parent"
-                  value={form.parentId}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, parentId: event.target.value }))
-                  }
-                  className="flex h-10 w-full rounded-full border border-input bg-surface px-4 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
-                >
-                  <option value="">— Không có —</option>
-                  {activeDefinitions
-                    .filter((item) => item.id !== editingId)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.code} · {item.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="aoi-selector">Selector</Label>
+              <div>
+                <Label htmlFor="aoi-parent">Mã AOI cha (tuỳ chọn)</Label>
                 <Input
-                  id="aoi-selector"
-                  value={form.selector}
+                  id="aoi-parent"
+                  value={form.parentCode}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, selector: event.target.value }))
+                    setForm((prev) => ({ ...prev, parentCode: event.target.value }))
                   }
-                  placeholder='[data-aoi="chat-user-message"]'
-                  className="font-mono text-xs"
+                  placeholder="chatbot"
+                  className="mt-1"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="aoi-description">Mô tả</Label>
-                <Textarea
-                  id="aoi-description"
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, description: event.target.value }))
-                  }
-                  rows={2}
-                  placeholder="Vùng này dùng để phân tích gì?"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2">
                 <Button size="sm" onClick={submit} disabled={busy}>
-                  <Icon name={editingId ? "ri-save-line" : "ri-add-line"} />
-                  {editingId ? "Lưu thay đổi" : "Tạo AOI"}
+                  {editingCode ? "Cập nhật" : "Thêm vào danh sách"}
                 </Button>
-                {editingId && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditingId(null);
-                        setForm(EMPTY_FORM);
-                      }}
-                    >
-                      Huỷ
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => deleteMutation.mutate(editingId)}
-                      disabled={busy}
-                    >
-                      <Icon name="ri-delete-bin-line" />
-                      Tắt AOI
-                    </Button>
-                  </>
+                {editingCode && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingCode(null);
+                      setForm(EMPTY_FORM);
+                    }}
+                  >
+                    Huỷ
+                  </Button>
                 )}
               </div>
             </div>
           </section>
 
           <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
-            <h3 className="text-sm font-semibold text-black">
-              Danh sách AOI ({definitions.length})
-            </h3>
+            <h3 className="text-sm font-semibold text-black">Danh sách AOI</h3>
             <div className="mt-3 space-y-2">
-              {definitions.map((definition) => {
-                const parent = definitions.find(
-                  (item) => item.id === definition.parentId,
-                );
-                return (
-                  <div
-                    key={definition.id}
-                    className={cn(
-                      "rounded-xl border p-3 transition-colors",
-                      definition.isActive
-                        ? "border-[#eeeee9] bg-white"
-                        : "border-dashed border-black/10 bg-[#fafaf7] opacity-70",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(definition)}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <p className="truncate font-mono text-[11px] text-[#36533a]">
-                          {definition.code}
-                        </p>
-                        <p className="mt-0.5 truncate text-sm font-medium text-black">
-                          {definition.name}
-                        </p>
-                        <p className="mt-0.5 truncate text-[11px] text-black/45">
-                          {parent ? `Thuộc ${parent.code}` : "Cấp gốc"}
-                          {!definition.isActive ? " · Đã tắt" : ""}
-                        </p>
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => toggleActive(definition)}
-                        disabled={busy}
-                        aria-label={
-                          definition.isActive ? "Tắt AOI" : "Bật lại AOI"
-                        }
-                        title={definition.isActive ? "Tắt AOI" : "Bật lại AOI"}
-                      >
-                        <Icon
-                          name={
-                            definition.isActive
-                              ? "ri-eye-off-line"
-                              : "ri-eye-line"
-                          }
-                          className="size-4"
-                        />
-                      </Button>
-                    </div>
+              {definitions.map((definition) => (
+                <div
+                  key={definition.code}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-black/5 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[11px] text-[#36533a]">
+                      {definition.code}
+                    </p>
+                    <p className="truncate text-xs text-black/60">{definition.name}</p>
                   </div>
-                );
-              })}
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Sửa ${definition.code}`}
+                      onClick={() => startEdit(definition)}
+                    >
+                      <Icon name="ri-edit-line" className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Xoá ${definition.code}`}
+                      onClick={() => remove(definition.code)}
+                    >
+                      <Icon name="ri-delete-bin-line" className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
               {definitions.length === 0 && (
-                <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-black/45">
-                  Chưa có AOI. Chọn một phần tử ở bảng bên trái để tạo.
+                <p className="text-xs text-black/45">
+                  Chưa có AOI. Đo layout rồi thêm từ bảng phần tử DOM.
                 </p>
               )}
             </div>

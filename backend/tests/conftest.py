@@ -32,8 +32,10 @@ os.environ.setdefault(
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-pytest-please-change")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("AI_HTTP_URL", "http://127.0.0.1:8000")
-os.environ.setdefault("CHATBOT_URL", "http://localhost:8002")
+os.environ.setdefault("CHATBOT_URL", "http://127.0.0.1:9")
 os.environ.setdefault("CHATBOT_INTERNAL_TOKEN", "test-chatbot-token")
+os.environ.setdefault("CHATBOT_INGEST_ATTEMPTS", "1")
+os.environ.setdefault("CHATBOT_INGEST_BACKOFF_SECONDS", "0")
 os.environ["MEDIA_DIR"] = os.path.join(tempfile.gettempdir(), "eyelearning-test-media")
 for key in (
     "R2_ACCOUNT_ID",
@@ -47,11 +49,11 @@ for key in (
 import pytest
 from sqlalchemy import text
 
+import app.models  # noqa: F401  (register all tables)
 from app.core.ratelimit import _BUCKETS
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-import app.models  # noqa: F401  (register all tables)
 
 # Giữ reference seed; xóa toàn bộ dữ liệu nghiệp vụ.
 _KEEP = {"schema_migrations", "app_metadata", "roles", "calibration_settings"}

@@ -77,6 +77,7 @@ def test_content_draft_publish_and_student_read(client, teacher, student):
     tree = client.get(f"/teacher/courses/{course_id}", headers=headers)
     assert tree.status_code == 200, tree.text
     assert tree.json()[0]["lessons"][0]["slides"] == 1
+    lesson_version_id = tree.json()[0]["lessons"][0]["lessonVersionId"]
 
     published = client.post(
         f"/teacher/courses/{course_id}/publish",
@@ -85,6 +86,33 @@ def test_content_draft_publish_and_student_read(client, teacher, student):
     )
     assert published.status_code == 200, published.text
     assert published.json()["courseVersionId"]
+
+    async def _published_state():
+        from sqlalchemy import text
+
+        from app.db.session import SessionLocal
+
+        async with SessionLocal() as db:
+            state = (
+                await db.execute(
+                    text("SELECT state FROM lesson_versions WHERE id = :id"),
+                    {"id": lesson_version_id},
+                )
+            ).scalar_one()
+            view_count = (
+                await db.execute(
+                    text(
+                        "SELECT count(*) FROM v_published_course_outline "
+                        "WHERE course_id = :id"
+                    ),
+                    {"id": course_id},
+                )
+            ).scalar_one()
+            return state, view_count
+
+    state, view_count = asyncio.run(_published_state())
+    assert state == "published"
+    assert view_count == 1
 
     outline = client.get(f"/api/courses/{course_id}", headers=auth(student))
     assert outline.status_code == 200, outline.text

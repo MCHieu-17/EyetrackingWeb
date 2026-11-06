@@ -2,12 +2,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    REAL,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    REAL,
     String,
     Text,
     UniqueConstraint,

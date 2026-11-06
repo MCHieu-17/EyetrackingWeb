@@ -1,233 +1,176 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import require_roles
 from app.db.session import get_db
-from app.models.aoi import AoiDefinition, AoiLayoutRect, AoiLayoutSnapshot
+from app.models.aoi import AnalysisRun
 from app.models.auth import User
-from app.models.course import Enrollment
-from app.models.gaze import LearningSession
 from app.schemas.aoi import (
-    AoiDefinitionIn,
-    AoiDefinitionOut,
-    AoiDefinitionUpdate,
-    AoiLayoutSnapshotIn,
-    AoiLayoutSnapshotOut,
+    AnalysisRunCreateIn,
+    AnalysisRunOut,
+    AnalysisRunResultOut,
     AoiRebuildIn,
     AoiRebuildOut,
+    AoiSetCreateIn,
+    AoiSetOut,
+    AoiSetPublishOut,
+    AoiSetUpdateIn,
 )
-from app.services import aoi_hits
+from app.services import analysis, aoi
 
 router = APIRouter(tags=["aoi"])
 
 
-def _definition_out(row: AoiDefinition) -> AoiDefinitionOut:
-    return AoiDefinitionOut(
-        id=row.id,
-        code=row.code,
-        name=row.name,
-        description=row.description,
-        scope=row.scope,
-        parent_id=row.parent_id,
-        selector=row.selector,
-        lesson_content_id=row.lesson_content_id,
-        is_active=row.is_active,
-        metadata=row.metadata_ or {},
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-@router.get("/api/aoi-definitions", response_model=list[AoiDefinitionOut])
-async def list_aoi_definitions(
-    include_inactive: bool = False,
-    _: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    stmt = select(AoiDefinition).order_by(AoiDefinition.code)
-    if not include_inactive:
-        stmt = stmt.where(AoiDefinition.is_active.is_(True))
-    rows = (await db.execute(stmt)).scalars().all()
-    return [_definition_out(row) for row in rows]
-
-
-@router.post(
-    "/api/aoi-definitions",
-    response_model=AoiDefinitionOut,
-    status_code=201,
-)
-async def create_aoi_definition(
-    body: AoiDefinitionIn,
+@router.get("/api/aoi-sets", response_model=list[AoiSetOut])
+async def list_aoi_sets(
+    scope: str | None = Query(default=None, pattern="^(slide|ui)$"),
+    slide_version_id: str | None = Query(default=None, alias="slideVersionId"),
+    ui_schema_version: str | None = Query(default=None, alias="uiSchemaVersion"),
+    state: str | None = Query(default=None, pattern="^(draft|published|archived)$"),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    if body.parent_id:
-        parent = await db.get(AoiDefinition, body.parent_id)
-        if parent is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Không tìm thấy AOI cha"
-            )
-
-    row = AoiDefinition(
-        code=body.code.strip(),
-        name=body.name.strip(),
-        description=body.description,
-        scope=body.scope,
-        parent_id=body.parent_id,
-        selector=body.selector,
-        lesson_content_id=body.lesson_content_id,
-        is_active=body.is_active,
-        metadata_=body.metadata,
-        created_by=user.id,
+    return await aoi.list_aoi_sets(
+        db,
+        user,
+        scope=scope,
+        slide_version_id=slide_version_id,
+        ui_schema_version=ui_schema_version,
+        state=state,
     )
-    db.add(row)
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Mã AOI đã tồn tại (hoặc đang active)",
-        )
-    await db.refresh(row)
-    return _definition_out(row)
 
 
-@router.patch("/api/aoi-definitions/{aoi_id}", response_model=AoiDefinitionOut)
-async def update_aoi_definition(
-    aoi_id: str,
-    body: AoiDefinitionUpdate,
-    _: User = Depends(require_roles("teacher", "admin")),
+@router.post("/api/aoi-sets", response_model=AoiSetOut, status_code=201)
+async def create_aoi_set(
+    body: AoiSetCreateIn,
+    user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    row = await db.get(AoiDefinition, aoi_id)
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy AOI")
+    return await aoi.create_aoi_set(db, user, body)
 
-    if body.parent_id is not None:
-        if body.parent_id == aoi_id:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="AOI không thể là cha của chính nó",
+
+@router.get("/api/aoi-sets/{set_id}", response_model=AoiSetOut)
+async def get_aoi_set(
+    set_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await aoi.get_aoi_set(db, set_id)
+    if row.scope == "slide" and row.slide_version_id:
+        await aoi._require_slide_access(db, user, row.slide_version_id)
+    return await aoi.get_aoi_set_out(db, set_id)
+
+
+@router.patch("/api/aoi-sets/{set_id}", response_model=AoiSetOut)
+async def update_aoi_set(
+    set_id: str,
+    body: AoiSetUpdateIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await aoi.update_aoi_set(db, user, set_id, body)
+
+
+@router.post("/api/aoi-sets/{set_id}/publish", response_model=AoiSetPublishOut)
+async def publish_aoi_set(
+    set_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await aoi.publish_aoi_set(db, user, set_id)
+    return AoiSetPublishOut(ok=True, id=row.id, state=row.state)
+
+
+@router.post("/api/analysis-runs", response_model=AnalysisRunResultOut, status_code=201)
+async def create_analysis_run(
+    body: AnalysisRunCreateIn,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    if idempotency_key:
+        existing = (
+            await db.execute(
+                select(AnalysisRun).where(
+                    AnalysisRun.session_id == body.session_id,
+                    AnalysisRun.aoi_set_id == body.aoi_set_id,
+                    AnalysisRun.from_time == body.from_time,
+                    AnalysisRun.to_time == body.to_time,
+                    AnalysisRun.config["idempotencyKey"].astext == idempotency_key,
+                )
             )
-        parent = await db.get(AoiDefinition, body.parent_id)
-        if parent is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Không tìm thấy AOI cha"
-            )
-        row.parent_id = body.parent_id
-    if body.name is not None:
-        row.name = body.name.strip()
-    if body.description is not None:
-        row.description = body.description
-    if body.selector is not None:
-        row.selector = body.selector
-    if body.is_active is not None:
-        row.is_active = body.is_active
-    if body.metadata is not None:
-        row.metadata_ = body.metadata
-
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Mã AOI đã tồn tại (hoặc đang active)",
-        )
-    await db.refresh(row)
-    return _definition_out(row)
+        ).scalar_one_or_none()
+        if existing is not None:
+            return await analysis.get_run_result(db, existing.id)
+        body.config = {**body.config, "idempotencyKey": idempotency_key}
+    run = await analysis.create_run(db, user, body)
+    return await analysis.execute_run(db, run.id)
 
 
-@router.delete("/api/aoi-definitions/{aoi_id}", response_model=dict)
-async def delete_aoi_definition(
-    aoi_id: str,
-    _: User = Depends(require_roles("teacher", "admin")),
+@router.get("/api/analysis-runs", response_model=list[AnalysisRunOut])
+async def list_analysis_runs(
+    session_id: str | None = Query(default=None, alias="sessionId"),
+    user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    row = await db.get(AoiDefinition, aoi_id)
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy AOI")
-    # Soft delete: giữ lịch sử hits và cho phép bật lại sau này.
-    row.is_active = False
-    await db.commit()
-    return {"ok": True}
+    return await analysis.list_runs(db, user, session_id=session_id)
 
 
-@router.post(
-    "/api/learning-sessions/{session_id}/aoi-layout",
-    response_model=AoiLayoutSnapshotOut,
-    status_code=201,
-)
-async def create_aoi_layout_snapshot(
-    session_id: str,
-    body: AoiLayoutSnapshotIn,
-    user: User = Depends(get_current_user),
+@router.get("/api/analysis-runs/{run_id}", response_model=AnalysisRunResultOut)
+async def get_analysis_run(
+    run_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await db.get(LearningSession, session_id)
-    if session is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học"
-        )
-    enrollment = await db.get(Enrollment, session.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
+    run = await db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy analysis run")
+    _, course, _ = await analysis._session_course(db, run.session_id)
+    from app.api.deps import can_access_course
+
+    if not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return await analysis.get_run_result(db, run_id)
 
-    if (
-        session.calibration_width_px is None
-        or session.calibration_height_px is None
-        or body.viewport_width_px != session.calibration_width_px
-        or body.viewport_height_px != session.calibration_height_px
-    ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={
-                "code": "viewport_mismatch",
-                "message": "Viewport hiện tại khác lúc hiệu chỉnh.",
-            },
-        )
 
-    snapshot = AoiLayoutSnapshot(
-        learning_session_id=session.id,
-        viewport_width_px=body.viewport_width_px,
-        viewport_height_px=body.viewport_height_px,
-        layout_key=body.layout_key,
+@router.get("/api/analysis-runs/{run_id}/export")
+async def export_analysis_run(
+    run_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    run = await db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy analysis run")
+    _, course, _ = await analysis._session_course(db, run.session_id)
+    from app.api.deps import can_access_course
+
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return StreamingResponse(
+        analysis.export_lines(run_id),
+        media_type="application/x-ndjson",
+        headers={
+            "Content-Disposition": f'attachment; filename="analysis-{run_id}.jsonl"',
+            "Cache-Control": "no-store",
+        },
     )
-    db.add(snapshot)
-    await db.flush()
-
-    for rect in body.rects:
-        db.add(
-            AoiLayoutRect(
-                snapshot_id=snapshot.id,
-                aoi_code=rect.code.strip(),
-                x_min=rect.x_min,
-                y_min=rect.y_min,
-                x_max=rect.x_max,
-                y_max=rect.y_max,
-            )
-        )
-
-    await db.commit()
-    await db.refresh(snapshot)
-    return AoiLayoutSnapshotOut(id=snapshot.id, captured_at=snapshot.captured_at)
 
 
 @router.post("/api/aoi/rebuild", response_model=AoiRebuildOut)
 async def rebuild_aoi(
     body: AoiRebuildIn,
-    _: User = Depends(require_roles("teacher", "admin")),
+    user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    inserted = await aoi_hits.rebuild_aoi_hits(
+    runs, completed, failed = await analysis.rebuild_course(
         db,
-        session_id=body.session_id,
-        lesson_id=body.lesson_id,
+        user,
         course_id=body.course_id,
         from_time=body.from_time,
         to_time=body.to_time,
+        algorithm_version=body.algorithm_version,
     )
-    return AoiRebuildOut(ok=True, inserted=inserted)
+    return AoiRebuildOut(ok=True, runs=runs, completed=completed, failed=failed)

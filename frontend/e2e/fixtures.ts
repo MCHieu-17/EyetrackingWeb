@@ -603,63 +603,51 @@ export async function mockApi(page: Page, opts: { user?: MockUser } = {}) {
   await page.route("**/api/teacher/lessons/*/heatmap**", (r) => json(r, HEATMAP_STATS));
   await page.route("**/api/teacher/lessons/*/slides", (r) => json(r, []));
 
-  // AOI editor
+  // AOI editor (versioned sets)
   const now = new Date().toISOString();
-  const aoiDefinitions = [
-    {
-      id: "aoi-slide",
-      code: "slide",
-      name: "Bài giảng",
-      description: null,
-      scope: "viewport",
-      parentId: null,
-      selector: '[data-aoi="slide"]',
-      lessonContentId: null,
-      isActive: true,
-      metadata: {},
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "aoi-chatbot",
-      code: "chatbot",
-      name: "Khung chatbot",
-      description: null,
-      scope: "viewport",
-      parentId: null,
-      selector: '[data-aoi="chatbot"]',
-      lessonContentId: null,
-      isActive: true,
-      metadata: {},
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
-  await page.route("**/api/aoi-definitions**", (r) => {
+  const aoiSet = {
+    id: "aoi-set-ui-1",
+    scope: "ui",
+    slideVersionId: null,
+    uiSchemaVersion: "reader-v1",
+    revision: 1,
+    state: "published",
+    createdBy: "teacher-1",
+    createdAt: now,
+    publishedAt: now,
+    definitions: [
+      {
+        id: "aoi-slide",
+        code: "slide",
+        name: "Bài giảng",
+        parentId: null,
+        geometry: { selector: '[data-aoi="slide"]' },
+      },
+      {
+        id: "aoi-chatbot",
+        code: "chatbot",
+        name: "Khung chatbot",
+        parentId: null,
+        geometry: { selector: '[data-aoi="chatbot"]' },
+      },
+    ],
+  };
+  await page.route("**/api/aoi-sets**", (r) => {
     const method = r.request().method();
-    if (method === "GET") return json(r, aoiDefinitions);
+    if (method === "GET") return json(r, [aoiSet]);
     if (method === "POST") {
       const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
-      return json(
-        r,
-        {
-          ...body,
-          id: `aoi-${Date.now()}`,
-          isActive: true,
-          metadata: {},
-          createdAt: now,
-          updatedAt: now,
-        },
-        201,
-      );
+      return json(r, { ...aoiSet, ...body, id: `aoi-set-${Date.now()}`, state: "draft" }, 201);
     }
     if (method === "PATCH") {
       const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>;
-      return json(r, { ...aoiDefinitions[0], ...body });
+      return json(r, { ...aoiSet, ...body, state: "draft" });
     }
-    return json(r, { ok: true });
+    return json(r, { ok: true, id: aoiSet.id, state: "published" });
   });
-  await page.route("**/api/aoi/rebuild", (r) => json(r, { ok: true, inserted: 0 }));
+  await page.route("**/api/aoi/rebuild", (r) =>
+    json(r, { ok: true, runs: 0, completed: 0, failed: 0 }),
+  );
 
   // Admin
   await page.route("**/api/admin/teachers", (r) => json(r, TEACHER_DIRECTORY));

@@ -1,15 +1,10 @@
-"""Đồng bộ trạng thái embedding slide sang dịch vụ chatbot (pgvector).
+"""Đồng bộ trạng thái ingest slide version sang chatbot/pgvector.
 
-Backend là nguồn dữ liệu slide; chatbot giữ vector trong bảng
-`lesson_content_embedding`. Module này:
-
-- Gọi `/ingest/lesson` (hoặc `/ingest/slide`) và cập nhật trạng thái
-  (`pending` → `ready` / `failed`) trên `lesson_contents`.
-- Cung cấp backfill toàn bộ qua `/ingest/reindex-all`.
-
-Các hàm được thiết kế để chạy trong BackgroundTasks; trạng thái được cập nhật
-bằng session riêng vì background task chạy sau khi response đã trả về.
+`slide_documents` là nguồn trạng thái duy nhất cho RAG. Backend gọi chatbot
+`/ingest/*`; chatbot đọc nội dung published qua view và ghi transcript/vector.
 """
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -17,50 +12,58 @@ from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.course import Lesson, LessonContent, Module
+from app.models.course import (
+    CourseVersionItem,
+    LessonVersionSlide,
+)
+from app.models.media import SlideDocument
 
 logger = logging.getLogger(__name__)
 
 PENDING = "pending"
 READY = "ready"
 FAILED = "failed"
+PIPELINE_VERSION = "rag-v2"
+MODEL_VERSION = "qwen3-embedding-0.6b"
 
 
 async def _mark(
-    session, slide_id: str, status: str, error: str | None = None
+    session, slide_version_id: str, status: str, error: str | None = None
 ) -> None:
-    slide = await session.get(LessonContent, slide_id)
-    if slide is None:
-        return
-    slide.embedding_status = status
-    slide.embedding_error = error
-    slide.embedding_updated_at = datetime.now(timezone.utc)
+    stmt = pg_insert(SlideDocument).values(
+        slide_version_id=slide_version_id,
+        pipeline_version=PIPELINE_VERSION,
+        model_version=MODEL_VERSION,
+        transcript="",
+        embedding=None,
+        ingestion_state=status,
+        ingestion_error=error,
+        updated_at=datetime.now(timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["slide_version_id"],
+        set_={
+            "ingestion_state": stmt.excluded.ingestion_state,
+            "ingestion_error": stmt.excluded.ingestion_error,
+            "updated_at": stmt.excluded.updated_at,
+        },
+    )
+    await session.execute(stmt)
     await session.commit()
 
 
 async def _mark_many(
-    session, slide_ids: list[str], status: str, error: str | None = None
+    session, slide_version_ids: list[str], status: str, error: str | None = None
 ) -> None:
-    if not slide_ids:
-        return
-    now = datetime.now(timezone.utc)
-    rows = (
-        await session.execute(
-            select(LessonContent).where(LessonContent.id.in_(slide_ids))
-        )
-    ).scalars()
-    for slide in rows:
-        slide.embedding_status = status
-        slide.embedding_error = error
-        slide.embedding_updated_at = now
-    await session.commit()
+    for slide_version_id in slide_version_ids:
+        await _mark(session, slide_version_id, status, error)
 
 
 async def _call(path: str, payload: dict) -> dict:
-    """Gọi chatbot ingest, retry lỗi tạm thời (5xx/429/connection)."""
     if not settings.chatbot_ready:
         raise RuntimeError("Chatbot chưa được cấu hình")
 
@@ -80,7 +83,6 @@ async def _call(path: str, payload: dict) -> dict:
                 return response.json()
         except httpx.HTTPStatusError as exc:
             last_error = exc
-            # 4xx: lỗi dữ liệu/cấu hình -> retry vô ích.
             if 400 <= exc.response.status_code < 500 and exc.response.status_code != 429:
                 break
         except httpx.HTTPError as exc:
@@ -91,25 +93,34 @@ async def _call(path: str, payload: dict) -> dict:
     raise RuntimeError(f"Chatbot ingest thất bại: {last_error}")
 
 
-async def _slide_ids_for_lesson(session, lesson_id: str) -> list[str]:
+async def _slide_ids_for_lesson_version(
+    session, lesson_version_id: str
+) -> list[str]:
     rows = (
         await session.execute(
-            select(LessonContent.id)
-            .where(LessonContent.lesson_id == lesson_id)
-            .order_by(LessonContent.order_index)
+            select(LessonVersionSlide.slide_version_id)
+            .where(LessonVersionSlide.lesson_version_id == lesson_version_id)
+            .order_by(LessonVersionSlide.position)
         )
     ).scalars()
     return [str(row) for row in rows]
 
 
-async def _slide_ids_for_course(session, course_id: str) -> list[str]:
+async def _slide_ids_for_course_version(
+    session, course_version_id: str
+) -> list[str]:
     rows = (
         await session.execute(
-            select(LessonContent.id)
-            .join(Lesson, Lesson.id == LessonContent.lesson_id)
-            .join(Module, Module.id == Lesson.module_id)
-            .where(Module.course_id == course_id)
-            .order_by(Module.order_index, Lesson.order_index, LessonContent.order_index)
+            select(LessonVersionSlide.slide_version_id)
+            .join(
+                CourseVersionItem,
+                CourseVersionItem.lesson_version_id
+                == LessonVersionSlide.lesson_version_id,
+            )
+            .where(CourseVersionItem.course_version_id == course_version_id)
+            .order_by(
+                CourseVersionItem.position, LessonVersionSlide.position
+            )
         )
     ).scalars()
     return [str(row) for row in rows]
@@ -120,82 +131,88 @@ async def _status_counts(session, slide_ids: list[str]) -> dict[str, int]:
         return {"ready": 0, "failed": 0}
     rows = (
         await session.execute(
-            select(LessonContent.embedding_status, func.count(LessonContent.id))
-            .where(LessonContent.id.in_(slide_ids))
-            .group_by(LessonContent.embedding_status)
+            select(SlideDocument.ingestion_state, func.count())
+            .where(SlideDocument.slide_version_id.in_(slide_ids))
+            .group_by(SlideDocument.ingestion_state)
         )
     ).all()
     counts = {status: int(count) for status, count in rows}
-    return {
-        "ready": counts.get(READY, 0),
-        "failed": counts.get(FAILED, 0),
-    }
+    return {"ready": counts.get(READY, 0), "failed": counts.get(FAILED, 0)}
 
 
-async def sync_slide(slide_id: str) -> dict[str, int]:
-    """Ingest một slide (dùng cho add_slide)."""
+async def sync_slide(slide_version_id: str) -> dict[str, int]:
     if not settings.chatbot_ready:
-        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding slide %s", slide_id)
+        logger.warning("Chatbot chưa cấu hình — bỏ qua ingest slide %s", slide_version_id)
         return {"ready": 0, "failed": 0}
-
     async with SessionLocal() as session:
-        await _mark(session, slide_id, PENDING)
+        await _mark(session, slide_version_id, PENDING)
         try:
-            await _call("/ingest/slide", {"lesson_content_id": slide_id})
-        except Exception as exc:
-            logger.warning("Embedding slide %s thất bại: %s", slide_id, exc)
-            await _mark(session, slide_id, FAILED, str(exc)[:500])
+            await _call("/ingest/slide", {"slide_version_id": slide_version_id})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ingest slide %s thất bại: %s", slide_version_id, exc)
+            await _mark(session, slide_version_id, FAILED, str(exc)[:500])
             return {"ready": 0, "failed": 1}
-        return await _status_counts(session, [slide_id])
+        return await _status_counts(session, [slide_version_id])
 
 
-async def sync_lesson(lesson_id: str) -> dict[str, int]:
-    """Ingest toàn bộ slide của một bài học."""
+async def sync_lesson_version(lesson_version_id: str) -> dict[str, int]:
     if not settings.chatbot_ready:
-        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding lesson %s", lesson_id)
+        logger.warning(
+            "Chatbot chưa cấu hình — bỏ qua ingest lesson version %s",
+            lesson_version_id,
+        )
         return {"ready": 0, "failed": 0}
-
     async with SessionLocal() as session:
-        slide_ids = await _slide_ids_for_lesson(session, lesson_id)
+        slide_ids = await _slide_ids_for_lesson_version(session, lesson_version_id)
         if not slide_ids:
             return {"ready": 0, "failed": 0}
         await _mark_many(session, slide_ids, PENDING)
         try:
-            await _call("/ingest/lesson", {"lesson_id": lesson_id})
-        except Exception as exc:
-            logger.warning("Embedding lesson %s thất bại: %s", lesson_id, exc)
+            await _call(
+                "/ingest/lesson-version",
+                {"lesson_version_id": lesson_version_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Ingest lesson version %s thất bại: %s", lesson_version_id, exc
+            )
             await _mark_many(session, slide_ids, FAILED, str(exc)[:500])
             return {"ready": 0, "failed": len(slide_ids)}
         return await _status_counts(session, slide_ids)
 
 
-async def sync_course(course_id: str) -> dict[str, int]:
-    """Ingest toàn bộ slide của một khóa học."""
+async def sync_course_version(course_version_id: str) -> dict[str, int]:
     if not settings.chatbot_ready:
-        logger.warning("Chatbot chưa cấu hình — bỏ qua embedding course %s", course_id)
+        logger.warning(
+            "Chatbot chưa cấu hình — bỏ qua ingest course version %s",
+            course_version_id,
+        )
         return {"ready": 0, "failed": 0}
-
     async with SessionLocal() as session:
-        slide_ids = await _slide_ids_for_course(session, course_id)
+        slide_ids = await _slide_ids_for_course_version(session, course_version_id)
         if not slide_ids:
             return {"ready": 0, "failed": 0}
         await _mark_many(session, slide_ids, PENDING)
         try:
-            await _call("/ingest/course", {"course_id": course_id})
-        except Exception as exc:
-            logger.warning("Embedding course %s thất bại: %s", course_id, exc)
+            await _call(
+                "/ingest/course-version",
+                {"course_version_id": course_version_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Ingest course version %s thất bại: %s", course_version_id, exc
+            )
             await _mark_many(session, slide_ids, FAILED, str(exc)[:500])
             return {"ready": 0, "failed": len(slide_ids)}
         return await _status_counts(session, slide_ids)
 
 
 async def reindex_all() -> dict[str, int]:
-    """Backfill toàn bộ slide chưa ready (admin/CLI)."""
     if not settings.chatbot_ready:
         return {"ready": 0, "failed": 0}
     try:
         data = await _call("/ingest/reindex-all", {})
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Reindex all thất bại: %s", exc)
         return {"ready": 0, "failed": 0}
     return {
@@ -205,27 +222,17 @@ async def reindex_all() -> dict[str, int]:
 
 
 async def counts() -> dict[str, int]:
-    """Thống kê trạng thái embedding toàn hệ thống."""
     async with SessionLocal() as session:
         rows = (
             await session.execute(
-                select(LessonContent.embedding_status, func.count(LessonContent.id))
-                .group_by(LessonContent.embedding_status)
+                select(SlideDocument.ingestion_state, func.count())
+                .group_by(SlideDocument.ingestion_state)
             )
         ).all()
         return {status: int(count) for status, count in rows}
 
 
-async def course_counts(course_id: str) -> dict[str, int]:
-    """Thống kê trạng thái embedding của một khóa học."""
+async def course_counts(course_version_id: str) -> dict[str, int]:
     async with SessionLocal() as session:
-        rows = (
-            await session.execute(
-                select(LessonContent.embedding_status, func.count(LessonContent.id))
-                .join(Lesson, Lesson.id == LessonContent.lesson_id)
-                .join(Module, Module.id == Lesson.module_id)
-                .where(Module.course_id == course_id)
-                .group_by(LessonContent.embedding_status)
-            )
-        ).all()
-        return {status: int(count) for status, count in rows}
+        slide_ids = await _slide_ids_for_course_version(session, course_version_id)
+        return await _status_counts(session, slide_ids)

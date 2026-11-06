@@ -12,6 +12,26 @@ export interface AoiSnapshotState {
   ready: boolean;
 }
 
+function paintedImageTransform(): Record<string, number> {
+  const img = document.querySelector<HTMLImageElement>('[data-aoi="slide"] img');
+  if (!img) return {};
+  const rect = img.getBoundingClientRect();
+  const naturalWidth = img.naturalWidth || rect.width;
+  const naturalHeight = img.naturalHeight || rect.height;
+  if (!naturalWidth || !naturalHeight) return {};
+  const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+  const left = rect.left + (rect.width - width) / 2;
+  const top = rect.top + (rect.height - height) / 2;
+  return {
+    left: left / window.innerWidth,
+    top: top / window.innerHeight,
+    width: width / window.innerWidth,
+    height: height / window.innerHeight,
+  };
+}
+
 /**
  * Đo layout DOM và tạo `aoi_layout_snapshots` cho presentation hiện tại.
  *
@@ -78,7 +98,7 @@ export function useAoiSnapshot({
         const snapshot = await createPresentationLayout(presentationId, {
           sequenceNo: generation,
           layoutGeneration: generation,
-          imageTransform: {},
+          imageTransform: paintedImageTransform(),
           rects,
         });
         if (disposed) return;

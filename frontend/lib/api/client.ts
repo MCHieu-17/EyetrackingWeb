@@ -35,6 +35,7 @@ export interface ApiRequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   keepalive?: boolean;
   skipAuthRefresh?: boolean;
@@ -158,7 +159,15 @@ function emitPasswordChangeRequired(status: number, message: string): void {
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { method = "GET", body, params, signal, keepalive, skipAuthRefresh = false } = options;
+  const {
+    method = "GET",
+    body,
+    params,
+    headers,
+    signal,
+    keepalive,
+    skipAuthRefresh = false,
+  } = options;
 
   // Chế độ demo: trả dữ liệu giả, không gọi backend.
   if (process.env.NEXT_PUBLIC_DEMO === "1") {
@@ -182,6 +191,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
         "Content-Type": "application/json",
         ...getAuthHeader(),
         ...getCsrfHeader(),
+        ...headers,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });

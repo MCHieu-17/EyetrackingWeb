@@ -124,6 +124,8 @@ thay đổi sau Phase 6 phải là migration mới, không sửa baseline đã k
 12. `trg_gaze_batch_consistency` — presentation cùng session, layout cùng presentation.
 13. `trg_aoi_definition_parent` — parent cùng aoi set.
 14. `trg_aoi_hit_consistency` — definition cùng aoi set của run.
+15. `trg_aoi_sets_immutable` — published AOI set chỉ được archive, không sửa.
+16. `trg_aoi_definitions_immutable` — chỉ thêm/sửa/xóa definition trong set draft.
 15. `trg_course_published_pointer` — published version cùng course và state published.
 16. `trg_device_current_calibration` — calibration cùng device.
 17. `trg_chat_session_context` — course version/lesson version/attempt cùng course/student.

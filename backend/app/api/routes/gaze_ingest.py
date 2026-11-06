@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import require_roles
 from app.core.rediscache import expire, increment
 from app.db.session import get_db
+from app.models.aoi import AoiLayoutRect, AoiLayoutSnapshot
 from app.models.auth import User
 from app.models.course import CourseVersionItem, Enrollment, LessonVersionSlide
 from app.models.gaze import (
@@ -23,7 +24,7 @@ from app.schemas.gaze import (
     PresentationCreateIn,
     PresentationOut,
 )
-from app.models.aoi import AoiLayoutRect, AoiLayoutSnapshot
+from app.services import aoi as aoi_service
 
 router = APIRouter(tags=["gaze-ingest"])
 
@@ -123,6 +124,20 @@ async def create_presentation(
             started_at=existing.started_at.isoformat(),
         )
 
+    previous = (
+        await db.execute(
+            select(ContentPresentation)
+            .where(
+                ContentPresentation.session_id == session.id,
+                ContentPresentation.ended_at.is_(None),
+            )
+            .order_by(ContentPresentation.sequence_no.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if previous is not None:
+        previous.ended_at = _now()
+
     presentation = ContentPresentation(
         session_id=session.id,
         lesson_version_slide_id=body.lesson_version_slide_id,
@@ -178,8 +193,12 @@ async def create_layout(
             captured_at=existing.captured_at.isoformat(),
         )
 
+    ui_set = await aoi_service.published_aoi_set(
+        db, ui_schema_version="reader-v1"
+    )
     snapshot = AoiLayoutSnapshot(
         presentation_id=presentation.id,
+        ui_aoi_set_id=ui_set.id if ui_set else None,
         captured_at=_now(),
         sequence_no=body.sequence_no,
         layout_generation=body.layout_generation,

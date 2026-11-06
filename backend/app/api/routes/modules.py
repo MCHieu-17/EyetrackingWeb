@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import can_manage_course, require_roles
 from app.db.session import get_db
 from app.models.auth import User
 from app.schemas.common import CamelModel
@@ -31,6 +31,8 @@ async def create_module(
     db: AsyncSession = Depends(get_db),
 ):
     course = await content.get_course_or_404(db, course_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     module = await content.create_module(db, course, user, body.title)
     await db.commit()
     await db.refresh(module)
@@ -50,6 +52,8 @@ async def update_module(
     db: AsyncSession = Depends(get_db),
 ):
     course, module = await content.course_of_module(db, module_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     if body.title is not None:
         module = await content.update_module(db, course, user, module_id, body.title)
     await db.commit()
@@ -69,6 +73,8 @@ async def delete_module(
     db: AsyncSession = Depends(get_db),
 ):
     course, _ = await content.course_of_module(db, module_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.delete_module(db, course, user, module_id)
     await db.commit()
     return {"ok": True}

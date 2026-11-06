@@ -113,7 +113,7 @@ def rate_limit(limit: int, seconds: int, key_prefix: str):
     """
 
     async def dependency(request: Request):
-        ident = f"{key_prefix}:{_real_ip(request)}"
+        ident = f"{settings.app_instance_id}:{key_prefix}:{_real_ip(request)}"
         client = await get_redis()
         retry = 0
         if client is not None:

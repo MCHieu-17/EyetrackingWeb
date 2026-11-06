@@ -38,6 +38,7 @@ export async function startQuizAttempt(lessonId: string): Promise<QuizAttempt> {
     return {
       id: `demo-attempt-${lessonId}`,
       assignmentId: lessonId,
+      status: "in_progress",
       answers: {},
       submittedAt: new Date().toISOString(),
       score: 0,
@@ -79,6 +80,7 @@ export async function retryQuizAttempt(attemptId: string): Promise<QuizAttempt> 
     return {
       id: `demo-retry-${attemptId}`,
       assignmentId: attemptId,
+      status: "in_progress",
       answers: {},
       submittedAt: new Date().toISOString(),
       score: 0,

@@ -14,6 +14,7 @@ export type AssistantMode = "reader" | "quiz" | "review";
 export interface AssistantQuizContext {
   mode: "quiz" | "review";
   assignmentId: string;
+  attemptId?: string | null;
   lessonId: string | null;
   draftAnswers?: Record<string, string[]>;
 }
@@ -21,6 +22,7 @@ export interface AssistantQuizContext {
 interface AssistantContextValue {
   mode: AssistantMode;
   assignmentId: string | null;
+  attemptId: string | null;
   lessonId: string | null;
   draftAnswers?: Record<string, string[]>;
   setReaderMode: (mode: "reader" | "quiz") => void;
@@ -63,6 +65,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     () => ({
       mode: quizContext?.mode ?? readerMode,
       assignmentId: quizContext?.assignmentId ?? null,
+      attemptId: quizContext?.attemptId ?? null,
       draftAnswers: quizContext?.draftAnswers,
       lessonId: quizContext?.lessonId ?? readerLessonId,
       setReaderMode,

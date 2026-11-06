@@ -3,6 +3,11 @@ import { isDemoMode } from "@/lib/demo-mode";
 
 export interface ChatCitation {
   documentId: string;
+  courseVersionId?: string | null;
+  lessonVersionId?: string | null;
+  slideVersionId?: string | null;
+  membershipId?: string | null;
+  assetId?: string | null;
   title: string;
   location: string;
   lessonId?: string | null;
@@ -26,8 +31,11 @@ export interface ChatSessionSummary {
   canContinue?: boolean;
   id: string;
   courseId: string;
+  courseVersionId?: string | null;
   lessonId: string | null;
+  lessonVersionId?: string | null;
   assignmentId: string | null;
+  attemptId?: string | null;
   title: string;
   messageCount: number;
   createdAt: string;
@@ -50,8 +58,10 @@ export interface SendChatInput {
   sessionId?: string | null;
   /** Bài học đang học (chỉ dùng làm ngữ cảnh prompt). */
   lessonId?: string | null;
-  /** Bài tập đang làm/chữa. */
+  /** Bài tập đang làm/chữa (lesson_version_id). */
   assignmentId?: string | null;
+  /** Lượt làm cụ thể; bắt buộc để hint/review đúng attempt. */
+  attemptId?: string | null;
   draftAnswers?: Record<string, string[]>;
 }
 
@@ -155,14 +165,25 @@ function demoReply(input: SendChatInput): ChatReply {
 // API thật
 // ---------------------------------------------------------------------------
 
-export async function listChatSessions(courseId: string, assignmentId?: string | null): Promise<ChatSessionSummary[]> {
+export async function listChatSessions(
+  courseId: string,
+  assignmentId?: string | null,
+  attemptId?: string | null,
+): Promise<ChatSessionSummary[]> {
   if (isDemoMode()) {
     return demoState.sessions.filter((item) => item.courseId === courseId);
   }
-  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/sessions${assignmentId ? `?assignmentId=${encodeURIComponent(assignmentId)}` : ""}`, {
-    credentials: "include",
-    headers: getAuthHeaders(),
-  });
+  const params = new URLSearchParams();
+  if (assignmentId) params.set("assignmentId", assignmentId);
+  if (attemptId) params.set("attemptId", attemptId);
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/api/courses/${courseId}/chat/sessions${query ? `?${query}` : ""}`,
+    {
+      credentials: "include",
+      headers: getAuthHeaders(),
+    },
+  );
   if (!response.ok) throw new ApiError(response.status, await response.text());
   const data = await response.json();
   return Array.isArray(data) ? data : [];

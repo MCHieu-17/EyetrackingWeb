@@ -12,11 +12,14 @@ class ChatState(TypedDict, total=False):
     # Input
     question: str
     course_id: str
+    course_version_id: str | None
     thread_id: str
     history: list[HistoryItem]
     lesson_id: str | None
+    lesson_version_id: str | None
     lesson_title: str
     module_title: str
+    attempt_id: str | None
     assignment_id: str | None
     assignment_title: str
     assignment_context: str

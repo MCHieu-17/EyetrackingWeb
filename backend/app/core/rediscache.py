@@ -9,7 +9,12 @@ Mọi lỗi kết nối đều gọi `report_failure()` rồi trả về giá tr
 import json
 from typing import Any
 
+from app.core.config import settings
 from app.db.redis import get_redis, report_failure
+
+
+def _key(key: str) -> str:
+    return f"{settings.app_instance_id}:{key}"
 
 
 async def json_get(key: str) -> Any | None:
@@ -17,7 +22,7 @@ async def json_get(key: str) -> Any | None:
     if client is None:
         return None
     try:
-        raw = await client.get(key)
+        raw = await client.get(_key(key))
     except Exception:  # noqa: BLE001
         report_failure()
         return None
@@ -34,7 +39,7 @@ async def json_set(key: str, value: Any, ttl: int) -> None:
     if client is None:
         return
     try:
-        await client.set(key, json.dumps(value, default=str), ex=ttl)
+        await client.set(_key(key), json.dumps(value, default=str), ex=ttl)
     except Exception:  # noqa: BLE001
         report_failure()
 
@@ -44,7 +49,7 @@ async def get_int(key: str) -> int | None:
     if client is None:
         return None
     try:
-        raw = await client.get(key)
+        raw = await client.get(_key(key))
     except Exception:  # noqa: BLE001
         report_failure()
         return None
@@ -62,7 +67,7 @@ async def increment(key: str) -> int | None:
     if client is None:
         return None
     try:
-        return int(await client.incr(key))
+        return int(await client.incr(_key(key)))
     except Exception:  # noqa: BLE001
         report_failure()
         return None
@@ -73,7 +78,7 @@ async def expire(key: str, ttl: int) -> None:
     if client is None:
         return
     try:
-        await client.expire(key, ttl)
+        await client.expire(_key(key), ttl)
     except Exception:  # noqa: BLE001
         report_failure()
 
@@ -84,7 +89,7 @@ async def try_acquire_lock(key: str, ttl: int) -> bool:
     if client is None:
         return True
     try:
-        return bool(await client.set(key, "1", nx=True, ex=ttl))
+        return bool(await client.set(_key(key), "1", nx=True, ex=ttl))
     except Exception:  # noqa: BLE001
         report_failure()
         return True

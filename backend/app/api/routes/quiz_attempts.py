@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import can_access_course, get_current_user, require_roles
@@ -17,7 +17,6 @@ from app.models.course import (
 )
 from app.models.quiz import QuizAttempt, QuizSpec
 from app.schemas.quiz import QuizAssignmentOut, QuizAttemptOut
-from app.services import content
 
 router = APIRouter(tags=["quiz-attempts"])
 
@@ -51,6 +50,11 @@ async def _published_item(
     if course is None or course.published_version_id is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
+        )
+    if course.archived_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "course_archived", "message": "Khóa học đã được lưu trữ"},
         )
     published = await db.get(CourseVersion, course.published_version_id)
     item = (
@@ -97,6 +101,7 @@ def _attempt_out(attempt: QuizAttempt, assignment_id: str) -> QuizAttemptOut:
     return QuizAttemptOut(
         id=attempt.id,
         assignment_id=assignment_id,
+        status=attempt.status,
         answers=attempt.answers,
         submitted_at=attempt.submitted_at or attempt.started_at,
         score=int(attempt.score or 0),
@@ -188,6 +193,18 @@ async def get_quiz_spec(
     if published is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
+        )
+    item = (
+        await db.execute(
+            select(CourseVersionItem).where(
+                CourseVersionItem.course_version_id == published.id,
+                CourseVersionItem.lesson_version_id == lesson_version.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Bài tập chưa có trong bản xuất bản"
         )
     return await _assignment_out(
         db,

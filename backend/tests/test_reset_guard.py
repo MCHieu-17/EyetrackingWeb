@@ -150,7 +150,7 @@ def test_preview_default_has_no_side_effects(tmp_path):
     assert not runner.called("DROP DATABASE")
     assert not runner.called("INSERT INTO app_metadata")
     assert not runner.called("bash", "ops/create_chatbot_role.sh")
-    assert not runner.called("start")
+    assert not runner.called("up", "-d", "--force-recreate")
 
 
 def test_apply_requires_matching_confirm(tmp_path):
@@ -247,7 +247,7 @@ def test_apply_happy_path_order_and_no_volume_delete(tmp_path):
     assert runner.called("stop")
     assert runner.called("run", "--rm", "migrate")
     assert runner.called("bash", "ops/create_chatbot_role.sh")
-    assert runner.called("start")
+    assert runner.called("up", "-d", "--force-recreate")
     assert not runner.called("down", "-v")
     assert not runner.called("volume", "rm")
 
@@ -265,4 +265,4 @@ def test_smoke_failure_does_not_start_runtime(tmp_path):
     with pytest.raises(GuardError) as exc:
         guard.apply("eyetracking", "eyetracking")
     assert exc.value.exit_code == 5
-    assert not runner.called("start")
+    assert not runner.called("up", "-d", "--force-recreate")

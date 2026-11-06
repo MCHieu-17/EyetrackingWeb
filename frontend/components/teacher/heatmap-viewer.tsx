@@ -229,6 +229,13 @@ export function HeatmapViewer({ courseId, lessonId }: { courseId: string; lesson
               </optgroup>
             ))}
           </select>
+          <a
+            href={`/api/teacher/lessons/${lesson.id}/export`}
+            className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-full border border-[#e8e8e3] bg-[#fdfdfa] text-[11px] font-semibold text-foreground transition hover:bg-white"
+            download
+          >
+            Xuất dữ liệu phân tích (JSONL)
+          </a>
         </section>
 
         {student && (

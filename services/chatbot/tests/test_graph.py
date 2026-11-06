@@ -1,11 +1,13 @@
 import asyncio
+
 import pytest
-from app.workflow import graph, blocks
+
+from app.workflow import blocks, graph
 from app.workflow.router import RoutePlan
 
 
 def state(**kw):
-    return {"question": "Khóa chính?", "course_id": "course", "thread_id": "thread", "history": [], **kw}
+    return {"question": "Khóa chính?", "course_id": "course", "course_version_id": "course-version", "thread_id": "thread", "history": [], **kw}
 
 
 @pytest.fixture
@@ -15,8 +17,8 @@ def fake(monkeypatch):
     async def lookup(s, op, target=""):
         return {"course": {"title": "Course", "description": "", "url": "/student/courses/course"}}
     class Retriever:
-        async def asearch(self, q, c):
-            return [{"id": "slide", "course_id": c, "content": "Source", "module_title": "M", "lesson_title": "L", "course_title": "C"}]
+        async def asearch(self, q, c, cv):
+            return [{"id": "slide", "course_id": c, "course_version_id": cv, "content": "Source", "module_title": "M", "lesson_title": "L", "course_title": "C"}]
     async def generate(s):
         yield "First [1]"
         yield "Second [1]"
@@ -60,7 +62,7 @@ def test_general_no_retrieval(fake, monkeypatch):
 
 def test_foreign_course_rejected(fake, monkeypatch):
     class Bad:
-        async def asearch(self,q,c): return [{'course_id':'other'}]
+        async def asearch(self,q,c,cv): return [{'course_id':'other','course_version_id':cv}]
     monkeypatch.setattr(graph, 'get_retriever', Bad)
     with pytest.raises(ValueError, match='foreign course'):
         collect(state())
@@ -91,7 +93,7 @@ def test_dependent_mixed_lookup_precedes_retrieval(fake, monkeypatch):
         order.append('lms')
         return {'assignments':[]}
     class R:
-        async def asearch(self,q,c):
+        async def asearch(self,q,c,cv):
             assert order == ['lms']
             order.append('retrieval')
             return []
@@ -120,6 +122,7 @@ def test_revoked_access_never_emits_another_block(fake, monkeypatch):
 
 def test_internal_session_course_mismatch_is_rejected(monkeypatch):
     import httpx
+
     from app.workflow import lms
     class Client:
         async def post(self,*args,**kwargs):

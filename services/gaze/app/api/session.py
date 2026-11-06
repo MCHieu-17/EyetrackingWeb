@@ -39,6 +39,23 @@ logger = logging.getLogger("app.gaze")
 
 router = APIRouter(tags=["session"])
 
+sessions = SessionManager(ttl=SESSION_TTL_SECONDS, max_sessions=MAX_SESSIONS)
+
+
+def _get_or_404(sid: str):
+    session = sessions.get(sid)
+    if session is None:
+        raise HTTPException(404, "session not found")
+    return session
+
+
+async def _read_limited(upload: UploadFile, limit: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Đọc tối đa `limit` bytes; vượt -> 413 (không nạp cả file khổng lồ vào RAM)."""
+    data = await upload.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(413, "file quá lớn")
+    return data
+
 
 @router.get("/session/{sid}", response_model=SessionStatus)
 def session_status(sid: str):

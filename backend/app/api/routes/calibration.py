@@ -1,7 +1,6 @@
 import base64
 import binascii
 import hashlib
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select

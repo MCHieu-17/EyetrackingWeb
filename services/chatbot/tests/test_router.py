@@ -68,6 +68,7 @@ def test_mixed_greeting(monkeypatch):
 
 def test_new_router_fast_paths_never_call_river(monkeypatch):
     import asyncio
+
     from app.workflow import river
     monkeypatch.setattr(river,'get_river',lambda: (_ for _ in ()).throw(AssertionError('River called')))
     for question,expected in [('Xin chào','general'),('hạn nộp bài tập','lms'),('điểm của tôi','lms')]:
@@ -77,6 +78,7 @@ def test_new_router_fast_paths_never_call_river(monkeypatch):
 
 def test_new_router_provider_error_is_clarification(monkeypatch):
     import asyncio
+
     from app.workflow import river
     class Failed:
         async def structured(self,*args): raise RuntimeError('provider down')

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import can_manage_course, require_roles
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import CourseVersionItem
@@ -25,6 +25,8 @@ async def create_quiz_item(
     db: AsyncSession = Depends(get_db),
 ):
     course, module = await content.course_of_module(db, module_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     lesson = await content.create_quiz_item(
         db,
         course,
@@ -84,6 +86,8 @@ async def reorder_module_items(
     db: AsyncSession = Depends(get_db),
 ):
     course, _ = await content.course_of_module(db, module_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     await content.reorder_items(
         db, course, user, module_id, [item.id for item in body.items]
     )

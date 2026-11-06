@@ -191,3 +191,24 @@ Mọi response lỗi giữ shape hiện tại:
   dùng `NULL`.
 - Không trả `password_hash`, `model_ubj`, `refresh_token_hash` trong bất kỳ DTO.
 - Không dùng `status` mutable để giả lập publish; publish là con trỏ version.
+
+## 7. Phase 5 — AOI/analysis/chat versioned
+
+| Route | Hành vi |
+|---|---|
+| `GET /api/aoi-sets` | Lọc `scope`, `slideVersionId`, `uiSchemaVersion`, `state`; chỉ trả set giáo viên có quyền |
+| `POST /api/aoi-sets` | Tạo revision draft mới cho slide/UI |
+| `PATCH /api/aoi-sets/{id}` | Chỉ sửa set draft; set published trả 409 |
+| `POST /api/aoi-sets/{id}/publish` | Archive bản published cũ cùng target, publish bản mới |
+| `POST /api/analysis-runs` | Một session + một AOI set + `[from,to)`; chốt batch watermark; `Idempotency-Key` |
+| `GET /api/analysis-runs/{id}` | Run + presentation metrics + hit count |
+| `GET /api/analysis-runs/{id}/export` | JSONL streaming: manifest + sample rows + end |
+| `POST /api/aoi/rebuild` | Mở rộng thành nhiều run theo course/session |
+| `GET /teacher/lessons/{id}/heatmap` | Projection từ `presentation_metrics` |
+| `GET /teacher/lessons/{id}/export` | Export run hoàn tất mới nhất của bài |
+| `POST /api/courses/{id}/chat` | `assignmentId` = lesson_version_id; `attemptId` chọn đúng lượt |
+| `GET /internal/chat/lms-query` | Course/structure/assignments/results theo session + attempt |
+
+Chat citation bổ sung `courseVersionId`, `lessonVersionId`, `slideVersionId`,
+`membershipId`, `assetId`. Retrieval lọc `course_id` + `course_version_id`
+trước LIMIT.

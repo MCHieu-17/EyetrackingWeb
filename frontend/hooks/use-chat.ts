@@ -14,10 +14,14 @@ import {
   type SendChatInput,
 } from "@/lib/api/chat";
 
-export function useChatSessions(courseId: string | null, assignmentId?: string | null) {
+export function useChatSessions(
+  courseId: string | null,
+  assignmentId?: string | null,
+  attemptId?: string | null,
+) {
   return useQuery({
-    queryKey: ["chat", "sessions", courseId, assignmentId ?? null],
-    queryFn: () => listChatSessions(courseId as string, assignmentId),
+    queryKey: ["chat", "sessions", courseId, assignmentId ?? null, attemptId ?? null],
+    queryFn: () => listChatSessions(courseId as string, assignmentId, attemptId),
     enabled: Boolean(courseId),
   });
 }

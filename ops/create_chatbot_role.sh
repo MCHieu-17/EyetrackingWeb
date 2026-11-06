@@ -53,8 +53,9 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"role";
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM :"role";
 
 -- Đọc nội dung published qua view; ghi tài liệu ingest.
+GRANT SELECT ON v_published_course_outline TO :"role";
 GRANT SELECT ON v_chatbot_slide_documents TO :"role";
-GRANT SELECT (slide_version_id) ON slide_documents TO :"role";
+GRANT SELECT ON slide_documents TO :"role";
 GRANT INSERT, UPDATE, DELETE ON slide_documents TO :"role";
 
 -- Không cho đọc dữ liệu bài tập/người dùng/chat.

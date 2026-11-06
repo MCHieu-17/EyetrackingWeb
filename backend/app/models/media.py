@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    BigInteger,
     CHAR,
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -106,7 +106,7 @@ class SlideDocument(Base):
     transcript: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("''")
     )
-    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
     content_tsv: Mapped[str | None] = mapped_column(TSVECTOR)
     ingestion_state: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'pending'")

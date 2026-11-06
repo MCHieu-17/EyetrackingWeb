@@ -14,9 +14,9 @@ from sqlalchemy import inspect, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.types import NullType
 
+import app.models  # noqa: F401
 from app.db.base import Base
 from app.db.session import engine
-import app.models  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 DIALECT = postgresql.dialect()

@@ -57,10 +57,19 @@ async def retrieve(state):
         # Data is public course metadata, never a quiz answer key.
         question += "\nĐối tượng được backend xác định: " + str(state["lms_data"])
     query = retrieval_query({**state, "question": question})
-    docs = await get_retriever().asearch(query, state["course_id"])
+    course_version_id = state.get("course_version_id")
+    if not course_version_id:
+        raise ValueError("Missing course_version_id for retrieval")
+    docs = await get_retriever().asearch(
+        query, state["course_id"], course_version_id
+    )
     # Do not trust metadata to widen the authorized scope.
-    if any(str(doc.get("course_id")) != str(state["course_id"]) for doc in docs):
-        raise ValueError("Retrieval returned foreign course")
+    if any(
+        str(doc.get("course_id")) != str(state["course_id"])
+        or str(doc.get("course_version_id")) != str(course_version_id)
+        for doc in docs
+    ):
+        raise ValueError("Retrieval returned foreign course/version")
     logger.info("chat_retrieval seconds=%.3f", time.perf_counter() - started)
     return {"retrieved_docs": docs, "citations": build_citations(docs)}
 

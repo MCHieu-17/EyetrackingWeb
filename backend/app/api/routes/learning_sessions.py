@@ -136,6 +136,11 @@ async def create_learning_session(
     lesson, course, published, item, lesson_version = await _published_item(
         db, body.lesson_id
     )
+    if course.archived_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "course_archived", "message": "Khóa học đã được lưu trữ"},
+        )
     if item.course_version_id != published.id or enrollment.course_id != course.id:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, detail="Bài học không thuộc khóa đã đăng ký"

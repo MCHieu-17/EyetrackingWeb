@@ -235,10 +235,11 @@ export function InlineQuiz({
   useEffect(() => {
     if (!assignment) return;
     setQuizContext({
-      mode: attempt ? "review" : "quiz",
+      mode: attempt?.status === "submitted" ? "review" : "quiz",
       assignmentId: assignment.id,
+      attemptId: attempt?.id ?? null,
       lessonId: assignment.lessonId ?? null,
-      draftAnswers: attempt ? undefined : answers,
+      draftAnswers: attempt?.status === "submitted" ? undefined : answers,
     });
   }, [assignment, attempt, answers, setQuizContext]);
 

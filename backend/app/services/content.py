@@ -19,7 +19,6 @@ import pymupdf
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.models.auth import User
@@ -29,7 +28,6 @@ from app.models.course import (
     CourseVersion,
     CourseVersionItem,
     CourseVersionModule,
-    Enrollment,
     Lesson,
     LessonVersion,
     LessonVersionSlide,
@@ -37,7 +35,7 @@ from app.models.course import (
     SlideVersion,
 )
 from app.models.media import MediaAsset, SlideDocument
-from app.models.profile import TeacherProfile, UserProfile
+from app.models.profile import TeacherProfile
 from app.models.quiz import QuizSpec
 from app.schemas.course import (
     CourseOutlineOut,
@@ -47,7 +45,6 @@ from app.schemas.course import (
     ModuleNodeOut,
     SlideAdminOut,
     SlideOut,
-    StudentLessonOut,
     StudentRowOut,
     TeacherCourseOut,
 )
@@ -395,16 +392,12 @@ async def list_teacher_courses(
     if not courses:
         return []
 
+    from app.services import course_stats
+
     course_ids = [course.id for course in courses]
-    enroll_counts = dict(
-        (
-            await db.execute(
-                select(Enrollment.course_id, func.count(Enrollment.id))
-                .where(Enrollment.course_id.in_(course_ids))
-                .group_by(Enrollment.course_id)
-            )
-        ).all()
-    )
+    enroll_counts = await course_stats.enrollment_counts(db, course_ids)
+    attention = await course_stats.attention_avg_by_course(db, course_ids)
+    sessions = await course_stats.session_counts_by_course(db, course_ids)
 
     out: list[TeacherCourseOut] = []
     for course in courses:
@@ -437,8 +430,8 @@ async def list_teacher_courses(
                 gradient="",
                 status=status_value,
                 students=enroll_counts.get(course.id, 0),
-                attention=None,
-                sessions=0,
+                attention=attention.get(course.id),
+                sessions=sessions.get(course.id, 0),
                 updated_at=course.updated_at,
                 is_owner="admin" in user.role_codes or course.owner_id == user.id,
                 lesson_count=int(item_count),
@@ -667,20 +660,34 @@ async def reorder_items(
     draft, module = await _draft_module(db, course, module_id, user)
     items = (
         await db.execute(
-            select(CourseVersionItem).where(
-                CourseVersionItem.module_id == module.id
-            )
+            select(CourseVersionItem)
+            .where(CourseVersionItem.course_version_id == draft.id)
+            .order_by(CourseVersionItem.position)
         )
     ).scalars().all()
-    by_lesson = {item.lesson_id: item for item in items}
+    module_items = [item for item in items if item.module_id == module.id]
+    by_lesson = {item.lesson_id: item for item in module_items}
     if set(ordered_lesson_ids) != set(by_lesson):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Danh sách item không khớp cấu trúc chương",
         )
-    # Chỉ đổi position trong cùng module; position toàn course version vẫn giữ.
-    for index, lesson_id in enumerate(ordered_lesson_ids):
-        by_lesson[lesson_id].position = index
+    modules = (
+        await db.execute(
+            select(CourseVersionModule)
+            .where(CourseVersionModule.course_version_id == draft.id)
+            .order_by(CourseVersionModule.position)
+        )
+    ).scalars().all()
+    global_order: list[str] = []
+    for current in modules:
+        if current.id == module.id:
+            global_order.extend(ordered_lesson_ids)
+        else:
+            global_order.extend(
+                item.lesson_id for item in items if item.module_id == current.id
+            )
+    await _renumber_items(db, draft.id, global_order)
     bump_generation(draft)
     await db.flush()
 
@@ -893,6 +900,8 @@ async def list_lesson_slides_admin(
                 is_key=row.is_key,
                 embedding_status=document.ingestion_state if document else "none",
                 embedding_error=document.ingestion_error if document else None,
+                slide_version_id=row.slide_version_id,
+                lesson_version_id=row.lesson_version_id,
             )
         )
     return out
@@ -1077,6 +1086,22 @@ async def publish_course(
     check_generation(draft, expected_generation)
     await validate_draft(db, draft)
 
+    # Publish toàn bộ lesson version đang được draft tham chiếu. View published
+    # outline và chatbot chỉ đọc lesson version state='published'.
+    lesson_version_ids = (
+        await db.execute(
+            select(CourseVersionItem.lesson_version_id)
+            .where(CourseVersionItem.course_version_id == draft.id)
+            .distinct()
+        )
+    ).scalars().all()
+    for lesson_version_id in lesson_version_ids:
+        lesson_version = await db.get(LessonVersion, lesson_version_id)
+        if lesson_version is not None and lesson_version.state == "draft":
+            lesson_version.state = "published"
+            lesson_version.published_at = _now()
+            lesson_version.published_by = user.id
+
     draft.state = "published"
     draft.published_at = _now()
     draft.published_by = user.id
@@ -1251,6 +1276,8 @@ async def get_lesson_version_contents(
                     if asset
                     else None
                 ),
+                slide_version_id=row.slide_version_id,
+                lesson_version_id=row.lesson_version_id,
             )
         )
     return out
@@ -1294,6 +1321,8 @@ async def get_lesson_contents(
                     if asset
                     else None
                 ),
+                slide_version_id=row.slide_version_id,
+                lesson_version_id=row.lesson_version_id,
             )
         )
     return out
@@ -1302,84 +1331,6 @@ async def get_lesson_contents(
 async def get_course_students(
     db: AsyncSession, course: Course
 ) -> list[StudentRowOut]:
-    from app.core.helpers import color_for, relative_time_vn
-    from app.models.gaze import LearningSession
+    from app.services import metrics
 
-    rows = (
-        await db.execute(
-            select(Enrollment, User, UserProfile)
-            .join(User, User.id == Enrollment.student_id)
-            .outerjoin(UserProfile, UserProfile.user_id == User.id)
-            .where(Enrollment.course_id == course.id)
-            .order_by(Enrollment.enrolled_at)
-        )
-    ).all()
-    if not rows:
-        return []
-
-    published = await get_published_version(db, course)
-    lesson_rows: list[tuple[str, str]] = []
-    if published is not None:
-        items = (
-            await db.execute(
-                select(CourseVersionItem)
-                .where(CourseVersionItem.course_version_id == published.id)
-                .order_by(CourseVersionItem.position)
-            )
-        ).scalars().all()
-        lesson_rows = [(item.lesson_id, item.lesson_version_id) for item in items]
-
-    enrollment_ids = [enrollment.id for enrollment, _, _ in rows]
-    last_active = dict(
-        (
-            await db.execute(
-                select(
-                    LearningSession.enrollment_id,
-                    func.max(LearningSession.started_at),
-                )
-                .where(LearningSession.enrollment_id.in_(enrollment_ids))
-                .group_by(LearningSession.enrollment_id)
-            )
-        ).all()
-    )
-
-    out: list[StudentRowOut] = []
-    for enrollment, student, profile in rows:
-        lessons: list[StudentLessonOut] = []
-        for lesson_id, lesson_version_id in lesson_rows:
-            metrics = (
-                await db.execute(
-                    select(
-                        func.count(LessonVersionSlide.id),
-                        func.count(LessonVersionSlide.id).filter(
-                            LessonVersionSlide.is_key.is_(True)
-                        ),
-                    ).where(
-                        LessonVersionSlide.lesson_version_id == lesson_version_id
-                    )
-                )
-            ).one()
-            total_slides, key_total = int(metrics[0]), int(metrics[1])
-            lessons.append(
-                StudentLessonOut(
-                    lesson_id=lesson_id,
-                    attention=None,
-                    mastery=None,
-                    key_done=0,
-                    key_total=key_total,
-                )
-            )
-        out.append(
-            StudentRowOut(
-                id=student.id,
-                name=profile.full_name if profile else student.email,
-                code="",
-                color=color_for(student.id),
-                avatar_url=profile.avatar_url if profile else None,
-                attention=None,
-                last_active=relative_time_vn(last_active.get(enrollment.id)),
-                status=enrollment.status,
-                lessons=lessons,
-            )
-        )
-    return out
+    return await metrics.course_students(db, course)

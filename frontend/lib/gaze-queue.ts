@@ -6,10 +6,12 @@ export interface QueuedGazeBatch {
   batch: GazeBatchInput;
   createdAt: number;
   attempts: number;
+  generation?: string;
 }
 
 const DB_NAME = "eyelearning-gaze";
 const STORE = "batches";
+const GENERATION_KEY = "eyelearning-gaze-generation";
 const MAX_AGE_MS = 10 * 60 * 1000;
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -38,6 +40,7 @@ function txDone(tx: IDBTransaction): Promise<void> {
 export async function enqueueGazeBatch(
   sessionId: string,
   batch: GazeBatchInput,
+  generation?: string,
 ): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   const db = await openDb();
@@ -49,11 +52,30 @@ export async function enqueueGazeBatch(
     batch,
     createdAt: Date.now(),
     attempts: 0,
+    generation,
   };
   store.put(item);
   await txDone(tx);
   db.close();
   await pruneQueue();
+}
+
+export async function clearGazeQueue(): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await openDb();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).clear();
+  await txDone(tx);
+  db.close();
+}
+
+export async function ensureQueueGeneration(generation: string): Promise<void> {
+  if (typeof localStorage === "undefined") return;
+  const previous = localStorage.getItem(GENERATION_KEY);
+  if (previous && previous !== generation) {
+    await clearGazeQueue();
+  }
+  localStorage.setItem(GENERATION_KEY, generation);
 }
 
 export async function pendingGazeBatches(
