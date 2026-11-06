@@ -101,7 +101,7 @@ của workspace khóa học):
 2. Sinh viên vào khóa sẽ **vào thẳng trang học**, không qua preflight.
 3. Camera không bật và gaze **không được ghi** cho khóa đó — kể cả khi tài khoản
    đã có calibration cũ.
-4. Bật lại khi cần test gaze/heatmap/analytics.
+4. Bật lại khi cần thử gaze/heatmap/analytics.
 
 Mặc định công tắc **bật** để giữ hành vi cũ. Khóa cũ không cần migration dữ liệu.
 
@@ -199,7 +199,7 @@ cổng 3000.
 | Migration lỗi | `docker logs eyetracking-migrate`; sửa file mới, không sửa file đã áp |
 | Chatbot chưa `/ready` | Chờ tải weights; `docker compose logs -f chatbot` |
 | Gaze chưa `/ready` | Chờ tải weights + load model; `docker compose logs -f gaze` |
-| Ảnh R2 trả 403 `error code: 1010` khi test bằng Python `urllib` | Cloudflare chặn User-Agent lạ; dùng `curl`/browser hoặc `httpx`. App dùng browser/httpx nên không ảnh hưởng |
+| Ảnh R2 trả 403 `error code: 1010` khi kiểm tra bằng Python `urllib` | Cloudflare chặn User-Agent lạ; dùng `curl`/browser hoặc `httpx`. App dùng browser/httpx nên không ảnh hưởng |
 | Ảnh R2 trả 403 với mọi User-Agent | Bật Public Access cho bucket trong Cloudflare Dashboard hoặc dùng custom domain; kiểm tra `R2_PUBLIC_URL` khớp bucket |
 | Hết dung lượng Docker | `./ops/docker_cleanup.sh` (không xóa volume) |
 

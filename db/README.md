@@ -13,7 +13,7 @@ Git. Không có chuỗi “drop legacy rồi dựng lại”, không tự baseli
 
 ## Runner
 
-`db/migrate.sh` là runner duy nhất cho dev/test/CI:
+`db/migrate.sh` là runner duy nhất cho dev/CI:
 
 - Một kết nối `psql` giữ `pg_advisory_lock` suốt lượt chạy.
 - Mỗi migration + checksum record commit trong một transaction.
