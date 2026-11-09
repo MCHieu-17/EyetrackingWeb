@@ -12,11 +12,10 @@
 -- ---------------------------------------------------------------------
 -- ADMIN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status, must_change_password)
+INSERT INTO users (email, password_hash, status)
 SELECT 'admin@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       'active',
-       false
+       'active'
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('admin@school.edu.vn')
 );
@@ -36,11 +35,10 @@ ON CONFLICT (user_id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- GIÁO VIÊN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status, must_change_password)
+INSERT INTO users (email, password_hash, status)
 SELECT 'teacher@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       'active',
-       false
+       'active'
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('teacher@school.edu.vn')
 );
@@ -66,11 +64,10 @@ ON CONFLICT (user_id) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- SINH VIÊN
 -- ---------------------------------------------------------------------
-INSERT INTO users (email, password_hash, status, must_change_password)
+INSERT INTO users (email, password_hash, status)
 SELECT 'student@school.edu.vn',
        '$2b$12$1q/iiUi4DF25DxUvlvyt5uUDwDBsEpGbTj5SqkEudV9QZCQhwYDoq',
-       'active',
-       false
+       'active'
 WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE lower(email) = lower('student@school.edu.vn')
 );

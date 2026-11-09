@@ -50,7 +50,6 @@ async def _asset_for_bytes(
     data: bytes,
     mime_type: str,
     object_key: str,
-    kind: str = "normalized",
     metadata: dict | None = None,
 ) -> MediaAsset:
     digest = _sha256(data)
@@ -77,7 +76,6 @@ async def _asset_for_bytes(
         mime_type=mime_type,
         byte_size=len(data),
         state="ready",
-        kind=kind,
         metadata_=metadata or {},
     )
     db.add(asset)
@@ -248,7 +246,6 @@ async def process_slide_import(job_id: str) -> None:
                 data=pdf_bytes,
                 mime_type="application/pdf",
                 object_key=f"{prefix}/source.pdf",
-                kind="normalized",
                 metadata={
                     "page_count": page_count,
                     "source_format": fmt,

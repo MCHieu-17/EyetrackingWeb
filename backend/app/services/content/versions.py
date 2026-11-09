@@ -35,7 +35,6 @@ async def clone_course_version(
         generation=1,
         title=source.title,
         description=source.description,
-        thumbnail_asset_id=source.thumbnail_asset_id,
         created_by=user.id,
     )
     db.add(draft)

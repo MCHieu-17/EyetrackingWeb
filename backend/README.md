@@ -261,10 +261,10 @@ cd backend
 # Integration test trên database tạm (từ gốc repo; cần postgres compose)
 ./scripts/test_backend.sh
 
-# Test migration (baseline + schema_generation=6)
+# Test migration (baseline + schema_generation=8)
 ./scripts/test_migrations.sh
 ```
 
 `scripts/test_backend.sh` tạo database `eyetracking_test`, chạy service
 `migrate`, rồi chạy `pytest` trong `backend/.venv`. `scripts/test_migrations.sh`
-kiểm tra đúng 1 migration và `schema_generation = 6`.
+kiểm tra đúng 1 migration và `schema_generation = 8`.

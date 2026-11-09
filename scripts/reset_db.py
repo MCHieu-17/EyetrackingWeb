@@ -519,8 +519,7 @@ CREATE DATABASE :"dbname";
         instance_id = str(uuid.uuid4())
         sql = """
 INSERT INTO app_metadata (key, value)
-VALUES ('db_instance_id', :'instance_id'),
-       ('schema_generation', '6')
+VALUES ('db_instance_id', :'instance_id')
 ON CONFLICT (key) DO UPDATE
 SET value = EXCLUDED.value, updated_at = now();
 """
@@ -543,6 +542,7 @@ SELECT json_build_object(
       WHERE schemaname = 'public'
         AND tablename IN ('users', 'courses', 'course_versions', 'gaze_samples')
   ),
+  'generation', (SELECT value FROM app_metadata WHERE key = 'schema_generation'),
   'instance_id', (SELECT value FROM app_metadata WHERE key = 'db_instance_id')
 );
 """
@@ -557,6 +557,11 @@ SELECT json_build_object(
             raise GuardError("Smoke test: reference seed thiếu roles.", exit_code=5)
         if int(payload.get("core_tables", 0)) != 4:
             raise GuardError("Smoke test: thiếu bảng lõi của baseline.", exit_code=5)
+        if payload.get("generation") != "8":
+            raise GuardError(
+                f"Smoke test: schema_generation phải là 8 (got {payload.get('generation')!r}).",
+                exit_code=5,
+            )
         if not payload.get("instance_id"):
             raise GuardError("Smoke test: thiếu app_metadata.db_instance_id.", exit_code=5)
 

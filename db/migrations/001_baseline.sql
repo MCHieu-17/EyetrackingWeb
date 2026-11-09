@@ -6,10 +6,10 @@
 -- rỗng; runner bọc file trong một transaction riêng.
 --
 -- Thứ tự: identity/auth → media → content/version → quiz → calibration/session
---         → AOI/layout → gaze → analysis/metrics → chat → metadata → view/trigger
---         → reference seed.
+--         → AOI/layout → gaze → analysis/metrics → chat → embedding jobs
+--         → metadata → view/trigger → reference seed.
 --
--- schema_generation = 6.
+-- schema_generation = 8.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -41,22 +41,18 @@ CREATE TABLE users (
                         CHECK (status IN ('active', 'suspended', 'banned')),
     last_login_at       TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at          TIMESTAMPTZ,
-    must_change_password BOOLEAN NOT NULL DEFAULT false
+    deleted_at          TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX ux_users_email_lower ON users (lower(email));
 
 CREATE TABLE roles (
     id      SMALLSERIAL PRIMARY KEY,
-    code    VARCHAR(30) NOT NULL UNIQUE,
-    label   VARCHAR(100)
+    code    VARCHAR(30) NOT NULL UNIQUE
 );
 
 CREATE TABLE user_roles (
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_id     SMALLINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    granted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, role_id)
 );
 CREATE INDEX idx_user_roles_role ON user_roles (role_id);
@@ -96,8 +92,7 @@ CREATE TABLE user_profiles (
                     CONSTRAINT user_profiles_gender_check
                     CHECK (gender IN ('male', 'female', 'other')),
     phone           VARCHAR(20),
-    avatar_url      TEXT,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    avatar_url      TEXT
 );
 
 CREATE TABLE student_profiles (
@@ -132,8 +127,6 @@ CREATE INDEX idx_courses_archived ON courses (archived_at);
 CREATE TABLE course_teachers (
     course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     teacher_id   UUID NOT NULL REFERENCES teacher_profiles(user_id) ON DELETE CASCADE,
-    assigned_by  UUID REFERENCES users(id) ON DELETE SET NULL,
-    assigned_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (course_id, teacher_id)
 );
 CREATE INDEX idx_course_teachers_teacher ON course_teachers (teacher_id);
@@ -167,24 +160,14 @@ CREATE TABLE media_assets (
     byte_size         BIGINT NOT NULL
                       CONSTRAINT media_assets_byte_size_check
                       CHECK (byte_size >= 0),
-    image_width       INTEGER
-                      CONSTRAINT media_assets_image_width_check
-                      CHECK (image_width > 0),
-    image_height      INTEGER
-                      CONSTRAINT media_assets_image_height_check
-                      CHECK (image_height > 0),
     state             VARCHAR(16) NOT NULL DEFAULT 'staging'
                       CONSTRAINT media_assets_state_check
                       CHECK (state IN ('staging', 'ready', 'failed', 'deleted')),
-    kind              VARCHAR(16) NOT NULL DEFAULT 'source'
-                      CONSTRAINT media_assets_kind_check
-                      CHECK (kind IN ('source', 'normalized', 'thumbnail')),
     metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (course_id, sha256),
     UNIQUE (storage_backend, object_key)
 );
-CREATE INDEX idx_media_assets_course ON media_assets (course_id);
 CREATE INDEX idx_media_assets_state ON media_assets (state);
 
 -- ---------------------------------------------------------------------------
@@ -204,7 +187,6 @@ CREATE TABLE course_versions (
                         CHECK (generation > 0),
     title               VARCHAR(255) NOT NULL,
     description         TEXT,
-    thumbnail_asset_id  UUID REFERENCES media_assets(id) ON DELETE RESTRICT,
     created_by          UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_at        TIMESTAMPTZ,
@@ -234,8 +216,7 @@ CREATE TABLE lessons (
     course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     kind        VARCHAR(10) NOT NULL
                 CONSTRAINT lessons_kind_check
-                CHECK (kind IN ('lesson', 'quiz')),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+                CHECK (kind IN ('lesson', 'quiz'))
 );
 CREATE INDEX idx_lessons_course_kind ON lessons (course_id, kind);
 
@@ -285,8 +266,7 @@ CREATE INDEX idx_course_version_items_lesson_version
 
 CREATE TABLE slides (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    lesson_id   UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    lesson_id   UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE
 );
 CREATE INDEX idx_slides_lesson ON slides (lesson_id);
 
@@ -306,7 +286,6 @@ CREATE TABLE slide_versions (
     UNIQUE (slide_id, revision_no),
     UNIQUE (id, slide_id)
 );
-CREATE INDEX idx_slide_versions_slide ON slide_versions (slide_id);
 CREATE INDEX idx_slide_versions_source_pdf
     ON slide_versions (source_pdf_asset_id, source_page);
 
@@ -382,20 +361,6 @@ CREATE INDEX idx_slide_documents_tsv ON slide_documents USING gin (content_tsv);
 CREATE INDEX idx_slide_documents_hnsw ON slide_documents
     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
-CREATE TABLE content_audit_events (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    actor_id           UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    course_version_id  UUID REFERENCES course_versions(id) ON DELETE SET NULL,
-    action             VARCHAR(16) NOT NULL
-                       CONSTRAINT content_audit_events_action_check
-                       CHECK (action IN ('publish', 'archive', 'restore')),
-    request_id         UUID,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_content_audit_course
-    ON content_audit_events (course_id, created_at);
-
 -- ---------------------------------------------------------------------------
 -- 5) Quiz
 -- ---------------------------------------------------------------------------
@@ -411,8 +376,7 @@ CREATE TABLE quiz_specs (
     questions          JSONB NOT NULL DEFAULT '[]'::jsonb
                        CONSTRAINT quiz_specs_questions_array_check
                        CHECK (jsonb_typeof(questions) = 'array'),
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE quiz_attempts (
@@ -445,8 +409,6 @@ CREATE TABLE quiz_attempts (
 );
 CREATE UNIQUE INDEX ux_quiz_attempts_one_in_progress
     ON quiz_attempts (enrollment_id, lesson_id) WHERE status = 'in_progress';
-CREATE INDEX idx_quiz_attempts_enrollment
-    ON quiz_attempts (enrollment_id, lesson_id, attempt_no);
 CREATE INDEX idx_quiz_attempts_item
     ON quiz_attempts (course_version_item_id);
 
@@ -461,7 +423,6 @@ CREATE TABLE devices (
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (owner_id, fingerprint)
 );
-CREATE INDEX idx_devices_owner ON devices (owner_id);
 
 CREATE TABLE calibrations (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -503,10 +464,7 @@ CREATE TABLE learning_sessions (
                            CHECK (status IN ('in_progress', 'completed', 'aborted', 'expired')),
     started_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at               TIMESTAMPTZ,
-    expires_at             TIMESTAMPTZ NOT NULL,
-    clock_uncertainty_ms   INTEGER
-                           CONSTRAINT learning_sessions_clock_uncertainty_check
-                           CHECK (clock_uncertainty_ms >= 0)
+    expires_at             TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX idx_learning_sessions_enrollment
     ON learning_sessions (enrollment_id, started_at);
@@ -592,7 +550,6 @@ CREATE TABLE aoi_definitions (
     is_active     BOOLEAN NOT NULL DEFAULT true,
     UNIQUE (aoi_set_id, code)
 );
-CREATE INDEX idx_aoi_definitions_set ON aoi_definitions (aoi_set_id);
 CREATE INDEX idx_aoi_definitions_parent ON aoi_definitions (parent_id);
 
 CREATE TABLE aoi_layout_snapshots (
@@ -652,7 +609,6 @@ CREATE TABLE gaze_batches (
     payload_hash      CHAR(64) NOT NULL
                       CONSTRAINT gaze_batches_payload_hash_check
                       CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
-    received_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     received_count    INTEGER NOT NULL DEFAULT 0
                       CONSTRAINT gaze_batches_received_count_check
                       CHECK (received_count >= 0),
@@ -671,8 +627,6 @@ CREATE TABLE gaze_batches (
     FOREIGN KEY (presentation_id, session_id)
         REFERENCES content_presentations(id, session_id) ON DELETE CASCADE
 );
-CREATE INDEX idx_gaze_batches_session
-    ON gaze_batches (session_id, batch_no);
 CREATE INDEX idx_gaze_batches_presentation
     ON gaze_batches (presentation_id);
 
@@ -754,18 +708,15 @@ CREATE TABLE analysis_runs (
     to_time            TIMESTAMPTZ NOT NULL,
     batch_watermark    UUID REFERENCES gaze_batches(id) ON DELETE SET NULL,
     algorithm_version  VARCHAR(64) NOT NULL,
-    config             JSONB NOT NULL DEFAULT '{}'::jsonb,
     status             VARCHAR(16) NOT NULL DEFAULT 'pending'
                        CONSTRAINT analysis_runs_status_check
                        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
-    error              TEXT,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at       TIMESTAMPTZ,
     CONSTRAINT analysis_runs_time_range_check CHECK (to_time > from_time)
 );
 CREATE INDEX idx_analysis_runs_session
     ON analysis_runs (session_id, created_at);
-CREATE INDEX idx_analysis_runs_status ON analysis_runs (status);
 CREATE INDEX idx_analysis_runs_status_created
     ON analysis_runs (status, created_at);
 CREATE INDEX idx_analysis_runs_presentation
@@ -780,7 +731,6 @@ CREATE TABLE aoi_hits (
     FOREIGN KEY (sample_id, event_time)
         REFERENCES gaze_samples(id, event_time) ON DELETE CASCADE
 );
-CREATE INDEX idx_aoi_hits_run ON aoi_hits (run_id);
 CREATE INDEX idx_aoi_hits_definition ON aoi_hits (definition_id);
 
 CREATE TABLE presentation_metrics (
@@ -841,7 +791,40 @@ CREATE INDEX idx_chat_messages_session
     ON chat_messages (session_id, created_at);
 
 -- ---------------------------------------------------------------------------
--- 12) Metadata / migration tracking
+-- 12) Embedding jobs (RAG ingest queue)
+-- ---------------------------------------------------------------------------
+-- `target_id` trỏ tới course_versions.id hoặc lesson_versions.id tùy `kind`;
+-- không đặt FK vì quan hệ polymorphic.
+CREATE TABLE embedding_jobs (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kind           VARCHAR(20) NOT NULL
+                   CONSTRAINT embedding_jobs_kind_check
+                   CHECK (kind IN ('course_version', 'lesson_version')),
+    target_id      UUID NOT NULL,
+    include_draft  BOOLEAN NOT NULL DEFAULT false,
+    force          BOOLEAN NOT NULL DEFAULT false,
+    status         VARCHAR(16) NOT NULL DEFAULT 'pending'
+                   CONSTRAINT embedding_jobs_status_check
+                   CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+    attempts       INTEGER NOT NULL DEFAULT 0
+                   CONSTRAINT embedding_jobs_attempts_check
+                   CHECK (attempts >= 0),
+    max_attempts   INTEGER NOT NULL DEFAULT 3
+                   CONSTRAINT embedding_jobs_max_attempts_check
+                   CHECK (max_attempts > 0),
+    error          TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at     TIMESTAMPTZ,
+    finished_at    TIMESTAMPTZ,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_embedding_jobs_status_created
+    ON embedding_jobs (status, created_at);
+CREATE INDEX idx_embedding_jobs_kind_target
+    ON embedding_jobs (kind, target_id);
+
+-- ---------------------------------------------------------------------------
+-- 13) Metadata / migration tracking
 -- ---------------------------------------------------------------------------
 CREATE TABLE app_metadata (
     key         TEXT PRIMARY KEY,
@@ -852,7 +835,7 @@ CREATE TABLE app_metadata (
 -- schema_migrations do runner tạo trước baseline (xem db/migrate.sh).
 
 -- ---------------------------------------------------------------------------
--- 13) Circular FKs (deferrable)
+-- 14) Circular FKs (deferrable)
 -- ---------------------------------------------------------------------------
 ALTER TABLE courses
     ADD CONSTRAINT courses_published_version_fkey
@@ -870,7 +853,7 @@ ALTER TABLE aoi_layout_snapshots
     ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
 
 -- ---------------------------------------------------------------------------
--- 14) Views
+-- 15) Views
 -- ---------------------------------------------------------------------------
 CREATE VIEW v_published_course_outline AS
 SELECT
@@ -999,7 +982,7 @@ JOIN v_published_course_outline o
 WHERE sd.ingestion_state = 'ready';
 
 -- ---------------------------------------------------------------------------
--- 15) Immutability / consistency triggers
+-- 16) Immutability / consistency triggers
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION prevent_published_course_version_mutation()
 RETURNS trigger
@@ -1019,7 +1002,6 @@ BEGIN
         IF NEW.state = 'archived'
            AND NEW.title = OLD.title
            AND NEW.description IS NOT DISTINCT FROM OLD.description
-           AND NEW.thumbnail_asset_id IS NOT DISTINCT FROM OLD.thumbnail_asset_id
            AND NEW.generation = OLD.generation THEN
             RETURN NEW;
         END IF;
@@ -1091,9 +1073,7 @@ BEGIN
         IF NEW.object_key <> OLD.object_key
            OR NEW.sha256 <> OLD.sha256
            OR NEW.mime_type <> OLD.mime_type
-           OR NEW.byte_size <> OLD.byte_size
-           OR NEW.image_width IS DISTINCT FROM OLD.image_width
-           OR NEW.image_height IS DISTINCT FROM OLD.image_height THEN
+           OR NEW.byte_size <> OLD.byte_size THEN
             RAISE EXCEPTION 'ready media asset % is immutable', OLD.id;
         END IF;
     END IF;
@@ -1613,17 +1593,17 @@ BEFORE INSERT OR UPDATE ON quiz_specs
 FOR EACH ROW EXECUTE FUNCTION check_quiz_spec_lesson_kind();
 
 -- ---------------------------------------------------------------------------
--- 16) Reference seed
+-- 17) Reference seed
 -- ---------------------------------------------------------------------------
 -- Chỉ roles + cấu hình hệ thống. KHÔNG tạo tài khoản mẫu; seed development nằm
 -- ở db/seed_dev_users.sql và chỉ chạy khi được chọn.
-INSERT INTO roles (code, label) VALUES
-    ('admin',   'Quản trị viên'),
-    ('teacher', 'Giáo viên'),
-    ('student', 'Học sinh')
+INSERT INTO roles (code) VALUES
+    ('admin'),
+    ('teacher'),
+    ('student')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO app_metadata (key, value) VALUES
-    ('schema_generation', '6')
+    ('schema_generation', '8')
 ON CONFLICT (key) DO UPDATE
 SET value = EXCLUDED.value, updated_at = now();

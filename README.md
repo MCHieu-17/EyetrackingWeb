@@ -37,7 +37,7 @@ giáo viên.
 | `backend/` | FastAPI — auth/JWT, khóa học, gaze ingestion, analytics, proxy chat |
 | `services/gaze/` | ML service — ước lượng gaze từ webcam, calibration, WebSocket (cần GPU) |
 | `services/chatbot/` | RAG service — ingest slide bằng VLM, hybrid retrieval, citation, SSE (embedding CPU) |
-| `db/` | Migrations PostgreSQL — một baseline `001_baseline.sql`, schema generation 6 |
+| `db/` | Migrations PostgreSQL — một baseline `001_baseline.sql`, schema generation 8 |
 | `nginx/` | Reverse proxy local: web :3000 → frontend/backend/gaze |
 | `scripts/` | Seed/reset/test + tạo role chatbot, bảo trì partition, dọn Docker |
 
@@ -207,7 +207,7 @@ Schema chuẩn là **một baseline sạch**:
   + reference seed (roles, cấu hình hệ thống, `user_identities` cho Microsoft 365).
 
 Không còn migration delta. Khi schema thay đổi, thêm file mới `002_...sql`;
-không sửa file đã áp. Schema generation hiện tại là `6`.
+không sửa file đã áp. Schema generation hiện tại là `8`.
 
 Service `migrate` tự chạy mỗi lần `docker compose up`. Runner `db/migrate.sh`:
 
@@ -230,7 +230,7 @@ Reset DB development (mặc định chỉ preview):
 ```
 
 Quy tắc: **không sửa file migration đã áp** — thêm file mới (`002_...`).
-Schema hiện tại là `schema_generation = 6`; DB cũ sẽ fail-fast và cần chạy
+Schema hiện tại là `schema_generation = 8`; DB cũ sẽ fail-fast và cần chạy
 migration (hoặc reset có guard).
 
 ## Slide storage

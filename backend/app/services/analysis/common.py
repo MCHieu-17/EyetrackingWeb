@@ -29,7 +29,6 @@ def _run_out(row: AnalysisRun) -> AnalysisRunOut:
         batch_watermark=row.batch_watermark,
         algorithm_version=row.algorithm_version,
         status=row.status,
-        error=row.error,
         created_at=row.created_at,
         completed_at=row.completed_at,
     )

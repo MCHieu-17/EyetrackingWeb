@@ -96,7 +96,6 @@ async def test_slide_leaf_priority_prefers_text_over_image(client):
             mime_type="application/pdf",
             byte_size=1,
             state="ready",
-            kind="normalized",
         )
         db.add(asset)
         await db.flush()
@@ -174,7 +173,6 @@ async def test_slide_leaf_priority_prefers_text_over_image(client):
             from_time=now - timedelta(minutes=1),
             to_time=now + timedelta(minutes=1),
             algorithm_version="gaze-metrics-v1",
-            config={},
             status="pending",
         )
         db.add(run)

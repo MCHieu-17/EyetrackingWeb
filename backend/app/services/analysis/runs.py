@@ -29,7 +29,6 @@ async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
     if run.status == "completed":
         return await get_run_result(db, run.id)
     run.status = "running"
-    run.error = None
     await db.commit()
 
     try:
@@ -76,7 +75,7 @@ async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
         result = await get_run_result(db, run.id)
         result.hit_count = inserted
         return result
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         await db.rollback()
         run = await db.get(
             AnalysisRun,
@@ -85,7 +84,6 @@ async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
         )
         if run is not None:
             run.status = "failed"
-            run.error = str(exc)[:1000]
             await db.commit()
         raise
 
@@ -161,7 +159,6 @@ async def _create_run(
         to_time=end,
         batch_watermark=watermark_id,
         algorithm_version=algorithm_version,
-        config={},
         status="pending",
     )
     db.add(run)

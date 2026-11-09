@@ -92,12 +92,6 @@ class CourseTeacher(Base):
     teacher_id: Mapped[str] = mapped_column(
         ForeignKey("teacher_profiles.user_id", ondelete="CASCADE"), primary_key=True
     )
-    assigned_by: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL")
-    )
-    assigned_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
 
 
 class Enrollment(Base):
@@ -164,9 +158,6 @@ class CourseVersion(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    thumbnail_asset_id: Mapped[str | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="RESTRICT")
-    )
     created_by: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -240,9 +231,6 @@ class Lesson(Base):
         ForeignKey("courses.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(10), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
 
     versions: Mapped[list["LessonVersion"]] = relationship(
         back_populates="lesson",
@@ -359,9 +347,6 @@ class Slide(Base):
     lesson_id: Mapped[str] = mapped_column(
         ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
 
     lesson: Mapped["Lesson"] = relationship(back_populates="slides")
     versions: Mapped[list["SlideVersion"]] = relationship(
@@ -449,32 +434,3 @@ class LessonVersionSlide(Base):
 
     lesson_version: Mapped["LessonVersion"] = relationship(back_populates="slides")
     slide_version: Mapped["SlideVersion"] = relationship(lazy="joined")
-
-
-class ContentAuditEvent(Base):
-    __tablename__ = "content_audit_events"
-    __table_args__ = (
-        CheckConstraint(
-            "action IN ('publish', 'archive', 'restore')",
-            name="content_audit_events_action_check",
-        ),
-        Index("idx_content_audit_course", "course_id", "created_at"),
-    )
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
-    )
-    actor_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
-    )
-    course_id: Mapped[str] = mapped_column(
-        ForeignKey("courses.id", ondelete="CASCADE"), nullable=False
-    )
-    course_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("course_versions.id", ondelete="SET NULL")
-    )
-    action: Mapped[str] = mapped_column(String(16), nullable=False)
-    request_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )

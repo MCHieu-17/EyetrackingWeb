@@ -39,22 +39,9 @@ class MediaAsset(Base):
             name="media_assets_state_check",
         ),
         CheckConstraint(
-            "kind IN ('source', 'normalized', 'thumbnail')",
-            name="media_assets_kind_check",
-        ),
-        CheckConstraint(
             "sha256 ~ '^[0-9a-f]{64}$'", name="media_assets_sha256_check"
         ),
         CheckConstraint("byte_size >= 0", name="media_assets_byte_size_check"),
-        CheckConstraint(
-            "image_width IS NULL OR image_width > 0",
-            name="media_assets_image_width_check",
-        ),
-        CheckConstraint(
-            "image_height IS NULL OR image_height > 0",
-            name="media_assets_image_height_check",
-        ),
-        Index("idx_media_assets_course", "course_id"),
         Index("idx_media_assets_state", "state"),
     )
 
@@ -69,13 +56,8 @@ class MediaAsset(Base):
     sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(127), nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    image_width: Mapped[int | None] = mapped_column(Integer)
-    image_height: Mapped[int | None] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'staging'")
-    )
-    kind: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'source'")
     )
     metadata_: Mapped[dict] = mapped_column(
         "metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb")

@@ -14,7 +14,7 @@ baseline; lịch sử vẫn còn trong Git. Không có chuỗi “drop legacy r�
 không tự baseline/replay.
 
 Khi schema thay đổi, thêm file mới `002_...sql`; **không sửa file đã áp**.
-Schema generation hiện tại là `6` (giá trị trong `app_metadata`).
+Schema generation hiện tại là `8` (giá trị trong `app_metadata`).
 
 ## Runner
 
@@ -60,7 +60,7 @@ database đích, DSN backend, ownership và kết nối còn lại. Không dùng
 `docker compose down -v`, không xóa volume, không đụng database khác.
 
 Sau reset, `docker compose up -d` sẽ chạy lại service `migrate` (baseline +
-generation 6). Nếu muốn seed tài khoản dev:
+generation 8). Nếu muốn seed tài khoản dev:
 
 ```bash
 ./scripts/seed_dev.sh

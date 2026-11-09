@@ -37,11 +37,11 @@ docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 log "kiểm tra schema"
 count="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT count(*) FROM schema_migrations;")"
-[ "$count" = "2" ] || { echo "expected 2 migrations, got $count" >&2; exit 1; }
+[ "$count" = "1" ] || { echo "expected 1 migration, got $count" >&2; exit 1; }
 
 generation="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT value FROM app_metadata WHERE key = 'schema_generation';")"
-[ "$generation" = "7" ] || { echo "expected schema_generation=7, got $generation" >&2; exit 1; }
+[ "$generation" = "8" ] || { echo "expected schema_generation=8, got $generation" >&2; exit 1; }
 
 identity_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT to_regclass('public.user_identities');")"
@@ -54,6 +54,27 @@ embedding_jobs_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER"
     "SELECT to_regclass('public.embedding_jobs');")"
 [ "$embedding_jobs_table" = "embedding_jobs" ] || {
     echo "embedding_jobs missing (got $embedding_jobs_table)" >&2
+    exit 1
+}
+
+dropped_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
+       AND tablename = 'content_audit_events';")"
+[ "$dropped_tables" = "0" ] || {
+    echo "dead tables still present (got $dropped_tables)" >&2
+    exit 1
+}
+
+dropped_columns="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT count(*) FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND ((table_name = 'users' AND column_name IN ('must_change_password', 'updated_at'))
+          OR (table_name = 'course_versions' AND column_name = 'thumbnail_asset_id')
+          OR (table_name = 'media_assets' AND column_name IN ('image_width', 'image_height', 'kind'))
+          OR (table_name = 'learning_sessions' AND column_name = 'clock_uncertainty_ms')
+          OR (table_name = 'analysis_runs' AND column_name IN ('config', 'error')));")"
+[ "$dropped_columns" = "0" ] || {
+    echo "dead columns still present (got $dropped_columns)" >&2
     exit 1
 }
 

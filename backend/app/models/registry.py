@@ -17,7 +17,6 @@ from app.models.auth import AuthSession, Role, User, UserIdentity, UserRole
 from app.models.calibration import Calibration, Device
 from app.models.chat import ChatMessage, ChatSession
 from app.models.course import (
-    ContentAuditEvent,
     Course,
     CourseTeacher,
     CourseVersion,
@@ -54,7 +53,6 @@ __all__ = [
     "Calibration",
     "ChatMessage",
     "ChatSession",
-    "ContentAuditEvent",
     "ContentPresentation",
     "Course",
     "CourseTeacher",

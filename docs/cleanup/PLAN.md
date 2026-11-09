@@ -7,8 +7,8 @@ có test và metric trước/sau. Mỗi task do một agent sở hữu một wor
 
 - Không big-bang; mỗi task là một branch/worktree độc lập.
 - Không đổi API path/response, auth/CSRF, gaze protocol.
-- Không đổi schema DB trừ migration `002_...` ở Phase 5.
-- Không sửa `db/migrations/001_baseline.sql`.
+- Schema DB đã squash vào `001_baseline.sql` (generation 8); mọi thay đổi tiếp theo phải là migration `002_...`.
+- Không sửa `db/migrations/001_baseline.sql` sau khi baseline đã khóa.
 - Mỗi task ≤ 15 file / ≤ 800 LOC thay đổi.
 - Mọi function public mới/đổi phải có test.
 - Merge theo thứ tự; chạy gate sau mỗi merge.

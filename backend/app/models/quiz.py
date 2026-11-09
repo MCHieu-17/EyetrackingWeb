@@ -54,9 +54,6 @@ class QuizSpec(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
 
     lesson_version: Mapped["LessonVersion"] = relationship()
 

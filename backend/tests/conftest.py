@@ -306,7 +306,6 @@ async def seed_slide(
             mime_type="application/pdf",
             byte_size=4,
             state="ready",
-            kind="normalized",
             metadata_={"page_count": 1, "source_format": "pdf"},
         )
         db.add(asset)

@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -44,13 +43,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    must_change_password: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
 
     roles: Mapped[list["Role"]] = relationship(
         secondary="user_roles", lazy="selectin", viewonly=True
@@ -78,7 +71,6 @@ class Role(Base):
 
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
-    label: Mapped[str | None] = mapped_column(String(100))
 
 
 class UserRole(Base):
@@ -90,9 +82,6 @@ class UserRole(Base):
     )
     role_id: Mapped[int] = mapped_column(
         ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    )
-    granted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
     )
 
 

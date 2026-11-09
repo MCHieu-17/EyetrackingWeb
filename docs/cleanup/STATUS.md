@@ -19,7 +19,7 @@
 | Playwright E2E | 4 passed |
 | frontend build | pass |
 | smoke | pass |
-| migrations | pass (2 migrations, schema generation 7) |
+| migrations | pass (1 migration, schema generation 8) |
 
 ### Metrics
 
@@ -52,7 +52,7 @@
 ```bash
 ./scripts/check.sh --full   # ruff, lint, typecheck, knip, 224 FE tests, 84 BE tests, build
 ./scripts/e2e.sh            # 4 Playwright smoke flows
-./scripts/test_migrations.sh # 2 migrations, schema_generation=7
+./scripts/test_migrations.sh # 1 migration, schema_generation=8
 ./scripts/smoke.sh           # nginx/backend/gaze/chatbot OK
 docker compose up -d --build # stack rebuilt, embedding-worker running
 ```

@@ -34,10 +34,6 @@ class LearningSession(Base):
             "status IN ('in_progress', 'completed', 'aborted', 'expired')",
             name="learning_sessions_status_check",
         ),
-        CheckConstraint(
-            "clock_uncertainty_ms IS NULL OR clock_uncertainty_ms >= 0",
-            name="learning_sessions_clock_uncertainty_check",
-        ),
         Index(
             "idx_learning_sessions_enrollment",
             "enrollment_id",
@@ -77,7 +73,6 @@ class LearningSession(Base):
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    clock_uncertainty_ms: Mapped[int | None] = mapped_column(Integer)
 
     enrollment: Mapped["Enrollment"] = relationship()
     course_version_item: Mapped["CourseVersionItem"] = relationship()
@@ -186,9 +181,6 @@ class GazeBatch(Base):
     sequence_start: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sequence_end: Mapped[int] = mapped_column(BigInteger, nullable=False)
     payload_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
     received_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )

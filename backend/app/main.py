@@ -40,7 +40,7 @@ from app.models.metadata import AppMetadata
 from app.services.embedding import close_ingest_client
 from app.services.study_chat import close_chatbot_client
 
-EXPECTED_SCHEMA_GENERATION = "7"
+EXPECTED_SCHEMA_GENERATION = "8"
 
 configure_logging()
 

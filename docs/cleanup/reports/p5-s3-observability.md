@@ -1,5 +1,8 @@
 # P5-S3 — Observability, backup, operations docs
 
+> Historical note: schema đã được squash vào `001_baseline.sql` (generation 8);
+> các mốc generation 6/7 trong báo cáo này là trạng thái lịch sử.
+
 ## Summary
 
 Thêm logging có thể cấu hình (`LOG_FORMAT=text|json`, `LOG_LEVEL`), script

@@ -486,7 +486,6 @@ async def change_password(
     full_user.password_hash = await asyncio.to_thread(
         security.hash_password, body.new_password
     )
-    full_user.must_change_password = False
     raw_refresh = request.cookies.get("refresh_token")
     await user_crud.revoke_all_sessions(
         db,

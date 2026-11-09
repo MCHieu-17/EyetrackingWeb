@@ -1,5 +1,9 @@
 # P5-S1 — DB-backed embedding job queue + worker
 
+> Historical note: `002_embedding_jobs.sql` đã được gộp vào
+> `001_baseline.sql` (schema generation 8). Báo cáo này giữ nguyên trạng thái
+> lịch sử tại thời điểm thực hiện.
+
 - Branch: `cleanup/p5-s1-embedding-jobs`
 - Base: `cleanup/integration` (rebased onto `f251996`)
 - Date: 2026-11-09

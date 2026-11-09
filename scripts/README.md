@@ -60,7 +60,7 @@ Chỉ `docker image prune` và `docker builder prune` cho tài nguyên cũ hơn 
 ## Migration (schema DB)
 
 Schema do các file trong `db/migrations/` quyết định. Hiện chỉ có **một
-baseline** `001_baseline.sql` (schema generation 6); migration tiếp theo là
+baseline** `001_baseline.sql` (schema generation 8); migration tiếp theo là
 `002_...sql`. Runner `db/migrate.sh` (nằm trong image
 `eyelearning-migrations:local`, build từ `db/Dockerfile`, service một-lần
 `migrate`) là thứ duy nhất nên chạy migration — **không** `psql -f` tay từng file.

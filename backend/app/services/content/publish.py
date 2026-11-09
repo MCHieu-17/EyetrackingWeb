@@ -9,7 +9,6 @@ from sqlalchemy.orm import raiseload
 
 from app.models.auth import User
 from app.models.course import (
-    ContentAuditEvent,
     Course,
     CourseVersion,
     CourseVersionItem,
@@ -212,15 +211,6 @@ async def publish_course(
     await db.flush()
     course.published_version_id = draft.id
     course.updated_at = _now()
-    db.add(
-        ContentAuditEvent(
-            actor_id=user.id,
-            course_id=course.id,
-            course_version_id=draft.id,
-            action="publish",
-            request_id=None,
-        )
-    )
     await db.flush()
     return draft
 

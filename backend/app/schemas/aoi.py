@@ -75,7 +75,6 @@ class AnalysisRunOut(CamelModel):
     batch_watermark: str | None = None
     algorithm_version: str
     status: str
-    error: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
 
