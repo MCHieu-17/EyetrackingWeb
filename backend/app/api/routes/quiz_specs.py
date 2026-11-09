@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
+from app.api.access import get_course_or_404
 from app.api.deps import can_manage_course, require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Course, Lesson, LessonVersion
+from app.models.course import Lesson, LessonVersion
 from app.models.quiz import QuizSpec
 from app.schemas.quiz import QuizAssignmentOut, QuizAssignmentUpdate
 from app.services import content
@@ -22,13 +24,21 @@ async def update_quiz_spec(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson_version = await db.get(LessonVersion, lesson_version_id)
+    lesson_version = await db.get(
+        LessonVersion,
+        lesson_version_id,
+        options=[raiseload(LessonVersion.slides)],
+    )
     if lesson_version is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
-    lesson = await db.get(Lesson, lesson_version.lesson_id)
-    course = await db.get(Course, lesson.course_id) if lesson else None
-    if lesson is None or course is None:
+    lesson = await db.get(
+        Lesson,
+        lesson_version.lesson_id,
+        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
+    )
+    if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    course = await get_course_or_404(db, lesson.course_id)
     if not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
