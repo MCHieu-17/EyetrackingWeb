@@ -2,9 +2,9 @@
 
 import logging
 
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from app.workflow.history import _history_messages
 from app.workflow.prompts import (
     CITATION_RULE,
     COURSE_QA_SYSTEM_PROMPT,
@@ -46,21 +46,6 @@ _answer_prompt = ChatPromptTemplate.from_messages(
         ("human", _ANSWER_HUMAN),
     ]
 )
-
-
-def _history_messages(history: list[dict]) -> list:
-    messages = []
-    from app.workflow.router import budget_history
-
-    for item in budget_history(history):
-        content = (item.get("content") or "").strip()
-        if not content:
-            continue
-        if item.get("role") == "student":
-            messages.append(HumanMessage(content=content))
-        else:
-            messages.append(AIMessage(content=content))
-    return messages
 
 
 def _location_label(state: ChatState) -> str:

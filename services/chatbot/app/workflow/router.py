@@ -5,11 +5,11 @@ import re
 import unicodedata
 from typing import Literal
 
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from openai import RateLimitError
 from pydantic import BaseModel, Field
 
+from app.workflow.history import _history_messages, budget_history
 from app.workflow.prompts import ROUTER_SYSTEM_PROMPT
 from app.workflow.providers import get_llm
 from app.workflow.state import ChatState
@@ -41,31 +41,6 @@ _router_prompt = ChatPromptTemplate.from_messages(
         ),
     ]
 )
-
-
-def budget_history(history: list[dict], max_chars: int = 16000) -> list[dict]:
-    selected = []
-    remaining = max_chars
-    for item in reversed(history[-10:]):
-        text = item.get("content") or ""
-        if len(text) > remaining:
-            break
-        selected.append(item)
-        remaining -= len(text)
-    return list(reversed(selected))
-
-
-def _history_messages(history: list[dict]) -> list:
-    messages = []
-    for item in budget_history(history):
-        content = (item.get("content") or "").strip()
-        if not content:
-            continue
-        if item.get("role") == "student":
-            messages.append(HumanMessage(content=content))
-        else:
-            messages.append(AIMessage(content=content))
-    return messages
 
 
 def _router_chain():
