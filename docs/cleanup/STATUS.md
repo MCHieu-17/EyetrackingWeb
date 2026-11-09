@@ -14,8 +14,9 @@
 | eslint | pass |
 | tsc | pass |
 | knip | pass |
-| pytest | 76 passed (final) |
-| frontend unit tests | 222 passed (final) |
+| pytest | 84 passed (final) |
+| frontend unit tests | 224 passed (final) |
+| Playwright E2E | 4 passed |
 | frontend build | pass |
 | smoke | pass |
 | migrations | pass (2 migrations, schema generation 7) |
@@ -49,7 +50,8 @@
 ## Final gate
 
 ```bash
-./scripts/check.sh --full   # ruff, lint, typecheck, knip, 222 FE tests, 81 BE tests, build
+./scripts/check.sh --full   # ruff, lint, typecheck, knip, 224 FE tests, 84 BE tests, build
+./scripts/e2e.sh            # 4 Playwright smoke flows
 ./scripts/test_migrations.sh # 2 migrations, schema_generation=7
 ./scripts/smoke.sh           # nginx/backend/gaze/chatbot OK
 docker compose up -d --build # stack rebuilt, embedding-worker running
