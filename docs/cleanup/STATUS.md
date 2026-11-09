@@ -35,8 +35,8 @@
 
 | Wave | Status | Tag | Notes |
 |---|---|---|---|
-| 0 | in progress | | Foundation |
-| 1 | pending | | Quick wins + test infra |
+| 0 | done | | Foundation |
+| 1 | in progress | | Quick wins + test infra (A1–A4 running) |
 | 2 | pending | | Backend split |
 | 3 | pending | | ORM performance |
 | 4 | pending | | Frontend split |
