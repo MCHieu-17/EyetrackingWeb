@@ -6,12 +6,12 @@ trong DB nên restart không mất việc; Redis chỉ là cache/throttle.
 
 import asyncio
 import logging
-import os
 
+from app.core.config import settings
 from app.services.analysis import execute_pending_runs
 
 logger = logging.getLogger("app.worker")
-POLL_SECONDS = float(os.getenv("WORKER_POLL_SECONDS", "5"))
+POLL_SECONDS = settings.worker_poll_seconds
 
 
 async def main() -> None:

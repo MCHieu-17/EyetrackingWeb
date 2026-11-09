@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, raiseload, selectinload
 
 from app.core.config import settings
+from app.core.helpers import escape_like
 from app.db.session import SessionLocal
 from app.models.auth import User
 from app.models.chat import ChatSession
@@ -470,7 +471,9 @@ async def list_teacher_courses(
         stmt = stmt.where(
             Course.id.in_(
                 select(CourseVersion.course_id).where(
-                    CourseVersion.title.ilike(f"%{q}%")
+                    CourseVersion.title.ilike(
+                        f"%{escape_like(q)}%", escape="\\"
+                    )
                 )
             )
         )

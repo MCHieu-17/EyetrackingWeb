@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload
 
 from app.api.deps import can_access_course, can_manage_course
+from app.core.helpers import escape_like as escape_like  # re-export cho API cũ
 from app.models.auth import User
 from app.models.course import Course, Lesson
 
@@ -82,7 +83,3 @@ async def get_lesson_viewable(db: AsyncSession, lesson_id: str, user: User) -> L
     if course is None or not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return lesson
-
-
-def escape_like(q: str) -> str:
-    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

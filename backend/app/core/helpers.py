@@ -38,6 +38,11 @@ def color_for(key: str) -> str:
     return AVATAR_COLORS[_digest(key) % len(AVATAR_COLORS)]
 
 
+def escape_like(q: str) -> str:
+    """Escape ký tự đặc biệt của LIKE (backslash, %, _) cho truy vấn ilike."""
+    return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def relative_time_vn(dt: datetime | None) -> str | None:
     if dt is None:
         return None
