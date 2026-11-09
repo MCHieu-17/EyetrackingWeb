@@ -230,6 +230,32 @@ services:
     mem_limit: 2g
     cpus: 1.0
 
+  # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs. Dùng image API
+  # (không cần LibreOffice); job nằm trong PostgreSQL nên restart không mất.
+  embedding-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: api
+    image: eyelearning-backend:local
+    container_name: eyetracking-embedding-worker
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["python", "-m", "app.embedding_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      EMBEDDING_WORKER_POLL_SECONDS: ${EMBEDDING_WORKER_POLL_SECONDS:-5}
+    # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
+    healthcheck:
+      disable: true
+    mem_limit: 2g
+    cpus: 1.0
+
   # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B
   # chạy CPU (stage ai-base trong services/chatbot/Dockerfile). LLM/VLM gọi
   # River API. KHÔNG đặt `gpus: all` — GPU chỉ dành cho gaze.

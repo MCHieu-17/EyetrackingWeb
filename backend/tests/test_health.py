@@ -7,4 +7,4 @@ async def test_health(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["schemaGeneration"] == "6"
+    assert data["schemaGeneration"] == "7"

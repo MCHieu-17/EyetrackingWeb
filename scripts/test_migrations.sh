@@ -37,16 +37,23 @@ docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 log "kiểm tra schema"
 count="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT count(*) FROM schema_migrations;")"
-[ "$count" = "1" ] || { echo "expected 1 migration, got $count" >&2; exit 1; }
+[ "$count" = "2" ] || { echo "expected 2 migrations, got $count" >&2; exit 1; }
 
 generation="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT value FROM app_metadata WHERE key = 'schema_generation';")"
-[ "$generation" = "6" ] || { echo "expected schema_generation=6, got $generation" >&2; exit 1; }
+[ "$generation" = "7" ] || { echo "expected schema_generation=7, got $generation" >&2; exit 1; }
 
 identity_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT to_regclass('public.user_identities');")"
 [ "$identity_table" = "user_identities" ] || {
     echo "user_identities missing (got $identity_table)" >&2
+    exit 1
+}
+
+embedding_jobs_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT to_regclass('public.embedding_jobs');")"
+[ "$embedding_jobs_table" = "embedding_jobs" ] || {
+    echo "embedding_jobs missing (got $embedding_jobs_table)" >&2
     exit 1
 }
 

@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     # Worker phân tích metrics/analysis.
     worker_poll_seconds: float = 5.0
 
+    # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs.
+    embedding_worker_poll_seconds: float = 5.0
+
     # Worker xử lý slide_import_jobs.
     content_worker_poll_seconds: float = 3.0
     # Job processing quá lâu (worker chết) sẽ được đưa lại hàng đợi.

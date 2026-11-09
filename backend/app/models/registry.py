@@ -30,6 +30,7 @@ from app.models.course import (
     Slide,
     SlideVersion,
 )
+from app.models.embedding_job import EmbeddingJob
 from app.models.gaze import (
     ContentPresentation,
     GazeBatch,
@@ -61,6 +62,7 @@ __all__ = [
     "CourseVersionItem",
     "CourseVersionModule",
     "Device",
+    "EmbeddingJob",
     "Enrollment",
     "GazeBatch",
     "GazeSample",
