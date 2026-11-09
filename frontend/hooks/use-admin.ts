@@ -7,6 +7,7 @@ import {
   promoteStudent,
   type AdminStudent,
 } from "@/lib/api/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useAdminStudents(query = "") {
   const normalizedQuery = query.trim();
@@ -18,7 +19,7 @@ export function useAdminStudents(query = "") {
   }, [normalizedQuery]);
 
   return useQuery({
-    queryKey: ["admin", "students", debouncedQuery],
+    queryKey: queryKeys.admin.students(debouncedQuery),
     queryFn: () => fetchAdminStudents(debouncedQuery),
     staleTime: 30_000,
   });
@@ -37,7 +38,7 @@ export function usePromoteStudent() {
       department?: string | null;
     }) => promoteStudent(student.id, { teacherCode, department }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "students"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.admin.studentsRoot });
     },
   });
 }

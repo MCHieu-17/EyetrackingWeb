@@ -7,14 +7,18 @@ import {
   fetchLessonSlides,
   fetchSessionContents,
 } from "@/lib/api/student";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useMyEnrollments() {
-  return useQuery({ queryKey: ["student", "enrollments"], queryFn: fetchMyEnrollments });
+  return useQuery({
+    queryKey: queryKeys.student.enrollments,
+    queryFn: fetchMyEnrollments,
+  });
 }
 
 export function useCourseOutline(courseId: string) {
   return useQuery({
-    queryKey: ["student", "course-outline", courseId],
+    queryKey: queryKeys.student.courseOutline(courseId),
     queryFn: () => fetchCourseOutline(courseId),
     enabled: Boolean(courseId),
   });
@@ -22,7 +26,7 @@ export function useCourseOutline(courseId: string) {
 
 export function useLessonSlides(lessonId: string, sessionId?: string | null) {
   return useQuery({
-    queryKey: ["student", "lesson-slides", lessonId, sessionId ?? null],
+    queryKey: queryKeys.student.lessonSlides(lessonId, sessionId),
     queryFn: () =>
       sessionId
         ? fetchSessionContents(sessionId)

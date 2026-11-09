@@ -1,29 +1,4 @@
-import { API_BASE_URL, ApiError, getAuthHeaders } from "@/lib/api/client";
-
-/** Đọc lỗi JSON của backend và header Retry-After (nếu có). */
-async function toApiError(response: Response): Promise<ApiError> {
-  let message = `HTTP ${response.status}`;
-  try {
-    const data = (await response.json()) as {
-      detail?: string | { message?: string };
-      message?: string;
-    };
-    if (typeof data?.detail === "string") message = data.detail;
-    else if (data?.detail && typeof data.detail === "object") {
-      message = data.detail.message ?? message;
-    } else if (typeof data?.message === "string") {
-      message = data.message;
-    }
-  } catch {
-    /* body không phải JSON */
-  }
-  const retryAfter = Number(response.headers.get("Retry-After"));
-  return new ApiError(
-    response.status,
-    message,
-    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-  );
-}
+import { API_BASE_URL, getAuthHeaders, parseApiError } from "@/lib/api/client";
 
 export interface ChatCitation {
   documentId: string;
@@ -116,7 +91,7 @@ export async function listChatSessions(
       headers: getAuthHeaders(),
     },
   );
-  if (!response.ok) throw await toApiError(response);
+  if (!response.ok) throw await parseApiError(response);
   const data = await response.json();
   return Array.isArray(data) ? data : [];
 }
@@ -126,7 +101,7 @@ export async function listChatMessages(sessionId: string): Promise<ChatMessageIt
     credentials: "include",
     headers: getAuthHeaders(),
   });
-  if (!response.ok) throw await toApiError(response);
+  if (!response.ok) throw await parseApiError(response);
   const data = await response.json();
   return Array.isArray(data) ? data : [];
 }
@@ -141,7 +116,7 @@ export async function renameChatSession(
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ title }),
   });
-  if (!response.ok) throw await toApiError(response);
+  if (!response.ok) throw await parseApiError(response);
   return response.json();
 }
 
@@ -151,7 +126,7 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
     credentials: "include",
     headers: getAuthHeaders(),
   });
-  if (!response.ok) throw await toApiError(response);
+  if (!response.ok) throw await parseApiError(response);
 }
 
 function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
@@ -216,7 +191,7 @@ export async function streamChatMessage(
   });
 
   if (!response.ok) {
-    throw await toApiError(response);
+    throw await parseApiError(response);
   }
   if (!response.body) {
     throw new Error("Trình duyệt không hỗ trợ streaming");
@@ -258,6 +233,6 @@ export async function getChatAccess(courseId: string): Promise<ChatAccess> {
   const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/access`, {
     credentials: "include", headers: getAuthHeaders(), cache: "no-store",
   });
-  if (!response.ok) throw await toApiError(response);
+  if (!response.ok) throw await parseApiError(response);
   return response.json();
 }

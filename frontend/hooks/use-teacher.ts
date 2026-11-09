@@ -10,17 +10,18 @@ import {
   fetchStudentDirectory,
   type CourseListQuery,
 } from "@/lib/api/teacher";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useTeacherCourses(query: CourseListQuery = {}) {
   return useQuery({
-    queryKey: ["teacher", "courses", query],
+    queryKey: queryKeys.teacher.courses(query),
     queryFn: () => fetchTeacherCourses(query),
   });
 }
 
 export function useCourseTree(courseId: string) {
   return useQuery({
-    queryKey: ["teacher", "course-tree", courseId],
+    queryKey: queryKeys.teacher.courseTree(courseId),
     queryFn: () => fetchCourseTree(courseId),
     enabled: Boolean(courseId),
     // Có slide đang index thì tự làm mới để checklist xuất bản cập nhật.
@@ -37,7 +38,7 @@ export function useCourseTree(courseId: string) {
 
 export function useCourseStudents(courseId: string) {
   return useQuery({
-    queryKey: ["teacher", "course-students", courseId],
+    queryKey: queryKeys.teacher.courseStudents(courseId),
     queryFn: () => fetchCourseStudents(courseId),
     enabled: Boolean(courseId),
   });
@@ -45,7 +46,7 @@ export function useCourseStudents(courseId: string) {
 
 export function useLessonSlidesAdmin(lessonId: string) {
   return useQuery({
-    queryKey: ["teacher", "lesson-slides", lessonId],
+    queryKey: queryKeys.teacher.lessonSlides(lessonId),
     queryFn: () => fetchLessonSlidesAdmin(lessonId),
     enabled: Boolean(lessonId),
     // Đang index thì tự làm mới để trạng thái pending → ready/failed.
@@ -69,7 +70,7 @@ export function useStudentDirectory(enabled: boolean, query = "") {
   }, [normalizedQuery]);
 
   return useQuery({
-    queryKey: ["teacher", "student-directory", debouncedQuery],
+    queryKey: queryKeys.teacher.studentDirectory(debouncedQuery),
     queryFn: () => fetchStudentDirectory(debouncedQuery),
     enabled,
     staleTime: 30_000,

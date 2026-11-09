@@ -12,18 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminStudents } from "@/hooks/use-admin";
 import type { AdminStudent } from "@/lib/api/admin";
-import { initialsOf } from "@/lib/utils";
+import { formatDateVN, initialsOf } from "@/lib/utils";
 import { PromoteStudentDialog } from "./promote-student-dialog";
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
-}
 
 export function StudentPromotion() {
   const [query, setQuery] = React.useState("");
@@ -116,7 +106,7 @@ export function StudentPromotion() {
                   {student.program ? (
                     <span className="truncate">{student.program}</span>
                   ) : null}
-                  <span>· Tham gia {formatDate(student.createdAt)}</span>
+                  <span>· Tham gia {formatDateVN(student.createdAt)}</span>
                 </div>
               </div>
 

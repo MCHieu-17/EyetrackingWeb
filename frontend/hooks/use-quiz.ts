@@ -10,11 +10,12 @@ import {
   updateQuizAssignment,
   type QuizAssignmentPatch,
 } from "@/lib/api/quiz";
+import { queryKeys } from "@/lib/query-keys";
 import type { QuizAssignment } from "@/lib/types/domain";
 
 export function useQuizAssignment(id: string) {
   return useQuery({
-    queryKey: ["quiz", "assignment", id],
+    queryKey: queryKeys.quiz.assignment(id),
     queryFn: () => getQuizAssignment(id),
     enabled: Boolean(id),
   });
@@ -22,7 +23,7 @@ export function useQuizAssignment(id: string) {
 
 export function useQuizAttempt(lessonId: string) {
   return useQuery({
-    queryKey: ["quiz", "attempt", lessonId],
+    queryKey: queryKeys.quiz.attempt(lessonId),
     queryFn: () => getQuizAttempt(lessonId),
     enabled: Boolean(lessonId),
   });
@@ -34,8 +35,12 @@ export function useStartQuizAttempt() {
     mutationFn: ({ lessonId }: { lessonId: string }) => startQuizAttempt(lessonId),
     onSuccess: async (attempt, variables) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: ["quiz", "attempt", variables.lessonId] }),
-        client.invalidateQueries({ queryKey: ["quiz", "assignment", attempt.assignmentId] }),
+        client.invalidateQueries({
+          queryKey: queryKeys.quiz.attempt(variables.lessonId),
+        }),
+        client.invalidateQueries({
+          queryKey: queryKeys.quiz.assignment(attempt.assignmentId),
+        }),
       ]);
     },
   });
@@ -54,10 +59,10 @@ export function useSubmitQuizAttempt() {
     onSuccess: async (attempt, variables) => {
       await Promise.all([
         client.invalidateQueries({
-          queryKey: ["quiz", "attempt", variables.assignment.lessonId],
+          queryKey: queryKeys.quiz.attempt(variables.assignment.lessonId),
         }),
         client.invalidateQueries({
-          queryKey: ["quiz", "assignment", variables.assignment.id],
+          queryKey: queryKeys.quiz.assignment(variables.assignment.id),
         }),
       ]);
     },
@@ -70,7 +75,9 @@ export function useUpdateQuizAssignment() {
     mutationFn: ({ id, patch }: { id: string; patch: QuizAssignmentPatch }) =>
       updateQuizAssignment(id, patch),
     onSuccess: (assignment) => {
-      client.invalidateQueries({ queryKey: ["quiz", "assignment", assignment.id] });
+      client.invalidateQueries({
+        queryKey: queryKeys.quiz.assignment(assignment.id),
+      });
     },
   });
 }
@@ -83,8 +90,12 @@ export function useRetryQuizAttempt() {
       retryQuizAttempt(attemptId),
     onSuccess: async (attempt, variables) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: ["quiz", "attempt", variables.lessonId] }),
-        client.invalidateQueries({ queryKey: ["quiz", "assignment", attempt.assignmentId] }),
+        client.invalidateQueries({
+          queryKey: queryKeys.quiz.attempt(variables.lessonId),
+        }),
+        client.invalidateQueries({
+          queryKey: queryKeys.quiz.assignment(attempt.assignmentId),
+        }),
       ]);
     },
   });

@@ -4,8 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchMyProfile } from "@/lib/api/profile";
 import type { AuthUser } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
+import { queryKeys } from "@/lib/query-keys";
 
-export const AUTH_USER_QUERY_KEY = ["auth", "user"] as const;
+/** Giữ export cũ cho các component đang dùng trực tiếp. */
+export const AUTH_USER_QUERY_KEY = queryKeys.authUser;
 
 function profileToAuthUser(
   profile: Awaited<ReturnType<typeof fetchMyProfile>> | undefined,
@@ -31,7 +33,7 @@ export interface AuthState {
 
 export function useAuthState(): AuthState {
   const { data: user = null, error, isLoading, refetch } = useQuery({
-    queryKey: AUTH_USER_QUERY_KEY,
+    queryKey: queryKeys.authUser,
     queryFn: async () => profileToAuthUser(await fetchMyProfile()),
     retry: false,
     staleTime: 30_000,
