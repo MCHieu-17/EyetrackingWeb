@@ -13,6 +13,9 @@ backend/.venv
 # Log local
 *.log
 
+# Backup DB local (scripts/backup.sh)
+backups/
+
 # Gaze: weights tải runtime + DB dev cục bộ
 services/gaze/weights/
 services/gaze/my_database.db
