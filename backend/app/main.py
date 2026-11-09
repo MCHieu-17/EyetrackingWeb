@@ -30,6 +30,7 @@ from app.api.routes import (
     users,
 )
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.db.redis import close_redis, init_redis
 from app.db.session import SessionLocal
 from app.models.metadata import AppMetadata
@@ -37,6 +38,8 @@ from app.services.embedding import close_ingest_client
 from app.services.study_chat import close_chatbot_client
 
 EXPECTED_SCHEMA_GENERATION = "7"
+
+configure_logging()
 
 
 @asynccontextmanager
