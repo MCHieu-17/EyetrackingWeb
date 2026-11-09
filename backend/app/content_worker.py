@@ -9,8 +9,7 @@ import logging
 
 from app.core.config import settings
 from app.services.content import process_pending_slide_imports
-
-logger = logging.getLogger("app.content_worker")
+from app.worker_loop import run_worker_loop
 
 
 async def main() -> None:
@@ -18,15 +17,13 @@ async def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    logger.info("content worker started")
-    while True:
-        try:
-            processed = await process_pending_slide_imports(limit=1)
-            if processed:
-                logger.info("processed %s slide import job(s)", processed)
-        except Exception:  # noqa: BLE001
-            logger.exception("content worker iteration failed")
-        await asyncio.sleep(settings.content_worker_poll_seconds)
+    await run_worker_loop(
+        "content",
+        settings.content_worker_poll_seconds,
+        process_pending_slide_imports,
+        limit=1,
+        unit="slide import job(s)",
+    )
 
 
 if __name__ == "__main__":

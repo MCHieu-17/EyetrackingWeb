@@ -11,7 +11,11 @@ from fastapi import (
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.access import get_course_or_404, get_lesson_or_404
+from app.api.access import (
+    get_lesson_with_course,
+    get_managed_lesson,
+    get_viewable_lesson,
+)
 from app.api.deps import (
     can_access_course,
     can_manage_course,
@@ -22,11 +26,7 @@ from app.core.config import settings
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    Enrollment,
-    Lesson,
-)
+from app.models.course import Enrollment
 from app.schemas.course import (
     LessonCreateIn,
     LessonUpdateIn,
@@ -37,12 +37,6 @@ from app.schemas.course import (
 from app.services import content, embedding
 
 router = APIRouter(tags=["lessons"])
-
-
-async def _course_for_lesson(db: AsyncSession, lesson_id: str) -> tuple[Lesson, Course]:
-    lesson = await get_lesson_or_404(db, lesson_id)
-    course = await get_course_or_404(db, lesson.course_id)
-    return lesson, course
 
 
 @router.post(
@@ -69,9 +63,7 @@ async def update_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_managed_lesson(db, lesson_id, user)
     if body.title is not None:
         await content.update_lesson(db, course, user, lesson.id, body.title)
     await db.commit()
@@ -84,9 +76,7 @@ async def delete_lesson(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_managed_lesson(db, lesson_id, user)
     await content.delete_lesson(db, course, user, lesson.id)
     await db.commit()
     return {"ok": True}
@@ -103,9 +93,7 @@ async def upload_lesson_slides(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_managed_lesson(db, lesson_id, user)
 
     data = bytearray()
     while chunk := await file.read(1024 * 1024):
@@ -140,9 +128,7 @@ async def get_slide_import_job(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_managed_lesson(db, lesson_id, user)
     job = await content.get_slide_import_job(db, course, lesson.id, job_id)
     return SlideImportJobOut(
         id=job.id,
@@ -163,9 +149,7 @@ async def list_lesson_slides(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_viewable_lesson(db, lesson_id, user)
     slides = await content.list_lesson_slides_admin(db, course, user, lesson.id)
     # Hàm trên có thể clone lesson version (copy-on-write); phải commit để
     # các request sau (và worker index) thấy cùng một bản nháp.
@@ -181,9 +165,7 @@ async def reindex_lesson_slides(
     db: AsyncSession = Depends(get_db),
 ):
     """Index lại các slide chưa sẵn sàng của bài giảng đang soạn."""
-    lesson, course = await _course_for_lesson(db, lesson_id)
-    if not await can_manage_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    lesson, course = await get_managed_lesson(db, lesson_id, user)
     slides = await content.list_lesson_slides_admin(db, course, user, lesson.id)
     await db.commit()
     if not slides:
@@ -202,7 +184,7 @@ async def get_lesson_contents(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course = await _course_for_lesson(db, lesson_id)
+    lesson, course = await get_lesson_with_course(db, lesson_id)
     enrolled = (
         await db.execute(
             select(Enrollment).where(

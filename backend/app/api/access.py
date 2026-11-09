@@ -65,6 +65,7 @@ async def get_lesson_or_404(db: AsyncSession, lesson_id: str) -> Lesson:
 
 
 async def course_of_lesson(db: AsyncSession, lesson: Lesson) -> Course | None:
+    """Load khóa học của bài học; trả None nếu không tìm thấy."""
     return await db.get(
         Course,
         lesson.course_id,
@@ -77,9 +78,40 @@ async def course_of_lesson(db: AsyncSession, lesson: Lesson) -> Course | None:
     )
 
 
-async def get_lesson_viewable(db: AsyncSession, lesson_id: str, user: User) -> Lesson:
+async def get_lesson_with_course(
+    db: AsyncSession, lesson_id: str
+) -> tuple[Lesson, Course]:
+    """Load bài học + khóa học, 404 nếu một trong hai không tồn tại."""
+    lesson = await get_lesson_or_404(db, lesson_id)
+    course = await get_course_or_404(db, lesson.course_id)
+    return lesson, course
+
+
+async def get_managed_lesson(
+    db: AsyncSession, lesson_id: str, user: User
+) -> tuple[Lesson, Course]:
+    """Load bài học + khóa học và yêu cầu quyền quản lý khóa học."""
+    lesson, course = await get_lesson_with_course(db, lesson_id)
+    if not await can_manage_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return lesson, course
+
+
+async def get_viewable_lesson(
+    db: AsyncSession, lesson_id: str, user: User
+) -> tuple[Lesson, Course]:
+    """Load bài học + khóa học và yêu cầu quyền xem khóa học.
+
+    Khác với `get_lesson_with_course`, khóa học thiếu bị coi là không có
+    quyền (403) để giữ nguyên hành vi cũ của `get_lesson_viewable`.
+    """
     lesson = await get_lesson_or_404(db, lesson_id)
     course = await course_of_lesson(db, lesson)
     if course is None or not await can_access_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return lesson, course
+
+
+async def get_lesson_viewable(db: AsyncSession, lesson_id: str, user: User) -> Lesson:
+    lesson, _ = await get_viewable_lesson(db, lesson_id, user)
     return lesson
