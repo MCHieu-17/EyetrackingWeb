@@ -310,14 +310,6 @@ async def mark_course_version_pending_in_session(
     return len(target_ids)
 
 
-async def mark_course_version_pending(course_version_id: str) -> int:
-    """Đánh dấu pending ngay để UI bắt đầu poll trước khi job nền chạy."""
-    async with SessionLocal() as session:
-        return await mark_course_version_pending_in_session(
-            session, course_version_id
-        )
-
-
 async def mark_lesson_version_pending(lesson_version_id: str) -> int:
     async with SessionLocal() as session:
         slide_ids = await _slide_ids_for_lesson_version(

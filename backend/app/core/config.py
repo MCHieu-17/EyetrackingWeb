@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     cors_origins: str
     ai_http_url: str
 
+    # Connection pool PostgreSQL. max_overflow được suy ra từ chênh lệch
+    # db_pool_max - db_pool_min để tổng kết nối tối đa đúng bằng db_pool_max.
+    db_pool_min: int = 5
+    db_pool_max: int = 20
+
     # Chatbot RAG service (internal). Backend gọi qua HTTP + token nội bộ.
     chatbot_url: str = ""
     chatbot_url_docker: str = ""
@@ -110,6 +115,9 @@ class Settings(BaseSettings):
     # Chuyển đổi PPTX/PPT/ODP -> PDF bằng LibreOffice headless.
     libreoffice_binary: str = "soffice"
     libreoffice_timeout_seconds: int = 120
+
+    # Worker phân tích metrics/analysis.
+    worker_poll_seconds: float = 5.0
 
     # Worker xử lý slide_import_jobs.
     content_worker_poll_seconds: float = 3.0
