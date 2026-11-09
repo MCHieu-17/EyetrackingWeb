@@ -3,6 +3,7 @@
 
 const SESSION_KEY = "gaze_session_id";
 const CALIBRATED_AT_KEY = "gaze_calibrated_at";
+const AFFINITY_COOKIE = "gaze_affinity";
 const SCREEN_W_KEY = "gaze_screen_w";
 const SCREEN_H_KEY = "gaze_screen_h";
 const DPR_KEY = "gaze_dpr";
@@ -15,6 +16,23 @@ export interface CalibrationScreenSnapshot {
   dpr: number;
   screenX: number;
   screenY: number;
+}
+
+/**
+ * Cookie affinity cho gaze service. nginx dùng cookie này để route mọi
+ * request/WS của cùng browser về cùng replica (session calibration nằm trong
+ * RAM từng replica). Tạo trước request đầu tiên để request đầu cũng đúng chỗ.
+ */
+export function ensureGazeAffinityCookie(): void {
+  if (typeof document === "undefined") return;
+  const exists = document.cookie
+    .split("; ")
+    .some((row) => row.startsWith(`${AFFINITY_COOKIE}=`));
+  if (exists) return;
+  const value =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  document.cookie = `${AFFINITY_COOKIE}=${value}; Path=/; SameSite=Lax`;
 }
 
 export function storeGazeSession(

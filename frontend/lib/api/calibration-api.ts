@@ -3,7 +3,10 @@
 
 import { buildCalibrationPoints, calibrationMargins } from "@/lib/calibration-geometry";
 import type { CalPoint } from "@/lib/calibration-geometry";
-import { storeGazeSession } from "./calibration-session";
+import {
+  ensureGazeAffinityCookie,
+  storeGazeSession,
+} from "./calibration-session";
 
 interface SessionCreateResult {
   ok: boolean;
@@ -14,6 +17,7 @@ interface SessionCreateResult {
 export async function createGazeSession(
   points: CalPoint[],
 ): Promise<SessionCreateResult> {
+  ensureGazeAffinityCookie();
   try {
     const res = await fetch("/gaze/session", {
       method: "POST",

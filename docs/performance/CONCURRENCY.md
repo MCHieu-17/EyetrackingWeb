@@ -64,10 +64,12 @@ và các nút thắt còn lại.
 - `MIN_FRAME_INTERVAL_MS` (mặc định 80ms): giới hạn ~12.5 FPS/session.
 - Calibration trả 503 + `Retry-After` khi queue đầy; WebSocket trả trạng thái
   `overloaded` và giữ stream.
-- Chạy **2 replica** gaze sau nginx; `ip_hash` giữ request của cùng client IP
-  trên một replica vì session calibration nằm trong RAM.
-- Lưu ý: nếu nhiều học sinh dùng chung NAT, `ip_hash` dồn về một replica.
-  Muốn phân tải thật sự cần chuyển session state sang Redis (follow-up).
+- Chạy **2 replica** gaze sau nginx. Frontend tạo cookie `gaze_affinity` trước
+  request đầu; nginx `hash $cookie_gaze_affinity` giữ mọi request/WS của cùng
+  browser trên một replica vì session calibration nằm trong RAM.
+- Nếu không có cookie, mọi request hash rỗng nên vẫn về cùng một replica
+  (đúng, nhưng không phân tải). Xoá cookie giữa phiên sẽ mất session và phải
+  calibration lại.
 
 ### 8. Chatbot
 
@@ -135,9 +137,9 @@ Các số trên là đo trên máy dev, không phải cam kết production. Cầ
 
 ## Còn lại / follow-up
 
-- **Gaze NAT**: 2 replica đã chạy nhưng `ip_hash` dồn client cùng IP về một
-  replica. Nếu lớp học dùng chung NAT, cần chuyển session calibration sang
-  Redis để phân tải thật.
+- **Gaze session state**: đã dùng cookie affinity để phân tải theo browser.
+  Nếu cần chuyển session giữa replica (replica chết, đổi thiết bị), cần
+  chuyển calibration state sang Redis.
 - **Gaze throughput**: vẫn 1 inference worker/GPU mỗi replica. Nếu cần
   > 100 stream đồng thời, đo GPU rồi cân nhắc TensorRT/ONNX hoặc thêm GPU.
 - **Chatbot**: đã có giới hạn concurrency + 429; nút thắt còn lại là quota
