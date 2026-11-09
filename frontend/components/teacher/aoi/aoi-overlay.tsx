@@ -9,172 +9,22 @@ import {
   useState,
 } from "react";
 import type { AoiDefinitionInput } from "@/lib/api/aoi";
-import { STABLE_UI_ANCHORS } from "@/lib/aoi/ui-components";
+import { colorFor } from "@/lib/aoi/colors";
+import {
+  type AoiRect,
+  type Box,
+  type Draft,
+  findAnchor,
+  measureElements,
+  measureSlide,
+  normalizeRect,
+  numberValue,
+  relativeRect,
+  screenBox,
+} from "@/lib/aoi/geometry";
 import { cn } from "@/lib/utils";
 
-export interface AoiRect {
-  xMin: number;
-  yMin: number;
-  xMax: number;
-  yMax: number;
-}
-
-interface Box {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-interface Draft {
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-}
-
-const COLORS = [
-  "#e11d48",
-  "#ea580c",
-  "#ca8a04",
-  "#16a34a",
-  "#0891b2",
-  "#2563eb",
-  "#7c3aed",
-  "#db2777",
-  "#0f766e",
-];
-
-function colorFor(code: string): string {
-  let hash = 0;
-  for (let index = 0; index < code.length; index += 1) {
-    hash = (hash * 31 + code.charCodeAt(index)) >>> 0;
-  }
-  return COLORS[hash % COLORS.length];
-}
-
-function numberValue(geometry: Record<string, unknown>, key: string): number {
-  const value = Number(geometry[key]);
-  return Number.isFinite(value) ? value : 0;
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function normalizeRect(
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-): AoiRect {
-  return {
-    xMin: clamp01(Math.min(startX, endX)),
-    yMin: clamp01(Math.min(startY, endY)),
-    xMax: clamp01(Math.max(startX, endX)),
-    yMax: clamp01(Math.max(startY, endY)),
-  };
-}
-
-function screenBox(
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-): Box {
-  return {
-    left: Math.min(startX, endX),
-    top: Math.min(startY, endY),
-    width: Math.abs(endX - startX),
-    height: Math.abs(endY - startY),
-  };
-}
-
-function measureElements(
-  shell: HTMLElement,
-  container: HTMLElement,
-): Map<string, DOMRect[]> {
-  const containerRect = container.getBoundingClientRect();
-  const map = new Map<string, DOMRect[]>();
-  shell.querySelectorAll<HTMLElement>("[data-aoi]").forEach((element) => {
-    const code = element.dataset.aoi?.trim();
-    if (!code) return;
-    const rect = element.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const local = new DOMRect(
-      rect.left - containerRect.left,
-      rect.top - containerRect.top,
-      rect.width,
-      rect.height,
-    );
-    const list = map.get(code) ?? [];
-    list.push(local);
-    map.set(code, list);
-  });
-  return map;
-}
-
-function measureSlide(
-  shell: HTMLElement,
-  container: HTMLElement,
-): DOMRect | null {
-  const canvas = shell.querySelector<HTMLCanvasElement>(
-    '[data-aoi="slide"] canvas',
-  );
-  if (!canvas) return null;
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return null;
-  const containerRect = container.getBoundingClientRect();
-  return new DOMRect(
-    rect.left - containerRect.left,
-    rect.top - containerRect.top,
-    rect.width,
-    rect.height,
-  );
-}
-
-function findAnchor(
-  box: Box,
-  elements: Map<string, DOMRect[]>,
-): { code: string; rect: DOMRect } | null {
-  const candidates: { code: string; rect: DOMRect; area: number }[] = [];
-  for (const [code, rects] of elements) {
-    if (!STABLE_UI_ANCHORS.has(code)) continue;
-    for (const rect of rects) {
-      if (rect.width <= 0 || rect.height <= 0) continue;
-      const contains =
-        box.left >= rect.left - 1 &&
-        box.top >= rect.top - 1 &&
-        box.left + box.width <= rect.right + 1 &&
-        box.top + box.height <= rect.bottom + 1;
-      if (contains) {
-        candidates.push({ code, rect, area: rect.width * rect.height });
-      }
-    }
-  }
-  if (candidates.length === 0) {
-    const root = elements.get("reader-root")?.[0];
-    return root ? { code: "reader-root", rect: root } : null;
-  }
-  candidates.sort((a, b) => a.area - b.area);
-  const chosen = candidates[0];
-  if ((elements.get(chosen.code)?.length ?? 0) > 1) {
-    const unique = candidates.find(
-      (candidate) => (elements.get(candidate.code)?.length ?? 0) === 1,
-    );
-    if (unique) return { code: unique.code, rect: unique.rect };
-  }
-  return { code: chosen.code, rect: chosen.rect };
-}
-
-function relativeRect(box: Box, anchor: DOMRect): AoiRect {
-  return {
-    xMin: clamp01((box.left - anchor.left) / anchor.width),
-    yMin: clamp01((box.top - anchor.top) / anchor.height),
-    xMax: clamp01((box.left + box.width - anchor.left) / anchor.width),
-    yMax: clamp01((box.top + box.height - anchor.top) / anchor.height),
-  };
-}
+export type { AoiRect } from "@/lib/aoi/geometry";
 
 function AoiBox({
   box,
