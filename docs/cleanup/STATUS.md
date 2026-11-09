@@ -15,7 +15,7 @@
 | tsc | pass |
 | knip | pass |
 | pytest | 34 passed (wave 1) |
-| frontend unit tests | 73 passed (wave 1) |
+| frontend unit tests | 222 passed (wave 4) |
 | frontend build | pass |
 | smoke | pass |
 | migrations | pass |
@@ -41,6 +41,6 @@
 | 1 | done | `cleanup/wave-1` | Quick wins + test infra (A1–A4 merged) |
 | 2 | done (backend) | | Backend split B1–B4 merged |
 | 3 | done (backend) | | ORM performance P1–P4 merged |
-| 4 | in progress | | Frontend split F1/F2/F5 merged; F3–F4 running |
+| 4 | done | | Frontend split F1–F5 merged |
 | 5 | pending | | Scale readiness |
 | 6 | pending | | Final integration |
