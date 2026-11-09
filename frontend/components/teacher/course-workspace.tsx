@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,16 +9,46 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import { FullPageSpinner } from "@/components/ui/spinner";
 import { LazyAoiEditor } from "@/components/teacher/aoi/lazy-aoi-editor";
-import { ContentEditor } from "@/components/teacher/content-editor";
 import { NewCourseSetup } from "@/components/teacher/content-editor/new-course-setup";
-import { CourseInfoTab } from "@/components/teacher/course-info-tab";
-import { StudentsTab } from "@/components/teacher/students-tab";
 import { UnsavedGuardProvider, useUnsavedGuard } from "@/components/teacher/unsaved-guard";
 import { useTeacherCourses } from "@/hooks/use-teacher";
 import { STATUS_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 type View = "content" | "info" | "students" | "aoi";
+
+function TabLoading({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[320px] items-center justify-center">
+      <FullPageSpinner label={label} />
+    </div>
+  );
+}
+
+// Tab nội dung chỉ tải khi thực sự được mở — giảm JS ban đầu của workspace.
+const ContentEditor = dynamic(
+  () => import("@/components/teacher/content-editor").then((mod) => mod.ContentEditor),
+  {
+    ssr: false,
+    loading: () => <TabLoading label="Đang tải nội dung khóa học..." />,
+  },
+);
+
+const CourseInfoTab = dynamic(
+  () => import("@/components/teacher/course-info-tab").then((mod) => mod.CourseInfoTab),
+  {
+    ssr: false,
+    loading: () => <TabLoading label="Đang tải thông tin khóa học..." />,
+  },
+);
+
+const StudentsTab = dynamic(
+  () => import("@/components/teacher/students-tab").then((mod) => mod.StudentsTab),
+  {
+    ssr: false,
+    loading: () => <TabLoading label="Đang tải danh sách học viên..." />,
+  },
+);
 
 const TABS: { key: View; label: string }[] = [
   { key: "content", label: "Nội dung" },

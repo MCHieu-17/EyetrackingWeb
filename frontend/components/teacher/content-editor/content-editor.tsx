@@ -4,8 +4,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -33,8 +31,18 @@ import {
 import { cn } from "@/lib/utils";
 import type { CourseStatus, LessonNode, ModuleNode } from "@/lib/types/domain";
 import { ContentOutline } from "./content-outline";
+import { DeleteLessonDialog, DeleteModuleDialog } from "./delete-dialogs";
+import {
+  countTree,
+  errText,
+  findSelectedItem,
+  firstItemId,
+  moduleOfLesson,
+} from "./editor-helpers";
+import { EditorHeader } from "./editor-header";
 import { ItemEditor } from "./item-editor";
 import { PublishChecklistDialog, publishReport } from "./publish-checklist";
+import { PublishConfirmDialog } from "./publish-confirm-dialog";
 
 /**
  * Tab "Nội dung": mục lục (trái) + trình soạn mục đang chọn (phải).
@@ -85,37 +93,24 @@ export function ContentEditor({
     window.setTimeout(() => setStatusMsg(null), 6000);
   }, []);
 
-  const errText = (e: unknown) => (e instanceof Error ? e.message : "Lỗi không xác định");
-
   const refreshTree = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
     if (courseId) queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] });
   }, [queryClient, courseId]);
 
   // Mục đang mở: lựa chọn rõ ràng, hoặc mặc định mục đầu tiên (không cần effect).
-  const firstItemId = tree[0]?.lessons[0]?.id ?? null;
-  const activeId = selection ?? firstItemId;
+  const activeId = selection ?? firstItemId(tree);
 
-  let selectedLesson: LessonNode | null = null;
-  let selectedModule: ModuleNode | null = null;
-  for (const mod of tree) {
-    const lesson = mod.lessons.find((item) => item.id === activeId);
-    if (lesson) {
-      selectedLesson = lesson;
-      selectedModule = mod;
-      break;
-    }
-  }
+  const selected = findSelectedItem(tree, activeId);
+  const selectedLesson = selected?.lesson ?? null;
+  const selectedModule = selected?.module ?? null;
 
-  const totalLessons = tree.flatMap((m) => m.lessons).filter((l) => l.kind === "lesson").length;
-  const totalQuizzes = tree.flatMap((m) => m.lessons).filter((l) => l.kind === "quiz").length;
-  const totalSlides = tree.flatMap((m) => m.lessons).reduce((sum, l) => sum + l.slides, 0);
-  const totalItems = totalLessons + totalQuizzes;
+  const { totalLessons, totalQuizzes, totalSlides, totalItems } = countTree(tree);
 
   const report = useMemo(() => publishReport(courseTitle, tree), [courseTitle, tree]);
 
   const openModuleOf = (lessonId: string) => {
-    const owner = tree.find((module) => module.lessons.some((item) => item.id === lessonId));
+    const owner = moduleOfLesson(tree, lessonId);
     if (owner) setExpanded((prev) => ({ ...prev, [owner.id]: true }));
   };
 
@@ -296,33 +291,19 @@ export function ContentEditor({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 border-b border-black/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm text-black/60">
-            {tree.length} chương · {totalLessons} bài giảng · {totalQuizzes} bài tập · {totalSlides} trang
-            {treeFetching && <span className="ml-2 text-black/45">· đang cập nhật…</span>}
-          </p>
-        </div>
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            {courseStatus === "published" ? (
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#cfe0ca] bg-[#e8f1e6] px-3.5 text-xs font-semibold text-[#3f573c]">
-                <Icon name="ri-checkbox-circle-fill" className="size-4" />
-                Đã xuất bản
-              </span>
-            ) : (
-              <Button
-                className="rounded-full"
-                onClick={requestPublish}
-                disabled={publishing || saving || reordering}
-              >
-                <Icon name="ri-rocket-2-line" className="size-4" />
-                {publishing ? "Đang xuất bản…" : "Xuất bản"}
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+      <EditorHeader
+        moduleCount={tree.length}
+        totalLessons={totalLessons}
+        totalQuizzes={totalQuizzes}
+        totalSlides={totalSlides}
+        treeFetching={treeFetching}
+        canManage={canManage}
+        courseStatus={courseStatus}
+        publishing={publishing}
+        saving={saving}
+        reordering={reordering}
+        onPublish={requestPublish}
+      />
 
       {statusMsg && (
         <Alert
@@ -401,12 +382,9 @@ export function ContentEditor({
         }}
       />
 
-      <ConfirmDialog
+      <PublishConfirmDialog
         open={confirmPublish}
         onOpenChange={setConfirmPublish}
-        title="Xuất bản khóa học?"
-        description="Sinh viên sẽ thấy khóa học trong danh sách và đăng ký được. Mọi bài giảng đã tải lên và bài tập đã giao hiện ngay với học viên."
-        confirmLabel="Xuất bản"
         loading={publishing}
         onConfirm={async () => {
           setConfirmPublish(false);
@@ -416,17 +394,9 @@ export function ContentEditor({
         }}
       />
 
-      <ConfirmDialog
-        open={moduleToDelete !== null}
+      <DeleteModuleDialog
+        module={moduleToDelete}
         onOpenChange={(open) => !open && setModuleToDelete(null)}
-        title={moduleToDelete ? `Xóa chương "${moduleToDelete.title}"?` : "Xóa chương?"}
-        description={
-          moduleToDelete && moduleToDelete.lessons.length > 0
-            ? `Chương này còn ${moduleToDelete.lessons.length} mục — tất cả bài giảng, bài tập và slide bên trong cũng bị xóa.`
-            : "Chương này sẽ bị xóa khỏi khóa học."
-        }
-        confirmLabel="Xóa chương"
-        destructive
         onConfirm={async () => {
           if (!moduleToDelete) return;
           const target = moduleToDelete;
@@ -442,21 +412,9 @@ export function ContentEditor({
         }}
       />
 
-      <ConfirmDialog
-        open={lessonToDelete !== null}
+      <DeleteLessonDialog
+        lesson={lessonToDelete}
         onOpenChange={(open) => !open && setLessonToDelete(null)}
-        title={
-          lessonToDelete
-            ? `Xóa ${lessonToDelete.kind === "quiz" ? "bài tập" : "bài giảng"} "${lessonToDelete.title}"?`
-            : "Xóa mục?"
-        }
-        description={
-          lessonToDelete?.kind === "quiz"
-            ? "Bài tập, toàn bộ câu hỏi và kết quả làm bài của học viên sẽ bị xóa."
-            : "Bài giảng, toàn bộ slide và dữ liệu điểm nhìn liên quan sẽ bị xóa."
-        }
-        confirmLabel="Xóa"
-        destructive
         onConfirm={async () => {
           if (!lessonToDelete) return;
           const target = lessonToDelete;
