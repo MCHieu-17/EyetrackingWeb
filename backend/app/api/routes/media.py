@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.access import get_course_or_404
 from app.api.deps import can_access_course, get_current_user
 from app.core.config import settings
 from app.db.session import get_db
@@ -65,9 +66,7 @@ async def _get_asset_for_user(
     asset = await db.get(MediaAsset, asset_id)
     if asset is None or asset.state != "ready":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
-    course = await db.get(Course, asset.course_id)
-    if course is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
+    course = await get_course_or_404(db, asset.course_id)
 
     allowed = await can_access_course(db, course, user)
     if not allowed:
