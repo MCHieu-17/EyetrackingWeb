@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { publishCourse, updateCourse } from "@/lib/api/teacher";
+import { queryKeys } from "@/lib/query-keys";
 import type { CourseStatus } from "@/lib/types/domain";
 
 /**
@@ -27,8 +28,10 @@ export function useCourseStatus(courseId: string) {
           await updateCourse(courseId, { status: next });
         }
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] }),
-          queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.teacher.courseTree(courseId),
+          }),
         ]);
         return null;
       } catch (e) {
@@ -37,7 +40,7 @@ export function useCourseStatus(courseId: string) {
         // Publish có thể bị chặn vì slide chưa index; làm mới cây để UI
         // chuyển sang trạng thái pending và tự poll.
         await queryClient.invalidateQueries({
-          queryKey: ["teacher", "course-tree", courseId],
+          queryKey: queryKeys.teacher.courseTree(courseId),
         });
         return message;
       } finally {

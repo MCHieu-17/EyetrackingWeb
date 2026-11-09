@@ -8,24 +8,17 @@ import type {
   StudentRow,
   SlideAdmin,
 } from "@/lib/types/domain";
-import { formatShortDate } from "@/lib/utils";
 
 export interface CourseListQuery {
   status?: CourseStatus;
   q?: string;
 }
 
-interface TeacherCourseRaw extends Omit<TeacherCourse, "updatedAt"> {
-  updatedAt: string;
-}
-
 export function fetchTeacherCourses(query: CourseListQuery = {}): Promise<TeacherCourse[]> {
   const { status, q } = query;
-  return apiFetch<TeacherCourseRaw[]>("/api/teacher/courses", {
+  return apiFetch<TeacherCourse[]>("/api/teacher/courses", {
     params: { status, q },
-  }).then((courses) =>
-    courses.map((course) => ({ ...course, updatedAt: formatShortDate(course.updatedAt) })),
-  );
+  });
 }
 
 export function fetchCourseTree(courseId: string): Promise<ModuleNode[]> {

@@ -72,10 +72,15 @@ function getAuthHeader(): Record<string, string> {
   return memoryAccessToken ? { Authorization: `Bearer ${memoryAccessToken}` } : {};
 }
 
-function getCsrfHeader(): Record<string, string> {
-  if (typeof document === "undefined") return {};
+/** Đọc CSRF token từ cookie; null nếu không có hoặc không chạy trong browser. */
+export function readCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
   const m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
-  const token = m ? decodeURIComponent(m[1]) : null;
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function getCsrfHeader(): Record<string, string> {
+  const token = readCsrfToken();
   return token ? { "X-CSRF-Token": token } : {};
 }
 
@@ -97,15 +102,14 @@ if (typeof window !== "undefined") {
 
 async function tryRefresh(): Promise<boolean> {
   try {
-    const csrf = (() => {
-      if (typeof document === "undefined") return {};
-      const m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
-      return m ? { "X-CSRF-Token": decodeURIComponent(m[1]) } : {};
-    })();
+    const csrf = readCsrfToken();
     const res = await fetch(`/api/auth/refresh`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(csrf as Record<string, string>) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrf !== null ? { "X-CSRF-Token": csrf } : {}),
+      },
       body: JSON.stringify({}),
     });
     if (!res.ok) return false;
@@ -150,6 +154,43 @@ function extractError(status: number, data: unknown): string {
   return d?.message ?? `HTTP ${status}`;
 }
 
+/** Đọc lỗi JSON của backend và header Retry-After (nếu có). */
+export async function parseApiError(response: Response): Promise<ApiError> {
+  let message = `HTTP ${response.status}`;
+  try {
+    message = extractError(response.status, await response.json());
+  } catch {
+    /* body không phải JSON */
+  }
+  const retryAfter = Number(response.headers.get("Retry-After"));
+  return new ApiError(
+    response.status,
+    message,
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+  );
+}
+
+/**
+ * Gọi fetch, tự refresh token một lần khi gặp 401 rồi thử lại.
+ * Dùng chung cho JSON và multipart để hai luồng có cùng hành vi auth.
+ */
+async function fetchWithAuthRetry(
+  doFetch: () => Promise<Response>,
+  skipAuthRefresh = false,
+): Promise<Response> {
+  let res = await doFetch();
+  if (res.status === 401 && !skipAuthRefresh) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      res = await doFetch();
+    } else {
+      clearMemoryToken();
+      notifyAuthChange();
+    }
+  }
+  return res;
+}
+
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const {
     method = "GET",
@@ -184,26 +225,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     });
   };
 
-  let res = await doFetch();
-
-  if (res.status === 401 && !skipAuthRefresh) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      res = await doFetch();
-    } else {
-      clearMemoryToken();
-      notifyAuthChange();
-    }
-  }
+  const res = await fetchWithAuthRetry(doFetch, skipAuthRefresh);
 
   if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      message = extractError(res.status, await res.json());
-    } catch {
-      /* body không phải JSON */
-    }
-    throw new ApiError(res.status, message);
+    throw await parseApiError(res);
   }
   return res.json() as Promise<T>;
 }
@@ -221,17 +246,7 @@ export async function apiFetchMultipart<T>(
       body: form,
     });
 
-  let res = await doFetch();
-
-  if (res.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      res = await doFetch();
-    } else {
-      clearMemoryToken();
-      notifyAuthChange();
-    }
-  }
+  const res = await fetchWithAuthRetry(doFetch);
 
   if (!res.ok) {
     if (res.status === 413) {
@@ -245,13 +260,7 @@ export async function apiFetchMultipart<T>(
         "Máy chủ phản hồi quá lâu. Vui lòng thử lại với file nhỏ hơn.",
       );
     }
-    let message = `HTTP ${res.status}`;
-    try {
-      message = extractError(res.status, await res.json());
-    } catch {
-      /* body không phải JSON */
-    }
-    throw new ApiError(res.status, message);
+    throw await parseApiError(res);
   }
   return res.json() as Promise<T>;
 }

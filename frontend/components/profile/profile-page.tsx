@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMyProfile, useUpdateMyProfile } from "@/hooks/use-profile";
 import type { GenderCode, MyProfile } from "@/lib/types/domain";
-import { initialsOf } from "@/lib/utils";
+import { formatDateVN, initialsOf } from "@/lib/utils";
 
 const GENDERS: { value: GenderCode; label: string }[] = [
   { value: "male", label: "Nam" },
@@ -39,16 +39,6 @@ function toForm(data: MyProfile): FormState {
     program: data.role === "student" ? data.program ?? "" : "",
     department: data.role === "teacher" ? data.department ?? "" : "",
   };
-}
-
-function formatDate(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(d);
 }
 
 function ReadOnlyItem({
@@ -246,7 +236,7 @@ function ProfileForm({ data }: { data: MyProfile }) {
           </div>
             <dl>
               <ReadOnlyItem icon="ri-mail-line" label="Email" value={data.email} helper="Không thể thay đổi" />
-              <ReadOnlyItem icon="ri-calendar-line" label="Ngày tham gia" value={formatDate(data.createdAt)} />
+              <ReadOnlyItem icon="ri-calendar-line" label="Ngày tham gia" value={formatDateVN(data.createdAt)} />
               <ReadOnlyItem icon="ri-user-line" label="Vai trò" value={roleTag} />
               <ReadOnlyItem
                 icon="ri-id-card-line"

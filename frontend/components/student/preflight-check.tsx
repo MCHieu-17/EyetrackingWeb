@@ -17,7 +17,7 @@ import {
 } from "@/lib/api/calibration";
 import { getDeviceFingerprint } from "@/lib/api/student";
 import { useCourseOutline } from "@/hooks/use-student";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTimeVN } from "@/lib/utils";
 
 type CameraState = "idle" | "checking" | "ready" | "error";
 type FaceState = "idle" | "checking" | "ready" | "not-found" | "error";
@@ -172,17 +172,7 @@ export function PreflightCheck({
     return `/student/courses/${courseId}/calibrate${q}`;
   }, [courseId, lessonId]);
 
-  const calibrationTime = useMemo(() => {
-    if (!calibratedAt) return null;
-    const date = new Date(calibratedAt);
-    if (Number.isNaN(date.getTime())) return null;
-    return new Intl.DateTimeFormat("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  }, [calibratedAt]);
+  const calibrationTime = calibratedAt ? formatDateTimeVN(calibratedAt) : null;
 
   const waitForVideo = useCallback(async () => {
     const video = videoRef.current;

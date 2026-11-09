@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { ENROLL_LABEL } from "@/lib/constants";
 import type { EnrollStatus } from "@/lib/types/domain";
-import { cn } from "@/lib/utils";
+import { cn, formatDateVN } from "@/lib/utils";
 
 export interface CourseListItem {
   id: string;
@@ -35,12 +35,6 @@ const STATUS_CLS: Record<string, string> = {
   completed: "bg-muted text-muted-foreground",
   dropped: "bg-[#f3ede4] text-[#8a6d3b]",
 };
-
-// Định dạng dd/MM/yyyy tất định từ ISO → tránh lệch locale/timezone khi SSR.
-function formatDate(value: string): string {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
-}
 
 function SortButton({
   label,
@@ -123,7 +117,7 @@ function CourseRow({ item }: { item: CourseListItem }) {
 
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground lg:justify-self-end lg:text-right">
         <Icon name="ri-calendar-line" className="size-3.5 shrink-0 lg:hidden" />
-        <span className="truncate">{formatDate(item.enrolledAt)}</span>
+        <span className="truncate">{formatDateVN(item.enrolledAt)}</span>
       </span>
 
       <Icon

@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { STATUS_LABEL } from "@/lib/constants";
 import type { TeacherCourse } from "@/lib/types/domain";
-import { cn } from "@/lib/utils";
+import { cn, formatShortDate } from "@/lib/utils";
 
 type SortMode = "recent" | "name";
 
@@ -61,7 +61,7 @@ function CourseRow({ course }: { course: TeacherCourse }) {
           </span>
           <span className="inline-flex items-center gap-1">
             <Icon name="ri-calendar-line" className="size-3.5" />
-            Cập nhật {course.updatedAt}
+            Cập nhật {formatShortDate(course.updatedAt)}
           </span>
         </div>
       </div>

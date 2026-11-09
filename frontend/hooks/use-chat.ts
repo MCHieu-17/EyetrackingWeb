@@ -12,6 +12,7 @@ import {
   type ChatStreamHandlers,
   type SendChatInput,
 } from "@/lib/api/chat";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useChatSessions(
   courseId: string | null,
@@ -19,7 +20,7 @@ export function useChatSessions(
   attemptId?: string | null,
 ) {
   return useQuery({
-    queryKey: ["chat", "sessions", courseId, assignmentId ?? null, attemptId ?? null],
+    queryKey: queryKeys.chat.sessions(courseId, assignmentId, attemptId),
     queryFn: () => listChatSessions(courseId as string, assignmentId, attemptId),
     enabled: Boolean(courseId),
   });
@@ -27,7 +28,7 @@ export function useChatSessions(
 
 export function useChatMessages(sessionId: string | null) {
   return useQuery({
-    queryKey: ["chat", "messages", sessionId],
+    queryKey: queryKeys.chat.messages(sessionId),
     staleTime: 0,
     queryFn: () => listChatMessages(sessionId as string),
     enabled: Boolean(sessionId),
@@ -40,7 +41,7 @@ export function useRenameChatSession() {
     mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
       renameChatSession(sessionId, title),
     onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["chat", "sessions"] });
+      client.invalidateQueries({ queryKey: queryKeys.chat.sessionsRoot });
     },
   });
 }
@@ -50,8 +51,8 @@ export function useDeleteChatSession() {
   return useMutation({
     mutationFn: (sessionId: string) => deleteChatSession(sessionId),
     onSuccess: (_data, sessionId) => {
-      client.removeQueries({ queryKey: ["chat", "messages", sessionId] });
-      client.invalidateQueries({ queryKey: ["chat", "sessions"] });
+      client.removeQueries({ queryKey: queryKeys.chat.messages(sessionId) });
+      client.invalidateQueries({ queryKey: queryKeys.chat.sessionsRoot });
     },
   });
 }
@@ -100,7 +101,7 @@ export function useChatStream() {
 
 export function useChatAccess(courseId: string, poll: boolean) {
   return useQuery({
-    queryKey: ["chat", "access", courseId],
+    queryKey: queryKeys.chat.access(courseId),
     queryFn: () => getChatAccess(courseId),
     staleTime: 0,
     refetchOnWindowFocus: "always",
