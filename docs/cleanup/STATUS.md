@@ -40,7 +40,7 @@
 | 0 | done | | Foundation |
 | 1 | done | `cleanup/wave-1` | Quick wins + test infra (A1–A4 merged) |
 | 2 | done (backend) | | Backend split B1–B4 merged |
-| 3 | in progress | | ORM performance P1–P4 running |
-| 4 | in progress | | Frontend split F1/F5 merged; F2–F4 running |
+| 3 | done (backend) | | ORM performance P1–P4 merged |
+| 4 | in progress | | Frontend split F1/F2/F5 merged; F3–F4 running |
 | 5 | pending | | Scale readiness |
 | 6 | pending | | Final integration |
