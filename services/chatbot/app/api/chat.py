@@ -4,8 +4,10 @@ Cả hai endpoint đều yêu cầu `X-Chatbot-Token` (backend gọi nội bộ)
 service không publish port ra ngoài trong docker-compose.
 """
 
+import asyncio
 import json
 import logging
+import os
 import secrets
 from contextlib import aclosing
 
@@ -20,6 +22,25 @@ from app.workflow.state import ChatState
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+# Giới hạn số chat xử lý đồng thời ở tầng API. Khi vượt, trả 429 thay vì để
+# hàng đợi asyncio phình vô hạn và làm tăng latency toàn bộ.
+_CHAT_MAX_CONCURRENT = int(os.getenv("CHATBOT_MAX_CONCURRENT", "20"))
+_CHAT_QUEUE_TIMEOUT = float(os.getenv("CHATBOT_QUEUE_TIMEOUT", "2"))
+_chat_slots = asyncio.Semaphore(_CHAT_MAX_CONCURRENT)
+
+
+async def _acquire_chat_slot() -> None:
+    try:
+        await asyncio.wait_for(
+            _chat_slots.acquire(), timeout=_CHAT_QUEUE_TIMEOUT
+        )
+    except TimeoutError as exc:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Chatbot đang quá tải, vui lòng thử lại.",
+            headers={"Retry-After": "2"},
+        ) from exc
 
 
 def require_internal_token(x_chatbot_token: str = Header(default="")) -> None:
@@ -61,12 +82,15 @@ def _sse(event: str, data: dict) -> str:
 async def chat(payload: ChatRequest):
     """Nhận câu hỏi, chạy pipeline và trả câu trả lời kèm citations."""
     state = _state_from_request(payload)
+    await _acquire_chat_slot()
     try:
         answer, citations, intent, verified = await collect_chat(state)
     except RuntimeError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+    finally:
+        _chat_slots.release()
 
     return ChatResponse(
         answer=answer,
@@ -85,11 +109,15 @@ async def chat(payload: ChatRequest):
 async def chat_stream(payload: ChatRequest):
     """SSE: status -> citations -> token (sau verify) -> done."""
     state = _state_from_request(payload)
+    await _acquire_chat_slot()
 
     async def event_stream():
-        async with aclosing(run_chat(state)) as stream:
-            async for event in stream:
-                yield _sse(event["event"], event["data"])
+        try:
+            async with aclosing(run_chat(state)) as stream:
+                async for event in stream:
+                    yield _sse(event["event"], event["data"])
+        finally:
+            _chat_slots.release()
 
     return StreamingResponse(
         event_stream(),

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     db_pool_timeout: float = 5.0
     # statement_timeout cho API; worker nặng có thể override bằng env riêng.
     db_statement_timeout_ms: int = 15000
+    # 0 = tắt prepared statement cache để tương thích PgBouncer transaction
+    # pooling. Đặt >0 nếu kết nối trực tiếp Postgres và cần tối ưu.
+    db_prepared_statement_cache_size: int = 0
 
     # Chatbot RAG service (internal). Backend gọi qua HTTP + token nội bộ.
     chatbot_url: str = ""
@@ -132,6 +135,10 @@ class Settings(BaseSettings):
     content_worker_poll_seconds: float = 3.0
     # Job processing quá lâu (worker chết) sẽ được đưa lại hàng đợi.
     content_worker_stale_seconds: int = 600
+
+    # Retention gaze samples: partition cũ hơn số ngày này bị drop bởi
+    # maintenance. Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
+    gaze_retention_days: int = 180
 
     @property
     def cors_origin_list(self) -> list[str]:

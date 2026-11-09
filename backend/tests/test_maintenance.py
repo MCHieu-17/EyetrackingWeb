@@ -2,10 +2,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from app.maintenance import (
     delete_expired_auth_sessions,
+    drop_old_gaze_partitions,
+    ensure_gaze_partitions,
     expire_stale_learning_sessions,
 )
 from app.models.auth import AuthSession
@@ -140,4 +142,46 @@ async def test_expire_stale_learning_sessions_only_updates_past_due():
             await db.execute(
                 delete(LearningSession).where(LearningSession.id.in_(session_ids))
             )
+            await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_ensure_gaze_partitions_is_idempotent():
+    async with SessionLocal() as db:
+        created = await ensure_gaze_partitions(db, months_ahead=1)
+        await db.commit()
+        again = await ensure_gaze_partitions(db, months_ahead=1)
+        await db.commit()
+    assert created >= 0
+    assert again == 0
+
+
+@pytest.mark.asyncio
+async def test_drop_old_gaze_partitions_only_drops_old():
+    old = "gaze_samples_2000_01"
+    async with SessionLocal() as db:
+        await db.execute(text(f'DROP TABLE IF EXISTS "{old}"'))
+        await db.execute(
+            text(
+                f'CREATE TABLE "{old}" PARTITION OF gaze_samples '
+                "FOR VALUES FROM ('2000-01-01') TO ('2000-02-01')"
+            )
+        )
+        await db.commit()
+
+    try:
+        async with SessionLocal() as db:
+            dropped = await drop_old_gaze_partitions(db, keep_days=180)
+            await db.commit()
+        assert dropped >= 1
+        async with SessionLocal() as db:
+            exists = (
+                await db.execute(
+                    text("SELECT to_regclass(:name)"), {"name": old}
+                )
+            ).scalar_one()
+        assert exists is None
+    finally:
+        async with SessionLocal() as db:
+            await db.execute(text(f'DROP TABLE IF EXISTS "{old}"'))
             await db.commit()

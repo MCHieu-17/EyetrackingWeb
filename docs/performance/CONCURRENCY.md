@@ -64,8 +64,40 @@ và các nút thắt còn lại.
 - `MIN_FRAME_INTERVAL_MS` (mặc định 80ms): giới hạn ~12.5 FPS/session.
 - Calibration trả 503 + `Retry-After` khi queue đầy; WebSocket trả trạng thái
   `overloaded` và giữ stream.
+- Chạy **2 replica** gaze sau nginx; `ip_hash` giữ request của cùng client IP
+  trên một replica vì session calibration nằm trong RAM.
+- Lưu ý: nếu nhiều học sinh dùng chung NAT, `ip_hash` dồn về một replica.
+  Muốn phân tải thật sự cần chuyển session state sang Redis (follow-up).
 
-### 8. Metrics nội bộ
+### 8. Chatbot
+
+- `CHATBOT_MAX_CONCURRENT` (mặc định 20): giới hạn số chat xử lý đồng thời.
+- `CHATBOT_QUEUE_TIMEOUT` (mặc định 2s): quá thời gian chờ trả 429 +
+  `Retry-After` thay vì xếp hàng vô hạn.
+- River vẫn là nút thắt bên ngoài; tăng `RIVER_*` theo quota thực tế.
+
+### 9. Worker & retention
+
+- Analysis worker chạy **2 replica** (dùng `SKIP LOCKED`).
+- `python -m app.maintenance` giờ:
+  - tạo partition gaze_samples trước 3 tháng;
+  - drop partition cũ hơn `GAZE_RETENTION_DAYS` (mặc định 180 ngày);
+  - xoá `aoi_hits` cũ trước khi detach partition để tránh FK chặn DROP.
+- Có thể scale thêm content/embedding worker bằng `docker compose up -d
+  --scale content-worker=2` khi cần (chú ý RAM LibreOffice).
+
+### 10. PgBouncer (tùy chọn)
+
+- Service `pgbouncer` nằm sau profile `pgbouncer`, không chạy mặc định.
+- Bật khi scale backend > 4 worker:
+  ```bash
+  docker compose --profile pgbouncer up -d pgbouncer
+  ```
+- Đổi `DATABASE_URL_DOCKER` host sang `pgbouncer:5432`.
+- Giữ `DB_PREPARED_STATEMENT_CACHE_SIZE=0` để tương thích transaction pooling.
+- Migration vẫn chạy trực tiếp Postgres (không qua PgBouncer).
+
+### 11. Metrics nội bộ
 
 - `GET /internal/metrics` (chỉ gọi trực tiếp backend/localhost):
   DB pool, Redis, queue depth analysis/embedding/slide import.
@@ -103,13 +135,16 @@ Các số trên là đo trên máy dev, không phải cam kết production. Cầ
 
 ## Còn lại / follow-up
 
-- **PgBouncer**: hiện tổng connection dự kiến ~60–80, dưới `max_connections=200`.
-  Chỉ cần PgBouncer khi scale backend > 4 worker hoặc thêm nhiều worker.
-- **Gaze**: vẫn 1 inference worker/GPU. Nếu cần > 50–100 stream đồng thời, đo
-  GPU utilization rồi cân nhắc 2 replica + sticky session hoặc TensorRT/ONNX.
-- **Chatbot**: nút thắt là River API (`RIVER_REQUESTS_PER_SECOND`, semaphore).
-  Cần queue ưu tiên + cache retrieval/answer + tăng quota nếu có.
-- **Worker**: có thể scale analysis/content/embedding bằng `docker compose
-  up -d --scale worker=2` (các job đã dùng `SKIP LOCKED`).
-- **Disk**: ổ `/` còn ~13GB; cần retention gaze/log/backup trước khi chạy tải
-  lớn thời gian dài.
+- **Gaze NAT**: 2 replica đã chạy nhưng `ip_hash` dồn client cùng IP về một
+  replica. Nếu lớp học dùng chung NAT, cần chuyển session calibration sang
+  Redis để phân tải thật.
+- **Gaze throughput**: vẫn 1 inference worker/GPU mỗi replica. Nếu cần
+  > 100 stream đồng thời, đo GPU rồi cân nhắc TensorRT/ONNX hoặc thêm GPU.
+- **Chatbot**: đã có giới hạn concurrency + 429; nút thắt còn lại là quota
+  River (`RIVER_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
+- **Worker**: analysis đã 2 replica; content/embedding có thể scale thêm khi
+  backlog lớn (chú ý RAM LibreOffice).
+- **Disk**: gaze đã có retention 180 ngày; vẫn cần retention log/backup và
+  theo dõi dung lượng (ổ `/` còn ~13GB).
+- **PgBouncer**: đã sẵn sàng sau profile `pgbouncer`; bật khi scale backend
+  > 4 worker.

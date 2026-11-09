@@ -14,11 +14,13 @@ engine = create_async_engine(
     pool_recycle=1800,
     pool_use_lifo=True,
     connect_args={
+        "prepared_statement_cache_size": settings.db_prepared_statement_cache_size,
+        "statement_cache_size": settings.db_prepared_statement_cache_size,
         "server_settings": {
             "application_name": "eyelearning-backend",
             "statement_timeout": str(settings.db_statement_timeout_ms),
             "lock_timeout": "5000",
-        }
+        },
     },
 )
 

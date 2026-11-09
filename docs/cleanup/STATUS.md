@@ -65,7 +65,12 @@ docker compose up -d --build # stack rebuilt, embedding-worker running
 - Nginx: 2 worker, rate limit, connection limit, upstream `max_conns`,
   `X-Accel-Redirect` cho media local.
 - Frontend: 2 replica sau nginx.
-- Gaze: queue limit 32 + throttle 80ms/frame; overload trả 503/overloaded.
+- Gaze: 2 replica + `ip_hash`, queue limit 32 + throttle 80ms/frame; overload
+  trả 503/overloaded.
+- Chatbot: giới hạn `CHATBOT_MAX_CONCURRENT`, quá tải trả 429.
+- Analysis worker: 2 replica; maintenance tạo/drop partition gaze theo
+  `GAZE_RETENTION_DAYS`.
+- PgBouncer tùy chọn sau profile `pgbouncer`; `DB_PREPARED_STATEMENT_CACHE_SIZE=0`.
 - Thêm `GET /internal/metrics`, `scripts/loadtest.sh`, `loadtest/browse.js`.
 - Chi tiết: `docs/performance/CONCURRENCY.md`.
 

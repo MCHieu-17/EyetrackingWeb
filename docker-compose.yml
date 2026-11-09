@@ -47,6 +47,8 @@ x-backend-env: &backend-env
   DB_POOL_MAX: ${DB_POOL_MAX:-10}
   DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-5}
   DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+  DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-0}
+  GAZE_RETENTION_DAYS: ${GAZE_RETENTION_DAYS:-180}
 
 # ============================================================
 # Stack LOCAL — build toàn bộ image từ source trên máy.
@@ -109,6 +111,34 @@ services:
       retries: 10
     mem_limit: 4g
     cpus: 4.0
+
+  # PgBouncer tùy chọn cho >4 backend worker hoặc nhiều worker process.
+  # Bật bằng: docker compose --profile pgbouncer up -d
+  # Sau đó đổi DATABASE_URL_DOCKER host sang pgbouncer:5432.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: eyetracking-pgbouncer
+    restart: unless-stopped
+    profiles: ["pgbouncer"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "40"
+      RESERVE_POOL_SIZE: "10"
+      RESERVE_POOL_TIMEOUT: "3"
+      AUTH_TYPE: scram-sha-256
+    ports:
+      - "127.0.0.1:6432:5432"
+    mem_limit: 256m
+    cpus: 0.5
 
   # Chạy migration một lần mỗi lần `docker compose up`. Runner db/migrate.sh
   # dùng bảng `schema_migrations`: chỉ chạy file chưa áp, chặn sửa file đã áp.
@@ -234,9 +264,11 @@ services:
       dockerfile: Dockerfile
       target: api
     image: eyelearning-backend:local
-    container_name: eyetracking-worker
     restart: unless-stopped
     logging: *default-logging
+    # Analysis dùng SKIP LOCKED nên scale ngang an toàn.
+    deploy:
+      replicas: 2
     command: ["python", "-m", "app.worker"]
     depends_on:
       migrate:
@@ -249,7 +281,7 @@ services:
     # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
     healthcheck:
       disable: true
-    mem_limit: 2g
+    mem_limit: 1536m
     cpus: 1.0
 
   # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs. Dùng image API
@@ -329,6 +361,8 @@ services:
       RAG_RRF_K: ${RAG_RRF_K:-60}
       RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.25}
       CHATBOT_BACKEND_URL: http://backend:8001
+      CHATBOT_MAX_CONCURRENT: ${CHATBOT_MAX_CONCURRENT:-20}
+      CHATBOT_QUEUE_TIMEOUT: ${CHATBOT_QUEUE_TIMEOUT:-2}
       RIVER_GENERATION_CONCURRENCY: ${RIVER_GENERATION_CONCURRENCY:-4}
       RIVER_VERIFY_CONCURRENCY: ${RIVER_VERIFY_CONCURRENCY:-2}
       RIVER_TOTAL_CONCURRENCY: ${RIVER_TOTAL_CONCURRENCY:-6}
@@ -369,9 +403,11 @@ services:
       context: ./services/gaze
       dockerfile: Dockerfile
     image: eyelearning-gaze:local
-    container_name: eyetracking-gaze
     restart: unless-stopped
     logging: *default-logging
+    # 2 replica chia sẻ GPU; nginx dùng cookie gaze_affinity để sticky session.
+    deploy:
+      replicas: 2
     environment:
       - DEVICE=${DEVICE:-cuda}
       # Làm mượt One-Euro cho POG (xem services/gaze/app/services/smoothing.py).
@@ -388,8 +424,10 @@ services:
       - MAX_INFERENCE_QUEUE=${MAX_INFERENCE_QUEUE:-32}
       - MIN_FRAME_INTERVAL_MS=${MIN_FRAME_INTERVAL_MS:-80}
       - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-5242880}
-    ports:
-      - "127.0.0.1:8000:8000"
+    # Không publish port host: 2 replica sẽ tranh cổng. Truy cập qua nginx
+    # /gaze/... hoặc `docker compose exec gaze ...` khi debug.
+    expose:
+      - "8000"
     volumes:
       - gaze-weights:/app/weights
     gpus: all
@@ -402,8 +440,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s
-    mem_limit: 6g
-    cpus: 4.0
+    mem_limit: 3g
+    cpus: 2.0
 
   frontend:
     build:

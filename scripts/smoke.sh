@@ -18,7 +18,7 @@ check() {
 
 check "nginx" "http://localhost:3000/nginx-health"
 check "backend" "http://localhost:8001/health"
-check "gaze" "http://localhost:8000/health"
+check "gaze" "http://localhost:3000/gaze/health"
 check "chatbot" "http://localhost:8002/health"
 
 log "OK"
