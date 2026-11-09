@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +30,7 @@ from app.schemas.course import (
     StudentsAddIn,
     TeacherCourseOut,
 )
-from app.services import content, embedding
+from app.services import content, embedding, embedding_jobs
 
 router = APIRouter(tags=["courses"])
 
@@ -201,7 +201,6 @@ async def get_course_draft(
 async def publish_course(
     course_id: str,
     body: PublishIn,
-    background_tasks: BackgroundTasks,
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -214,13 +213,13 @@ async def publish_course(
     stats = await embedding.course_version_ingest_status_in_session(db, draft.id)
     if stats["total"] and stats["ready"] < stats["total"]:
         await embedding.mark_course_version_pending_in_session(db, draft.id)
-        background_tasks.add_task(
-            embedding.sync_course_version, draft.id, True, True
+        await embedding_jobs.enqueue_course_version(
+            db, draft.id, include_draft=True, force=True
         )
+        await db.commit()
         remaining = stats["total"] - stats["ready"]
-        # Không dùng `raise HTTPException` ở đây: FastAPI bỏ background task khi
-        # exception được xử lý, khiến job ingest không bao giờ chạy và người
-        # dùng kẹt ở "chưa index" mãi. Trả JSONResponse kèm background task.
+        # Không dùng `raise HTTPException` ở đây: response 409 vẫn phải giữ
+        # job đã enqueue để worker index nốt các slide còn thiếu.
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
@@ -232,7 +231,6 @@ async def publish_course(
                     ),
                 }
             },
-            background=background_tasks,
         )
 
     version = await content.publish_course(
@@ -241,9 +239,10 @@ async def publish_course(
     await db.commit()
     # Lưới an toàn: sau khi publish, index nốt slide nào còn thiếu (thường không
     # còn vì đã chặn ở trên).
-    background_tasks.add_task(
-        embedding.sync_course_version, version.id, False, True
+    await embedding_jobs.enqueue_course_version(
+        db, version.id, include_draft=False, force=True
     )
+    await db.commit()
     return {"ok": True, "courseVersionId": version.id}
 
 

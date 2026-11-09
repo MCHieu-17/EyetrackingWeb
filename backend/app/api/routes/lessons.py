@@ -1,7 +1,6 @@
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     HTTPException,
@@ -34,7 +33,7 @@ from app.schemas.course import (
     SlideImportJobOut,
     SlideOut,
 )
-from app.services import content, embedding
+from app.services import content, embedding, embedding_jobs
 
 router = APIRouter(tags=["lessons"])
 
@@ -160,7 +159,6 @@ async def list_lesson_slides(
 @router.post("/teacher/lessons/{lesson_id}/slides/reindex")
 async def reindex_lesson_slides(
     lesson_id: str,
-    background_tasks: BackgroundTasks,
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -172,9 +170,10 @@ async def reindex_lesson_slides(
         return {"ok": True, "queued": 0}
     lesson_version_id = slides[0].lesson_version_id
     queued = await embedding.mark_lesson_version_pending(lesson_version_id)
-    background_tasks.add_task(
-        embedding.sync_lesson_version, lesson_version_id, True, True
+    await embedding_jobs.enqueue_lesson_version(
+        db, lesson_version_id, include_draft=True, force=True
     )
+    await db.commit()
     return {"ok": True, "queued": queued}
 
 
