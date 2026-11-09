@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.crud import profile as profile_crud
+from app.crud import user as user_crud
 from app.db.session import get_db
 from app.models.auth import User
 from app.schemas.user import ProfileOut, ProfileUpdate
@@ -21,17 +22,24 @@ async def _build_profile(db: AsyncSession, user: User) -> ProfileOut:
     profile = await profile_crud.get_user_profile(db, user.id)
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Chưa có hồ sơ")
+    # `get_current_user` có thể trả AuthUser từ cache (không có email/password);
+    # route hồ sơ cần bản đầy đủ nên load lại theo id.
+    full_user = await user_crud.get_user_by_id(db, user.id)
+    if full_user is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không hợp lệ"
+        )
     role = _primary_role(user)
     data = ProfileOut(
         role=role,
-        email=user.email,
+        email=full_user.email,
         full_name=profile.full_name,
         date_of_birth=profile.date_of_birth,
         gender=profile.gender,
         phone=profile.phone,
         avatar_url=profile.avatar_url,
-        created_at=user.created_at,
-        has_password=user.password_hash is not None,
+        created_at=full_user.created_at,
+        has_password=full_user.password_hash is not None,
     )
     if role == "student":
         sp = await profile_crud.get_student_profile(db, user.id)

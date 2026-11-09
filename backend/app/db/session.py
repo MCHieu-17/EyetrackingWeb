@@ -10,13 +10,13 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_size=settings.db_pool_min,
     max_overflow=max(0, settings.db_pool_max - settings.db_pool_min),
-    pool_timeout=30,
+    pool_timeout=settings.db_pool_timeout,
     pool_recycle=1800,
     pool_use_lifo=True,
     connect_args={
         "server_settings": {
             "application_name": "eyelearning-backend",
-            "statement_timeout": "30000",
+            "statement_timeout": str(settings.db_statement_timeout_ms),
             "lock_timeout": "5000",
         }
     },

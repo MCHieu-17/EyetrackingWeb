@@ -12,6 +12,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
@@ -39,6 +40,35 @@ CONTEXT_MAX = 30000
 HISTORY_LIMIT = 10
 
 _chatbot_client: httpx.AsyncClient | None = None
+
+
+@dataclass(frozen=True)
+class ChatSessionSnapshot:
+    """Dữ liệu tối thiểu để kiểm tra quyền trong lúc stream.
+
+    Stream có thể kéo dài hàng chục giây; giữ ORM session/connection trong suốt
+    thời gian đó sẽ làm cạn pool. Snapshot chỉ chứa scalar đã load sẵn.
+    """
+
+    id: str
+    student_id: str
+    course_id: str
+    course_version_id: str | None
+    lesson_version_id: str | None
+    quiz_attempt_id: str | None
+    context_key: str
+
+
+def snapshot_session(session: ChatSession) -> ChatSessionSnapshot:
+    return ChatSessionSnapshot(
+        id=session.id,
+        student_id=session.student_id,
+        course_id=session.course_id,
+        course_version_id=session.course_version_id,
+        lesson_version_id=session.lesson_version_id,
+        quiz_attempt_id=session.quiz_attempt_id,
+        context_key=session.context_key,
+    )
 
 
 def question_correct_ids(question: dict) -> list[str]:
@@ -109,6 +139,11 @@ def _chatbot_ready() -> bool:
     return bool(settings.chatbot_url_resolved and settings.chatbot_internal_token)
 
 
+def chatbot_ready() -> bool:
+    """Public guard để route quyết định trước khi ghi message vào DB."""
+    return _chatbot_ready()
+
+
 def _headers() -> dict[str, str]:
     return {"X-Chatbot-Token": settings.chatbot_internal_token}
 
@@ -132,6 +167,11 @@ async def close_chatbot_client() -> None:
 
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def chatbot_error_stream(message: str) -> AsyncIterator[str]:
+    """SSE lỗi không cần DB (dùng khi chatbot chưa cấu hình)."""
+    yield _sse("error", {"message": message})
 
 
 async def _history(db: AsyncSession, session_id: str) -> list[dict]:
@@ -234,12 +274,14 @@ async def _persist_assistant(
     return message
 
 
-async def _ensure_access(session: ChatSession) -> None:
+async def _ensure_access(session: ChatSession | ChatSessionSnapshot) -> None:
     async with SessionLocal() as check:
         await ensure_access_in_db(check, session)
 
 
-async def ensure_access_in_db(check: AsyncSession, session: ChatSession) -> None:
+async def ensure_access_in_db(
+    check: AsyncSession, session: ChatSession | ChatSessionSnapshot
+) -> None:
     enrolled = (
         await check.execute(
             select(Enrollment.id)
@@ -283,7 +325,7 @@ async def ensure_access_in_db(check: AsyncSession, session: ChatSession) -> None
 
 
 async def _guarded_lines(
-    response: httpx.Response, session: ChatSession
+    response: httpx.Response, session: ChatSession | ChatSessionSnapshot
 ) -> AsyncIterator[str]:
     lines = response.aiter_lines().__aiter__()
     pending = asyncio.create_task(anext(lines))
@@ -306,7 +348,7 @@ async def _guarded_lines(
             await pending
 
 
-async def stream_in_session(
+async def prepare_stream(
     db: AsyncSession,
     *,
     course: Course,
@@ -320,11 +362,12 @@ async def stream_in_session(
     attempt: QuizAttempt | None,
     support_mode: str,
     draft_answers: dict[str, list[str]] | None = None,
-) -> AsyncIterator[str]:
-    if not _chatbot_ready():
-        yield _sse("error", {"message": "Trợ lý học tập chưa được cấu hình"})
-        return
+) -> tuple[dict, ChatSessionSnapshot]:
+    """Chuẩn bị payload + lưu câu hỏi trong một transaction ngắn.
 
+    Route gọi hàm này rồi đóng DB session trước khi trả StreamingResponse.
+    Nhờ vậy connection không bị giữ trong suốt thời gian LLM trả lời.
+    """
     history = await _history(db, session.id)
     payload = _payload(
         course=course,
@@ -351,8 +394,24 @@ async def stream_in_session(
         )
     )
     await db.commit()
+    return payload, snapshot_session(session)
 
-    yield _sse("session", {"sessionId": session.id})
+
+async def stream_in_session(
+    *,
+    session_id: str,
+    payload: dict,
+    session_snapshot: ChatSessionSnapshot,
+) -> AsyncIterator[str]:
+    """Stream SSE từ chatbot mà không giữ DB connection.
+
+    Chỉ mở SessionLocal ngắn khi cần lưu câu trả lời cuối cùng.
+    """
+    if not _chatbot_ready():
+        yield _sse("error", {"message": "Trợ lý học tập chưa được cấu hình"})
+        return
+
+    yield _sse("session", {"sessionId": session_id})
 
     answer_parts: list[str] = []
     citations: list[dict] = []
@@ -366,7 +425,7 @@ async def stream_in_session(
             json=payload,
         ) as response:
             response.raise_for_status()
-            async for line in _guarded_lines(response, session):
+            async for line in _guarded_lines(response, session_snapshot):
                 if line.startswith("event: "):
                     event = line[7:].strip()
                     continue
@@ -389,10 +448,13 @@ async def stream_in_session(
         return
 
     if completed:
-        await _persist_assistant(
-            db,
-            session=session,
-            answer="".join(answer_parts),
-            citations=citations,
-            intent=intent,
-        )
+        async with SessionLocal() as db:
+            session = await db.get(ChatSession, session_id)
+            if session is not None:
+                await _persist_assistant(
+                    db,
+                    session=session,
+                    answer="".join(answer_parts),
+                    citations=citations,
+                    intent=intent,
+                )

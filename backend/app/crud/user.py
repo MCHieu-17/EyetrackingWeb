@@ -1,10 +1,26 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload, selectinload
 
+from app.core.rediscache import delete as cache_delete
+from app.core.rediscache import get_json as cache_get_json
+from app.core.rediscache import set_json as cache_set_json
 from app.models.auth import AuthSession, Role, User, UserRole
+
+AUTH_CACHE_TTL_SECONDS = 30
+
+
+@dataclass(frozen=True)
+class AuthUser:
+    """User tối thiểu cho mỗi request đã xác thực (cache Redis 30s)."""
+
+    id: str
+    status: str
+    deleted_at: str | None
+    role_codes: list[str]
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -42,6 +58,45 @@ async def get_user_for_auth(db: AsyncSession, user_id: str) -> User | None:
         .where(User.id == user_id)
     )
     return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_user_for_auth_cached(
+    db: AsyncSession, user_id: str
+) -> User | AuthUser | None:
+    """Auth lookup có cache Redis ngắn hạn.
+
+    Cache chỉ chứa id/status/deleted_at/roles — đủ cho phân quyền. Các route
+    cần email/password_hash/created_at phải tự load user đầy đủ từ DB.
+    """
+    cache_key = f"auth:user:{user_id}"
+    cached = await cache_get_json(cache_key)
+    if isinstance(cached, dict) and cached.get("id") == user_id:
+        return AuthUser(
+            id=cached["id"],
+            status=cached.get("status", ""),
+            deleted_at=cached.get("deleted_at"),
+            role_codes=list(cached.get("role_codes") or []),
+        )
+
+    user = await get_user_for_auth(db, user_id)
+    if user is not None:
+        await cache_set_json(
+            cache_key,
+            {
+                "id": user.id,
+                "status": user.status,
+                "deleted_at": (
+                    user.deleted_at.isoformat() if user.deleted_at else None
+                ),
+                "role_codes": user.role_codes,
+            },
+            AUTH_CACHE_TTL_SECONDS,
+        )
+    return user
+
+
+async def invalidate_auth_cache(user_id: str) -> None:
+    await cache_delete(f"auth:user:{user_id}")
 
 
 async def touch_last_login(db: AsyncSession, user: User) -> None:

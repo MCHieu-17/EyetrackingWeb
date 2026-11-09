@@ -37,7 +37,12 @@ from app.services.chat_access import (
     context_key,
     require_chat_access,
 )
-from app.services.study_chat import stream_in_session
+from app.services.study_chat import (
+    chatbot_error_stream,
+    chatbot_ready,
+    prepare_stream,
+    stream_in_session,
+)
 
 router = APIRouter(tags=["chat"])
 
@@ -501,27 +506,46 @@ async def stream_message(
         support_mode,
     ) = await _prepare(db, course, body, user)
 
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+    if not chatbot_ready():
+        await db.close()
+        return StreamingResponse(
+            chatbot_error_stream("Trợ lý học tập chưa được cấu hình"),
+            media_type="text/event-stream",
+            headers=headers,
+        )
+
+    payload, snapshot = await prepare_stream(
+        db,
+        course=course,
+        course_version=version,
+        session=session,
+        message=body.message,
+        lesson=lesson,
+        lesson_version=lesson_version,
+        module_title=module_title,
+        quiz=quiz,
+        attempt=attempt,
+        support_mode=support_mode,
+        draft_answers=body.draft_answers,
+    )
+    # Trả connection về pool trước khi stream. Generator chỉ mở SessionLocal
+    # ngắn khi cần lưu câu trả lời cuối cùng.
+    await db.close()
+
     return StreamingResponse(
         stream_in_session(
-            db,
-            course=course,
-            course_version=version,
-            session=session,
-            message=body.message,
-            lesson=lesson,
-            lesson_version=lesson_version,
-            module_title=module_title,
-            quiz=quiz,
-            attempt=attempt,
-            support_mode=support_mode,
-            draft_answers=body.draft_answers,
+            session_id=snapshot.id,
+            payload=payload,
+            session_snapshot=snapshot,
         ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=headers,
     )
 
 

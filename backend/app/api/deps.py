@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ratelimit import enforce_rate_limit
 from app.core.security import decode_access_token
-from app.crud.user import get_user_for_auth
+from app.crud.user import get_user_for_auth_cached
 from app.db.session import get_db
 from app.models.auth import User
 
@@ -45,7 +45,7 @@ async def _authenticate(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không hợp lệ"
         )
-    user = await get_user_for_auth(db, payload["sub"])
+    user = await get_user_for_auth_cached(db, payload["sub"])
     if user is None or user.deleted_at is not None or user.status != "active":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không hợp lệ"

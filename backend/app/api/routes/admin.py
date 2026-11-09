@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.access import escape_like, validate_uuid
 from app.api.deps import require_roles
 from app.core.ratelimit import rate_limit
+from app.crud import user as user_crud
 from app.db.session import get_db
 from app.models.auth import Role, User, UserRole
 from app.models.profile import StudentProfile, TeacherProfile, UserProfile
@@ -168,4 +169,5 @@ async def promote_student(
             detail="Mã giảng viên đã tồn tại, vui lòng chọn mã khác",
         )
 
+    await user_crud.invalidate_auth_cache(user.id)
     return PromoteStudentOut(ok=True, teacher_code=teacher_code)

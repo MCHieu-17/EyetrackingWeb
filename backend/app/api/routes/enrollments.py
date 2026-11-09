@@ -5,6 +5,7 @@ from sqlalchemy.orm import raiseload
 
 from app.api.deps import get_current_user
 from app.core.helpers import gradient_for
+from app.core.rediscache import get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import (
@@ -25,6 +26,11 @@ async def my_enrollments(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"student:enrollments:{user.id}"
+    cached = await get_json(cache_key)
+    if isinstance(cached, list):
+        return [EnrolledCourseOut.model_validate(item) for item in cached]
+
     module_counts = (
         select(
             CourseVersionModule.course_version_id,
@@ -111,4 +117,9 @@ async def my_enrollments(
                 ),
             )
         )
+    await set_json(
+        cache_key,
+        [item.model_dump(mode="json") for item in out],
+        30,
+    )
     return out

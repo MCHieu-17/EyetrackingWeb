@@ -49,8 +49,10 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
 #   tin mọi peer thì request local có thể giả mạo X-Forwarded-For và bypass
 #   rate limit. Dải mặc định bao trùm network Docker bridge.
 ENV FORWARDED_ALLOW_IPS=172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", \
-     "--proxy-headers"]
+# Số process API. Mỗi process có pool DB riêng; giữ DB_POOL_MAX nhỏ (4-10)
+# để tổng connection không vượt max_connections của Postgres.
+ENV WEB_CONCURRENCY=2
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers ${WEB_CONCURRENCY} --proxy-headers"]
 
 # ---- content-worker: thêm LibreOffice + font ----
 FROM base AS content-worker

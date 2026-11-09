@@ -49,11 +49,25 @@
 ## Final gate
 
 ```bash
-./scripts/check.sh --full   # ruff, lint, typecheck, knip, 222 FE tests, 76 BE tests, build
+./scripts/check.sh --full   # ruff, lint, typecheck, knip, 222 FE tests, 81 BE tests, build
 ./scripts/test_migrations.sh # 2 migrations, schema_generation=7
 ./scripts/smoke.sh           # nginx/backend/gaze/chatbot OK
 docker compose up -d --build # stack rebuilt, embedding-worker running
 ```
+
+## Concurrency hardening (2026-11-09)
+
+- Chat SSE không còn giữ DB connection trong lúc stream; 10 stream đồng thời
+  giữ `db_pool.checked_out = 0`.
+- Backend chạy 2 uvicorn worker; pool mỗi process 4–10; pool timeout 5s trả 503.
+- Postgres: `shared_buffers=1GB`, `effective_cache_size=3GB`, 4 CPU/4GB.
+- Redis cache auth 30s + enrollments 30s + course outline 60s.
+- Nginx: 2 worker, rate limit, connection limit, upstream `max_conns`,
+  `X-Accel-Redirect` cho media local.
+- Frontend: 2 replica sau nginx.
+- Gaze: queue limit 32 + throttle 80ms/frame; overload trả 503/overloaded.
+- Thêm `GET /internal/metrics`, `scripts/loadtest.sh`, `loadtest/browse.js`.
+- Chi tiết: `docs/performance/CONCURRENCY.md`.
 
 ## Follow-ups
 

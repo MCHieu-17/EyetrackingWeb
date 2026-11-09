@@ -15,11 +15,16 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
-from app.settings import INFER_WORKERS
+from app.settings import INFER_WORKERS, MAX_INFERENCE_QUEUE
 
 _pipeline: Any | None = None
 _gpu_available: bool | None = None
 _pool = ThreadPoolExecutor(max_workers=INFER_WORKERS, thread_name_prefix="gaze-infer")
+_queue_slots = asyncio.Semaphore(MAX_INFERENCE_QUEUE)
+
+
+class InferenceOverloaded(RuntimeError):
+    """Queue suy luận đầy — caller nên trả 503/overloaded thay vì xếp hàng."""
 
 
 def init_pipeline() -> None:
@@ -63,9 +68,19 @@ def process_frame(frame):
 
 
 async def run_inference(fn: Callable, *args) -> Any:
-    """Chạy 1 tác vụ suy luận trong executor chuyên dụng (không chặn threadpool)."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_pool, fn, *args)
+    """Chạy 1 tác vụ suy luận trong executor chuyên dụng (không chặn threadpool).
+
+    Giới hạn số tác vụ chờ để bảo vệ GPU: queue đầy -> InferenceOverloaded.
+    """
+    try:
+        await asyncio.wait_for(_queue_slots.acquire(), timeout=0.1)
+    except TimeoutError as exc:
+        raise InferenceOverloaded("inference queue full") from exc
+    try:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_pool, fn, *args)
+    finally:
+        _queue_slots.release()
 
 
 def predict(session, jpeg_bytes: bytes):

@@ -1,7 +1,8 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,8 +110,17 @@ async def get_asset_file(
     file_path = _ensure_media_in_root(settings.media_path / asset.object_key)
     if not file_path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
-    return FileResponse(
-        str(file_path),
-        media_type=asset.mime_type,
-        headers=headers,
+
+    # Đã kiểm tra quyền xong; để nginx phục vụ file bằng sendfile + Range,
+    # không giữ worker Python trong suốt thời gian tải PDF.
+    headers.update(
+        {
+            "X-Accel-Redirect": (
+                f"/_protected_media/{quote(asset.object_key, safe='/')}"
+            ),
+            "Content-Type": asset.mime_type,
+            "Content-Length": str(asset.byte_size),
+            "Accept-Ranges": "bytes",
+        }
     )
+    return Response(status_code=status.HTTP_200_OK, headers=headers)

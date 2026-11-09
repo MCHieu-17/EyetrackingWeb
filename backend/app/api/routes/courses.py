@@ -11,6 +11,8 @@ from app.api.access import (
 )
 from app.api.deps import can_access_course, get_current_user, require_roles
 from app.core.helpers import color_for
+from app.core.rediscache import delete as cache_delete
+from app.core.rediscache import get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import (
@@ -333,6 +335,8 @@ async def add_course_students(
         db.add(Enrollment(course_id=course.id, student_id=sid))
         added += 1
     await db.commit()
+    for sid in valid_ids:
+        await cache_delete(f"student:enrollments:{sid}")
     return {"ok": True, "added": added}
 
 
@@ -357,6 +361,7 @@ async def remove_course_student(
         )
     enrollment.status = "dropped"
     await db.commit()
+    await cache_delete(f"student:enrollments:{student_id}")
     return {"ok": True}
 
 
@@ -379,4 +384,17 @@ async def get_course_outline(
         # Khóa đã publish được phép xem outline để sinh viên quyết định đăng ký.
         if course.published_version_id is None or course.archived_at is not None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return await content.get_published_outline(db, course)
+
+    # Outline chỉ đổi khi publish version hoặc metadata khóa học đổi; khóa cache
+    # gồm cả hai nên không cần xóa thủ công.
+    cache_key = (
+        f"course:outline:{course.id}:{course.published_version_id}:"
+        f"{course.updated_at.isoformat() if course.updated_at else ''}"
+    )
+    cached = await get_json(cache_key)
+    if isinstance(cached, dict):
+        return CourseOutlineOut.model_validate(cached)
+
+    outline = await content.get_published_outline(db, course)
+    await set_json(cache_key, outline.model_dump(mode="json"), 60)
+    return outline

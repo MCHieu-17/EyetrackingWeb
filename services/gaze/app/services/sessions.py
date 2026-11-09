@@ -30,6 +30,7 @@ class Session:
         )
         self.state = "collecting"  # "collecting" -> "ready"
         self.last_active = time.time()
+        self.last_frame_at = 0.0   # throttle FPS per session
         self.processing = False    # drop-frame flag
 
     def add_sample(self, point_id: str, pitch: float, yaw: float) -> int:

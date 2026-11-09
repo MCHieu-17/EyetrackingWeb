@@ -4,9 +4,11 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 from app.api.routes import (
     admin,
@@ -19,6 +21,7 @@ from app.api.routes import (
     courses,
     enrollments,
     gaze_ingest,
+    internal_metrics,
     learning_sessions,
     lessons,
     media,
@@ -90,6 +93,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
 performance_logger = logging.getLogger("app.performance")
+
+
+@app.exception_handler(SATimeoutError)
+async def db_pool_timeout_handler(request: Request, exc: SATimeoutError):
+    """Pool cạn -> 503 + Retry-After thay vì treo/500."""
+    performance_logger.warning(
+        "db pool timeout path=%s detail=%s", request.url.path, exc
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Hệ thống đang quá tải, vui lòng thử lại."},
+        headers={"Retry-After": "2"},
+    )
+
+
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
@@ -154,6 +172,7 @@ app.include_router(aoi.router)
 app.include_router(analytics.router)
 app.include_router(chat.router)
 app.include_router(chat_internal.router)
+app.include_router(internal_metrics.router)
 
 
 @app.get("/health", tags=["system"])

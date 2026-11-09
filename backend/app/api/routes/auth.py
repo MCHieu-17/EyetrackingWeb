@@ -468,26 +468,35 @@ async def change_password(
 
     Đổi thành công sẽ thu hồi mọi refresh session khác, giữ lại phiên hiện tại.
     """
+    # get_current_user có thể trả AuthUser từ cache; cần bản User gắn với DB
+    # để đọc password_hash và ghi thay đổi.
+    full_user = await user_crud.get_user_by_id(db, user.id)
+    if full_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản không hợp lệ",
+        )
     if not await asyncio.to_thread(
-        security.verify_password, body.current_password, user.password_hash
+        security.verify_password, body.current_password, full_user.password_hash
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Mật khẩu hiện tại không đúng",
         )
-    user.password_hash = await asyncio.to_thread(
+    full_user.password_hash = await asyncio.to_thread(
         security.hash_password, body.new_password
     )
-    user.must_change_password = False
+    full_user.must_change_password = False
     raw_refresh = request.cookies.get("refresh_token")
     await user_crud.revoke_all_sessions(
         db,
-        user.id,
+        full_user.id,
         except_token_hash=(
             security.hash_refresh_token(raw_refresh) if raw_refresh else None
         ),
     )
     await db.commit()
+    await user_crud.invalidate_auth_cache(full_user.id)
     return {"ok": True}
 
 

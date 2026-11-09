@@ -35,6 +35,14 @@ MAX_SESSIONS = int(os.getenv("MAX_SESSIONS", "100"))
 # tăng lên khi chạy nhiều GPU/process riêng biệt.
 INFER_WORKERS = int(os.getenv("INFER_WORKERS", "1"))
 
+# Giới hạn số frame chờ trong executor. Khi đầy, trả lỗi overload thay vì
+# để queue phình vô hạn làm tăng latency toàn hệ thống.
+MAX_INFERENCE_QUEUE = int(os.getenv("MAX_INFERENCE_QUEUE", "32"))
+
+# FPS tối thiểu giữa 2 frame của cùng một session (ms). Client có thể gửi dày
+# hơn; server drop bớt để bảo vệ GPU khi đông người.
+MIN_FRAME_INTERVAL_MS = int(os.getenv("MIN_FRAME_INTERVAL_MS", "80"))
+
 # Thiết bị suy luận: "cpu", "cuda", hoặc rỗng để tự dò GPU.
 DEVICE = os.getenv("DEVICE", "").strip().lower()
 

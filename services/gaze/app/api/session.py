@@ -11,6 +11,7 @@ khỏi calibration lại.
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.responses import JSONResponse, Response
@@ -31,6 +32,7 @@ from app.services.sessions import SessionManager
 from app.settings import (
     MAX_SESSIONS,
     MAX_UPLOAD_BYTES,
+    MIN_FRAME_INTERVAL_MS,
     MIN_SAMPLES,
     SESSION_TTL_SECONDS,
 )
@@ -96,6 +98,12 @@ async def calibrate(sid: str, image: UploadFile = File(...), point_id: str = For
 
     try:
         result = await inference.run_inference(inference.process_frame, frame)
+    except inference.InferenceOverloaded:
+        raise HTTPException(
+            503,
+            "inference overloaded",
+            headers={"Retry-After": "1"},
+        )
     except Exception:  # lỗi suy luận không được làm sập request
         logger.exception("Calibration inference lỗi (sid=%s, point=%s)", sid, point_id)
         raise HTTPException(500, "inference failed")
@@ -176,6 +184,10 @@ async def stream(ws: WebSocket, sid: str):
             continue
         if session.processing:  # drop frame, không xếp hàng
             continue
+        now = time.monotonic()
+        if now - session.last_frame_at < MIN_FRAME_INTERVAL_MS / 1000:
+            continue
+        session.last_frame_at = now
         session.processing = True
         header, jpeg = parse_frame(data)
         try:
@@ -197,6 +209,11 @@ async def stream(ws: WebSocket, sid: str):
             else:
                 response["x"], response["y"] = point
             await ws.send_json(response)
+        except inference.InferenceOverloaded:
+            # Queue đầy: báo client giảm FPS, không làm sập stream.
+            await ws.send_json(
+                {"ok": False, "error": "overloaded", "status": "overloaded"}
+            )
         except Exception:
             # Lỗi suy luận 1 frame không được ngắt phiên stream.
             await ws.send_json({"ok": False, "error": "internal", "status": "error"})

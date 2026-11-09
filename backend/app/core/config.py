@@ -25,8 +25,14 @@ class Settings(BaseSettings):
 
     # Connection pool PostgreSQL. max_overflow được suy ra từ chênh lệch
     # db_pool_max - db_pool_min để tổng kết nối tối đa đúng bằng db_pool_max.
-    db_pool_min: int = 5
-    db_pool_max: int = 20
+    # Với nhiều uvicorn worker, đặt pool mỗi process nhỏ (4-10) để tổng
+    # connection vẫn nằm dưới max_connections của Postgres.
+    db_pool_min: int = 4
+    db_pool_max: int = 10
+    # Fail-fast khi pool cạn: request nhận 503 thay vì treo 30s.
+    db_pool_timeout: float = 5.0
+    # statement_timeout cho API; worker nặng có thể override bằng env riêng.
+    db_statement_timeout_ms: int = 15000
 
     # Chatbot RAG service (internal). Backend gọi qua HTTP + token nội bộ.
     chatbot_url: str = ""
