@@ -189,11 +189,13 @@ async def _resolve_context(
     version = await _published_version(db, course)
     enrollment = (
         await db.execute(
-            select(Enrollment).where(
+            select(Enrollment)
+            .where(
                 Enrollment.course_id == course.id,
                 Enrollment.student_id == user.id,
                 Enrollment.status == "active",
             )
+            .options(raiseload(Enrollment.course))
         )
     ).scalar_one_or_none()
     if enrollment is None:
