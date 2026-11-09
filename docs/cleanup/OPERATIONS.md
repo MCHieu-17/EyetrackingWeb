@@ -31,14 +31,17 @@ Lưu ý:
   column). Nếu baseline sau này qualify `public.unaccent`, bước này vẫn an toàn.
 - File backup nằm trên host tại `backups/`, không nằm trong Docker volume.
   Copy ra ổ khác hoặc backup ngoài máy nếu cần giữ lâu dài.
+- Script tự giữ tối đa `BACKUP_KEEP` file gần nhất (mặc định 7):
+  `BACKUP_KEEP=14 ./scripts/backup.sh`.
 - Đường dẫn trong `--restore` được tính từ thư mục gốc repo (script `cd` về đó).
 - Không commit file backup: `backups/` đã có trong `.gitignore`.
 
 ## Bảo trì định kỳ
 
-S2 cung cấp `scripts/maintenance.sh` để dọn dữ liệu hết hạn (auth session và
-learning session quá hạn). Script idempotent, không xoá volume và không reset
-database.
+`scripts/maintenance.sh` dọn dữ liệu hết hạn (auth session, learning session
+quá hạn), tạo partition gaze_samples trước 3 tháng và drop partition cũ hơn
+`GAZE_RETENTION_DAYS` (mặc định 180 ngày). Script idempotent, không xoá volume
+và không reset database.
 
 ```bash
 ./scripts/maintenance.sh          # chạy trong Docker (service backend phải đang chạy)

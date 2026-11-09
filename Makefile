@@ -6,8 +6,9 @@
 #   make test-backend
 #   make build
 #   make up / make down / make smoke
+#   make bundle-report / make loadtest / make e2e
 
-.PHONY: check check-full test-backend test-frontend build up down smoke
+.PHONY: check check-full test-backend test-frontend build up down smoke bundle-report loadtest e2e
 
 check:
 	./scripts/check.sh
@@ -32,3 +33,12 @@ down:
 
 smoke:
 	./scripts/smoke.sh
+
+bundle-report:
+	node scripts/bundle-report.mjs
+
+loadtest:
+	./scripts/loadtest.sh
+
+e2e:
+	./scripts/e2e.sh

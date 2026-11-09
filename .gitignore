@@ -29,6 +29,9 @@ backend/media/
 
 # Next.js
 frontend/.next
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 # Next.js tự sinh khi phát hiện AI agent; đã tắt bằng agentRules: false
 frontend/AGENTS.md
 frontend/CLAUDE.md

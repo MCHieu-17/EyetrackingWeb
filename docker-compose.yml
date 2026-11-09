@@ -304,6 +304,7 @@ services:
     environment:
       <<: *backend-env
       EMBEDDING_WORKER_POLL_SECONDS: ${EMBEDDING_WORKER_POLL_SECONDS:-5}
+      EMBEDDING_WORKER_STALE_SECONDS: ${EMBEDDING_WORKER_STALE_SECONDS:-600}
     # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
     healthcheck:
       disable: true

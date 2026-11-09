@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -174,6 +175,33 @@ async def test_process_job_failure_retries_then_fails(monkeypatch):
         assert stored.finished_at is not None
 
     assert await _claim() is None
+
+
+@pytest.mark.asyncio
+async def test_recover_stale_running_job_returns_to_pending():
+    target_id = str(uuid.uuid4())
+    job_id = await _enqueue_lesson(target_id)
+    claimed = await _claim()
+    assert claimed is not None and claimed.id == job_id
+
+    async with SessionLocal() as db:
+        job = await db.get(EmbeddingJob, job_id)
+        assert job is not None
+        job.started_at = embedding_jobs._now() - timedelta(seconds=3600)
+        await db.commit()
+
+    async with SessionLocal() as db:
+        recovered = await embedding_jobs.recover_stale_jobs(
+            db, stale_seconds=600
+        )
+    assert recovered == 1
+
+    async with SessionLocal() as db:
+        stored = await db.get(EmbeddingJob, job_id)
+        assert stored is not None
+        assert stored.status == "pending"
+        assert stored.error == "stale running job; retrying"
+        assert stored.finished_at is None
 
 
 @pytest.mark.asyncio

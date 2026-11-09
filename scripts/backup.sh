@@ -39,6 +39,9 @@ Cách dùng:
       --yes bỏ qua câu hỏi (dùng cho script/khẩn cấp).
 
   ./scripts/backup.sh --help
+
+Biến môi trường:
+  BACKUP_KEEP=7   Số file backup gần nhất giữ lại (mặc định 7).
 EOF
 }
 
@@ -131,3 +134,16 @@ docker compose exec -T postgres pg_dump \
 mv "$partial" "$output"
 trap - EXIT
 echo "Đã tạo backup: $output"
+
+# Giữ tối đa BACKUP_KEEP file gần nhất để không đầy đĩa.
+keep="${BACKUP_KEEP:-7}"
+if [[ "$keep" =~ ^[0-9]+$ ]] && (( keep > 0 )); then
+    mapfile -t old < <(
+        ls -1t "$BACKUP_DIR"/eyelearning-*.dump 2>/dev/null \
+            | tail -n +$((keep + 1))
+    )
+    if (( ${#old[@]} > 0 )); then
+        rm -f -- "${old[@]}"
+        echo "Đã xoá ${#old[@]} backup cũ (giữ $keep file gần nhất)."
+    fi
+fi

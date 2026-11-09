@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -21,6 +22,42 @@ class AuthUser:
     status: str
     deleted_at: str | None
     role_codes: list[str]
+
+
+# Fallback in-process khi Redis không có (dev/test) hoặc Redis lỗi. Mỗi worker
+# có cache riêng; TTL ngắn nên sai lệch tối đa 30s.
+_AUTH_MEMORY: dict[str, tuple[float, dict]] = {}
+_AUTH_MEMORY_MAX = 10_000
+
+
+def _memory_get(key: str) -> dict | None:
+    item = _AUTH_MEMORY.get(key)
+    if item is None:
+        return None
+    expires_at, value = item
+    if expires_at <= time.monotonic():
+        _AUTH_MEMORY.pop(key, None)
+        return None
+    return value
+
+
+def _memory_set(key: str, value: dict) -> None:
+    if len(_AUTH_MEMORY) >= _AUTH_MEMORY_MAX:
+        now = time.monotonic()
+        for stale in [k for k, (exp, _) in _AUTH_MEMORY.items() if exp <= now]:
+            _AUTH_MEMORY.pop(stale, None)
+        if len(_AUTH_MEMORY) >= _AUTH_MEMORY_MAX:
+            _AUTH_MEMORY.clear()
+    _AUTH_MEMORY[key] = (time.monotonic() + AUTH_CACHE_TTL_SECONDS, value)
+
+
+def _auth_user_from_dict(value: dict) -> AuthUser:
+    return AuthUser(
+        id=value["id"],
+        status=value.get("status", ""),
+        deleted_at=value.get("deleted_at"),
+        role_codes=list(value.get("role_codes") or []),
+    )
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -71,32 +108,31 @@ async def get_user_for_auth_cached(
     cache_key = f"auth:user:{user_id}"
     cached = await cache_get_json(cache_key)
     if isinstance(cached, dict) and cached.get("id") == user_id:
-        return AuthUser(
-            id=cached["id"],
-            status=cached.get("status", ""),
-            deleted_at=cached.get("deleted_at"),
-            role_codes=list(cached.get("role_codes") or []),
-        )
+        return _auth_user_from_dict(cached)
+
+    memory = _memory_get(cache_key)
+    if memory is not None and memory.get("id") == user_id:
+        return _auth_user_from_dict(memory)
 
     user = await get_user_for_auth(db, user_id)
     if user is not None:
-        await cache_set_json(
-            cache_key,
-            {
-                "id": user.id,
-                "status": user.status,
-                "deleted_at": (
-                    user.deleted_at.isoformat() if user.deleted_at else None
-                ),
-                "role_codes": user.role_codes,
-            },
-            AUTH_CACHE_TTL_SECONDS,
-        )
+        payload = {
+            "id": user.id,
+            "status": user.status,
+            "deleted_at": (
+                user.deleted_at.isoformat() if user.deleted_at else None
+            ),
+            "role_codes": user.role_codes,
+        }
+        _memory_set(cache_key, payload)
+        await cache_set_json(cache_key, payload, AUTH_CACHE_TTL_SECONDS)
     return user
 
 
 async def invalidate_auth_cache(user_id: str) -> None:
-    await cache_delete(f"auth:user:{user_id}")
+    cache_key = f"auth:user:{user_id}"
+    _AUTH_MEMORY.pop(cache_key, None)
+    await cache_delete(cache_key)
 
 
 async def touch_last_login(db: AsyncSession, user: User) -> None:

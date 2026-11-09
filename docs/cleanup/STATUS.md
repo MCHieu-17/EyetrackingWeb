@@ -24,15 +24,15 @@
 
 | Metric | Baseline | Target | After |
 |---|---|---|---|
-| Gaze batch queries | 14 (P4 baseline) | ≤ 5 | 9 (P1) |
+| Gaze batch queries | 14 (P4 baseline) | ≤ 5 | 5 (auth cache + join) |
 | Teacher course list queries | 6 (P4 baseline) | ≤ 10 | 6 |
 | Course students queries | 9 (P4 baseline) | ≤ 10 | 9 |
 | Media asset queries | 17 (P4 baseline) | ≤ 5 | 4 (P2) |
 | Client JS chunks total | 2,516.0 KB (57 chunks, webpack analyze) | ≤ baseline | 2,556.7 KB (59 chunks, webpack analyze; +1.6%, within 5% budget) |
-| Initial JS `/` | 705.5 KB | ≤ baseline, tốt nhất −10% | 692.4 KB (−1.9%) |
+| Initial JS `/` | 705.5 KB (webpack) | ≤ baseline, tốt nhất −10% | 692.4 KB (webpack, −1.9%); 169.7 KB (Turbopack manifest) |
 | Landing page chunk | 19,276 B | giảm | 5,986 B (−69%) |
-| Initial JS `/student` | not measured | ≤ baseline | build pass; follow-up measure |
-| Initial JS `/teacher` | not measured | ≤ baseline | build pass; follow-up measure |
+| Initial JS `/student` | not measured | ≤ baseline | 299.1 KB (Turbopack manifest) |
+| Initial JS `/teacher` | not measured | ≤ baseline | 283.8 KB (Turbopack manifest) |
 
 ## Waves
 
@@ -76,10 +76,9 @@ docker compose up -d --build # stack rebuilt, embedding-worker running
 
 ## Follow-ups
 
-- Gaze batch còn 9 query (mục tiêu ≤ 5); phần còn lại là auth + insert + query bắt buộc.
-  Có thể gộp auth/enrollment lookup hoặc cache session ngắn hạn nếu cần.
-- Chưa đo riêng initial JS `/student` và `/teacher`; nên thêm script đo theo route.
+- Gaze batch đã đạt 5 query (từ 14 baseline) nhờ auth cache + gộp query.
+- Initial JS theo route đo bằng `node scripts/bundle-report.mjs` (Turbopack).
 - Embedding job queue chưa có stale-running recovery; thêm lease/timeout nếu chạy nhiều worker.
-- Chưa có Playwright E2E; nên bổ sung 5 flow chính ở wave sau.
+- Playwright E2E smoke đã có (`./scripts/e2e.sh`, 4 flow: landing/student/teacher/admin).
 - Có thể generate TypeScript types từ OpenAPI để giảm drift frontend/backend.
 - Cân nhắc chuyển dần ORM default sang `lazy="raise"` sau khi query-count tests đã phủ rộng.

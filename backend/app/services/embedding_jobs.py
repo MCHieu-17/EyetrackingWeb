@@ -8,11 +8,12 @@ restart và nhiều backend replica dùng chung một hàng đợi.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.embedding_job import EmbeddingJob
 from app.services import embedding
@@ -176,10 +177,54 @@ async def process_job(job_id: str) -> None:
         await db.commit()
 
 
+async def recover_stale_jobs(
+    db: AsyncSession, *, stale_seconds: int | None = None
+) -> int:
+    """Đưa job running quá lâu trở lại pending (hoặc failed nếu hết lượt).
+
+    Worker chết giữa chừng không còn giữ lock; job sẽ kẹt running mãi nếu
+    không có bước này.
+    """
+    seconds = (
+        settings.embedding_worker_stale_seconds
+        if stale_seconds is None
+        else stale_seconds
+    )
+    if seconds <= 0:
+        return 0
+    cutoff = _now() - timedelta(seconds=seconds)
+    jobs = (
+        await db.execute(
+            select(EmbeddingJob)
+            .where(
+                EmbeddingJob.status == "running",
+                EmbeddingJob.started_at < cutoff,
+            )
+            .with_for_update(skip_locked=True)
+        )
+    ).scalars().all()
+    now = _now()
+    for job in jobs:
+        job.updated_at = now
+        if job.attempts < job.max_attempts:
+            job.status = "pending"
+            job.error = "stale running job; retrying"
+            job.finished_at = None
+        else:
+            job.status = "failed"
+            job.error = "stale running job; max attempts reached"
+            job.finished_at = now
+    if jobs:
+        await db.commit()
+        logger.warning("Recovered %s stale embedding job(s)", len(jobs))
+    return len(jobs)
+
+
 async def process_pending_jobs(limit: int = 1) -> int:
     """Worker entrypoint: claim và xử lý tối đa `limit` job."""
     job_ids: list[str] = []
     async with SessionLocal() as db:
+        await recover_stale_jobs(db)
         for _ in range(limit):
             job = await claim_next_job(db)
             if job is None:

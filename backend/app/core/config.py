@@ -130,6 +130,8 @@ class Settings(BaseSettings):
 
     # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs.
     embedding_worker_poll_seconds: float = 5.0
+    # Job running quá lâu (worker chết) được đưa lại pending/failed.
+    embedding_worker_stale_seconds: int = 600
 
     # Worker xử lý slide_import_jobs.
     content_worker_poll_seconds: float = 3.0

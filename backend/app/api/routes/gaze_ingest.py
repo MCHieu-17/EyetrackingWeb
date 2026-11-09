@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, insert, select
+from sqlalchemy import and_, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload
 
@@ -51,21 +51,18 @@ def _parse_time(value: str) -> datetime:
 async def _session_for_user(
     db: AsyncSession, session_id: str, user: User
 ) -> LearningSession:
-    session = (
+    row = (
         await db.execute(
-            select(LearningSession)
+            select(LearningSession, Enrollment.student_id)
+            .join(Enrollment, Enrollment.id == LearningSession.enrollment_id)
             .options(raiseload(LearningSession.presentations))
             .where(LearningSession.id == session_id)
         )
-    ).scalar_one_or_none()
-    if session is None:
+    ).first()
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    student_id = (
-        await db.execute(
-            select(Enrollment.student_id).where(Enrollment.id == session.enrollment_id)
-        )
-    ).scalar_one_or_none()
-    if student_id is None or student_id != user.id:
+    session, student_id = row
+    if student_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return session
 
@@ -273,14 +270,29 @@ async def ingest_gaze_batch(
                 detail={"code": "batch_conflict", "message": "Layout không thuộc presentation"},
             )
 
-    existing = (
+    # Một query lấy cả batch trùng (nếu có) và batch_no lớn nhất. Dùng base
+    # một dòng + LEFT JOIN để vẫn có max_no khi chưa có batch trùng.
+    max_no_sq = (
+        select(func.coalesce(func.max(GazeBatch.batch_no), -1))
+        .where(GazeBatch.session_id == session.id)
+        .scalar_subquery()
+    )
+    base = select(max_no_sq.label("max_no")).subquery()
+    row = (
         await db.execute(
-            select(GazeBatch).where(
-                GazeBatch.session_id == session.id,
-                GazeBatch.batch_id == body.batch_id,
+            select(base.c.max_no, GazeBatch)
+            .select_from(base)
+            .outerjoin(
+                GazeBatch,
+                and_(
+                    GazeBatch.session_id == session.id,
+                    GazeBatch.batch_id == body.batch_id,
+                ),
             )
         )
-    ).scalar_one_or_none()
+    ).first()
+    max_no = int(row[0]) if row is not None else -1
+    existing = row[1] if row is not None else None
     if existing is not None:
         if existing.payload_hash != body.payload_hash:
             raise HTTPException(
@@ -298,19 +310,12 @@ async def ingest_gaze_batch(
             rejected=0,
         )
 
-    max_no = (
-        await db.execute(
-            select(func.coalesce(func.max(GazeBatch.batch_no), -1)).where(
-                GazeBatch.session_id == session.id
-            )
-        )
-    ).scalar_one()
-    if body.batch_no != int(max_no) + 1:
+    if body.batch_no != max_no + 1:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={
                 "code": "batch_out_of_order",
-                "message": f"Batch number phải là {int(max_no) + 1}",
+                "message": f"Batch number phải là {max_no + 1}",
             },
         )
 

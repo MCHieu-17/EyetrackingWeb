@@ -121,6 +121,12 @@ curl -s http://localhost:8001/internal/metrics | python3 -m json.tool
 
 # 4. Microbench endpoint
 ./scripts/bench.sh http://localhost:8001 /health
+
+# 5. Initial JS theo route (sau npm run build)
+node scripts/bundle-report.mjs
+
+# 6. E2E smoke (stack phải đang chạy)
+./scripts/e2e.sh
 ```
 
 ## Kết quả đo nhanh (dev stack)
@@ -130,7 +136,11 @@ curl -s http://localhost:8001/internal/metrics | python3 -m json.tool
 | 500 request đồng thời `/api/me/enrollments` (backend trực tiếp) | ~908 RPS, p95 462ms, 0 lỗi |
 | 1000 request, concurrency 50 | ~955 RPS, p95 139ms, 0 lỗi |
 | 10 chat stream đồng thời | DB pool `checked_out=0` trong suốt stream |
+| Gaze batch hot path | 5 SQL query (từ 14 baseline) |
 | Gaze queue 40 task, queue limit 32 | 32 ok, 8 overloaded (đúng thiết kế) |
+| Initial JS `/` (Turbopack manifest) | 169.7 KB |
+| Initial JS `/student` | 299.1 KB |
+| Initial JS `/teacher` | 283.8 KB |
 
 Các số trên là đo trên máy dev, không phải cam kết production. Cần chạy
 `loadtest.sh` trên staging với dữ liệu gần thật.

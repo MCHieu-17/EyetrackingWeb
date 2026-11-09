@@ -153,6 +153,10 @@ async def test_gaze_batch_query_count(client):
         "samples": [_sample(0), _sample(1)],
     }
 
+    # Warm auth cache (Redis hoặc fallback in-process) để đo đúng hot path.
+    warm = await client.get("/api/me/enrollments", headers=headers)
+    assert warm.status_code == 200, warm.text
+
     with count_queries(engine) as counter:
         response = await client.post(
             f"/api/learning-sessions/{session_id}/gaze-batches",
@@ -162,4 +166,5 @@ async def test_gaze_batch_query_count(client):
 
     assert response.status_code == 200, response.text
     assert response.json()["stored"] == 2
-    assert counter.count <= 9, "\n\n".join(counter.statements)
+    # session+enrollment, presentation, batch+max, insert batch, insert samples.
+    assert counter.count <= 5, "\n\n".join(counter.statements)
