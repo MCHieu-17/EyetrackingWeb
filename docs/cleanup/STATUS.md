@@ -24,10 +24,10 @@
 
 | Metric | Baseline | Target | After |
 |---|---|---|---|
-| Gaze batch queries | 14 (P4 baseline) | ≤ 5 | |
-| Teacher course list queries | 6 (P4 baseline) | ≤ 10 | |
-| Course students queries | 9 (P4 baseline) | ≤ 10 | |
-| Media asset queries | 17 (P4 baseline) | ≤ 5 | |
+| Gaze batch queries | 14 (P4 baseline) | ≤ 5 | 9 (P1) |
+| Teacher course list queries | 6 (P4 baseline) | ≤ 10 | 6 |
+| Course students queries | 9 (P4 baseline) | ≤ 10 | 9 |
+| Media asset queries | 17 (P4 baseline) | ≤ 5 | 4 (P2) |
 | Client JS chunks total | 2,516.0 KB (57 chunks, webpack analyze) | ≤ baseline | 2,334.8 KB (44 chunks, Turbopack build — not directly comparable) |
 | Initial JS `/` | pending (route manifest) | ≤ baseline, tốt nhất −10% | |
 | Initial JS `/student` | pending (route manifest) | ≤ baseline | |
