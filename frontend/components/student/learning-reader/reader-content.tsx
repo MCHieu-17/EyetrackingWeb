@@ -8,12 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorState } from "@/components/ui/error-state";
 import { useGazeTracker, type GazeFrameResult } from "@/hooks/use-gaze-tracker";
 import { useAoiSnapshot } from "@/hooks/use-aoi-snapshot";
 import {
@@ -37,44 +32,28 @@ import {
 } from "@/lib/api/calibration";
 import { resolveMediaUrl } from "@/lib/api/client";
 import { LazyInlineQuiz } from "@/components/quiz/lazy-inline-quiz";
-import { LazyPdfPage } from "@/components/pdf/lazy-pdf-page";
 import { ReaderFrame } from "@/components/reader/reader-frame";
-import { useChatAccess } from "@/hooks/use-chat";
 import { LazyStudyAssistantChat } from "@/components/assistant/lazy-study-assistant-chat";
+import { useAssistant } from "@/components/assistant/assistant-context";
+import { ReaderBanners } from "./reader-banners";
+import { ReaderError, ReaderLoading } from "./reader-states";
+import { ReaderSlideContent } from "./reader-slide-content";
+import { useReaderChat } from "./use-reader-chat";
 import {
-  AssistantProvider,
-  useAssistant,
-} from "@/components/assistant/assistant-context";
+  findNextLesson,
+  getReaderLayoutKey,
+  hashPayload,
+  isGazeDotVisible,
+  resolveActiveLessonId,
+  type GazeDotPosition,
+} from "./reader-helpers";
 
 // Gom gaze sample rồi gửi theo batch — tránh vượt rate limit 60 req/phút của backend
 // (tracker phát ~12 điểm/giây; gửi lẻ từng điểm sẽ chạm trần gần như ngay lập tức).
 const GAZE_FLUSH_MS = 1500;
 const GAZE_MAX_BATCH = 40;
 
-function hashPayload(value: unknown): string {
-  const text = JSON.stringify(value);
-  let h1 = 0x811c9dc5;
-  let h2 = 0x01000193;
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i);
-    h1 = Math.imul(h1 ^ code, 0x01000193) >>> 0;
-    h2 = Math.imul(h2 ^ code, 0x85ebca6b) >>> 0;
-  }
-  return (
-    h1.toString(16).padStart(8, "0").repeat(4) +
-    h2.toString(16).padStart(8, "0").repeat(4)
-  );
-}
-
-export function LearningReader({ courseId }: { courseId: string }) {
-  return (
-    <AssistantProvider>
-      <ReaderContent courseId={courseId} />
-    </AssistantProvider>
-  );
-}
-
-function ReaderContent({ courseId }: { courseId: string }) {
+export function ReaderContent({ courseId }: { courseId: string }) {
   const searchParams = useSearchParams();
   const requestedLessonId = searchParams.get("lesson");
 
@@ -95,22 +74,21 @@ function ReaderContent({ courseId }: { courseId: string }) {
   );
   // Vị trí chấm điểm nhìn (chuẩn hóa theo màn hình) khi GV bật hiển thị cho SV.
   // `key` = bài+trang lúc ghi, để tự ẩn khi đổi trang/bài mà không cần effect.
-  const [gazeDot, setGazeDot] = useState<{ x: number; y: number; key: string } | null>(null);
-  // Chat dock bên phải. Chỉ dùng ở desktop (>= xl); mobile không thiết kế.
-  const [chatOpen, setChatOpen] = useState(false);
+  const [gazeDot, setGazeDot] = useState<GazeDotPosition | null>(null);
   const { setReaderMode, setReaderLessonId, mode: assistantMode, assignmentId: assistantAssignmentId } = useAssistant();
-  const chatAccess = useChatAccess(courseId, chatOpen || assistantMode === "quiz");
-  const chatAllowed = chatAccess.data?.allowed === true && !chatAccess.isError;
-  const refreshChatAccess = chatAccess.refetch;
-  useEffect(() => {
-    void refreshChatAccess();
-  }, [activeLessonId, assistantAssignmentId, assistantMode, refreshChatAccess]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!chatAllowed) setChatOpen(false);
-  }, [chatAllowed]);
-  const assistantButtonRef = useRef<HTMLButtonElement>(null);
-  const wasChatOpen = useRef(false);
+  const {
+    chatOpen,
+    chatAllowed,
+    chatAccess,
+    assistantButtonRef,
+    toggleChat,
+    closeChat,
+  } = useReaderChat({
+    courseId,
+    activeLessonId,
+    assistantMode,
+    assistantAssignmentId,
+  });
 
   const gazeBufferRef = useRef<GazeSample[]>([]);
   const gazeBufferLessonRef = useRef<string | null>(null);
@@ -129,20 +107,13 @@ function ReaderContent({ courseId }: { courseId: string }) {
     () => course?.modules.flatMap((module) => module.lessons) ?? [],
     [course],
   );
-  const flatLessonIndex = allItems.findIndex((lesson) => lesson.id === activeLessonId);
-  const nextLesson = allItems[flatLessonIndex + 1];
+  const nextLesson = findNextLesson(allItems, activeLessonId);
 
-  const requestedIsValid =
-    !!requestedLessonId && allItems.some((lesson) => lesson.id === requestedLessonId);
-  const activeLessonIsValid = allItems.some((lesson) => lesson.id === activeLessonId);
-  const resolvedLessonId =
-    allItems.length === 0
-      ? activeLessonId
-      : requestedIsValid
-        ? (requestedLessonId as string)
-        : activeLessonIsValid
-          ? activeLessonId
-          : allItems[0].id;
+  const resolvedLessonId = resolveActiveLessonId({
+    requestedLessonId,
+    activeLessonId,
+    lessons: allItems,
+  });
 
   // Render-phase adjust: tự chọn bài khi outline tải xong mà chưa có bài hợp lệ.
   if (course && allItems.length > 0 && resolvedLessonId !== activeLessonId) {
@@ -189,14 +160,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
   useEffect(() => {
     setReaderLessonId(activeLessonId || null);
   }, [activeLessonId, setReaderLessonId]);
-
-  // Đóng chat thì trả focus về nút "Trợ lý" ở header.
-  useEffect(() => {
-    if (wasChatOpen.current && !chatOpen) {
-      assistantButtonRef.current?.focus();
-    }
-    wasChatOpen.current = chatOpen;
-  }, [chatOpen]);
 
   const enrollmentId = enrollments.find((enrollment) => enrollment.course.id === courseId)?.enrollmentId;
 
@@ -342,13 +305,7 @@ function ReaderContent({ courseId }: { courseId: string }) {
   }, [activeLessonId, flushGazeForLesson]);
 
   // Layout key đổi khi mở/đóng chat để snapshot AOI phản ánh đúng bố cục.
-  const layoutKey = activeIsQuiz
-    ? chatOpen
-      ? "quiz-chat"
-      : "quiz"
-    : chatOpen
-      ? "reader-chat"
-      : "reader";
+  const layoutKey = getReaderLayoutKey(activeIsQuiz, chatOpen);
 
   useEffect(() => {
     layoutKeyRef.current = layoutKey;
@@ -510,86 +467,13 @@ function ReaderContent({ courseId }: { courseId: string }) {
     setCurrentSlide(0);
   };
 
-  const closeChat = useCallback(() => setChatOpen(false), []);
-
   if (courseLoading) {
-    return (
-      <div className="flex h-dvh flex-col overflow-hidden bg-[#f5f6f2] p-2 sm:p-3">
-        <div className="flex h-12 shrink-0 items-center px-3">
-          <Skeleton className="h-7 w-28 rounded-full" />
-        </div>
-        <div className="flex min-h-0 flex-1 gap-3">
-           <Skeleton className="hidden w-64 shrink-0 rounded-[20px] lg:block" />
-          <div className="flex min-w-0 flex-1 items-center justify-center p-3">
-             <Skeleton className="aspect-video w-full max-w-5xl rounded-[18px]" />
-          </div>
-        </div>
-      </div>
-    );
+    return <ReaderLoading />;
   }
 
   if (courseError || !course) {
-    return (
-      <div className="flex h-dvh items-center justify-center p-6">
-        <ErrorState
-          title="Không tải được bài học"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
+    return <ReaderError onRetry={() => refetch()} />;
   }
-
-  const banners = (
-    <>
-      {gazeSource === "off" && calibrationRequired && (total > 0 || activeIsQuiz) && (
-        <div className="z-10 shrink-0 px-4 pb-2 sm:px-5">
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-2 rounded-xl border border-[#dce8d9] bg-[#e8f1e6] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs leading-5 text-foreground">
-              Không kết nối được phiên theo dõi điểm nhìn (phiên hiệu chỉnh có thể đã hết hạn). Nội
-              dung vẫn dùng được bình thường, nhưng dữ liệu gaze sẽ không được ghi nhận.
-            </p>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
-              <Link
-                href={`/student/courses/${courseId}/prepare${activeLessonId ? `?lesson=${encodeURIComponent(activeLessonId)}` : ""}`}
-              >
-                Kiểm tra &amp; hiệu chỉnh lại
-              </Link>
-            </Button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-
-  const slideContent = slidesLoading ? (
-    <Skeleton className="aspect-video w-full rounded-2xl" />
-  ) : slidePdfUrl ? (
-    <div
-      data-aoi="slide"
-      className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm"
-    >
-      <LazyPdfPage
-        key={`${slidePdfUrl}:${currentContent?.pageNumber ?? 1}`}
-        url={slidePdfUrl}
-        pageNumber={currentContent?.pageNumber ?? 1}
-        alt={currentContent?.title ?? "Trang bài học"}
-        className="absolute inset-0"
-      />
-    </div>
-  ) : (
-    <div className="flex aspect-video flex-col items-center justify-center rounded-[18px] border border-border/80 bg-white p-8 text-center shadow-sm">
-      <div className="flex size-11 items-center justify-center rounded-full bg-muted text-foreground">
-        <Icon name="ri-image-line" className="size-5" />
-      </div>
-      <p className="mt-4 max-w-sm text-base font-semibold text-foreground sm:text-lg">
-        {currentContent?.title ?? "Nội dung bài học"}
-      </p>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Nội dung trang PDF sẽ hiển thị tại đây.
-      </p>
-    </div>
-  );
 
   const quizContent = activeQuizId ? (
     <LazyInlineQuiz
@@ -602,15 +486,6 @@ function ReaderContent({ courseId }: { courseId: string }) {
       Bài tập chưa sẵn sàng.
     </p>
   );
-
-  const toggleChat = async () => {
-    if (chatOpen) {
-      setChatOpen(false);
-      return;
-    }
-    const result = await chatAccess.refetch();
-    if (result.data?.allowed && !result.isError) setChatOpen(true);
-  };
 
   return (
     <>
@@ -638,8 +513,22 @@ function ReaderContent({ courseId }: { courseId: string }) {
         }
         gazeSource={gazeSource}
         calibrationRequired={calibrationRequired}
-        banners={banners}
-        slideContent={slideContent}
+        banners={
+          <ReaderBanners
+            courseId={courseId}
+            activeLessonId={activeLessonId}
+            calibrationRequired={calibrationRequired}
+            gazeSource={gazeSource}
+            hasContent={total > 0 || activeIsQuiz}
+          />
+        }
+        slideContent={
+          <ReaderSlideContent
+            slidesLoading={slidesLoading}
+            slidePdfUrl={slidePdfUrl}
+            currentContent={currentContent}
+          />
+        }
         quizContent={quizContent}
         chatPanel={
           <LazyStudyAssistantChat
@@ -651,7 +540,7 @@ function ReaderContent({ courseId }: { courseId: string }) {
         className="h-dvh"
       />
 
-      {showGazeDot && gazeDot && gazeDot.key === `${activeLessonId}:${currentSlide}` && (
+      {showGazeDot && isGazeDotVisible(gazeDot, activeLessonId, currentSlide) && (
         <div className="pointer-events-none fixed inset-0 z-30">
           <span
             className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black shadow-[0_1px_5px_rgba(0,0,0,0.2)]"
