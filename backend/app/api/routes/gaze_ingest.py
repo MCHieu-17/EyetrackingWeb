@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.api.deps import require_roles
 from app.core.rediscache import expire, increment
@@ -50,11 +51,21 @@ def _parse_time(value: str) -> datetime:
 async def _session_for_user(
     db: AsyncSession, session_id: str, user: User
 ) -> LearningSession:
-    session = await db.get(LearningSession, session_id)
+    session = (
+        await db.execute(
+            select(LearningSession)
+            .options(raiseload(LearningSession.presentations))
+            .where(LearningSession.id == session_id)
+        )
+    ).scalar_one_or_none()
     if session is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    enrollment = await db.get(Enrollment, session.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
+    student_id = (
+        await db.execute(
+            select(Enrollment.student_id).where(Enrollment.id == session.enrollment_id)
+        )
+    ).scalar_one_or_none()
+    if student_id is None or student_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return session
 

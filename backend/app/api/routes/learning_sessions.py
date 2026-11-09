@@ -142,13 +142,39 @@ async def _current_calibration(
     return await db.get(Calibration, device.current_calibration_id)
 
 
+async def _session_for_user(
+    db: AsyncSession, session_id: str, user: User
+) -> LearningSession:
+    session = (
+        await db.execute(
+            select(LearningSession)
+            .options(raiseload(LearningSession.presentations))
+            .where(LearningSession.id == session_id)
+        )
+    ).scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
+    student_id = (
+        await db.execute(
+            select(Enrollment.student_id).where(Enrollment.id == session.enrollment_id)
+        )
+    ).scalar_one_or_none()
+    if student_id is None or student_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return session
+
+
 @router.post("/api/learning-sessions", response_model=LearningSessionOut, status_code=201)
 async def create_learning_session(
     body: LearningSessionCreateIn,
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    enrollment = await db.get(Enrollment, body.enrollment_id)
+    enrollment = await db.get(
+        Enrollment,
+        body.enrollment_id,
+        options=[raiseload(Enrollment.course)],
+    )
     if enrollment is None or enrollment.student_id != user.id:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, detail="Bạn chưa tham gia khóa học"
@@ -249,12 +275,7 @@ async def end_learning_session(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await db.get(LearningSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    enrollment = await db.get(Enrollment, session.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    session = await _session_for_user(db, session_id, user)
     if session.status != "in_progress":
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -276,12 +297,7 @@ async def get_session_contents(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await db.get(LearningSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    enrollment = await db.get(Enrollment, session.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    session = await _session_for_user(db, session_id, user)
     item = await db.get(CourseVersionItem, session.course_version_item_id)
     if item is None:
         raise HTTPException(
