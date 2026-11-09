@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 from sqlalchemy import text
+from sqlalchemy.orm import raiseload
 
 from app.db.session import SessionLocal
 from app.models.aoi import AnalysisRun
@@ -17,7 +18,11 @@ from app.services.analysis.manifest import _manifest
 
 async def export_lines(run_id: str) -> AsyncIterator[str]:
     async with SessionLocal() as db:
-        run = await db.get(AnalysisRun, run_id)
+        run = await db.get(
+            AnalysisRun,
+            run_id,
+            options=[raiseload(AnalysisRun.aoi_set)],
+        )
         if run is None:
             yield json.dumps({"type": "error", "message": "not_found"}) + "\n"
             return

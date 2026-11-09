@@ -19,7 +19,11 @@ from app.services.analysis.hits import _insert_slide_hits, _insert_ui_hits
 
 
 async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
-    run = await db.get(AnalysisRun, run_id)
+    run = await db.get(
+        AnalysisRun,
+        run_id,
+        options=[raiseload(AnalysisRun.aoi_set)],
+    )
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy analysis run")
     if run.status == "completed":
@@ -74,7 +78,11 @@ async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
         return result
     except Exception as exc:  # noqa: BLE001
         await db.rollback()
-        run = await db.get(AnalysisRun, run_id)
+        run = await db.get(
+            AnalysisRun,
+            run_id,
+            options=[raiseload(AnalysisRun.aoi_set)],
+        )
         if run is not None:
             run.status = "failed"
             run.error = str(exc)[:1000]
@@ -83,7 +91,11 @@ async def execute_run(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
 
 
 async def get_run_result(db: AsyncSession, run_id: str) -> AnalysisRunResultOut:
-    run = await db.get(AnalysisRun, run_id)
+    run = await db.get(
+        AnalysisRun,
+        run_id,
+        options=[raiseload(AnalysisRun.aoi_set)],
+    )
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy analysis run")
     hit_count = int(
