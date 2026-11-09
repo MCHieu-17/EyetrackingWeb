@@ -1,17 +1,49 @@
 #!/usr/bin/env bash
-# Kiểm tra tĩnh toàn repo: Python lint, frontend lint/typecheck, compose config.
+# Kiểm tra chất lượng toàn repo.
 #
-#   ./scripts/check.sh            # lint + typecheck + compose config
+#   ./scripts/check.sh            # ruff + frontend lint/typecheck + compose config
 #   ./scripts/check.sh --build    # thêm npm run build (chậm)
+#   ./scripts/check.sh --full     # thêm knip + unit tests + backend tests + build
+#
+# --full dùng cho gate trước khi merge; --build giữ lại cho tương thích.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 RUN_BUILD=0
-if [ "${1:-}" = "--build" ]; then
-    RUN_BUILD=1
-fi
+RUN_FULL=0
+
+usage() {
+    cat <<'EOF'
+Usage: ./scripts/check.sh [--build | --full]
+
+  (không tham số)  ruff, frontend lint, typecheck, docker compose config
+  --build          như trên + frontend build
+  --full           như trên + knip, frontend unit tests, backend tests, build
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --build)
+            RUN_BUILD=1
+            ;;
+        --full)
+            RUN_FULL=1
+            RUN_BUILD=1
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf '[check] tham số không hợp lệ: %s\n' "$arg" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
 
 log() { printf '[check] %s\n' "$*"; }
 
@@ -29,6 +61,17 @@ log "frontend lint"
 
 log "frontend typecheck"
 (cd frontend && npm run typecheck)
+
+if [ "$RUN_FULL" -eq 1 ]; then
+    log "frontend knip"
+    (cd frontend && npm run knip)
+
+    log "frontend unit tests"
+    (cd frontend && npm run test)
+
+    log "backend tests"
+    ./scripts/test_backend.sh
+fi
 
 if [ "$RUN_BUILD" -eq 1 ]; then
     log "frontend build"
