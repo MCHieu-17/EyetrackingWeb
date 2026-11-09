@@ -13,7 +13,6 @@ import {
   getGazeSessionStatus,
   getStoredCalibration,
   getStoredGazeSessionId,
-  isCalibrationScreenStale,
   restoreGazeSessionFromBackend,
 } from "@/lib/api/calibration";
 import { getDeviceFingerprint } from "@/lib/api/student";
@@ -82,7 +81,6 @@ export function PreflightCheck({
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [calibratedAt, setCalibratedAt] = useState<string | null>(null);
   const [sessionIssue, setSessionIssue] = useState<string | null>(null);
-  const [screenStale, setScreenStale] = useState(false);
 
   // Khóa tắt bắt buộc hiệu chỉnh -> không cần kiểm tra camera/calibration.
   const calibrationRequired = course?.requireCalibration !== false;
@@ -120,14 +118,14 @@ export function PreflightCheck({
               : Number.POSITIVE_INFINITY;
           // Phiên cũ đã hết hạn trên gaze (TTL 30' hoặc service restart) nhưng
           // DB còn model .ubj: tạo session mới rồi nạp lại model, không bắt
-          // người học hiệu chỉnh lại. Chỉ khôi phục khi màn hình không đổi.
-          if (active?.calibrated && ageDays < 30 && !isCalibrationScreenStale()) {
+          // người học hiệu chỉnh lại. Model dùng được với mọi viewport nhờ
+          // phép quy đổi toạ độ ở useGazeTracker.
+          if (active?.calibrated && ageDays < 30) {
             const restored = await restoreGazeSessionFromBackend(fp);
             if (cancelled) return;
             if (restored) {
               setIsCalibrated(true);
               setCalibratedAt(active.calibratedAt);
-              setScreenStale(false);
               setSessionIssue(null);
               return;
             }
@@ -136,7 +134,6 @@ export function PreflightCheck({
             clearStoredGazeSession();
             setIsCalibrated(false);
             setCalibratedAt(active.calibratedAt);
-            setScreenStale(false);
             setSessionIssue(
               "Thiết bị có bản ghi hiệu chỉnh trong 30 ngày, nhưng phiên theo dõi cục bộ không còn hoạt động. Vui lòng hiệu chỉnh lại để tạo phiên mới trước khi học.",
             );
@@ -145,7 +142,6 @@ export function PreflightCheck({
           clearStoredGazeSession();
           setIsCalibrated(false);
           setCalibratedAt(null);
-          setScreenStale(false);
           setSessionIssue(
             status.error === "network_error"
               ? "Không kết nối được dịch vụ theo dõi để kiểm tra phiên hiệu chỉnh — hãy hiệu chỉnh lại trước khi học."
@@ -155,7 +151,6 @@ export function PreflightCheck({
         }
         setIsCalibrated(true);
         setCalibratedAt(stored.calibratedAt);
-        setScreenStale(isCalibrationScreenStale());
         setSessionIssue(null);
       })();
     }, 0);
@@ -518,16 +513,6 @@ export function PreflightCheck({
               <p>{sessionIssue}</p>
             </div>
           )}
-          {screenStale && isCalibrated && (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-border/80 bg-[#f5f6f2] px-3 py-2.5 text-xs leading-5 text-foreground">
-              <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
-              <p>
-                Kích thước màn hình/cửa sổ đã đổi so với lúc hiệu chỉnh — điểm nhìn có thể bị lệch.
-                Nên hiệu chỉnh lại trước khi học.
-              </p>
-            </div>
-          )}
-
           <div className="mt-auto space-y-2 pt-6">
             <Button
               size="lg"

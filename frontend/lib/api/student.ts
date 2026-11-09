@@ -1,7 +1,7 @@
 import { apiFetch } from "./client";
 import type { EnrolledCourse, CourseOutline, Slide } from "@/lib/types/domain";
 
-export interface LearningSession {
+interface LearningSession {
   id: string;
   enrollmentId: string;
   lessonId: string;
@@ -23,7 +23,7 @@ export interface LearningSession {
   pipelineVersion?: string | null;
 }
 
-export interface CreateLearningSessionInput {
+interface CreateLearningSessionInput {
   enrollmentId: string;
   lessonId: string;
   deviceFingerprint: string;
@@ -72,7 +72,7 @@ export interface GazeBatchInput {
   samples: GazeSample[];
 }
 
-export interface GazeBatchAck {
+interface GazeBatchAck {
   ok: boolean;
   batchId: string;
   received: number;

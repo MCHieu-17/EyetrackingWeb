@@ -11,12 +11,22 @@ from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from app.settings import database_url, db_pool_max, db_pool_min
+from app.settings import (
+    database_url,
+    db_pool_max,
+    db_pool_min,
+    db_pool_reconnect_timeout,
+    db_pool_timeout,
+)
 
 logger = logging.getLogger(__name__)
 
 _pool: ConnectionPool | None = None
 _lock = threading.Lock()
+
+
+class DatabaseUnavailableError(RuntimeError):
+    """Không kết nối được PostgreSQL (sai credential, DB chưa lên, pool timeout)."""
 
 
 def _configure(conn) -> None:
@@ -29,19 +39,28 @@ def get_pool() -> ConnectionPool:
     if _pool is None:
         with _lock:
             if _pool is None:
-                _pool = ConnectionPool(
-                    conninfo=database_url(),
-                    min_size=db_pool_min(),
-                    max_size=db_pool_max(),
-                    kwargs={
-                        "autocommit": True,
-                        "row_factory": dict_row,
-                        "prepare_threshold": 0,
-                    },
-                    configure=_configure,
-                    check=ConnectionPool.check_connection,
-                    open=True,
-                )
+                try:
+                    _pool = ConnectionPool(
+                        conninfo=database_url(),
+                        min_size=db_pool_min(),
+                        max_size=db_pool_max(),
+                        timeout=db_pool_timeout(),
+                        reconnect_timeout=db_pool_reconnect_timeout(),
+                        kwargs={
+                            "autocommit": True,
+                            "row_factory": dict_row,
+                            "prepare_threshold": 0,
+                        },
+                        configure=_configure,
+                        check=ConnectionPool.check_connection,
+                        open=True,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    raise DatabaseUnavailableError(
+                        "Không mở được PostgreSQL pool cho chatbot. "
+                        "Kiểm tra CHATBOT_DATABASE_URL và role CHATBOT_DB_USER "
+                        f"(role/password phải khớp .env). Chi tiết: {exc}"
+                    ) from exc
                 logger.info("Đã mở DB connection pool")
     return _pool
 

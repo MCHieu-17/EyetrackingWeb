@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.models.aoi import AoiLayoutSnapshot, PresentationMetric
 from app.models.auth import User
@@ -29,7 +30,6 @@ from app.models.gaze import (
     LearningSession,
 )
 from app.models.profile import StudentProfile, UserProfile
-from app.schemas.analytics import HotspotOut, SlideStatOut
 from app.schemas.course import StudentLessonOut, StudentRowOut
 
 DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v1"
@@ -37,8 +37,6 @@ GRID_SIZE = 24
 FIXATION_RADIUS = 0.03
 MIN_FIXATION_POINTS = 2
 MAX_GAP_MS = 250
-MAX_POINTS = 300
-HOTSPOT_TOP_N = 5
 
 
 def _now() -> datetime:
@@ -91,59 +89,6 @@ def _count_fixations(points: list[tuple[float, float]]) -> int:
             sum_x, sum_y = x, y
     fixations += int(count >= MIN_FIXATION_POINTS)
     return fixations
-
-
-def _hotspots(grid: list[list[int]]) -> list[HotspotOut]:
-    total = sum(sum(row) for row in grid)
-    if total <= 0:
-        return []
-    candidates: list[tuple[float, float, int]] = []
-    for i in range(GRID_SIZE):
-        for j in range(GRID_SIZE):
-            weight = grid[i][j]
-            if weight < max(2, total * 0.01):
-                continue
-            neighbours = [
-                grid[a][b]
-                for a in range(max(0, i - 1), min(GRID_SIZE, i + 2))
-                for b in range(max(0, j - 1), min(GRID_SIZE, j + 2))
-            ]
-            if weight >= max(neighbours):
-                candidates.append(
-                    ((i + 0.5) / GRID_SIZE, (j + 0.5) / GRID_SIZE, weight)
-                )
-    candidates.sort(key=lambda item: -item[2])
-    out: list[HotspotOut] = []
-    for x, y, weight in candidates:
-        if any((x - item.x) ** 2 + (y - item.y) ** 2 < 0.12**2 for item in out):
-            continue
-        out.append(
-            HotspotOut(
-                x=round(x, 4),
-                y=round(y, 4),
-                r=0.08,
-                w=round(weight / total, 4),
-            )
-        )
-        if len(out) >= HOTSPOT_TOP_N:
-            break
-    return out
-
-
-def _merge_grids(grids: list[list[list[int]]]) -> list[list[int]]:
-    merged = _empty_grid()
-    for grid in grids:
-        if not isinstance(grid, list):
-            continue
-        for i, row in enumerate(grid[:GRID_SIZE]):
-            if not isinstance(row, list):
-                continue
-            for j, value in enumerate(row[:GRID_SIZE]):
-                try:
-                    merged[i][j] += int(value)
-                except (TypeError, ValueError):
-                    continue
-    return merged
 
 
 async def compute_presentation_metrics(
@@ -288,188 +233,29 @@ async def refresh_session_metrics(
     return out
 
 
-async def _published_item_for_lesson(
-    db: AsyncSession, lesson_id: str
-) -> tuple[Course, CourseVersion, CourseVersionItem] | None:
-    lesson = await db.get(Lesson, lesson_id)
-    if lesson is None:
-        return None
-    course = await db.get(Course, lesson.course_id)
-    if course is None or course.published_version_id is None:
-        return None
-    version = await db.get(CourseVersion, course.published_version_id)
-    if version is None:
-        return None
-    item = (
-        await db.execute(
-            select(CourseVersionItem).where(
-                CourseVersionItem.course_version_id == version.id,
-                CourseVersionItem.lesson_id == lesson.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if item is None:
-        return None
-    return course, version, item
-
-
-async def lesson_heatmap(
-    db: AsyncSession,
-    lesson_id: str,
-    student_id: str | None = None,
-    algorithm_version: str = DEFAULT_ALGORITHM_VERSION,
-) -> list[SlideStatOut]:
-    resolved = await _published_item_for_lesson(db, lesson_id)
-    if resolved is None:
-        return []
-    _, _, item = resolved
-    slides = (
-        await db.execute(
-            select(LessonVersionSlide)
-            .where(LessonVersionSlide.lesson_version_id == item.lesson_version_id)
-            .order_by(LessonVersionSlide.position)
-        )
-    ).scalars().all()
-    if not slides:
-        return []
-
-    out: list[SlideStatOut] = []
-    for index, slide in enumerate(slides):
-        stmt = (
-            select(
-                func.coalesce(func.sum(PresentationMetric.sample_count), 0),
-                func.coalesce(func.sum(PresentationMetric.on_slide_count), 0),
-                func.coalesce(func.sum(PresentationMetric.dwell_ms), 0),
-                func.coalesce(func.sum(PresentationMetric.fixation_count), 0),
-                func.count(func.distinct(ContentPresentation.session_id)),
-            )
-            .join(
-                ContentPresentation,
-                ContentPresentation.id == PresentationMetric.presentation_id,
-            )
-            .where(
-                ContentPresentation.lesson_version_slide_id == slide.id,
-                PresentationMetric.algorithm_version == algorithm_version,
-            )
-        )
-        if student_id:
-            stmt = stmt.join(
-                LearningSession,
-                LearningSession.id == ContentPresentation.session_id,
-            ).join(
-                Enrollment, Enrollment.id == LearningSession.enrollment_id
-            ).where(Enrollment.student_id == student_id)
-        sample_count, on_slide_count, dwell_ms, fixations, sessions = (
-            await db.execute(stmt)
-        ).one()
-
-        grid_stmt = (
-            select(PresentationMetric.heatmap_grid)
-            .join(
-                ContentPresentation,
-                ContentPresentation.id == PresentationMetric.presentation_id,
-            )
-            .where(
-                ContentPresentation.lesson_version_slide_id == slide.id,
-                PresentationMetric.algorithm_version == algorithm_version,
-            )
-        )
-        if student_id:
-            grid_stmt = (
-                grid_stmt.join(
-                    LearningSession,
-                    LearningSession.id == ContentPresentation.session_id,
-                )
-                .join(
-                    Enrollment, Enrollment.id == LearningSession.enrollment_id
-                )
-                .where(Enrollment.student_id == student_id)
-            )
-        grids = (await db.execute(grid_stmt)).scalars().all()
-        grid = _merge_grids(list(grids))
-
-        points: list[list[float]] = []
-        point_stmt = (
-            select(
-                GazeSample.viewport_x,
-                GazeSample.viewport_y,
-                AoiLayoutSnapshot.image_transform,
-            )
-            .join(GazeBatch, GazeBatch.id == GazeSample.batch_id)
-            .join(
-                ContentPresentation,
-                ContentPresentation.id == GazeBatch.presentation_id,
-            )
-            .outerjoin(
-                AoiLayoutSnapshot,
-                AoiLayoutSnapshot.id == GazeBatch.layout_snapshot_id,
-            )
-            .where(
-                ContentPresentation.lesson_version_slide_id == slide.id,
-                GazeSample.status == "ok",
-            )
-        )
-        if student_id:
-            point_stmt = (
-                point_stmt.join(
-                    LearningSession,
-                    LearningSession.id == ContentPresentation.session_id,
-                )
-                .join(
-                    Enrollment, Enrollment.id == LearningSession.enrollment_id
-                )
-                .where(Enrollment.student_id == student_id)
-            )
-        point_rows = (
-            await db.execute(
-                point_stmt.order_by(GazeSample.event_time).limit(5000)
-            )
-        ).all()
-        for viewport_x, viewport_y, transform in point_rows:
-            if viewport_x is None or viewport_y is None:
-                continue
-            mapped = _map_viewport_to_slide(
-                float(viewport_x), float(viewport_y), transform
-            )
-            if mapped is None:
-                continue
-            x, y = mapped
-            if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
-                points.append([round(x, 4), round(y, 4)])
-        if len(points) > MAX_POINTS:
-            step = len(points) / MAX_POINTS
-            points = [points[int(i * step)] for i in range(MAX_POINTS)]
-
-        out.append(
-            SlideStatOut(
-                idx=index,
-                on_slide=round(on_slide_count / sample_count * 100, 1)
-                if sample_count
-                else 0.0,
-                fixations=int(fixations),
-                view_sec=round(dwell_ms / 1000 / max(1, int(sessions)), 1),
-                hotspots=_hotspots(grid),
-                points=points,
-            )
-        )
-    return out
-
-
 async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOut]:
     from app.core.helpers import color_for, relative_time_vn
 
     if course.published_version_id is None:
         return []
-    version = await db.get(CourseVersion, course.published_version_id)
-    if version is None:
+    version_id = (
+        await db.execute(
+            select(CourseVersion.id).where(
+                CourseVersion.id == course.published_version_id
+            )
+        )
+    ).scalar_one_or_none()
+    if version_id is None:
         return []
     items = (
         await db.execute(
-            select(CourseVersionItem)
-            .where(CourseVersionItem.course_version_id == version.id)
+            select(CourseVersionItem, Lesson)
+            .join(Lesson, Lesson.id == CourseVersionItem.lesson_id)
+            .where(CourseVersionItem.course_version_id == version_id)
             .order_by(CourseVersionItem.position)
+            .options(raiseload(Lesson.versions), raiseload(Lesson.slides))
         )
-    ).scalars().all()
+    ).all()
 
     rows = (
         await db.execute(
@@ -479,6 +265,11 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
             .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
             .where(Enrollment.course_id == course.id)
             .order_by(Enrollment.enrolled_at)
+            .options(
+                raiseload(Enrollment.course),
+                raiseload(User.profile),
+                raiseload(User.roles),
+            )
         )
     ).all()
     if not rows:
@@ -498,101 +289,119 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
         ).all()
     )
 
+    lesson_version_ids = list(
+        dict.fromkeys(item.lesson_version_id for item, _ in items)
+    )
+    slides_by_version: dict[str, list[str]] = {}
+    if lesson_version_ids:
+        slide_rows = (
+            await db.execute(
+                select(
+                    LessonVersionSlide.lesson_version_id,
+                    LessonVersionSlide.id,
+                )
+                .where(
+                    LessonVersionSlide.lesson_version_id.in_(
+                        lesson_version_ids
+                    )
+                )
+                .order_by(
+                    LessonVersionSlide.lesson_version_id,
+                    LessonVersionSlide.position,
+                )
+            )
+        ).all()
+        for lesson_version_id, slide_id in slide_rows:
+            slides_by_version.setdefault(lesson_version_id, []).append(slide_id)
+
+    slide_ids = [
+        slide_id for ids in slides_by_version.values() for slide_id in ids
+    ]
+    metrics_by_enrollment_slide: dict[tuple[str, str], tuple[int, int, int]] = {}
+    if slide_ids:
+        metric_rows = (
+            await db.execute(
+                select(
+                    ContentPresentation.lesson_version_slide_id,
+                    LearningSession.enrollment_id,
+                    func.coalesce(func.sum(PresentationMetric.sample_count), 0),
+                    func.coalesce(
+                        func.sum(PresentationMetric.on_slide_count), 0
+                    ),
+                    func.coalesce(func.sum(PresentationMetric.dwell_ms), 0),
+                )
+                .join(
+                    ContentPresentation,
+                    ContentPresentation.id == PresentationMetric.presentation_id,
+                )
+                .join(
+                    LearningSession,
+                    LearningSession.id == ContentPresentation.session_id,
+                )
+                .where(
+                    LearningSession.enrollment_id.in_(enrollment_ids),
+                    ContentPresentation.lesson_version_slide_id.in_(slide_ids),
+                    PresentationMetric.algorithm_version
+                    == DEFAULT_ALGORITHM_VERSION,
+                )
+                .group_by(
+                    ContentPresentation.lesson_version_slide_id,
+                    LearningSession.enrollment_id,
+                )
+            )
+        ).all()
+        metrics_by_enrollment_slide = {
+            (enrollment_id, slide_id): (
+                int(sample_count),
+                int(on_slide_count),
+                int(dwell_ms),
+            )
+            for slide_id, enrollment_id, sample_count, on_slide_count, dwell_ms
+            in metric_rows
+        }
+
     out: list[StudentRowOut] = []
     for enrollment, student, profile, student_profile in rows:
         lessons: list[StudentLessonOut] = []
-        for item in items:
-            lesson = await db.get(Lesson, item.lesson_id)
-            if lesson is None:
-                continue
+        for item, lesson in items:
             if lesson.kind == "quiz":
                 lessons.append(
                     StudentLessonOut(
                         lesson_id=lesson.id,
                         attention=None,
                         mastery=None,
-                        key_done=0,
-                        key_total=0,
                     )
                 )
                 continue
 
-            slides = (
-                await db.execute(
-                    select(LessonVersionSlide)
-                    .where(
-                        LessonVersionSlide.lesson_version_id
-                        == item.lesson_version_id
-                    )
-                    .order_by(LessonVersionSlide.position)
-                )
-            ).scalars().all()
+            slides = slides_by_version.get(item.lesson_version_id, [])
             total_samples = 0
             on_slide_samples = 0
-            key_total = sum(1 for slide in slides if slide.is_key)
-            key_done = 0
-            normal_total = sum(1 for slide in slides if not slide.is_key)
-            normal_done = 0
-            for slide in slides:
+            viewed_total = 0
+            for slide_id in slides:
                 sample_count, on_slide_count, dwell_ms = (
-                    await db.execute(
-                        select(
-                            func.coalesce(
-                                func.sum(PresentationMetric.sample_count), 0
-                            ),
-                            func.coalesce(
-                                func.sum(PresentationMetric.on_slide_count), 0
-                            ),
-                            func.coalesce(func.sum(PresentationMetric.dwell_ms), 0),
-                        )
-                        .join(
-                            ContentPresentation,
-                            ContentPresentation.id
-                            == PresentationMetric.presentation_id,
-                        )
-                        .join(
-                            LearningSession,
-                            LearningSession.id
-                            == ContentPresentation.session_id,
-                        )
-                        .where(
-                            ContentPresentation.lesson_version_slide_id == slide.id,
-                            LearningSession.enrollment_id == enrollment.id,
-                            PresentationMetric.algorithm_version
-                            == DEFAULT_ALGORITHM_VERSION,
-                        )
+                    metrics_by_enrollment_slide.get(
+                        (enrollment.id, slide_id), (0, 0, 0)
                     )
-                ).one()
-                total_samples += int(sample_count)
-                on_slide_samples += int(on_slide_count)
-                viewed = int(dwell_ms) > 0
-                if slide.is_key and viewed:
-                    key_done += 1
-                if not slide.is_key and viewed:
-                    normal_done += 1
+                )
+                total_samples += sample_count
+                on_slide_samples += on_slide_count
+                if dwell_ms > 0:
+                    viewed_total += 1
 
             attention = (
                 round(on_slide_samples / total_samples * 100, 1)
                 if total_samples
                 else None
             )
-            key_ratio = key_done / key_total if key_total else None
-            normal_ratio = normal_done / normal_total if normal_total else None
-            if key_ratio is not None and normal_ratio is not None:
-                mastery = round(100 * (0.85 * key_ratio + 0.15 * normal_ratio), 1)
-            elif key_ratio is not None:
-                mastery = round(100 * key_ratio, 1)
-            elif normal_ratio is not None:
-                mastery = round(100 * normal_ratio, 1)
-            else:
-                mastery = None
+            mastery = (
+                round(100 * viewed_total / len(slides), 1) if slides else None
+            )
             lessons.append(
                 StudentLessonOut(
                     lesson_id=lesson.id,
                     attention=attention,
                     mastery=mastery,
-                    key_done=key_done,
-                    key_total=key_total,
                 )
             )
         attentions = [

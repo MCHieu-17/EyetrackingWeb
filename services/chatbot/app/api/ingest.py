@@ -9,9 +9,12 @@ import asyncio
 import logging
 import threading
 
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException
+from psycopg_pool import PoolTimeout
 
 from app.api.chat import require_internal_token
+from app.db import DatabaseUnavailableError
 from app.schemas import (
     IngestCourseRequest,
     IngestLessonRequest,
@@ -63,11 +66,30 @@ def _result(stats: tuple[int, int, list[str]]) -> IngestResult:
     return IngestResult(processed=processed, failed=failed, errors=errors)
 
 
+# Lỗi DB phải trả 503 kèm lý do thật (sai role/password, mất kết nối...) thay
+# vì 500 chung chung. Backend sẽ lưu detail này vào slide_documents để UI hiển thị.
+DB_ERRORS = (DatabaseUnavailableError, PoolTimeout, psycopg.Error)
+
+
+def _db_unavailable(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail=f"Không truy cập được PostgreSQL cho chatbot: {exc}",
+    )
+
+
+def _ingest_failed(exc: Exception) -> HTTPException:
+    logger.exception("Ingest thất bại")
+    return HTTPException(status_code=503, detail=f"Ingest thất bại: {exc}")
+
+
 @router.post("/slide", response_model=IngestResult)
 async def embed_slide(payload: IngestSlideRequest):
     try:
         stats = await _run_async(
-            get_ingestion().embed_slide, payload.slide_version_id
+            get_ingestion().embed_slide,
+            payload.slide_version_id,
+            payload.include_draft,
         )
     except LookupError:
         raise HTTPException(
@@ -76,6 +98,10 @@ async def embed_slide(payload: IngestSlideRequest):
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except DB_ERRORS as exc:
+        raise _db_unavailable(exc) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _ingest_failed(exc) from exc
     return _result(stats)
 
 
@@ -83,7 +109,10 @@ async def embed_slide(payload: IngestSlideRequest):
 async def embed_lesson_version(payload: IngestLessonRequest):
     try:
         stats = await _run_async(
-            get_ingestion().embed_lesson_version, payload.lesson_version_id
+            get_ingestion().embed_lesson_version,
+            payload.lesson_version_id,
+            payload.include_draft,
+            payload.slide_version_ids,
         )
     except LookupError:
         raise HTTPException(
@@ -92,6 +121,10 @@ async def embed_lesson_version(payload: IngestLessonRequest):
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except DB_ERRORS as exc:
+        raise _db_unavailable(exc) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _ingest_failed(exc) from exc
     return _result(stats)
 
 
@@ -99,7 +132,10 @@ async def embed_lesson_version(payload: IngestLessonRequest):
 async def embed_course_version(payload: IngestCourseRequest):
     try:
         stats = await _run_async(
-            get_ingestion().embed_course_version, payload.course_version_id
+            get_ingestion().embed_course_version,
+            payload.course_version_id,
+            payload.include_draft,
+            payload.slide_version_ids,
         )
     except LookupError:
         raise HTTPException(
@@ -108,6 +144,10 @@ async def embed_course_version(payload: IngestCourseRequest):
         )
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except DB_ERRORS as exc:
+        raise _db_unavailable(exc) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _ingest_failed(exc) from exc
     return _result(stats)
 
 
@@ -117,4 +157,8 @@ async def reindex_all():
         stats = await _run_async(get_ingestion().reindex_all)
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except DB_ERRORS as exc:
+        raise _db_unavailable(exc) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _ingest_failed(exc) from exc
     return _result(stats)

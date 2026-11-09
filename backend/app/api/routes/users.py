@@ -18,7 +18,7 @@ def _primary_role(user: User) -> str:
 
 
 async def _build_profile(db: AsyncSession, user: User) -> ProfileOut:
-    profile = user.profile
+    profile = await profile_crud.get_user_profile(db, user.id)
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Chưa có hồ sơ")
     role = _primary_role(user)
@@ -31,6 +31,7 @@ async def _build_profile(db: AsyncSession, user: User) -> ProfileOut:
         phone=profile.phone,
         avatar_url=profile.avatar_url,
         created_at=user.created_at,
+        has_password=user.password_hash is not None,
     )
     if role == "student":
         sp = await profile_crud.get_student_profile(db, user.id)

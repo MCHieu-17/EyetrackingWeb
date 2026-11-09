@@ -15,7 +15,7 @@ export default function RegisterPage() {
           Tạo tài khoản
         </h1>
         <p className="text-sm text-muted-foreground">
-          Đăng ký tài khoản học viên để bắt đầu học tập.
+          Tạo tài khoản bằng Microsoft 365 của trường để bắt đầu học tập.
         </p>
       </div>
       <RegisterForm />

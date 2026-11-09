@@ -1,14 +1,14 @@
 import { AppShell } from "@/components/layout/app-shell";
-import { CourseAssignment } from "@/components/admin/course-assignment";
+import { StudentPromotion } from "@/components/admin/student-promotion";
 
 export default function AdminPage() {
   return (
     <AppShell
       role="admin"
-      title="Phân công giảng viên"
-      description="Chọn khóa học để xem chủ sở hữu, thêm giảng viên hỗ trợ hoặc gỡ phân công."
+      title="Nâng cấp giáo viên"
+      description="Chọn một sinh viên để cấp quyền giảng viên. Sau khi nâng cấp, tài khoản sẽ không còn quyền sinh viên."
     >
-      <CourseAssignment />
+      <StudentPromotion />
     </AppShell>
   );
 }

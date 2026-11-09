@@ -8,7 +8,6 @@ import {
   listChatMessages,
   listChatSessions,
   renameChatSession,
-  sendChatMessage,
   streamChatMessage,
   type ChatStreamHandlers,
   type SendChatInput,
@@ -32,16 +31,6 @@ export function useChatMessages(sessionId: string | null) {
     staleTime: 0,
     queryFn: () => listChatMessages(sessionId as string),
     enabled: Boolean(sessionId),
-  });
-}
-
-export function useSendChatMessage() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: SendChatInput) => sendChatMessage(input),
-    onSuccess: (_reply, input) => {
-      client.invalidateQueries({ queryKey: ["chat", "sessions", input.courseId] });
-    },
   });
 }
 

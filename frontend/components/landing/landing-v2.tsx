@@ -402,8 +402,8 @@ export default function LandingV2() {
                   Một bức tranh rõ hơn.
                 </h3>
                 <p>
-                  Heatmap thể hiện mật độ điểm nhìn trên từng trang tài liệu, giúp giảng viên
-                  hiểu hành vi quan sát của người học.
+                  Dữ liệu điểm nhìn trên từng trang tài liệu giúp giảng viên hiểu hành vi
+                  quan sát của người học.
                 </p>
                 <HeatIllustration />
               </article>

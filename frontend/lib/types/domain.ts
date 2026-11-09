@@ -5,7 +5,7 @@
 
 export type CourseStatus = 'draft' | 'published' | 'archived';
 export type EnrollStatus = 'active' | 'completed' | 'dropped';
-export type LessonKind = 'lesson' | 'quiz';
+type LessonKind = 'lesson' | 'quiz';
 
 export interface TeacherCourse {
   id: string;
@@ -28,6 +28,12 @@ export interface LessonNode {
   title: string;
   kind: LessonKind;          // 'lesson' (slide) hoặc 'quiz' (trắc nghiệm)
   slides: number;            // count(lesson_contents)
+  /** Số slide đã index xong cho trợ lý học tập. */
+  slidesReady?: number;
+  /** Số slide index lỗi. */
+  slidesFailed?: number;
+  /** Số slide đang chờ index. */
+  slidesPending?: number;
   attention: number | null;
   mastery?: number | null;   // điểm hoàn thành TB (độ bao phủ nội dung)
   quizId?: string | null;
@@ -47,12 +53,10 @@ export interface ModuleNode {
   generation?: number | null;
 }
 
-export interface StudentLesson {
+interface StudentLesson {
   lessonId: string;
   attention: number | null;
   mastery?: number | null;   // điểm hoàn thành (độ bao phủ nội dung)
-  keyDone?: number;          // số trang trọng tâm đã hoàn thành
-  keyTotal?: number;         // tổng số trang trọng tâm
 }
 
 export interface StudentRow {
@@ -65,16 +69,6 @@ export interface StudentRow {
   lastActive: string;
   status: EnrollStatus;
   lessons: StudentLesson[];
-}
-
-export interface Hotspot { x: number; y: number; r: number; w: number } // x,y,r chuẩn hóa [0,1] theo slide — khớp gaze_events
-export interface SlideStat {
-  idx: number;               // lesson_contents.order_index
-  onSlide: number;           // on-slide ratio %
-  fixations: number;
-  viewSec: number;           // thời gian xem TB (giây)
-  hotspots: Hotspot[];
-  points?: [number, number][]; // gaze thô (chuẩn hóa [0,1]), dùng để vẽ scatter khi thiếu hotspot
 }
 
 // Student (my-courses)
@@ -104,9 +98,11 @@ export interface Slide {
   pageNumber: number;
   pageCount: number;
   sourceFormat?: string | null;
+  slideVersionId?: string | null;
+  lessonVersionId?: string | null;
 }
 
-// Slide trọng tâm + điểm hoàn thành theo độ bao phủ nội dung (teacher)
+// Slide + điểm hoàn thành theo độ bao phủ nội dung (teacher)
 
 export interface SlideAdmin {
   id: string;
@@ -116,10 +112,11 @@ export interface SlideAdmin {
   pageNumber: number;
   pageCount: number;
   sourceFormat?: string | null;
-  isKey: boolean;
   /** Trạng thái ingest RAG: none | pending | ready | failed. */
   embeddingStatus?: "none" | "pending" | "ready" | "failed";
   embeddingError?: string | null;
+  slideVersionId?: string | null;
+  lessonVersionId?: string | null;
 }
 
 export interface LessonItem {
@@ -160,7 +157,7 @@ export interface CourseOutline {
 
 export type GenderCode = 'male' | 'female' | 'other';
 
-export interface ProfileBase {
+interface ProfileBase {
   email: string;               // users.email — email đăng nhập, read-only
   fullName: string;            // user_profiles.full_name
   dateOfBirth: string | null;  // user_profiles.date_of_birth (yyyy-mm-dd)
@@ -168,15 +165,16 @@ export interface ProfileBase {
   phone: string | null;        // user_profiles.phone
   avatarUrl: string | null;    // user_profiles.avatar_url
   createdAt: string;           // users.created_at
+  hasPassword: boolean;        // false = chỉ đăng nhập bằng Microsoft 365
 }
 
-export interface StudentProfile extends ProfileBase {
+interface StudentProfile extends ProfileBase {
   role: 'student';
   studentCode: string;         // student_profiles.student_code — read-only
   program: string | null;      // student_profiles.program
 }
 
-export interface TeacherProfile extends ProfileBase {
+interface TeacherProfile extends ProfileBase {
   role: 'teacher';
   teacherCode: string;         // teacher_profiles.teacher_code — read-only
   department: string | null;   // teacher_profiles.department

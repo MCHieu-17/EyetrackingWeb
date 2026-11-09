@@ -1,5 +1,29 @@
 import { API_BASE_URL, ApiError, getAuthHeaders } from "@/lib/api/client";
-import { isDemoMode } from "@/lib/demo-mode";
+
+/** Đọc lỗi JSON của backend và header Retry-After (nếu có). */
+async function toApiError(response: Response): Promise<ApiError> {
+  let message = `HTTP ${response.status}`;
+  try {
+    const data = (await response.json()) as {
+      detail?: string | { message?: string };
+      message?: string;
+    };
+    if (typeof data?.detail === "string") message = data.detail;
+    else if (data?.detail && typeof data.detail === "object") {
+      message = data.detail.message ?? message;
+    } else if (typeof data?.message === "string") {
+      message = data.message;
+    }
+  } catch {
+    /* body không phải JSON */
+  }
+  const retryAfter = Number(response.headers.get("Retry-After"));
+  return new ApiError(
+    response.status,
+    message,
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+  );
+}
 
 export interface ChatCitation {
   documentId: string;
@@ -14,22 +38,13 @@ export interface ChatCitation {
   lessonTitle?: string;
   slideId?: string | null;
   slideIndex?: number | null;
-  imageUrl?: string;
   pdfUrl?: string;
   pageNumber?: number | null;
   snippet?: string;
   score?: number;
 }
 
-export interface ChatReply {
-  sessionId: string;
-  answer: string;
-  citations: ChatCitation[];
-  intent?: string | null;
-  verified?: boolean;
-}
-
-export interface ChatSessionSummary {
+interface ChatSessionSummary {
   canContinue?: boolean;
   id: string;
   courseId: string;
@@ -44,7 +59,7 @@ export interface ChatSessionSummary {
   updatedAt: string;
 }
 
-export interface ChatMessageItem {
+interface ChatMessageItem {
   id: string;
   role: "student" | "assistant";
   content: string;
@@ -67,7 +82,7 @@ export interface SendChatInput {
   draftAnswers?: Record<string, string[]>;
 }
 
-export interface ChatBlockMeta { route?: string; block_id?: string | number; }
+interface ChatBlockMeta { route?: string; block_id?: string | number; }
 
 export interface ChatStreamHandlers {
   onSession?: (sessionId: string) => void;
@@ -85,98 +100,11 @@ export interface ChatStreamHandlers {
   onError?: (message: string) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Demo mode: giữ widget hoạt động khi NEXT_PUBLIC_DEMO=1 (không có backend).
-// ---------------------------------------------------------------------------
-
-const demoState: {
-  sessions: ChatSessionSummary[];
-  messages: Record<string, ChatMessageItem[]>;
-} = { sessions: [], messages: {} };
-
-function demoNow(): string {
-  return new Date().toISOString();
-}
-
-function demoId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-}
-
-function demoReply(input: SendChatInput): ChatReply {
-  const sessionId = input.sessionId || demoId("demo-session");
-  let session = demoState.sessions.find((item) => item.id === sessionId);
-  if (!session) {
-    session = {
-      id: sessionId,
-      courseId: input.courseId,
-      lessonId: input.lessonId ?? null,
-      assignmentId: input.assignmentId ?? null,
-      title: input.message.slice(0, 60) || "Phiên mới",
-      messageCount: 0,
-      createdAt: demoNow(),
-      updatedAt: demoNow(),
-    };
-    demoState.sessions.unshift(session);
-    demoState.messages[sessionId] = [];
-  }
-
-  const studentMessage: ChatMessageItem = {
-    id: demoId("demo-msg"),
-    role: "student",
-    content: input.message,
-    citations: [],
-    createdAt: demoNow(),
-  };
-  const answer =
-    "Đây là câu trả lời demo. Trong chế độ thật, trợ lý sẽ tìm trong tài liệu môn học và trích dẫn nguồn [1]. " +
-    "Bạn có thể hỏi về khái niệm, hoặc xin gợi ý cho bài tập — trợ lý sẽ không giải hộ.";
-  const citation: ChatCitation = {
-    documentId: "demo-slide-1",
-    title: "Chương 1 - Bài 1: Giới thiệu",
-    location: "",
-    lessonId: input.lessonId ?? null,
-    lessonTitle: "Bài 1: Giới thiệu",
-    slideId: "demo-slide-1",
-    slideIndex: 1,
-    imageUrl: "",
-    pdfUrl: "",
-    pageNumber: 1,
-    snippet: "Nội dung demo của slide.",
-    score: 0.9,
-  };
-  const assistantMessage: ChatMessageItem = {
-    id: demoId("demo-msg"),
-    role: "assistant",
-    content: answer,
-    citations: [citation],
-    intent: "course_qa",
-    createdAt: demoNow(),
-  };
-  demoState.messages[sessionId].push(studentMessage, assistantMessage);
-  session.messageCount += 2;
-  session.updatedAt = demoNow();
-
-  return {
-    sessionId,
-    answer,
-    citations: [citation],
-    intent: "course_qa",
-    verified: true,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// API thật
-// ---------------------------------------------------------------------------
-
 export async function listChatSessions(
   courseId: string,
   assignmentId?: string | null,
   attemptId?: string | null,
 ): Promise<ChatSessionSummary[]> {
-  if (isDemoMode()) {
-    return demoState.sessions.filter((item) => item.courseId === courseId);
-  }
   const params = new URLSearchParams();
   if (assignmentId) params.set("assignmentId", assignmentId);
   if (attemptId) params.set("attemptId", attemptId);
@@ -188,71 +116,45 @@ export async function listChatSessions(
       headers: getAuthHeaders(),
     },
   );
-  if (!response.ok) throw new ApiError(response.status, await response.text());
+  if (!response.ok) throw await toApiError(response);
   const data = await response.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function listChatMessages(sessionId: string): Promise<ChatMessageItem[]> {
-  if (isDemoMode()) return demoState.messages[sessionId] ?? [];
   const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}/messages`, {
     credentials: "include",
     headers: getAuthHeaders(),
   });
-  if (!response.ok) throw new ApiError(response.status, await response.text());
+  if (!response.ok) throw await toApiError(response);
   const data = await response.json();
   return Array.isArray(data) ? data : [];
-}
-
-export async function sendChatMessage(input: SendChatInput): Promise<ChatReply> {
-  if (isDemoMode()) return demoReply(input);
-  const { courseId, ...body } = input;
-  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new ApiError(response.status, await response.text());
-  return response.json();
 }
 
 export async function renameChatSession(
   sessionId: string,
   title: string,
 ): Promise<ChatSessionSummary> {
-  if (isDemoMode()) {
-    const session = demoState.sessions.find((item) => item.id === sessionId);
-    if (!session) throw new ApiError(404, "Không tìm thấy phiên chat");
-    session.title = title;
-    session.updatedAt = demoNow();
-    return session;
-  }
   const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ title }),
   });
-  if (!response.ok) throw new ApiError(response.status, await response.text());
+  if (!response.ok) throw await toApiError(response);
   return response.json();
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  if (isDemoMode()) {
-    demoState.sessions = demoState.sessions.filter((item) => item.id !== sessionId);
-    delete demoState.messages[sessionId];
-    return;
-  }
   const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}`, {
     method: "DELETE",
     credentials: "include",
     headers: getAuthHeaders(),
   });
-  if (!response.ok) throw new ApiError(response.status, await response.text());
+  if (!response.ok) throw await toApiError(response);
 }
 
-export function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
+function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
   let event = "message";
   const dataLines: string[] = [];
   for (const line of frame.split("\n")) {
@@ -304,20 +206,6 @@ export async function streamChatMessage(
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (isDemoMode()) {
-    const reply = demoReply(input);
-    handlers.onSession?.(reply.sessionId);
-    handlers.onCitations?.(reply.citations);
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    handlers.onToken?.(reply.answer, { route: "knowledge", block_id: 0 });
-    handlers.onDone?.({
-      sessionId: reply.sessionId,
-      intent: reply.intent ?? undefined,
-      verified: reply.verified,
-    });
-    return;
-  }
-
   const { courseId, ...body } = input;
   const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/stream`, {
     method: "POST",
@@ -328,7 +216,7 @@ export async function streamChatMessage(
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, await response.text());
+    throw await toApiError(response);
   }
   if (!response.body) {
     throw new Error("Trình duyệt không hỗ trợ streaming");
@@ -360,17 +248,16 @@ export async function streamChatMessage(
   }
 }
 
-export interface ChatAccess {
+interface ChatAccess {
   allowed: boolean;
   reason: string | null;
   blockedUntil: string | null;
 }
 
 export async function getChatAccess(courseId: string): Promise<ChatAccess> {
-  if (isDemoMode()) return { allowed: true, reason: null, blockedUntil: null };
   const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/access`, {
     credentials: "include", headers: getAuthHeaders(), cache: "no-store",
   });
-  if (!response.ok) throw new ApiError(response.status, await response.text());
+  if (!response.ok) throw await toApiError(response);
   return response.json();
 }

@@ -6,7 +6,10 @@
 media
 .git
 .env
+.env.*
 Dockerfile
 .dockerignore
 README.md
 requirements-dev.txt
+tests
+pytest.ini

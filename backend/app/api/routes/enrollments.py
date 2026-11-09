@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.api.deps import get_current_user
 from app.core.helpers import gradient_for
-from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import (
@@ -26,40 +25,73 @@ async def my_enrollments(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    module_counts = (
+        select(
+            CourseVersionModule.course_version_id,
+            func.count(CourseVersionModule.id).label("module_count"),
+        )
+        .group_by(CourseVersionModule.course_version_id)
+        .subquery()
+    )
+    lesson_counts = (
+        select(
+            CourseVersionItem.course_version_id,
+            func.count(CourseVersionItem.id).label("lesson_count"),
+        )
+        .group_by(CourseVersionItem.course_version_id)
+        .subquery()
+    )
     rows = (
         await db.execute(
-            select(Enrollment, Course, CourseVersion, UserProfile)
+            select(
+                Enrollment,
+                Course,
+                CourseVersion,
+                UserProfile,
+                func.coalesce(module_counts.c.module_count, 0),
+                func.coalesce(lesson_counts.c.lesson_count, 0),
+            )
             .join(Course, Course.id == Enrollment.course_id)
             .outerjoin(
                 CourseVersion,
                 CourseVersion.id == Course.published_version_id,
             )
             .outerjoin(UserProfile, UserProfile.user_id == Course.owner_id)
+            .outerjoin(
+                module_counts,
+                module_counts.c.course_version_id == CourseVersion.id,
+            )
+            .outerjoin(
+                lesson_counts,
+                lesson_counts.c.course_version_id == CourseVersion.id,
+            )
             .where(Enrollment.student_id == user.id)
             .order_by(Enrollment.enrolled_at.desc())
+            .options(
+                raiseload(Enrollment.course),
+                raiseload(Course.versions),
+                raiseload(Course.enrollments),
+                raiseload(Course.owner),
+                raiseload(Course.creator),
+                raiseload(CourseVersion.modules),
+                raiseload(CourseVersion.items),
+            )
         )
     ).all()
     if not rows:
         return []
 
     out: list[EnrolledCourseOut] = []
-    for enrollment, course, version, teacher_profile in rows:
+    for (
+        enrollment,
+        course,
+        version,
+        teacher_profile,
+        module_count,
+        lesson_count,
+    ) in rows:
         if version is None:
             continue
-        module_count = (
-            await db.execute(
-                select(func.count(CourseVersionModule.id)).where(
-                    CourseVersionModule.course_version_id == version.id
-                )
-            )
-        ).scalar_one()
-        lesson_count = (
-            await db.execute(
-                select(func.count(CourseVersionItem.id)).where(
-                    CourseVersionItem.course_version_id == version.id
-                )
-            )
-        ).scalar_one()
         out.append(
             EnrolledCourseOut(
                 enrollment_id=enrollment.id,
@@ -80,42 +112,3 @@ async def my_enrollments(
             )
         )
     return out
-
-
-@router.post(
-    "/api/courses/{course_id}/enroll",
-    status_code=201,
-    dependencies=[Depends(rate_limit(10, 60, "enroll"))],
-)
-async def enroll(
-    course_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await db.get(Course, course_id)
-    if course is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    if course.archived_at is not None or course.published_version_id is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="Khóa học chưa được xuất bản"
-        )
-    existing = (
-        await db.execute(
-            select(Enrollment).where(
-                Enrollment.course_id == course_id, Enrollment.student_id == user.id
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Đã đăng ký khóa học này")
-    enrollment = Enrollment(course_id=course_id, student_id=user.id)
-    db.add(enrollment)
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, detail="Đã đăng ký khóa học này"
-        ) from exc
-    await db.refresh(enrollment)
-    return {"ok": True, "enrollmentId": enrollment.id}

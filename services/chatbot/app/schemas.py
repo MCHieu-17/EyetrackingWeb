@@ -46,7 +46,6 @@ class CitationOut(BaseModel):
     lesson_title: str = ""
     slide_id: str | None = None
     slide_index: int | None = None
-    image_url: str = ""
     pdf_url: str = ""
     page_number: int | None = None
     snippet: str = ""
@@ -64,14 +63,19 @@ class ChatResponse(BaseModel):
 
 class IngestSlideRequest(BaseModel):
     slide_version_id: str = Field(min_length=1, max_length=64)
+    include_draft: bool = False
 
 
 class IngestLessonRequest(BaseModel):
     lesson_version_id: str = Field(min_length=1, max_length=64)
+    include_draft: bool = False
+    slide_version_ids: list[str] | None = None
 
 
 class IngestCourseRequest(BaseModel):
     course_version_id: str = Field(min_length=1, max_length=64)
+    include_draft: bool = False
+    slide_version_ids: list[str] | None = None
 
 
 class IngestResult(BaseModel):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,25 +84,6 @@ async def _get_asset_for_user(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return asset
-
-
-@router.get("/media/assets/{asset_id}")
-async def get_asset(
-    asset_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    asset = await _get_asset_for_user(db, asset_id, user)
-
-    if asset.storage_backend == "r2" and settings.r2_enabled:
-        return RedirectResponse(
-            media_storage.asset_url(asset.id, asset.object_key, asset.storage_backend)
-        )
-
-    file_path = _ensure_media_in_root(settings.media_path / asset.object_key)
-    if not file_path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file")
-    return FileResponse(str(file_path), media_type=asset.mime_type)
 
 
 @router.get("/media/assets/{asset_id}/file")

@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { gazeStreamUrl, getStoredGazeSessionId } from "@/lib/api/calibration";
+import {
+  gazeStreamUrl,
+  getCalibrationScreenSnapshot,
+  getStoredGazeSessionId,
+} from "@/lib/api/calibration";
+import { transformGazePoint } from "@/lib/calibration-geometry";
 
-export type GazeSource = "real" | "simulated" | "off";
+type GazeSource = "real" | "simulated" | "off";
 
-export interface GazeFrameContext {
+interface GazeFrameContext {
   presentationId: string | null;
   layoutGeneration: number;
   surface: "lesson" | "quiz";
@@ -21,7 +26,7 @@ export interface GazeFrameResult {
   status: "ok" | "no_face" | "error" | "offscreen";
 }
 
-export interface UseGazeTrackerOptions {
+interface UseGazeTrackerOptions {
   enabled: boolean;
   calibrated: boolean;
   onPoint: (x: number, y: number, source: GazeSource) => void;
@@ -30,17 +35,52 @@ export interface UseGazeTrackerOptions {
   allowSimulation?: boolean;
 }
 
-export interface GazeTrackerState {
+interface GazeTrackerState {
   stream: MediaStream | null;
   source: GazeSource;
 }
 
-const FPS = 20;
+const FPS = 12;
 const FRAME_INTERVAL_MS = 1000 / FPS;
 const MAX_RECONNECTS = 5;
+const MAX_BUFFERED_BYTES = 1024 * 1024;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/**
+ * Quy đổi toạ độ gaze từ viewport lúc calibration sang viewport hiện tại.
+ *
+ * Model gaze trả toạ độ chuẩn hoá theo viewport calibration. Khi người học
+ * zoom/resize/move cửa sổ, cùng một điểm nhìn vật lý trên màn hình sẽ có
+ * toạ độ chuẩn hoá khác. Dùng hình chữ nhật vật lý của viewport (screenX/Y,
+ * innerWidth/Height, DPR) để quy đổi, nhờ đó không phải hiệu chỉnh lại.
+ */
+function transformGazeToViewport(
+  x: number,
+  y: number,
+): { x: number; y: number } {
+  const cal = getCalibrationScreenSnapshot();
+  if (!cal) return { x, y };
+  return transformGazePoint(
+    x,
+    y,
+    {
+      width: cal.w,
+      height: cal.h,
+      dpr: cal.dpr,
+      screenX: cal.screenX,
+      screenY: cal.screenY,
+    },
+    {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      screenX: window.screenX,
+      screenY: window.screenY,
+    },
+  );
 }
 
 export function useGazeTracker({
@@ -57,6 +97,7 @@ export function useGazeTracker({
   const onPointRef = useRef(onPoint);
   const onFrameRef = useRef(onFrame);
   const getContextRef = useRef(getContext);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     onPointRef.current = onPoint;
@@ -85,13 +126,19 @@ export function useGazeTracker({
     const captureFrame = async (video: HTMLVideoElement): Promise<Blob | null> => {
       if (video.videoWidth === 0 || video.videoHeight === 0) return null;
       const scale = Math.min(1, 480 / video.videoWidth);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(video.videoWidth * scale);
-      canvas.height = Math.round(video.videoHeight * scale);
+      const width = Math.round(video.videoWidth * scale);
+      const height = Math.round(video.videoHeight * scale);
+      let canvas = canvasRef.current;
+      if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvasRef.current = canvas;
+      }
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
       const context = canvas.getContext("2d");
       if (!context) return null;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.78));
+      context.drawImage(video, 0, 0, width, height);
+      return new Promise((resolve) => canvas!.toBlob(resolve, "image/jpeg", 0.78));
     };
 
     const runWsSession = async (
@@ -110,6 +157,11 @@ export function useGazeTracker({
           }
           sendTimer = window.setTimeout(async () => {
             if (disposed || ws.readyState !== WebSocket.OPEN) return;
+            // Backpressure: bỏ frame nếu socket còn tồn đọng quá nhiều dữ liệu.
+            if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+              scheduleSend();
+              return;
+            }
             const blob = await captureFrame(video);
             if (blob && ws.readyState === WebSocket.OPEN) {
               const context = getContextRef.current?.() ?? null;
@@ -174,8 +226,12 @@ export function useGazeTracker({
                 : data.ok && typeof data.x === "number" && typeof data.y === "number"
                   ? "ok"
                   : "error";
-            if (status === "ok") {
-              onPointRef.current(data.x as number, data.y as number, "real");
+            const point =
+              status === "ok"
+                ? transformGazeToViewport(data.x as number, data.y as number)
+                : null;
+            if (point) {
+              onPointRef.current(point.x, point.y, "real");
             } else if (status === "no_face") {
               onPointRef.current(-1, -1, "real");
             }
@@ -184,8 +240,8 @@ export function useGazeTracker({
               sequence: data.sequence ?? null,
               captureMonotonicNs: data.captureMonotonicNs ?? null,
               eventTime: new Date().toISOString(),
-              x: status === "ok" ? (data.x as number) : null,
-              y: status === "ok" ? (data.y as number) : null,
+              x: point?.x ?? null,
+              y: point?.y ?? null,
               status,
             });
           } catch {

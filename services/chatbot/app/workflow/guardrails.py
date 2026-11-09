@@ -23,7 +23,6 @@ from pydantic import BaseModel, Field
 
 from app.workflow.citations import claim_in_answer, normalize_text, quote_supported
 from app.workflow.prompts import VERIFIER_SYSTEM_PROMPT
-from app.workflow.providers import get_llm
 from app.workflow.retrieval import format_context
 from app.workflow.state import ChatState
 
@@ -75,10 +74,6 @@ _verifier_prompt = ChatPromptTemplate.from_messages(
         ),
     ]
 )
-
-
-def _verifier_chain():
-    return _verifier_prompt | get_llm(purpose="verify").with_structured_output(VerificationResult)
 
 
 def _sentence_count(text: str) -> int:
@@ -206,87 +201,6 @@ what the draft itself reveals. Judge the entire answer, including implications."
         ]
     )
     return prompt
-
-
-def _leakage_check(state: ChatState, draft: str) -> LeakageCheck:
-    return (_leakage_prompt() | get_llm(purpose="verify").with_structured_output(LeakageCheck)).invoke({
-        "question": state["question"], "assignment_context": state.get("assignment_context") or "", "draft": draft,
-    })
-
-
-def verify_answer(state: ChatState, draft: str) -> dict:
-    """Chấm draft; trả dict {ok, feedback, claims, no_solution_ok}."""
-    docs = state.get("retrieved_docs") or []
-    intent = state.get("intent") or "course_qa"
-
-    if intent == "exercise_hints" and state.get("assignment_context"):
-        try:
-            if option_disclosures(draft, state["assignment_context"]):
-                return {
-                    "ok": False,
-                    "feedback": "Không nhắc lại nội dung phương án. Chỉ hướng dẫn cách tự kiểm tra, không đưa ra nhận định giúp chọn hay loại phương án.",
-                    "claims": [],
-                    "no_solution_ok": False,
-                }
-            leakage = _leakage_check(state, draft)
-            if not leakage.safe or leakage.inferred_options:
-                return {
-                    "ok": False,
-                    "feedback": f"Gợi ý làm lộ phương án: {leakage.reason}. Chỉ đưa phương pháp, không thực hiện phép so sánh hay kết luận thay học viên.",
-                    "claims": [],
-                    "no_solution_ok": False,
-                }
-        except Exception:
-            logger.warning("Không kiểm tra được lộ đáp án", exc_info=True)
-            return {
-                "ok": False,
-                "feedback": "Không kiểm tra được tính an toàn của gợi ý.",
-                "claims": [],
-                "no_solution_ok": False,
-            }
-
-    try:
-        result: VerificationResult = _verifier_chain().invoke(
-            {
-                "intent": intent,
-                "support_mode": state.get("support_mode", "hint"),
-                "assignment_context": state.get("assignment_context") or "(không có bài tập)",
-                "question": state["question"],
-                "draft": draft,
-                "context": format_context(docs) or "(không có tài liệu)",
-            }
-        )
-    except Exception:
-        logger.warning("Verifier lỗi — coi như không đạt", exc_info=True)
-        return {
-            "ok": False,
-            "feedback": "Không kiểm tra được citation; hãy viết lại chặt chẽ hơn.",
-            "claims": [],
-            "no_solution_ok": False,
-        }
-
-    problems = _check_result(result, draft, docs, intent, state.get("assignment_context") or "")
-    if intent == "exercise_hints" and option_disclosures(
-        draft, state.get("assignment_context") or ""
-    ):
-        problems.append(
-            "Lộ nội dung phương án: hãy chỉ hướng dẫn phương pháp, không nhắc lại định nghĩa giúp chọn hoặc loại phương án."
-        )
-    no_solution_ok = (
-        not (
-            intent == "exercise_hints"
-            and option_disclosures(draft, state.get("assignment_context") or "")
-        )
-        and not result.violates_no_solution
-        and not any(claim.violates_no_solution for claim in result.claims)
-    )
-    feedback = "\n".join(problems) or result.feedback
-    return {
-        "ok": not problems,
-        "feedback": feedback,
-        "claims": [claim.model_dump() for claim in result.claims],
-        "no_solution_ok": no_solution_ok,
-    }
 
 
 def safe_response(intent: str) -> str:

@@ -1,6 +1,6 @@
 import type { GazeBatchInput } from "@/lib/api/student";
 
-export interface QueuedGazeBatch {
+interface QueuedGazeBatch {
   id: string;
   sessionId: string;
   batch: GazeBatchInput;
@@ -60,7 +60,7 @@ export async function enqueueGazeBatch(
   await pruneQueue();
 }
 
-export async function clearGazeQueue(): Promise<void> {
+async function clearGazeQueue(): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");

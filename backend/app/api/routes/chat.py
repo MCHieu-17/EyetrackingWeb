@@ -5,11 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.api.access import get_course_or_404, validate_uuid
-from app.api.deps import require_roles
+from app.api.deps import require_roles, user_rate_limit
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
 from app.models.auth import User
@@ -26,7 +27,6 @@ from app.models.course import (
 from app.models.quiz import QuizAttempt, QuizSpec
 from app.schemas.chat import (
     ChatMessageOut,
-    ChatReplyOut,
     ChatSendIn,
     ChatSessionOut,
     ChatSessionUpdate,
@@ -37,10 +37,7 @@ from app.services.chat_access import (
     context_key,
     require_chat_access,
 )
-from app.services.study_chat import (
-    answer_in_session,
-    stream_in_session,
-)
+from app.services.study_chat import stream_in_session
 
 router = APIRouter(tags=["chat"])
 
@@ -63,7 +60,11 @@ async def _session_or_404(
     db: AsyncSession, session_id: str, user: User
 ) -> ChatSession:
     validate_uuid(session_id, "Không tìm thấy phiên chat")
-    session = await db.get(ChatSession, session_id)
+    session = await db.get(
+        ChatSession,
+        session_id,
+        options=[raiseload(ChatSession.messages)],
+    )
     if (
         session is None
         or session.student_id != user.id
@@ -103,7 +104,14 @@ async def _published_version(db: AsyncSession, course: Course) -> CourseVersion:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
         )
-    version = await db.get(CourseVersion, course.published_version_id)
+    version = await db.get(
+        CourseVersion,
+        course.published_version_id,
+        options=[
+            raiseload(CourseVersion.modules),
+            raiseload(CourseVersion.items),
+        ],
+    )
     if version is None or version.state != "published":
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
@@ -247,9 +255,21 @@ async def _resolve_context(
     module_title: str | None = None
     quiz: QuizSpec | None = None
     if item is not None:
-        lesson = await db.get(Lesson, item.lesson_id)
-        lesson_version = await db.get(LessonVersion, item.lesson_version_id)
-        module = await db.get(CourseVersionModule, item.module_id)
+        lesson = await db.get(
+            Lesson,
+            item.lesson_id,
+            options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
+        )
+        lesson_version = await db.get(
+            LessonVersion,
+            item.lesson_version_id,
+            options=[raiseload(LessonVersion.slides)],
+        )
+        module = await db.get(
+            CourseVersionModule,
+            item.module_id,
+            options=[raiseload(CourseVersionModule.items)],
+        )
         module_title = module.title if module else None
         if lesson is not None and lesson.kind == "quiz":
             quiz = await db.get(QuizSpec, item.lesson_version_id)
@@ -368,6 +388,8 @@ async def list_sessions(
     course_id: UUID,
     assignment_id: UUID | None = Query(None, alias="assignmentId"),
     attempt_id: UUID | None = Query(None, alias="attemptId"),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -416,12 +438,13 @@ async def list_sessions(
             ChatSession.archived_at.is_(None),
         )
         .order_by(ChatSession.updated_at.desc())
+        .options(raiseload(ChatSession.messages))
     )
     if assignment_id is not None:
         stmt = stmt.where(ChatSession.lesson_version_id == str(assignment_id))
     if attempt_id is not None:
         stmt = stmt.where(ChatSession.quiz_attempt_id == str(attempt_id))
-    rows = (await db.execute(stmt)).all()
+    rows = (await db.execute(stmt.limit(limit).offset(offset))).all()
     return [
         ChatSessionOut(
             id=session.id,
@@ -442,56 +465,19 @@ async def list_sessions(
 
 
 @router.post(
-    "/api/courses/{course_id}/chat",
-    response_model=ChatReplyOut,
-    dependencies=[Depends(rate_limit(20, 60, "study-chat"))],
-)
-async def send_message(
-    course_id: UUID,
-    body: ChatSendIn,
-    user: User = Depends(require_roles("student")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_course_or_404(db, str(course_id))
-    await _require_enrolled(db, course.id, user)
-    await require_chat_access(db, course.id, user.id)
-    (
-        session,
-        version,
-        lesson,
-        lesson_version,
-        module_title,
-        quiz,
-        attempt,
-        support_mode,
-    ) = await _prepare(db, course, body, user)
-
-    answer, citations, intent, verified = await answer_in_session(
-        db,
-        course=course,
-        course_version=version,
-        session=session,
-        message=body.message,
-        lesson=lesson,
-        lesson_version=lesson_version,
-        module_title=module_title,
-        quiz=quiz,
-        attempt=attempt,
-        support_mode=support_mode,
-        draft_answers=body.draft_answers,
-    )
-    return ChatReplyOut(
-        session_id=session.id,
-        answer=answer,
-        citations=citations,
-        intent=intent,
-        verified=verified,
-    )
-
-
-@router.post(
     "/api/courses/{course_id}/chat/stream",
-    dependencies=[Depends(rate_limit(20, 60, "study-chat-stream"))],
+    dependencies=[
+        Depends(rate_limit(20, 60, "study-chat-stream")),
+        # Mỗi tài khoản chỉ gửi 1 tin nhắn mỗi 5 giây, trên mọi thiết bị/IP.
+        Depends(
+            user_rate_limit(
+                1,
+                5,
+                "study-chat-stream",
+                detail="Bạn gửi tin nhắn quá nhanh.",
+            )
+        ),
+    ],
 )
 async def stream_message(
     course_id: UUID,
@@ -543,6 +529,8 @@ async def stream_message(
 )
 async def list_messages(
     session_id: str,
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -556,6 +544,8 @@ async def list_messages(
                 select(ChatMessage)
                 .where(ChatMessage.session_id == session.id)
                 .order_by(ChatMessage.created_at)
+                .limit(limit)
+                .offset(offset)
             )
         )
         .scalars()
@@ -595,6 +585,9 @@ async def delete_session(
     db: AsyncSession = Depends(get_db),
 ):
     session = await _session_or_404(db, session_id, user)
-    await db.delete(session)
+    await db.execute(
+        delete(ChatMessage).where(ChatMessage.session_id == session.id)
+    )
+    await db.execute(delete(ChatSession).where(ChatSession.id == session.id))
     await db.commit()
     return {"status": "ok"}

@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthLayout } from "@/components/account/auth-layout";
 import { LoginForm } from "@/components/account/login-form";
-import { DemoLoginLinks } from "@/components/account/demo-login-links";
 
 export const metadata: Metadata = {
   title: "Đăng nhập – GazeEdu",
 };
 
 export default function LoginPage() {
-  const demo = process.env.NEXT_PUBLIC_DEMO === "1";
   return (
     <AuthLayout>
       <div className="mb-6 space-y-1.5 text-center lg:text-left">
@@ -19,15 +17,11 @@ export default function LoginPage() {
         <p className="text-sm text-muted-foreground">Đăng nhập để tiếp tục sử dụng GazeEdu.</p>
       </div>
       <LoginForm />
-      {demo && <DemoLoginLinks />}
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Chưa có tài khoản?{" "}
         <Link href="/account/register" className="font-semibold text-foreground underline underline-offset-2">
-          Đăng ký ngay
+          Đăng ký bằng Outlook
         </Link>
-      </p>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        Gặp sự cố đăng nhập? Liên hệ quản trị viên trường của bạn.
       </p>
     </AuthLayout>
   );

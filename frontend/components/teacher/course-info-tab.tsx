@@ -47,6 +47,7 @@ export function CourseInfoTab({
   const [description, setDescription] = useState("");
   const [baseline, setBaseline] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -101,9 +102,9 @@ export function CourseInfoTab({
   }, [guard, canManage, dirty, save]);
 
   const changeStatusWithFlash = async (next: CourseStatus, note: string) => {
-    const ok = await changeStatus(next);
-    if (ok) flash("ok", note);
-    else flash("err", "Không đổi được trạng thái khóa học. Vui lòng thử lại.");
+    const error = await changeStatus(next);
+    if (!error) flash("ok", note);
+    else flash("err", error);
   };
 
   const requestPublish = () => {
@@ -112,6 +113,13 @@ export function CourseInfoTab({
       return;
     }
     setConfirmPublish(true);
+  };
+
+  const openItem = (lessonId: string) => {
+    const proceed = () =>
+      router.push(`/teacher/courses/${courseId}?tab=content&lesson=${lessonId}`);
+    if (guard) guard.confirmLeave(proceed);
+    else proceed();
   };
 
   if (isLoading && !course) return <FullPageSpinner label="Đang tải khóa học…" />;
@@ -189,7 +197,7 @@ export function CourseInfoTab({
             <p className="text-sm font-semibold text-black">
               {report.blocking ? "Phải sửa trước khi xuất bản" : "Cân nhắc trước khi xuất bản"}
             </p>
-            <PublishIssueList issues={report.issues} />
+            <PublishIssueList issues={report.issues} onOpenItem={openItem} />
           </div>
         )}
 
@@ -248,7 +256,7 @@ export function CourseInfoTab({
           <Button
             variant="destructive"
             className="rounded-full"
-            disabled={saving}
+            disabled={saving || deleting || statusSaving}
             onClick={() => setConfirmDelete(true)}
           >
             <Icon name="ri-delete-bin-line" className="size-4" />
@@ -261,6 +269,7 @@ export function CourseInfoTab({
         open={checklistOpen}
         onOpenChange={setChecklistOpen}
         report={report}
+        onOpenItem={openItem}
       />
 
       <ConfirmDialog
@@ -293,22 +302,27 @@ export function CourseInfoTab({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Xóa khóa học này?"
-        description="Khóa học cùng toàn bộ nội dung và đăng ký liên quan sẽ bị xóa. Không thể hoàn tác."
+        description="Khóa học cùng toàn bộ nội dung, đăng ký, dữ liệu điểm nhìn/AOI và tệp trên R2 sẽ bị xóa vĩnh viễn. Không thể hoàn tác."
         confirmLabel="Xóa khóa học"
         destructive
-        loading={saving}
+        loading={deleting}
         onConfirm={async () => {
-          setConfirmDelete(false);
+          setDeleting(true);
           try {
             await deleteCourse(courseId);
             // Cache danh sách sống 2 phút (staleTime) → phải xoá hẳn entry, nếu
             // không khóa vừa xóa vẫn hiện trong danh sách khi quay về /teacher.
             queryClient.removeQueries({ queryKey: ["teacher", "courses"] });
             queryClient.removeQueries({ queryKey: ["teacher", "course-tree", courseId] });
+            queryClient.removeQueries({ queryKey: ["teacher", "course-students", courseId] });
+            setConfirmDelete(false);
             router.replace("/teacher");
             router.refresh();
           } catch (e) {
+            setConfirmDelete(false);
             flash("err", `Không xóa được khóa học: ${e instanceof Error ? e.message : "lỗi"}`);
+          } finally {
+            setDeleting(false);
           }
         }}
       />

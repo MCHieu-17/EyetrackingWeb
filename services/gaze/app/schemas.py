@@ -42,8 +42,6 @@ class CalibrateResult(BaseModel):
 class TrainResult(BaseModel):
     status: Literal["ok"] = "ok"
     n_samples: int
-    # None khi không đủ mẫu để ước lượng MAE (ví dụ chỉ 1 điểm) — không phải NaN.
-    mae_px: float | None = None
 
 
 class InsufficientSamples(BaseModel):

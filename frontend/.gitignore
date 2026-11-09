@@ -27,9 +27,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — dự án chỉ dùng .env ở gốc repo
 .env*
-!.env.example
+
+# Next.js tự sinh khi phát hiện AI agent; đã tắt bằng agentRules: false
+AGENTS.md
+CLAUDE.md
 
 # vercel
 .vercel

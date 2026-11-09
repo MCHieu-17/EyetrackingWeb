@@ -9,7 +9,6 @@ backend/.venv
 
 # Env (giữ .env.example)
 .env
-frontend/.env.local
 
 # Log local
 *.log
@@ -27,6 +26,9 @@ backend/media/
 
 # Next.js
 frontend/.next
+# Next.js tự sinh khi phát hiện AI agent; đã tắt bằng agentRules: false
+frontend/AGENTS.md
+frontend/CLAUDE.md
 # PDF.js worker/assets được copy từ node_modules khi dev/build
 frontend/public/pdf.worker.min.mjs
 frontend/public/pdfjs/

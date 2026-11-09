@@ -20,6 +20,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Giây phải chờ (header Retry-After) khi bị giới hạn tần suất. */
+    public retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -31,7 +33,7 @@ export const MAX_UPLOAD_LABEL = `${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`;
 /** Số trang PDF tối đa backend chấp nhận (settings.max_slide_pages). */
 export const MAX_SLIDE_PAGES = 150;
 
-export interface ApiRequestOptions {
+interface ApiRequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
@@ -39,6 +41,8 @@ export interface ApiRequestOptions {
   signal?: AbortSignal;
   keepalive?: boolean;
   skipAuthRefresh?: boolean;
+  /** Timeout cho mỗi lần fetch (ms). Mặc định 30s; 0 = không timeout. */
+  timeoutMs?: number;
 }
 
 function buildUrl(path: string, params?: ApiRequestOptions["params"]) {
@@ -155,24 +159,19 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     signal,
     keepalive,
     skipAuthRefresh = false,
+    timeoutMs = 30_000,
   } = options;
 
-  // Chế độ demo: trả dữ liệu giả, không gọi backend.
-  if (process.env.NEXT_PUBLIC_DEMO === "1") {
-    const { isDemoMode, demoResponse } = await import("@/lib/demo");
-    if (isDemoMode()) {
-      const data = demoResponse(path, method, body);
-      if (data !== undefined) {
-        await new Promise((r) => setTimeout(r, 120));
-        return data as T;
-      }
-    }
-  }
-
-  const doFetch = (): Promise<Response> =>
-    fetch(buildUrl(path, params), {
+  const doFetch = (): Promise<Response> => {
+    const canTimeout =
+      timeoutMs > 0 &&
+      typeof AbortSignal !== "undefined" &&
+      typeof AbortSignal.timeout === "function";
+    const requestSignal =
+      signal ?? (canTimeout ? AbortSignal.timeout(timeoutMs) : undefined);
+    return fetch(buildUrl(path, params), {
       method,
-      signal,
+      signal: requestSignal,
       keepalive,
       credentials: "include",
       headers: {
@@ -183,6 +182,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+  };
 
   let res = await doFetch();
 
@@ -213,17 +213,6 @@ export async function apiFetchMultipart<T>(
   form: FormData,
   method: "POST" | "PUT" | "PATCH" = "POST",
 ): Promise<T> {
-  {
-    const { isDemoMode, demoResponse } = await import("@/lib/demo");
-    if (isDemoMode()) {
-      const data = demoResponse(path, method);
-      if (data !== undefined) {
-        await new Promise((r) => setTimeout(r, 200));
-        return data as T;
-      }
-    }
-  }
-
   const doFetch = (): Promise<Response> =>
     fetch(buildUrl(path), {
       method,

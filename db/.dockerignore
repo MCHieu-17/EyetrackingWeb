@@ -1,0 +1,7 @@
+# Build context cho image migrations: chỉ cần runner + file SQL.
+# README/seed dev không vào image.
+*
+!migrations/
+!migrations/*.sql
+!migrate.sh
+!chatbot_role.sql

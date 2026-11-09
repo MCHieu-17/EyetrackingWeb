@@ -9,27 +9,7 @@ Citation do LLM sinh ra không được tin tuyệt đối:
 import re
 import unicodedata
 
-CITE_RE = re.compile(r"\[(\d+)\]")
 WORD_RE = re.compile(r"\w+", re.UNICODE)
-
-
-def extract_citation_ids(text: str) -> list[int]:
-    return [int(match.group(1)) for match in CITE_RE.finditer(text or "")]
-
-
-def sanitize_citations(text: str, citations: list[dict]) -> str:
-    """Bỏ các nhãn [n] không tồn tại; giữ nguyên phần còn lại."""
-    limit = len(citations)
-
-    def _replace(match: re.Match) -> str:
-        index = int(match.group(1))
-        return match.group(0) if 1 <= index <= limit else ""
-
-    # Keep code, links and math byte-for-byte, including indentation/newlines.
-    protected = re.compile(r"(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`|\$\$[\s\S]*?\$\$|(?<!\\)\$[^$\n]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\[[^\]\n]*\]\([^\n)]*\))")
-    parts = protected.split(text or "")
-    cleaned = "".join(part if i % 2 else re.sub(r" +([.,;:!?])", r"\1", CITE_RE.sub(_replace, part)) for i, part in enumerate(parts))
-    return cleaned.strip()
 
 
 def normalize_text(text: str) -> str:
@@ -79,28 +59,3 @@ def claim_in_answer(claim: str, answer: str) -> bool:
     a_tokens = set(WORD_RE.findall(a))
     overlap = sum(1 for token in c_tokens if token in a_tokens) / len(c_tokens)
     return overlap >= 0.8
-
-
-def chunk_text(text: str, size: int = 48) -> list[str]:
-    """Chia answer thành chunk nhỏ để stream sau khi verify.
-
-    Cắt theo ranh giới từ để frontend render Markdown mượt hơn.
-    """
-    if not text:
-        return []
-    chunks: list[str] = []
-    current: list[str] = []
-    length = 0
-    for word in text.split(" "):
-        piece = word if not current else " " + word
-        if length + len(piece) > size and current:
-            chunks.append("".join(current))
-            # Giữ khoảng trắng ở ranh giới chunk: frontend nối token trực tiếp.
-            current = [" " + word]
-            length = 1 + len(word)
-        else:
-            current.append(piece)
-            length += len(piece)
-    if current:
-        chunks.append("".join(current))
-    return chunks

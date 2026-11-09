@@ -6,7 +6,6 @@ import type {
   ModuleItemRef,
   ModuleNode,
   StudentRow,
-  SlideStat,
   SlideAdmin,
 } from "@/lib/types/domain";
 import { formatShortDate } from "@/lib/utils";
@@ -37,7 +36,7 @@ export function fetchCourseStudents(courseId: string): Promise<StudentRow[]> {
   return apiFetch<StudentRow[]>(`/api/teacher/courses/${courseId}/students`);
 }
 
-export interface StudentDirectoryEntry {
+interface StudentDirectoryEntry {
   id: string;
   name: string;
   code: string;
@@ -70,16 +69,7 @@ export function removeCourseStudent(
   });
 }
 
-export function fetchHeatmap(
-  lessonId: string,
-  scope: "class" | string = "class",
-): Promise<SlideStat[]> {
-  return apiFetch<SlideStat[]>(`/api/teacher/lessons/${lessonId}/heatmap`, {
-    params: scope === "class" ? {} : { student_id: scope },
-  });
-}
-
-export interface CourseWriteInput {
+interface CourseWriteInput {
   title: string;
   description?: string;
   status?: CourseStatus;
@@ -235,17 +225,11 @@ export function fetchLessonSlidesAdmin(lessonId: string): Promise<SlideAdmin[]> 
   return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`);
 }
 
-export function setSlideKey(slideId: string, isKey: boolean): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>(`/api/teacher/slides/${slideId}`, {
-    method: "PATCH",
-    body: { isKey },
+export function reindexLessonSlides(
+  lessonId: string,
+): Promise<{ ok: boolean; queued: number }> {
+  return apiFetch(`/api/teacher/lessons/${lessonId}/slides/reindex`, {
+    method: "POST",
   });
 }
-
-export function deleteSlide(slideId: string): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>(`/api/teacher/slides/${slideId}`, {
-    method: "DELETE",
-  });
-}
-
 

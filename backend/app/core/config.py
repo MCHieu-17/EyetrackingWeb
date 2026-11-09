@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     chatbot_ingest_timeout_seconds: float = 600
     chatbot_ingest_attempts: int = 3
     chatbot_ingest_backoff_seconds: float = 5
+    # Chia danh sách slide thành từng batch để một request không chạy quá lâu
+    # (VLM + embedding tuần tự) và mỗi batch kịp cập nhật trạng thái.
+    chatbot_ingest_batch_size: int = 8
 
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -42,16 +45,41 @@ class Settings(BaseSettings):
     cookie_samesite: str = "lax"  # lax đủ cho same-site rewrite, strict nếu muốn
     cookie_domain: str | None = None  # None = host-only (khuyến nghị cho rewrite)
 
+    # Microsoft 365 / Outlook OAuth (single tenant của trường).
+    # Để trống CLIENT_ID/SECRET/TENANT_ID → tắt đăng nhập Outlook.
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant_id: str = ""
+    microsoft_redirect_uri: str = (
+        "http://localhost:3000/api/auth/oauth/microsoft/callback"
+    )
+    # Danh sách domain email được phép, phẩy phân tách. Trống = cho phép mọi
+    # tài khoản thuộc tenant (khuyến nghị vì đã giới hạn single tenant).
+    microsoft_allowed_domains: str = ""
+    # Origin frontend để redirect sau callback OAuth.
+    frontend_url: str = "http://localhost:3000"
+
     @property
     def cookie_secure_resolved(self) -> bool:
         if self.cookie_secure is not None:
             return self.cookie_secure
         return not self.debug
 
-    gaze_downsample_hz: float = 4.0
-    # Tần số lưu gaze RAW (viewport). 0 = lưu tất cả sample client gửi.
-    gaze_raw_hz: float = 15.0
-    gaze_batch_max: int = 2000
+    @property
+    def microsoft_oauth_enabled(self) -> bool:
+        return bool(
+            self.microsoft_client_id
+            and self.microsoft_client_secret
+            and self.microsoft_tenant_id
+        )
+
+    @property
+    def microsoft_allowed_domain_list(self) -> list[str]:
+        return [
+            domain.strip().lower()
+            for domain in self.microsoft_allowed_domains.split(",")
+            if domain.strip()
+        ]
 
     # Dải mạng proxy tin cậy (CIDR, phẩy phân tách) — chỉ khi request đến từ
     # peer trong dải này mới tin header X-Forwarded-For (chống giả mạo IP).
@@ -62,10 +90,6 @@ class Settings(BaseSettings):
     # Redis (tùy chọn). Dùng cho rate-limit + cache analytics. Để trống → fallback
     # in-memory (1 process, dev/test). Ví dụ: redis://localhost:6379/0
     redis_url: str = ""
-    # TTL (giây) cho cache heatmap analytics.
-    heatmap_cache_ttl_seconds: int = 60
-    # Khoảng cách tối thiểu (giây) giữa 2 lần refresh_aggregates cho cùng 1 lesson.
-    aggregate_refresh_throttle_seconds: int = 10
 
     # Thư mục lưu slide ảnh render từ PDF (mount StaticFiles tại /media).
     media_dir: str = "media"
@@ -91,10 +115,6 @@ class Settings(BaseSettings):
     content_worker_poll_seconds: float = 3.0
     # Job processing quá lâu (worker chết) sẽ được đưa lại hàng đợi.
     content_worker_stale_seconds: int = 600
-
-    # Tính điểm hoàn thành bài học theo tỷ lệ gaze trên trang.
-    mastery_coverage_threshold: float = 0.85      # tỷ lệ gaze trên trang >= 85% → đủ trang
-    mastery_key_weight: float = 0.85              # trọng số nhóm slide trọng tâm (còn lại 0.15)
 
     @property
     def cors_origin_list(self) -> list[str]:

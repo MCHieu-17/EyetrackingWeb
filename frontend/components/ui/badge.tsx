@@ -32,5 +32,3 @@ export function Badge({ className, variant, ...props }: BadgeProps) {
     <span data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
-
-export { badgeVariants };

@@ -13,7 +13,7 @@ router = APIRouter(tags=["quiz-specs"])
 
 
 @router.patch(
-    "/api/teacher/quiz-specs/{lesson_version_id}",
+    "/teacher/quiz-specs/{lesson_version_id}",
     response_model=QuizAssignmentOut,
 )
 async def update_quiz_spec(
@@ -65,9 +65,19 @@ async def update_quiz_spec(
             question.model_dump(by_alias=True) for question in body.questions
         ]
     content.bump_generation(draft)
+    if body.status == "published":
+        # "Giao bài cho học viên" phải đưa bài tập vào bản xuất bản để sinh
+        # viên thấy. Bản xuất bản là bất biến nên cách duy nhất là xuất bản
+        # course version nháp hiện tại (kéo theo các thay đổi nháp khác).
+        await content.publish_course(db, course, user, None)
     await db.commit()
     await db.refresh(quiz)
     await db.refresh(draft_lesson_version)
+
+    published_quiz_lessons = await content.published_quiz_lesson_ids(db, course)
+    effective_status = (
+        "published" if lesson.id in published_quiz_lessons else "draft"
+    )
 
     return QuizAssignmentOut(
         id=draft_lesson_version.id,
@@ -79,7 +89,7 @@ async def update_quiz_spec(
         instructions=quiz.instructions,
         due_at=quiz.due_at,
         duration_minutes=quiz.duration_minutes,
-        status="draft" if draft_lesson_version.state == "draft" else "published",
+        status=effective_status,
         created_at=draft_lesson_version.created_at,
         allow_chatbot=quiz.allow_chatbot,
         allow_retry=quiz.allow_retry,

@@ -1,41 +1,30 @@
 import { apiFetch } from "./client";
 
-export interface TeacherDirectory {
+export interface AdminStudent {
   id: string;
   name: string;
-  code: string;
-  email?: string | null;
-  department?: string | null;
+  email: string;
+  studentCode?: string | null;
+  program?: string | null;
+  avatarUrl?: string | null;
+  createdAt: string;
 }
 
-export interface CourseTeacher {
-  teacherId: string;
-  name: string;
-  code: string;
-  email?: string | null;
-  isOwner: boolean;
+interface PromoteStudentResult {
+  ok: boolean;
+  teacherCode: string;
 }
 
-export function fetchTeachers(q?: string): Promise<TeacherDirectory[]> {
-  return apiFetch<TeacherDirectory[]>("/api/admin/teachers", { params: { q } });
+export function fetchAdminStudents(q?: string): Promise<AdminStudent[]> {
+  return apiFetch<AdminStudent[]>("/api/admin/students", { params: { q } });
 }
 
-export function fetchCourseTeachers(courseId: string): Promise<CourseTeacher[]> {
-  return apiFetch<CourseTeacher[]>(`/api/admin/courses/${courseId}/teachers`);
-}
-
-export function assignTeachers(
-  courseId: string,
-  teacherIds: string[],
-): Promise<{ ok: boolean; assigned: string[]; added: number }> {
-  return apiFetch(`/api/admin/courses/${courseId}/teachers`, {
+export function promoteStudent(
+  userId: string,
+  payload: { teacherCode?: string | null; department?: string | null },
+): Promise<PromoteStudentResult> {
+  return apiFetch<PromoteStudentResult>(`/api/admin/students/${userId}/promote`, {
     method: "POST",
-    body: { teacherIds },
-  });
-}
-
-export function unassignTeacher(courseId: string, teacherId: string): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/admin/courses/${courseId}/teachers/${teacherId}`, {
-    method: "DELETE",
+    body: payload,
   });
 }

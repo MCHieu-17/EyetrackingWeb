@@ -15,6 +15,7 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.responses import JSONResponse, Response
 
+from app.protocol import parse_frame
 from app.schemas import (
     CalibrateResult,
     DeletedResult,
@@ -25,7 +26,6 @@ from app.schemas import (
     SessionStatus,
     TrainResult,
 )
-from app.protocol import parse_frame
 from app.services import inference
 from app.services.sessions import SessionManager
 from app.settings import (
@@ -124,10 +124,10 @@ def train(sid: str):
 
     X = [m[:2] for ms in session.samples.values() for m in ms]
     y = [m[2:] for ms in session.samples.values() for m in ms]
-    mae = session.calib.evaluate(X, y)  # fit full ở cuối
+    session.calib.fit(X, y)
     session.state = "ready"
-    logger.info("Train xong sid=%s n_samples=%d mae=%s", sid, len(X), mae)
-    return TrainResult(n_samples=len(X), mae_px=mae)
+    logger.info("Train xong sid=%s n_samples=%d", sid, len(X))
+    return TrainResult(n_samples=len(X))
 
 
 @router.get("/session/{sid}/model")

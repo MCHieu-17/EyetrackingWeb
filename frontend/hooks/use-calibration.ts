@@ -35,7 +35,7 @@ interface ViewportSize {
 
 let frozenViewport: ViewportSize | null = null;
 
-// Cố ý KHÔNG theo dõi resize: 16 điểm phải giữ nguyên trong suốt một phiên
+// Cố ý KHÔNG theo dõi resize: 25 điểm phải giữ nguyên trong suốt một phiên
 // hiệu chỉnh, nếu không mô hình đã huấn luyện sẽ lệch với điểm đang hiển thị.
 // Đọc một lần lúc mount rồi "đóng băng"; mount sau (đổi màn hình rồi vào lại)
 // sẽ đọc lại kích thước mới.
@@ -53,7 +53,7 @@ function subscribeViewport(): () => void {
   };
 }
 
-export type CalibrationPhase = "idle" | "calibrating" | "sending" | "training";
+type CalibrationPhase = "idle" | "calibrating" | "sending" | "training";
 
 export interface CalibrationEngine {
   points: CalPoint[];
@@ -81,9 +81,9 @@ const ERROR_TEXT: Record<string, string> = {
   insufficient: "Chưa đủ mẫu cho điểm này — hãy bấm lại và giữ nhìn vào chấm.",
 };
 
-export interface UseCalibrationOptions {
-  /** Gọi khi train thành công; nhận maePx để caller quyết định điều hướng. */
-  onComplete: (result: { maePx: number | null }) => void;
+interface UseCalibrationOptions {
+  /** Gọi khi train thành công. */
+  onComplete: () => void;
   /** Lưu lên Postgres theo device (chỉ học viên). Mặc định true. */
   persistToBackend?: boolean;
 }
@@ -108,6 +108,7 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [camOn, setCamOn] = useState(false);
 
   const attachVideo = useCallback((el: HTMLVideoElement | null) => {
@@ -189,13 +190,20 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
       waited += 50;
     }
     if (video.videoWidth === 0) return null;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const scale = Math.min(1, 640 / video.videoWidth);
+    const width = Math.round(video.videoWidth * scale);
+    const height = Math.round(video.videoHeight * scale);
+    let canvas = canvasRef.current;
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      canvasRef.current = canvas;
+    }
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0);
-    return new Promise((resolve) => canvas.toBlob((b) => resolve(b ?? null), "image/jpeg", 0.9));
+    ctx.drawImage(video, 0, 0, width, height);
+    return new Promise((resolve) => canvas!.toBlob((b) => resolve(b ?? null), "image/jpeg", 0.8));
   }, []);
 
   const finish = useCallback(async () => {
@@ -213,7 +221,14 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
       setError(message);
       return;
     }
-    storeGazeSession(sessionId, window.innerWidth, window.innerHeight);
+    storeGazeSession(
+      sessionId,
+      window.innerWidth,
+      window.innerHeight,
+      window.screenX,
+      window.screenY,
+      window.devicePixelRatio || 1,
+    );
     if (persistToBackend) {
       // Lưu model .ubj để lần sau khôi phục không cần hiệu chỉnh lại
       const model = await downloadGazeModel(sessionId);
@@ -222,13 +237,14 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
           deviceFingerprint: getDeviceFingerprint(),
           numPoints: points.length,
           modelUbjBase64: bytesToBase64(model),
-          maePx: trained.maePx ?? null,
           screenWidth: window.innerWidth,
           screenHeight: window.innerHeight,
+          screenX: window.screenX,
+          screenY: window.screenY,
         });
       }
     }
-    onCompleteRef.current({ maePx: trained.maePx ?? null });
+    onCompleteRef.current();
   }, [sessionId, reset, persistToBackend, points]);
 
   const handleDotClick = useCallback(async () => {

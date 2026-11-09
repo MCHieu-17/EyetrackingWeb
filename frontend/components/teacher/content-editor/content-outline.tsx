@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import {
   DndContext,
   DragOverlay,
@@ -28,7 +27,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { INPUT_CLS } from "@/components/teacher/workspace-ui";
@@ -96,7 +94,7 @@ function InlineTitleInput({
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={() => {
-        if (draft.trim() && draft.trim() !== value) onCommit(draft);
+        if (draft.trim() && draft.trim() !== value) onCommit(draft.trim());
         else onCancel();
       }}
       onKeyDown={(event) => {
@@ -114,7 +112,6 @@ function InlineTitleInput({
 
 export function ContentOutline({
   tree,
-  courseId,
   canManage,
   selection,
   onSelect,
@@ -131,7 +128,6 @@ export function ContentOutline({
   busy,
 }: {
   tree: ModuleNode[];
-  courseId: string;
   canManage: boolean;
   selection: string | null;
   onSelect: (lessonId: string) => void;
@@ -139,7 +135,7 @@ export function ContentOutline({
   onToggleModule: (moduleId: string) => void;
   onAddModule: () => void;
   onAddItem: (moduleId: string, kind: "lesson" | "quiz") => void;
-  onRenameLesson: (lesson: LessonNode) => void;
+  onRenameLesson: (lesson: LessonNode, title: string) => void;
   onRenameModule: (moduleId: string, title: string) => void;
   onDeleteLesson: (lesson: LessonNode) => void;
   onDeleteModule: (module: ModuleNode) => void;
@@ -149,6 +145,7 @@ export function ContentOutline({
 }) {
   const [activeLesson, setActiveLesson] = useState<LessonNode | null>(null);
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [renamingLessonId, setRenamingLessonId] = useState<string | null>(null);
   const [lastFocusModuleId, setLastFocusModuleId] = useState<string | null>(null);
 
   // Chương vừa tạo → mở ngay ô đổi tên để giáo viên nhập tên thật.
@@ -242,10 +239,11 @@ export function ContentOutline({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onToggleModule(module.id)}
-                  onDoubleClick={() => canManage && setRenamingModuleId(module.id)}
+                  onClick={() =>
+                    canManage ? setRenamingModuleId(module.id) : onToggleModule(module.id)
+                  }
                   className="min-w-0 flex-1 truncate rounded-md px-1 text-left text-sm font-semibold text-black transition-colors hover:bg-[#e8f1e6]/55"
-                  title={module.title}
+                  title={canManage ? "Bấm để đổi tên chương" : module.title}
                 >
                   {module.title}
                 </button>
@@ -254,30 +252,16 @@ export function ContentOutline({
               <span className="shrink-0 text-[11px] font-medium text-black/45">{itemCount} mục</span>
 
               {canManage && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Thao tác chương ${module.title}`}
-                      title="Thao tác chương"
-                      className="text-muted-foreground"
-                    >
-                      <Icon name="ri-more-2-fill" className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setRenamingModuleId(module.id)}>
-                      <Icon name="ri-edit-line" />
-                      Đổi tên chương
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem destructive onSelect={() => onDeleteModule(module)}>
-                      <Icon name="ri-delete-bin-line" />
-                      Xóa chương
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Xóa chương ${module.title}`}
+                  title="Xóa chương"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => onDeleteModule(module)}
+                >
+                  <Icon name="ri-delete-bin-line" className="size-4" />
+                </Button>
               )}
             </div>
 
@@ -337,11 +321,17 @@ export function ContentOutline({
                           disabled={!canManage || busy}
                         >
                           <div
+                            onClick={(event) => {
+                              // Bấm vào vùng trống của dòng (kể cả nhãn trạng thái)
+                              // cũng chọn mục — không chỉ riêng ô tròn hay tên.
+                              if ((event.target as HTMLElement).closest("button, input, a")) return;
+                              onSelect(lesson.id);
+                            }}
                             className={cn(
-                              "flex items-center gap-2 rounded-[18px] border px-2.5 py-2 transition",
+                              "flex cursor-pointer items-center gap-2 rounded-[18px] border px-2.5 py-2 transition",
                               isSelected
                                 ? "border-[#6f8f69] bg-[#e8f1e6]/60 shadow-xs"
-                                : "border-[#eeeee9] bg-[#fdfdfa] hover:border-black/15",
+                                : "border-[#eeeee9] bg-[#fdfdfa] hover:border-black/15 hover:bg-[#f6f8f4]",
                             )}
                           >
                             {canManage && <DragHandle label={`Kéo để sắp xếp ${lesson.title}`} />}
@@ -351,74 +341,66 @@ export function ContentOutline({
                               onClick={() => onSelect(lesson.id)}
                               aria-current={isSelected ? "true" : undefined}
                               aria-label={`Mở ${lesson.title}`}
-                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                              title={`Mở ${lesson.title}`}
+                              className={cn(
+                                "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-semibold tabular-nums transition hover:ring-2 hover:ring-[#6f8f69]/30 active:scale-95",
+                                isQuiz ? "bg-black text-white" : "bg-[#e8f1e6] text-[#52704f]",
+                              )}
                             >
-                              <span
-                                className={cn(
-                                  "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
-                                  isQuiz ? "bg-black text-white" : "bg-[#e8f1e6] text-[#52704f]",
-                                )}
-                              >
-                                {isQuiz ? (
-                                  <Icon name="ri-file-text-line" className="size-4" />
-                                ) : (
-                                  lessonIndex + 1
-                                )}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span
-                                  className={cn(
-                                    "block truncate text-sm",
-                                    isSelected ? "font-semibold text-black" : "font-medium text-black",
-                                  )}
-                                  title={lesson.title}
-                                >
-                                  {lesson.title}
-                                </span>
-                                <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[11px] font-medium text-black/50">
-                                    {KIND_LABEL[lesson.kind] ?? "Nội dung"}
-                                  </span>
-                                  {itemStatus(lesson)}
-                                </span>
-                              </span>
+                              {isQuiz ? (
+                                <Icon name="ri-file-text-line" className="size-4" />
+                              ) : (
+                                lessonIndex + 1
+                              )}
                             </button>
 
-                            {canManage && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={`Thao tác ${lesson.title}`}
-                                    title="Thao tác"
-                                    className="shrink-0 text-muted-foreground"
-                                  >
-                                    <Icon name="ri-more-2-fill" className="size-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => onRenameLesson(lesson)}>
-                                    <Icon name="ri-edit-line" />
-                                    Đổi tên
-                                  </DropdownMenuItem>
-                                  {!isQuiz && (
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/teacher/courses/${courseId}/lessons/${lesson.id}/heatmap`}
-                                      >
-                                        <Icon name="ri-fire-line" />
-                                        Xem heatmap
-                                      </Link>
-                                    </DropdownMenuItem>
+                            <div className="min-w-0 flex-1">
+                              {renamingLessonId === lesson.id ? (
+                                <InlineTitleInput
+                                  value={lesson.title}
+                                  ariaLabel={`Đổi tên ${lesson.title}`}
+                                  onCommit={(value) => {
+                                    setRenamingLessonId(null);
+                                    onRenameLesson(lesson, value);
+                                  }}
+                                  onCancel={() => setRenamingLessonId(null)}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onSelect(lesson.id);
+                                    if (canManage) setRenamingLessonId(lesson.id);
+                                  }}
+                                  className={cn(
+                                    "block w-full truncate rounded-md px-1 text-left text-sm transition-colors",
+                                    canManage && "hover:bg-[#e8f1e6]/55",
+                                    isSelected ? "font-semibold text-black" : "font-medium text-black",
                                   )}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem destructive onSelect={() => onDeleteLesson(lesson)}>
-                                    <Icon name="ri-delete-bin-line" />
-                                    Xóa
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                  title={canManage ? "Bấm để đổi tên" : lesson.title}
+                                >
+                                  {lesson.title}
+                                </button>
+                              )}
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] font-medium text-black/50">
+                                  {KIND_LABEL[lesson.kind] ?? "Nội dung"}
+                                </span>
+                                {itemStatus(lesson)}
+                              </div>
+                            </div>
+
+                            {canManage && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Xóa ${lesson.title}`}
+                                title="Xóa"
+                                className="shrink-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => onDeleteLesson(lesson)}
+                              >
+                                <Icon name="ri-delete-bin-line" className="size-4" />
+                              </Button>
                             )}
                           </div>
                         </SortableRow>

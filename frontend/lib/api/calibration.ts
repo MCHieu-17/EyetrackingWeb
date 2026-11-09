@@ -10,8 +10,6 @@ import type { CalPoint } from "@/lib/calibration-geometry";
 export {
   buildCalibrationPoints,
   calibrationMargins,
-  getContainedImageRect,
-  screenGazeToSlide,
 } from "@/lib/calibration-geometry";
 export type { CalPoint } from "@/lib/calibration-geometry";
 
@@ -20,8 +18,10 @@ const CALIBRATED_AT_KEY = "gaze_calibrated_at";
 const SCREEN_W_KEY = "gaze_screen_w";
 const SCREEN_H_KEY = "gaze_screen_h";
 const DPR_KEY = "gaze_dpr";
+const SCREEN_X_KEY = "gaze_screen_x";
+const SCREEN_Y_KEY = "gaze_screen_y";
 
-export interface SessionCreateResult {
+interface SessionCreateResult {
   ok: boolean;
   sessionId?: string;
   error?: string;
@@ -44,7 +44,7 @@ export async function createGazeSession(
   }
 }
 
-export interface SampleResult {
+interface SampleResult {
   ok: boolean;
   status?: string;
   count?: number;
@@ -76,32 +76,25 @@ export async function submitCalibrationSample(
   }
 }
 
-export interface TrainResult {
+interface TrainResult {
   ok: boolean;
-  maePx?: number;
   error?: string;
-}
-
-export const MAX_TRAIN_MAE = 0.12;
-
-export function formatMaePercent(mae: number): string {
-  return `${(mae * 100).toFixed(1)}%`;
 }
 
 export async function trainGazeSession(sessionId: string): Promise<TrainResult> {
   try {
     const res = await fetch(`/gaze/session/${sessionId}/train`, { method: "POST" });
-    const data = (await res.json().catch(() => ({}))) as { status?: string; mae_px?: number };
-    if (data.status === "ok") return { ok: true, maePx: data.mae_px };
+    const data = (await res.json().catch(() => ({}))) as { status?: string };
+    if (data.status === "ok") return { ok: true };
     if (data.status === "insufficient_samples")
-      return { ok: false, error: "insufficient_samples", maePx: data.mae_px };
-    return { ok: false, error: `train_${res.status}`, maePx: data.mae_px };
+      return { ok: false, error: "insufficient_samples" };
+    return { ok: false, error: `train_${res.status}` };
   } catch {
     return { ok: false, error: "network_error" };
   }
 }
 
-export interface SessionStatusResult {
+interface SessionStatusResult {
   ok: boolean;
   ready: boolean;
   error?: string;
@@ -141,25 +134,43 @@ export async function checkFace(imageBlob: Blob): Promise<{ ok: boolean; error?:
   }
 }
 
+export interface CalibrationScreenSnapshot {
+  w: number;
+  h: number;
+  dpr: number;
+  screenX: number;
+  screenY: number;
+}
+
 export function storeGazeSession(
   sessionId: string,
   screenWidth?: number,
   screenHeight?: number,
+  screenX?: number,
+  screenY?: number,
+  dpr?: number,
 ): void {
   globalThis.localStorage?.setItem(SESSION_KEY, sessionId);
   globalThis.localStorage?.setItem(CALIBRATED_AT_KEY, new Date().toISOString());
-  globalThis.localStorage?.setItem(DPR_KEY, String(globalThis.devicePixelRatio || 1));
+  globalThis.localStorage?.setItem(
+    DPR_KEY,
+    String(dpr ?? (globalThis.devicePixelRatio || 1)),
+  );
   if (screenWidth && screenHeight) {
     globalThis.localStorage?.setItem(SCREEN_W_KEY, String(Math.round(screenWidth)));
     globalThis.localStorage?.setItem(SCREEN_H_KEY, String(Math.round(screenHeight)));
+  }
+  if (typeof screenX === "number" && typeof screenY === "number") {
+    globalThis.localStorage?.setItem(SCREEN_X_KEY, String(Math.round(screenX)));
+    globalThis.localStorage?.setItem(SCREEN_Y_KEY, String(Math.round(screenY)));
   }
   calibrationScreenSnapshot = undefined;
 }
 
 // Snapshot ổn định cho useSyncExternalStore (tránh trả object mới mỗi render).
-let calibrationScreenSnapshot: { w: number; h: number } | null | undefined;
+let calibrationScreenSnapshot: CalibrationScreenSnapshot | null | undefined;
 
-export function getCalibrationScreenSnapshot(): { w: number; h: number } | null {
+export function getCalibrationScreenSnapshot(): CalibrationScreenSnapshot | null {
   if (calibrationScreenSnapshot === undefined) {
     calibrationScreenSnapshot = getStoredCalibrationScreen();
   }
@@ -176,31 +187,20 @@ export function subscribeCalibrationScreen(callback: () => void): () => void {
   return () => window.removeEventListener("storage", handler);
 }
 
-export function getStoredCalibrationScreen(): { w: number; h: number } | null {
+function getStoredCalibrationScreen(): CalibrationScreenSnapshot | null {
   const w = Number(globalThis.localStorage?.getItem(SCREEN_W_KEY) ?? "");
   const h = Number(globalThis.localStorage?.getItem(SCREEN_H_KEY) ?? "");
   if (!w || !h) return null;
-  return { w, h };
-}
-
-export function getStoredCalibrationDpr(): number {
   const dpr = Number(globalThis.localStorage?.getItem(DPR_KEY) ?? "");
-  return dpr > 0 ? dpr : 1;
-}
-
-export function isCalibrationScreenStale(): boolean {
-  if (typeof window === "undefined") return false;
-  const stored = getStoredCalibrationScreen();
-  if (!stored) return false;
-  // Viewport lúc lấy mẫu phải BẰNG viewport lúc calibration. Không dùng
-  // tolerance: F11/zoom làm innerWidth/innerHeight đổi là phải hiệu chỉnh lại.
-  const currentDpr = window.devicePixelRatio || 1;
-  const storedDpr = getStoredCalibrationDpr();
-  return (
-    window.innerWidth !== stored.w ||
-    window.innerHeight !== stored.h ||
-    currentDpr !== storedDpr
-  );
+  const screenX = Number(globalThis.localStorage?.getItem(SCREEN_X_KEY) ?? "");
+  const screenY = Number(globalThis.localStorage?.getItem(SCREEN_Y_KEY) ?? "");
+  return {
+    w,
+    h,
+    dpr: dpr > 0 ? dpr : 1,
+    screenX: Number.isFinite(screenX) ? screenX : 0,
+    screenY: Number.isFinite(screenY) ? screenY : 0,
+  };
 }
 
 export function getStoredGazeSessionId(): string | null {
@@ -220,6 +220,8 @@ export function clearStoredGazeSession(): void {
   globalThis.localStorage?.removeItem(SCREEN_W_KEY);
   globalThis.localStorage?.removeItem(SCREEN_H_KEY);
   globalThis.localStorage?.removeItem(DPR_KEY);
+  globalThis.localStorage?.removeItem(SCREEN_X_KEY);
+  globalThis.localStorage?.removeItem(SCREEN_Y_KEY);
   calibrationScreenSnapshot = undefined;
 }
 
@@ -242,7 +244,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function base64ToBytes(b64: string): Uint8Array {
+function base64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -250,7 +252,7 @@ export function base64ToBytes(b64: string): Uint8Array {
 }
 
 /** Nạp model .ubj vào session để dùng ngay, bỏ qua bước hiệu chỉnh lại. */
-export async function importGazeModel(
+async function importGazeModel(
   sessionId: string,
   model: Uint8Array,
 ): Promise<boolean> {
@@ -277,9 +279,10 @@ export async function saveCalibrationToBackend(params: {
   deviceFingerprint: string;
   numPoints: number;
   modelUbjBase64: string;
-  maePx: number | null;
   screenWidth: number;
   screenHeight: number;
+  screenX?: number;
+  screenY?: number;
 }): Promise<boolean> {
   try {
     const { apiFetch } = await import("./client");
@@ -294,7 +297,8 @@ export async function saveCalibrationToBackend(params: {
         viewportWidthPx: params.screenWidth,
         viewportHeightPx: params.screenHeight,
         devicePixelRatio: globalThis.devicePixelRatio || 1,
-        maePx: params.maePx,
+        screenXPx: params.screenX,
+        screenYPx: params.screenY,
       },
     });
     return true;
@@ -304,16 +308,16 @@ export async function saveCalibrationToBackend(params: {
 }
 
 /** Tải model hiệu chỉnh đang active của thiết bị (nếu có). */
-export async function fetchActiveCalibrationModel(
+async function fetchActiveCalibrationModel(
   deviceFingerprint: string,
-): Promise<{ modelUbjBase64: string; maePx: number | null } | null> {
+): Promise<{ modelUbjBase64: string } | null> {
   try {
     const { apiFetch } = await import("./client");
-    const data = await apiFetch<{ modelUbjBase64: string; maePx?: number }>(
+    const data = await apiFetch<{ modelUbjBase64: string }>(
       "/api/calibrations/active/model",
       { params: { deviceFingerprint } },
     );
-    return { modelUbjBase64: data.modelUbjBase64, maePx: data.maePx ?? null };
+    return { modelUbjBase64: data.modelUbjBase64 };
   } catch {
     return null;
   }
@@ -328,6 +332,7 @@ export async function restoreGazeSessionFromBackend(
 ): Promise<boolean> {
   const stored = await fetchActiveCalibrationModel(deviceFingerprint);
   if (!stored) return false;
+  const active = await fetchActiveCalibration(deviceFingerprint);
   const session = await createGazeSession(
     buildCalibrationPoints(
       calibrationMargins(globalThis.innerWidth, globalThis.innerHeight),
@@ -339,45 +344,53 @@ export async function restoreGazeSessionFromBackend(
     deleteGazeSession(session.sessionId);
     return false;
   }
-  storeGazeSession(session.sessionId, globalThis.innerWidth, globalThis.innerHeight);
+  // Giữ đúng viewport/DPR lúc calibration để phép quy đổi gaze hoạt động
+  // chính xác kể cả khi người học đang zoom/resize.
+  storeGazeSession(
+    session.sessionId,
+    active?.viewportWidthPx ?? globalThis.innerWidth,
+    active?.viewportHeightPx ?? globalThis.innerHeight,
+    active?.screenX ?? undefined,
+    active?.screenY ?? undefined,
+    active?.devicePixelRatio ?? undefined,
+  );
   return true;
 }
 
 export async function fetchActiveCalibration(
   deviceFingerprint: string,
-): Promise<{ calibrated: boolean; calibratedAt: string | null } | null> {
+): Promise<{
+  calibrated: boolean;
+  calibratedAt: string | null;
+  viewportWidthPx: number | null;
+  viewportHeightPx: number | null;
+  devicePixelRatio: number | null;
+  screenX: number | null;
+  screenY: number | null;
+} | null> {
   try {
     const { apiFetch } = await import("./client");
-    const data = await apiFetch<{ calibrated: boolean; calibratedAt: string; maePx?: number }>(
-      "/api/calibrations/active",
-      { params: { deviceFingerprint } },
-    );
-    return { calibrated: data.calibrated, calibratedAt: data.calibratedAt };
+    const data = await apiFetch<{
+      calibrated: boolean;
+      calibratedAt: string;
+      viewportWidthPx?: number | null;
+      viewportHeightPx?: number | null;
+      devicePixelRatio?: number | null;
+      screenXPx?: number | null;
+      screenYPx?: number | null;
+    }>("/api/calibrations/active", { params: { deviceFingerprint } });
+    return {
+      calibrated: data.calibrated,
+      calibratedAt: data.calibratedAt,
+      viewportWidthPx: data.viewportWidthPx ?? null,
+      viewportHeightPx: data.viewportHeightPx ?? null,
+      devicePixelRatio: data.devicePixelRatio ?? null,
+      screenX: data.screenXPx ?? null,
+      screenY: data.screenYPx ?? null,
+    };
   } catch {
     return null;
   }
-}
-
-export interface CalibrationSettings {
-  enabled: boolean;
-  threshold: number;
-  updatedAt?: string | null;
-}
-
-export async function fetchAdminCalibrationSettings(): Promise<CalibrationSettings> {
-  const { apiFetch } = await import("./client");
-  return apiFetch<CalibrationSettings>("/api/admin/calibration-settings");
-}
-
-export async function updateAdminCalibrationSettings(patch: {
-  enabled: boolean;
-  threshold: number;
-}): Promise<CalibrationSettings> {
-  const { apiFetch } = await import("./client");
-  return apiFetch<CalibrationSettings>("/api/admin/calibration-settings", {
-    method: "PUT",
-    body: { enabled: patch.enabled, threshold: patch.threshold },
-  });
 }
 
 function getGazeWsOrigin(): string {

@@ -1,0 +1,14 @@
+# torch + torchvision (CPU) — dùng cho services/chatbot.
+#
+# Chatbot chạy embedding local Qwen3-Embedding-0.6B trên CPU; LLM/VLM gọi
+# River API. Không cần CUDA/nvidia-* nên image nhẹ hơn nhiều so với
+# services/gaze/Dockerfile (bản GPU chỉ dành cho gaze).
+#
+# Pin cùng phiên bản với bản GPU để hành vi model nhất quán.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+
+# numpy pin sẵn ở base (torchvision cần numpy), khớp numpy==1.26.4 mà
+# sentence-transformers/Qwen yêu cầu.
+numpy==1.26.4

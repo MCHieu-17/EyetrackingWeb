@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,12 +10,12 @@ import { useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import { MAX_SLIDE_PAGES, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/api/client";
 import {
   fetchSlideImportJob,
+  reindexLessonSlides,
   uploadLessonSlides,
   type SlideImportJob,
 } from "@/lib/api/teacher";
 import { cn } from "@/lib/utils";
 import type { LessonNode } from "@/lib/types/domain";
-import { KeySlideControls } from "./key-slide-controls";
 import { SlidePreview } from "./slide-preview";
 
 /** Trạng thái tài liệu: idle → uploading → success | error (giữ file để thử lại). */
@@ -69,11 +68,35 @@ export function LessonEditor({
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [pendingReplace, setPendingReplace] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexError, setReindexError] = useState("");
 
   const uploading = upload.status === "uploading";
   const slideCount = Math.max(lesson.slides, slides.length);
   const hasSlides = slideCount > 0;
-  const failedSlides = slides.filter((slide) => slide.embeddingStatus === "failed");
+  const unindexedSlides = slides.filter(
+    (slide) =>
+      slide.embeddingStatus === "failed" || slide.embeddingStatus === "none",
+  );
+  const pendingSlides = slides.filter((slide) => slide.embeddingStatus === "pending");
+
+  const retryIndex = async () => {
+    setReindexing(true);
+    setReindexError("");
+    try {
+      await reindexLessonSlides(lesson.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["teacher", "lesson-slides", lesson.id] }),
+        queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
+      ]);
+    } catch (error) {
+      setReindexError(
+        error instanceof Error ? error.message : "Không bắt đầu index lại được.",
+      );
+    } finally {
+      setReindexing(false);
+    }
+  };
 
   const validate = (file: File): string | null => {
     const lower = file.name.toLowerCase();
@@ -105,6 +128,13 @@ export function LessonEditor({
         queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
         queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] }),
       ]);
+      // Worker index nền ngay sau khi job import xong; làm mới thêm một lần
+      // để bắt trạng thái pending và bắt đầu poll.
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["teacher", "lesson-slides", lesson.id],
+        });
+      }, 3000);
       setUpload({
         status: "success",
         fileName: file.name,
@@ -289,15 +319,45 @@ export function LessonEditor({
           </Alert>
         )}
 
-        {failedSlides.length > 0 && (
+        {pendingSlides.length > 0 && (
+          <Alert
+            variant="info"
+            className="mt-3"
+            title={`${pendingSlides.length} trang đang được index cho trợ lý học tập`}
+          >
+            Hệ thống đang xử lý nền; bạn có thể tiếp tục soạn nội dung. Khóa học chỉ
+            xuất bản được khi tất cả trang đã index xong.
+          </Alert>
+        )}
+
+        {unindexedSlides.length > 0 && (
           <Alert
             variant="destructive"
             className="mt-3"
-            title={`${failedSlides.length} trang chưa index được cho trợ lý học tập`}
+            title={`${unindexedSlides.length} trang chưa index được cho trợ lý học tập`}
           >
-            Trợ lý sẽ không tìm thấy nội dung các trang này. Lỗi:{" "}
-            {failedSlides[0].embeddingError || "không rõ"}. Hệ thống tự thử lại khi bạn tải lại
-            PDF; quản trị viên có thể chạy reindex nếu lỗi kéo dài.
+            <p>
+              Trợ lý sẽ không tìm thấy nội dung các trang này. Lỗi:{" "}
+              {unindexedSlides[0].embeddingError || "chưa có thông tin"}. Khóa học
+              sẽ không xuất bản được cho tới khi tất cả trang index xong.
+            </p>
+            {reindexError && <p className="mt-1 text-xs">{reindexError}</p>}
+            <div className="mt-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="rounded-full border-black/10 bg-white"
+                onClick={() => void retryIndex()}
+                disabled={reindexing}
+              >
+                <Icon
+                  name={reindexing ? "ri-loader-4-line" : "ri-refresh-line"}
+                  className={cn("size-4", reindexing && "animate-spin")}
+                />
+                {reindexing ? "Đang xử lý…" : "Thử lại index"}
+              </Button>
+            </div>
           </Alert>
         )}
       </section>
@@ -313,36 +373,6 @@ export function LessonEditor({
           </div>
           <SlidePreview slides={slides} />
         </section>
-      )}
-
-      {/* Ít dùng → gập lại, không lồng thêm accordion nào khác. */}
-      {slides.length > 0 && (
-        <details className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
-          <summary className="cursor-pointer text-sm font-semibold text-black">
-            Cài đặt nâng cao (trang trọng tâm)
-          </summary>
-          <p className="mt-2 text-xs leading-5 text-black/60">
-            Đánh dấu trang trọng tâm để tính điểm hoàn thành bài học. Những thiết lập này ảnh
-            hưởng tới cách tính mức độ hoàn thành của học viên.
-          </p>
-          <p className="mt-1 text-xs leading-5 text-black/60">
-            Chấm điểm nhìn là thiết lập cấp khóa học —{" "}
-            <Link
-              href={`/teacher/courses/${courseId}?tab=info`}
-              className="font-medium text-[#3f573c] underline underline-offset-4"
-            >
-              mở tab Thông tin
-            </Link>
-            .
-          </p>
-          <div className="mt-1">
-            <KeySlideControls
-              lessonId={lesson.id}
-              canDelete={canManage}
-              slides={slides}
-            />
-          </div>
-        </details>
       )}
 
       {slidesLoading && slides.length === 0 && (

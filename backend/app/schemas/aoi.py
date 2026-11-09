@@ -1,15 +1,20 @@
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from app.schemas.common import CamelModel
 
+AOI_CODE_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
+
 
 class AoiDefinitionIn(CamelModel):
-    code: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    code: str = Field(min_length=1, max_length=64, pattern=AOI_CODE_PATTERN)
     name: str = Field(min_length=1, max_length=100)
     parent_id: str | None = None
     geometry: dict = Field(default_factory=dict)
+    is_container: bool = False
+    kind: str = Field(default="custom", pattern="^(text|image|table|drawing|custom|ui|system)$")
+    is_active: bool = True
 
 
 class AoiDefinitionOut(CamelModel):
@@ -18,25 +23,33 @@ class AoiDefinitionOut(CamelModel):
     name: str
     parent_id: str | None = None
     geometry: dict = Field(default_factory=dict)
+    is_container: bool = False
+    kind: str = "custom"
+    is_active: bool = True
 
 
-class AoiSetCreateIn(CamelModel):
-    scope: str = Field(pattern="^(slide|ui)$")
-    slide_version_id: str | None = None
-    ui_schema_version: str | None = Field(default=None, max_length=64)
+class AoiSetSaveIn(CamelModel):
     definitions: list[AoiDefinitionIn] = Field(default_factory=list, max_length=500)
-
-    @model_validator(mode="after")
-    def _scope_target(self):
-        if (self.scope == "slide") != (self.slide_version_id is not None):
-            raise ValueError("scope='slide' phải có slideVersionId và ngược lại")
-        if (self.scope == "ui") != (self.ui_schema_version is not None):
-            raise ValueError("scope='ui' phải có uiSchemaVersion và ngược lại")
-        return self
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
-class AoiSetUpdateIn(CamelModel):
-    definitions: list[AoiDefinitionIn] = Field(default_factory=list, max_length=500)
+class AoiSetGenerateIn(CamelModel):
+    slide_number: int | None = Field(default=None, ge=1)
+    merge: bool = False
+    # Thay các vùng gợi ý tự động (TEXT/IMAGE/TABLE) nhưng giữ vùng tự vẽ.
+    replace_auto: bool = False
+    # Xoá cả vùng tự vẽ, chỉ giữ container slide_n rồi tạo lại các vùng gợi ý.
+    reset_all: bool = False
+
+
+class AoiUiComponentIn(CamelModel):
+    code: str = Field(min_length=1, max_length=64, pattern=AOI_CODE_PATTERN)
+    name: str = Field(min_length=1, max_length=100)
+
+
+class AoiUiGenerateIn(CamelModel):
+    components: list[AoiUiComponentIn] = Field(default_factory=list, max_length=200)
+    merge: bool = True
 
 
 class AoiSetOut(CamelModel):
@@ -52,30 +65,10 @@ class AoiSetOut(CamelModel):
     definitions: list[AoiDefinitionOut] = Field(default_factory=list)
 
 
-class AoiSetPublishOut(CamelModel):
-    ok: bool = True
-    id: str
-    state: str
-
-
-class AnalysisRunCreateIn(CamelModel):
-    session_id: str
-    aoi_set_id: str
-    from_time: datetime
-    to_time: datetime
-    algorithm_version: str = Field(default="gaze-metrics-v1", max_length=64)
-    config: dict = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _time_range(self):
-        if self.to_time <= self.from_time:
-            raise ValueError("toTime phải sau fromTime")
-        return self
-
-
 class AnalysisRunOut(CamelModel):
     id: str
     session_id: str
+    presentation_id: str | None = None
     aoi_set_id: str
     from_time: datetime
     to_time: datetime
@@ -107,6 +100,7 @@ class AnalysisRunResultOut(CamelModel):
 
 class AoiRebuildIn(CamelModel):
     course_id: str
+    lesson_id: str | None = None
     from_time: datetime | None = None
     to_time: datetime | None = None
     algorithm_version: str = Field(default="gaze-metrics-v1", max_length=64)

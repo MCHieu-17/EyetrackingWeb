@@ -22,7 +22,6 @@ class ChatCitation(CamelModel):
     lesson_title: str = ""
     slide_id: str | None = None
     slide_index: int | None = None
-    image_url: str = ""
     pdf_url: str = ""
     page_number: int | None = None
     snippet: str = ""
@@ -40,14 +39,6 @@ class ChatSendIn(CamelModel):
         Annotated[str, Field(min_length=1, max_length=100)],
         Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=12)],
     ] = Field(default_factory=dict, max_length=200)
-
-
-class ChatReplyOut(CamelModel):
-    session_id: str
-    answer: str
-    citations: list[ChatCitation] = Field(default_factory=list)
-    intent: str | None = None
-    verified: bool = True
 
 
 class ChatSessionOut(CamelModel):

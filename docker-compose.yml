@@ -4,14 +4,57 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Env dùng chung cho backend API + các worker (content-worker, worker).
+# Service nào cần thêm biến riêng thì merge thêm bên dưới.
+x-backend-env: &backend-env
+  DATABASE_URL: ${DATABASE_URL_DOCKER}
+  REDIS_URL: ${REDIS_URL_DOCKER}
+  AI_HTTP_URL: http://gaze:8000
+  # Chatbot RAG service (nội bộ). Backend gọi qua tên service + token.
+  CHATBOT_URL: http://chatbot:8000
+  CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+  JWT_SECRET: ${JWT_SECRET}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+  # Dải mạng proxy tin cậy: chỉ peer trong dải này mới được tin X-Forwarded-For
+  # (nginx trong mạng docker nội bộ).
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+  FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+  DEBUG: ${DEBUG:-false}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+  # Microsoft 365 / Outlook OAuth (single tenant của trường).
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+  MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://localhost:3000/api/auth/oauth/microsoft/callback}
+  MICROSOFT_ALLOWED_DOMAINS: ${MICROSOFT_ALLOWED_DOMAINS:-}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  MEDIA_DIR: /app/media
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
+  MAX_PDF_BYTES: ${MAX_PDF_BYTES:-104857600}
+  MAX_SLIDE_PAGES: ${MAX_SLIDE_PAGES:-150}
+  MAX_SLIDE_RENDER_PIXELS: ${MAX_SLIDE_RENDER_PIXELS:-25000000}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+  COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  DB_POOL_MIN: ${DB_POOL_MIN:-5}
+  DB_POOL_MAX: ${DB_POOL_MAX:-20}
+
 # ============================================================
 # Stack LOCAL — build toàn bộ image từ source trên máy.
 # Không dùng GHCR, không pull_policy, không Cloudflare/Portainer.
 #
-#   ./ops/build_ai_base.sh          # lần đầu: build image nền torch/CUDA
 #   docker compose up -d --build    # build + chạy toàn bộ stack
+#   docker compose up -d            # chạy lại (image đã build)
 #
 # Web: http://localhost:3000 (nginx -> frontend/backend/gaze)
+# GPU: chỉ service `gaze`; chatbot embedding chạy CPU + River API.
 # ============================================================
 services:
   postgres:
@@ -19,6 +62,25 @@ services:
     container_name: eyetracking-postgres
     restart: unless-stopped
     logging: *default-logging
+    shm_size: 1gb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=on
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -33,14 +95,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    mem_limit: 2g
+    cpus: 2.0
 
   # Chạy migration một lần mỗi lần `docker compose up`. Runner db/migrate.sh
   # dùng bảng `schema_migrations`: chỉ chạy file chưa áp, chặn sửa file đã áp.
   # Service exit 1 ⇒ compose huỷ lần chạy đó; xem `docker logs eyetracking-migrate`.
   migrate:
     build:
-      context: .
-      dockerfile: Dockerfile.migrations
+      context: ./db
+      dockerfile: Dockerfile
     image: eyelearning-migrations:local
     container_name: eyetracking-migrate
     restart: "no"
@@ -53,6 +117,12 @@ services:
       PGUSER: ${POSTGRES_USER}
       PGDATABASE: ${POSTGRES_DB}
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Runner tự tạo/cập nhật role chatbot sau migrations. Phải khớp DSN của
+      # service chatbot (CHATBOT_DATABASE_URL_DOCKER).
+      CHATBOT_DB_USER: ${CHATBOT_DB_USER:-}
+      CHATBOT_DB_PASSWORD: ${CHATBOT_DB_PASSWORD:-}
+    mem_limit: 512m
+    cpus: 1.0
 
   redis:
     image: redis:7.4.11-alpine3.21
@@ -69,11 +139,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    mem_limit: 512m
+    cpus: 0.5
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: api
     image: eyelearning-backend:local
     container_name: eyetracking-backend
     restart: unless-stopped
@@ -84,32 +157,12 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL_DOCKER}
-      REDIS_URL: ${REDIS_URL_DOCKER}
-      AI_HTTP_URL: http://gaze:8000
-      # Chatbot RAG service (nội bộ). Backend gọi qua tên service + token.
-      CHATBOT_URL: http://chatbot:8000
-      CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+      <<: *backend-env
       CHATBOT_TIMEOUT_SECONDS: ${CHATBOT_TIMEOUT_SECONDS:-120}
       CHATBOT_INGEST_TIMEOUT_SECONDS: ${CHATBOT_INGEST_TIMEOUT_SECONDS:-600}
       CHATBOT_INGEST_ATTEMPTS: ${CHATBOT_INGEST_ATTEMPTS:-3}
       CHATBOT_INGEST_BACKOFF_SECONDS: ${CHATBOT_INGEST_BACKOFF_SECONDS:-5}
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
-      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
-      GAZE_DOWNSAMPLE_HZ: ${GAZE_DOWNSAMPLE_HZ:-4.0}
-      GAZE_RAW_HZ: ${GAZE_RAW_HZ:-15.0}
-      GAZE_BATCH_MAX: ${GAZE_BATCH_MAX:-2000}
-      # Dải mạng proxy tin cậy: chỉ peer trong dải này mới được tin X-Forwarded-For
-      # (nginx trong mạng docker nội bộ).
-      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
-      DEBUG: ${DEBUG:-false}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      CHATBOT_INGEST_BATCH_SIZE: ${CHATBOT_INGEST_BATCH_SIZE:-8}
     ports:
       - "127.0.0.1:8001:8001"
     volumes:
@@ -120,15 +173,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    mem_limit: 2g
+    cpus: 2.0
 
   # Worker chuyển đổi slide upload (LibreOffice) và tạo slide_version.
+  # Image riêng có LibreOffice/fonts; API không cần và không cài.
   content-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: eyelearning-backend:local
+      target: content-worker
+    image: eyelearning-backend-content-worker:local
     container_name: eyetracking-content-worker
     restart: unless-stopped
+    init: true
     logging: *default-logging
     command: ["python", "-m", "app.content_worker"]
     depends_on:
@@ -137,28 +195,22 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL_DOCKER}
-      REDIS_URL: ${REDIS_URL_DOCKER}
-      AI_HTTP_URL: http://gaze:8000
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
-      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      <<: *backend-env
       CONTENT_WORKER_POLL_SECONDS: ${CONTENT_WORKER_POLL_SECONDS:-3}
+      CONTENT_WORKER_STALE_SECONDS: ${CONTENT_WORKER_STALE_SECONDS:-600}
+      LIBREOFFICE_BINARY: ${LIBREOFFICE_BINARY:-soffice}
       LIBREOFFICE_TIMEOUT_SECONDS: ${LIBREOFFICE_TIMEOUT_SECONDS:-120}
-      DEBUG: ${DEBUG:-false}
     volumes:
       - backend-media:/app/media
+    mem_limit: 4g
+    cpus: 2.0
 
-  # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B.
-  # Build từ ./services/chatbot (FROM image nền docker/ai-base có torch CUDA).
+  # Worker tính analysis_runs (không cần LibreOffice → dùng image API).
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: api
     image: eyelearning-backend:local
     container_name: eyetracking-worker
     restart: unless-stopped
@@ -170,27 +222,25 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL_DOCKER}
-      REDIS_URL: ${REDIS_URL_DOCKER}
-      AI_HTTP_URL: http://gaze:8000
-      CHATBOT_URL: http://chatbot:8000
-      CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      <<: *backend-env
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
-      DEBUG: ${DEBUG:-false}
+    # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
+    healthcheck:
+      disable: true
+    mem_limit: 2g
+    cpus: 1.0
 
+  # Chatbot RAG: FastAPI + LangChain, embedding local Qwen3-Embedding-0.6B
+  # chạy CPU (stage ai-base trong services/chatbot/Dockerfile). LLM/VLM gọi
+  # River API. KHÔNG đặt `gpus: all` — GPU chỉ dành cho gaze.
   chatbot:
     build:
       context: ./services/chatbot
       dockerfile: Dockerfile
-      args:
-        AI_BASE: eyelearning-ai-base:latest
     image: eyelearning-chatbot:local
     container_name: eyetracking-chatbot
     restart: unless-stopped
     logging: *default-logging
-    gpus: all
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -199,12 +249,16 @@ services:
     environment:
       CHATBOT_DATABASE_URL: ${CHATBOT_DATABASE_URL_DOCKER}
       CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-10}
+      DB_POOL_RECONNECT_TIMEOUT: ${DB_POOL_RECONNECT_TIMEOUT:-10}
       LLM_NAME: ${LLM_NAME:-river}
       VLM_NAME: ${VLM_NAME:-river}
       EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
-      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cuda}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
       EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
       EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
       HF_TOKEN: ${HF_TOKEN:-}
@@ -257,13 +311,15 @@ services:
       timeout: 5s
       retries: 3
       start_period: 180s
+    mem_limit: 4g
+    cpus: 4.0
 
+  # Gaze cần GPU (NVIDIA driver + nvidia-container-toolkit trên host).
+  # Không có GPU: đặt DEVICE=cpu và bỏ `gpus: all` — chạy được nhưng rất chậm.
   gaze:
     build:
       context: ./services/gaze
       dockerfile: Dockerfile
-      args:
-        AI_BASE: eyelearning-ai-base:latest
     image: eyelearning-gaze:local
     container_name: eyetracking-gaze
     restart: unless-stopped
@@ -296,6 +352,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 180s
+    mem_limit: 6g
+    cpus: 4.0
 
   frontend:
     build:
@@ -308,7 +366,6 @@ services:
         # Browser dùng same-origin qua nginx.
         NEXT_PUBLIC_API_URL: ""
         NEXT_PUBLIC_GAZE_URL: ""
-        NEXT_PUBLIC_DEMO: "0"
     image: eyelearning-frontend:local
     container_name: eyetracking-frontend
     restart: unless-stopped
@@ -321,6 +378,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    mem_limit: 1g
+    cpus: 1.0
 
   nginx:
     build:
@@ -341,6 +400,12 @@ services:
       # chậm không được chặn nginx/backend — gaze chỉ ảnh hưởng tính năng AI.
       gaze:
         condition: service_started
+    mem_limit: 256m
+    cpus: 0.5
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
 volumes:
   pgdata:

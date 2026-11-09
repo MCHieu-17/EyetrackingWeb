@@ -22,7 +22,6 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".pdf", ".pptx", ".ppt", ".odp"}
 FORMAT_BY_EXTENSION = {
     ".pdf": "pdf",
     ".pptx": "pptx",

@@ -1,211 +1,171 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.access import escape_like, get_course_or_404
+from app.api.access import escape_like, validate_uuid
 from app.api.deps import require_roles
 from app.core.ratelimit import rate_limit
 from app.db.session import get_db
-from app.models.auth import User
-from app.models.calibration import CalibrationSettings
-from app.models.course import CourseTeacher
-from app.models.profile import TeacherProfile, UserProfile
-from app.schemas.calibration import CalibrationSettingsIn, CalibrationSettingsOut
-from app.schemas.course import CourseTeacherOut, TeacherAssignIn, TeacherDirectoryOut
+from app.models.auth import Role, User, UserRole
+from app.models.profile import StudentProfile, TeacherProfile, UserProfile
+from app.schemas.admin import PromoteStudentIn, PromoteStudentOut, StudentAdminOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-async def _teacher_or_404(db: AsyncSession, teacher_id: str) -> TeacherProfile:
-    teacher = await db.get(TeacherProfile, teacher_id)
-    if teacher is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="Tài khoản không phải giáo viên"
+async def _next_teacher_code(db: AsyncSession) -> str:
+    """Sinh mã giảng viên kế tiếp dạng GV0001, GV0002, ..."""
+    rows = await db.execute(
+        select(TeacherProfile.teacher_code).where(
+            TeacherProfile.teacher_code.like("GV%")
         )
-    return teacher
+    )
+    max_number = 0
+    for code in rows.scalars():
+        suffix = code[2:]
+        if suffix.isdigit():
+            max_number = max(max_number, int(suffix))
+    return f"GV{max_number + 1:04d}"
 
 
-@router.get("/teachers", response_model=list[TeacherDirectoryOut])
-async def list_teachers(
-    q: str | None = None,
+@router.get("/students", response_model=list[StudentAdminOut])
+async def list_students(
+    q: str | None = Query(default=None, max_length=100),
     _: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Danh mục giáo viên (id, tên, mã, khoa) để phân công vào khóa học."""
+    """Danh sách sinh viên đang hoạt động để admin nâng cấp lên giáo viên."""
     stmt = (
-        select(User, UserProfile, TeacherProfile)
+        select(User, UserProfile, StudentProfile)
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
-        .join(TeacherProfile, TeacherProfile.user_id == User.id)
-        .where(User.deleted_at.is_(None), User.status == "active")
+        .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
+        .where(
+            User.deleted_at.is_(None),
+            User.status == "active",
+            User.roles.any(code="student"),
+        )
         .order_by(UserProfile.full_name)
-        .limit(500)
+        .limit(200)
     )
     if q and q.strip():
-        esc = escape_like(q.strip())
-        like = f"%{esc}%"
+        like = f"%{escape_like(q.strip())}%"
         stmt = stmt.where(
-            UserProfile.full_name.ilike(like, escape="\\") | User.email.ilike(like, escape="\\")
+            or_(
+                UserProfile.full_name.ilike(like, escape="\\"),
+                User.email.ilike(like, escape="\\"),
+                StudentProfile.student_code.ilike(like, escape="\\"),
+            )
         )
     rows = (await db.execute(stmt)).all()
     return [
-        TeacherDirectoryOut(
-            id=u.id,
-            name=p.full_name if p else u.email,
-            code=tp.teacher_code,
-            email=u.email,
-            department=tp.department,
+        StudentAdminOut(
+            id=user.id,
+            name=profile.full_name if profile else user.email,
+            email=user.email,
+            student_code=student.student_code if student else None,
+            program=student.program if student else None,
+            avatar_url=profile.avatar_url if profile else None,
+            created_at=user.created_at,
         )
-        for u, p, tp in rows
+        for user, profile, student in rows
     ]
 
 
-@router.get("/courses/{course_id}/teachers", response_model=list[CourseTeacherOut])
-async def list_course_teachers(
-    course_id: str,
+@router.post(
+    "/students/{user_id}/promote",
+    response_model=PromoteStudentOut,
+    dependencies=[Depends(rate_limit(20, 60, "admin_promote"))],
+)
+async def promote_student(
+    user_id: str,
+    body: PromoteStudentIn,
     _: User = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await get_course_or_404(db, course_id)
-
-    assigned_ids_stmt = select(CourseTeacher.teacher_id).where(
-        CourseTeacher.course_id == course_id
-    )
-    assigned_ids = set((await db.execute(assigned_ids_stmt)).scalars().all())
-
-    all_ids = assigned_ids | {course.owner_id}
-    if not all_ids:
-        return []
-
-    stmt = (
-        select(User, UserProfile, TeacherProfile)
-        .join(TeacherProfile, TeacherProfile.user_id == User.id)
-        .outerjoin(UserProfile, UserProfile.user_id == User.id)
-        .where(User.id.in_(all_ids))
-    )
-    rows = (await db.execute(stmt)).all()
-    by_id = {u.id: (u, p, tp) for u, p, tp in rows}
-
-    out: list[CourseTeacherOut] = []
-    owner = by_id.get(course.owner_id)
-    if owner:
-        u, p, tp = owner
-        out.append(
-            CourseTeacherOut(
-                teacher_id=u.id,
-                name=p.full_name if p else u.email,
-                code=tp.teacher_code,
-                email=u.email,
-                is_owner=True,
-            )
-        )
-    for tid in sorted(assigned_ids):
-        if tid == course.owner_id or tid not in by_id:
-            continue
-        u, p, tp = by_id[tid]
-        out.append(
-            CourseTeacherOut(
-                teacher_id=u.id,
-                name=p.full_name if p else u.email,
-                code=tp.teacher_code,
-                email=u.email,
-                is_owner=False,
-            )
-        )
-    return out
-
-
-@router.post("/courses/{course_id}/teachers", status_code=201, dependencies=[Depends(rate_limit(10, 60, "admin_assign"))])
-async def assign_teachers(
-    course_id: str,
-    body: TeacherAssignIn,
-    user: User = Depends(require_roles("admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_course_or_404(db, course_id)
-    ids = list(dict.fromkeys(body.teacher_ids))
-    if not ids:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Chưa chọn giáo viên")
-
-    existing_stmt = select(CourseTeacher.teacher_id).where(
-        CourseTeacher.course_id == course_id
-    )
-    existing = set((await db.execute(existing_stmt)).scalars().all())
-
-    added = 0
-    for tid in ids:
-        if tid == course.owner_id or tid in existing:
-            continue
-        await _teacher_or_404(db, tid)
-        db.add(CourseTeacher(course_id=course_id, teacher_id=tid, assigned_by=user.id))
-        existing.add(tid)
-        added += 1
-    await db.commit()
-    return {"ok": True, "assigned": list(ids), "added": added}
-
-
-@router.delete("/courses/{course_id}/teachers/{teacher_id}")
-async def unassign_teacher(
-    course_id: str,
-    teacher_id: str,
-    _: User = Depends(require_roles("admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_course_or_404(db, course_id)
-    if teacher_id == course.owner_id:
+    """Nâng cấp một sinh viên thành giáo viên (bỏ role student)."""
+    validate_uuid(user_id, detail="Không tìm thấy sinh viên")
+    user = await db.get(User, user_id)
+    if user is None or user.deleted_at is not None:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Không thể gỡ chủ khóa học khỏi danh sách giảng viên",
+            status.HTTP_404_NOT_FOUND, detail="Không tìm thấy sinh viên"
         )
-    assignment = (
+    if user.status != "active":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Tài khoản không hoạt động"
+        )
+
+    role_codes = set(user.role_codes)
+    if "teacher" in role_codes:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Tài khoản đã là giáo viên"
+        )
+    if "student" not in role_codes:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Tài khoản không phải sinh viên"
+        )
+
+    teacher_code = (body.teacher_code or "").strip()
+    if teacher_code:
+        if len(teacher_code) > 30:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail="Mã giảng viên quá dài"
+            )
+        existing = (
+            await db.execute(
+                select(TeacherProfile.user_id).where(
+                    TeacherProfile.teacher_code == teacher_code
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, detail="Mã giảng viên đã tồn tại"
+            )
+    else:
+        teacher_code = await _next_teacher_code(db)
+
+    teacher_role_id = (
+        await db.execute(select(Role.id).where(Role.code == "teacher"))
+    ).scalar_one()
+    student_role_id = (
+        await db.execute(select(Role.id).where(Role.code == "student"))
+    ).scalar_one()
+
+    department = (
+        body.department.strip()
+        if body.department and body.department.strip()
+        else None
+    )
+
+    try:
+        teacher_profile = await db.get(TeacherProfile, user.id)
+        if teacher_profile is None:
+            db.add(
+                TeacherProfile(
+                    user_id=user.id,
+                    teacher_code=teacher_code,
+                    department=department,
+                )
+            )
+        else:
+            teacher_profile.teacher_code = teacher_code
+            if department is not None:
+                teacher_profile.department = department
+
+        db.add(UserRole(user_id=user.id, role_id=teacher_role_id))
         await db.execute(
-            select(CourseTeacher).where(
-                CourseTeacher.course_id == course_id,
-                CourseTeacher.teacher_id == teacher_id,
+            delete(UserRole).where(
+                UserRole.user_id == user.id,
+                UserRole.role_id == student_role_id,
             )
         )
-    ).scalar_one_or_none()
-    if assignment is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Giáo viên chưa được phân công"
-        )
-    await db.delete(assignment)
-    await db.commit()
-    return {"ok": True}
-
-
-# Calibration settings — admin điều chỉnh ngưỡng MAE & bật/tắt tính điểm
-async def _get_or_init_settings(db: AsyncSession) -> CalibrationSettings:
-    row = await db.get(CalibrationSettings, 1)
-    if row is None:
-        row = CalibrationSettings(id=1, enabled=True, threshold=0.12)
-        db.add(row)
-        await db.flush()
         await db.commit()
-    return row
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Mã giảng viên đã tồn tại, vui lòng chọn mã khác",
+        )
 
-
-@router.get("/calibration-settings", response_model=CalibrationSettingsOut)
-async def get_calibration_settings(
-    _: User = Depends(require_roles("admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    row = await _get_or_init_settings(db)
-    return CalibrationSettingsOut(enabled=row.enabled, threshold=float(row.threshold), updated_at=row.updated_at)
-
-
-@router.put("/calibration-settings", response_model=CalibrationSettingsOut)
-async def update_calibration_settings(
-    body: CalibrationSettingsIn,
-    user: User = Depends(require_roles("admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    from datetime import datetime, timezone
-
-    row = await _get_or_init_settings(db)
-    row.enabled = body.enabled
-    row.threshold = float(body.threshold)
-    row.updated_at = datetime.now(timezone.utc)
-    row.updated_by = user.id
-    await db.commit()
-    await db.refresh(row)
-    return CalibrationSettingsOut(enabled=row.enabled, threshold=float(row.threshold), updated_at=row.updated_at)
+    return PromoteStudentOut(ok=True, teacher_code=teacher_code)

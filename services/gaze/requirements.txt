@@ -1,8 +1,8 @@
 # Runtime dependencies cho service gaze.
 #
 # torch/torchvision + các gói nvidia-cuda-* KHÔNG khai báo ở đây nữa — chúng nằm
-# trong image nền dùng chung docker/ai-base (torch 2.6.0 / torchvision 0.21.0,
-# CUDA 12.4). Dockerfile của service `FROM eyelearning-ai-base:latest`.
+# trong stage `ai-base` của services/gaze/Dockerfile (torch 2.6.0 /
+# torchvision 0.21.0, CUDA 12.4).
 
 numpy==1.26.4
 pillow==11.2.1

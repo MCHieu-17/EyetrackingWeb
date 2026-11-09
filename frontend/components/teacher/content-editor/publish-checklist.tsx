@@ -16,10 +16,10 @@ import type { ModuleNode } from "@/lib/types/domain";
 /**
  * Kiểm tra nội dung trước khi xuất bản.
  *
- * Quy tắc CHẶN (`blocking`) giữ nguyên như trước: cần tên khóa học, có chương và
- * có ít nhất một mục. Các vấn đề còn lại chỉ là CẢNH BÁO — bài giảng chưa có PDF
- * vẫn xuất bản được (sinh viên thấy bài trống), bài tập nháp vẫn chưa hiện với
- * sinh viên.
+ * Quy tắc CHẶN (`blocking`) khớp `content.validate_draft` ở backend: cần tên
+ * khóa học, có chương, có ít nhất một mục, bài giảng phải có slide và toàn bộ
+ * slide phải index xong, bài tập phải có câu hỏi. Bài tập còn nháp chỉ là cảnh
+ * báo vì xuất bản khóa học sẽ đưa nó vào bản published.
  */
 export interface PublishIssue {
   key: string;
@@ -61,17 +61,38 @@ export function publishReport(title: string, tree: ModuleNode[]): PublishReport 
         issues.push({
           key: `slides-${lesson.id}`,
           item,
-          label: "Bài giảng chưa có tài liệu PDF — sinh viên sẽ thấy bài trống",
-          blocking: false,
+          label: "Bài giảng chưa có tài liệu PDF — không thể xuất bản",
+          blocking: true,
           lessonId: lesson.id,
         });
+      }
+      if (lesson.kind === "lesson" && lesson.slides > 0) {
+        const ready = lesson.slidesReady ?? 0;
+        const failed = lesson.slidesFailed ?? 0;
+        const pending = lesson.slidesPending ?? 0;
+        if (ready < lesson.slides) {
+          const details = [
+            failed > 0 ? `${failed} lỗi` : null,
+            pending > 0 ? `${pending} đang xử lý` : null,
+          ].filter(Boolean);
+          issues.push({
+            key: `index-${lesson.id}`,
+            item,
+            label:
+              `Còn ${lesson.slides - ready} trang chưa index xong cho trợ lý học tập` +
+              (details.length ? ` (${details.join(", ")})` : "") +
+              " — khóa học chỉ xuất bản được khi tất cả trang đã index",
+            blocking: true,
+            lessonId: lesson.id,
+          });
+        }
       }
       if (lesson.kind === "quiz" && (lesson.questionCount ?? 0) === 0) {
         issues.push({
           key: `questions-${lesson.id}`,
           item,
-          label: "Bài tập chưa có câu hỏi nào",
-          blocking: false,
+          label: "Bài tập chưa có câu hỏi nào — không thể xuất bản",
+          blocking: true,
           lessonId: lesson.id,
         });
       }

@@ -1,7 +1,12 @@
-FROM nginx:1.27-alpine
+FROM nginx:1.27.3-alpine
 
 # Config thuần HTTP cho local (không TLS/Cloudflare).
+COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d/default.conf
+
+# Thư mục cache asset Next.js (proxy_cache_path trong default.conf).
+RUN mkdir -p /var/cache/nginx/next_static \
+    && chown -R nginx:nginx /var/cache/nginx
 
 EXPOSE 80
 

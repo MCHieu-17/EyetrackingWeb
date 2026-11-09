@@ -6,12 +6,11 @@ concurrency. Job nằm trong PostgreSQL nên restart không mất việc.
 
 import asyncio
 import logging
-import os
 
+from app.core.config import settings
 from app.services.content import process_pending_slide_imports
 
 logger = logging.getLogger("app.content_worker")
-POLL_SECONDS = float(os.getenv("CONTENT_WORKER_POLL_SECONDS", "3"))
 
 
 async def main() -> None:
@@ -27,7 +26,7 @@ async def main() -> None:
                 logger.info("processed %s slide import job(s)", processed)
         except Exception:  # noqa: BLE001
             logger.exception("content worker iteration failed")
-        await asyncio.sleep(POLL_SECONDS)
+        await asyncio.sleep(settings.content_worker_poll_seconds)
 
 
 if __name__ == "__main__":

@@ -42,24 +42,6 @@ def _validate_unique_question_ids(questions: list[QuizQuestion]) -> None:
         raise ValueError("ID câu hỏi phải duy nhất")
 
 
-class QuizAssignmentCreate(CamelModel):
-    course_id: UUID
-    lesson_id: UUID | None = None
-    title: str = Field(min_length=1, max_length=255)
-    instructions: str = Field(default="", max_length=8000)
-    due_at: datetime | None = None
-    duration_minutes: int = Field(ge=1, le=1440)
-    status: str = Field(default="draft", pattern="^(draft|published)$")
-    allow_chatbot: bool = False
-    allow_retry: bool = False
-    questions: list[QuizQuestion] = Field(min_length=1, max_length=200)
-
-    @model_validator(mode="after")
-    def validate_question_ids(self):
-        _validate_unique_question_ids(self.questions)
-        return self
-
-
 class QuizItemCreate(CamelModel):
     """Tạo nhanh một item bài tập trong chương (nháp, chưa có câu hỏi).
 
@@ -125,11 +107,6 @@ def _coerce_answers(value: object) -> object:
 
 # Dùng chung cho input và output: dữ liệu cũ có thể lưu đáp án dạng chuỗi.
 Answers = Annotated[dict[str, list[str]], BeforeValidator(_coerce_answers)]
-
-
-class QuizAttemptCreate(CamelModel):
-    # Mỗi câu: danh sách id lựa chọn đã chọn (câu một đáp án → list 1 phần tử).
-    answers: Answers = Field(default_factory=dict)
 
 
 class QuizAttemptOut(CamelModel):

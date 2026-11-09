@@ -1,4 +1,3 @@
-import inspect
 import time
 from collections import deque
 from ipaddress import ip_address, ip_network
@@ -83,26 +82,72 @@ def _memory_check(ident: str, limit: int, seconds: int) -> int:
     return 0
 
 
+_SLIDING_WINDOW_LUA = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local count = redis.call('ZCARD', key)
+if count >= limit then
+    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    local retry = window
+    if oldest[2] then
+        retry = math.ceil(window - (now - tonumber(oldest[2])))
+    end
+    if retry < 1 then retry = 1 end
+    return retry
+end
+redis.call('ZADD', key, now, member)
+redis.call('EXPIRE', key, window)
+return 0
+"""
+
+
 async def _redis_check(client, ident: str, limit: int, seconds: int) -> int:
-    """Sliding window trên Redis sorted set. Trả về Retry-After > 0 nếu chặn."""
+    """Sliding window trên Redis sorted set. Trả về Retry-After > 0 nếu chặn.
+
+    Dùng Lua để nguyên tử: chỉ ghi nhận request khi còn lượt. Nếu ghi cả request
+    bị chặn, cửa sổ sẽ bị kéo dài mãi (request thứ 2 trong cùng giây bị chặn lại
+    tiếp tục đẩy mốc), khiến người dùng không bao giờ gửi lại được.
+    """
     now = time.time()
     key = f"rl:{ident}"
     member = f"{now:.6f}:{uuid4().hex}"
-    pipe = client.pipeline(transaction=False)
-    if inspect.isawaitable(pipe):
-        pipe = await pipe
-    pipe.zremrangebyscore(key, 0, now - seconds)
-    pipe.zadd(key, {member: now})
-    pipe.zcard(key)
-    pipe.expire(key, seconds)
-    results = await pipe.execute()
-    count = int(results[2])
-    if count <= limit:
-        return 0
-    oldest = await client.zrange(key, 0, 0, withscores=True)
-    if oldest:
-        return int(seconds - (now - float(oldest[0][1]))) + 1
-    return seconds
+    retry = await client.eval(
+        _SLIDING_WINDOW_LUA, 1, key, now, seconds, limit, member
+    )
+    return int(retry)
+
+
+async def enforce_rate_limit(
+    key: str,
+    limit: int,
+    seconds: int,
+    detail: str = "Quá nhiều yêu cầu.",
+) -> None:
+    """Chặn nếu `key` vượt quá `limit` request trong `seconds` giây.
+
+    Redis lỗi → fallback in-memory; không bao giờ ném lỗi khác ngoài 429.
+    """
+    ident = f"{settings.app_instance_id}:{key}"
+    client = await get_redis()
+    retry = 0
+    if client is not None:
+        try:
+            retry = await _redis_check(client, ident, limit, seconds)
+        except Exception:  # noqa: BLE001 — Redis lỗi thì về in-memory
+            report_failure()
+            retry = _memory_check(ident, limit, seconds)
+    else:
+        retry = _memory_check(ident, limit, seconds)
+    if retry:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": str(retry)},
+        )
 
 
 def rate_limit(limit: int, seconds: int, key_prefix: str):
@@ -113,22 +158,8 @@ def rate_limit(limit: int, seconds: int, key_prefix: str):
     """
 
     async def dependency(request: Request):
-        ident = f"{settings.app_instance_id}:{key_prefix}:{_real_ip(request)}"
-        client = await get_redis()
-        retry = 0
-        if client is not None:
-            try:
-                retry = await _redis_check(client, ident, limit, seconds)
-            except Exception:  # noqa: BLE001 — Redis lỗi thì về in-memory
-                report_failure()
-                retry = _memory_check(ident, limit, seconds)
-        else:
-            retry = _memory_check(ident, limit, seconds)
-        if retry:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Quá nhiều yêu cầu, vui lòng thử lại sau.",
-                headers={"Retry-After": str(retry)},
-            )
+        await enforce_rate_limit(
+            f"{key_prefix}:{_real_ip(request)}", limit, seconds
+        )
 
     return dependency

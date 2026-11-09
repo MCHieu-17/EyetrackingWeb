@@ -30,12 +30,6 @@ def init_pipeline() -> None:
     _pipeline = Pipeline()
 
 
-def set_pipeline(pipeline: Any | None) -> None:
-    """Cắm pipeline tuỳ ý (dùng cho test) hoặc None để reset."""
-    global _pipeline
-    _pipeline = pipeline
-
-
 def pipeline_ready() -> bool:
     return _pipeline is not None
 

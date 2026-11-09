@@ -23,15 +23,6 @@ export function isQuestionComplete(question: QuizQuestion): boolean {
   return questionIssues(question).length === 0;
 }
 
-/** Câu hoàn toàn trống (giáo viên vừa bấm "Thêm câu hỏi", chưa nhập gì). */
-export function isQuestionBlank(question: QuizQuestion): boolean {
-  return (
-    !question.prompt.trim() &&
-    !question.explanation.trim() &&
-    question.options.every((option) => !option.text.trim())
-  );
-}
-
 /** Cắt khoảng trắng thừa — dùng trước khi gửi API (backend cũng cắt lại). */
 export function trimQuestion(question: QuizQuestion): QuizQuestion {
   return {
@@ -42,7 +33,7 @@ export function trimQuestion(question: QuizQuestion): QuizQuestion {
   };
 }
 
-export interface DraftPayload {
+interface DraftPayload {
   /** Chỉ các câu ĐÃ hợp lệ — đây là những gì được gửi lên server. */
   questions: QuizQuestion[];
   /** Số câu chưa lưu được (đang soạn dở, hoặc còn trống). */

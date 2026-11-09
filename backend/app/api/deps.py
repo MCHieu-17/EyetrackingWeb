@@ -4,8 +4,9 @@ from jwt import PyJWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import enforce_rate_limit
 from app.core.security import decode_access_token
-from app.crud.user import get_user_by_id
+from app.crud.user import get_user_for_auth
 from app.db.session import get_db
 from app.models.auth import User
 
@@ -44,7 +45,7 @@ async def _authenticate(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token không hợp lệ"
         )
-    user = await get_user_by_id(db, payload["sub"])
+    user = await get_user_for_auth(db, payload["sub"])
     if user is None or user.deleted_at is not None or user.status != "active":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không hợp lệ"
@@ -71,6 +72,26 @@ def require_roles(*roles: str):
         return user
 
     return checker
+
+
+def user_rate_limit(
+    limit: int,
+    seconds: int,
+    key_prefix: str,
+    detail: str = "Quá nhiều yêu cầu.",
+):
+    """Dependency giới hạn tần suất theo tài khoản đang đăng nhập.
+
+    Khác với `rate_limit` (theo IP), giới hạn này áp cho từng user trên mọi
+    thiết bị/IP. Dùng cho các thao tác tốn tài nguyên như gửi tin nhắn chatbot.
+    """
+
+    async def dependency(user: User = Depends(get_current_user)):
+        await enforce_rate_limit(
+            f"{key_prefix}:user:{user.id}", limit, seconds, detail
+        )
+
+    return dependency
 
 
 async def can_manage_course(db: AsyncSession, course, user: User) -> bool:

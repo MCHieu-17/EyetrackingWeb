@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import raiseload, selectinload
 
 from app.models.auth import AuthSession, Role, User, UserRole
 
@@ -20,6 +20,25 @@ async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
     stmt = (
         select(User)
         .options(selectinload(User.roles))
+        .where(User.id == user_id)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_user_for_auth(db: AsyncSession, user_id: str) -> User | None:
+    """Chỉ tải User + roles cho mỗi request đã xác thực.
+
+    Profile/student_profile/teacher_profile không cần cho auth; route nào cần
+    hồ sơ thì dùng `get_user_by_id` hoặc truy vấn profile riêng.
+    """
+    stmt = (
+        select(User)
+        .options(
+            selectinload(User.roles),
+            raiseload(User.profile),
+            raiseload(User.student_profile),
+            raiseload(User.teacher_profile),
+        )
         .where(User.id == user_id)
     )
     return (await db.execute(stmt)).scalar_one_or_none()
@@ -87,11 +106,12 @@ async def create_student(
     db: AsyncSession,
     *,
     email: str,
-    password_hash: str,
+    password_hash: str | None,
     full_name: str,
 ) -> User:
     """Tạo user mới với role `student` và status `active`.
 
+    `password_hash=None` dành cho tài khoản đăng nhập bằng Microsoft 365.
     Không tạo student_profile/student_code (do admin cấp sau) — hồ sơ cơ bản
     nằm ở user_profiles.
     """

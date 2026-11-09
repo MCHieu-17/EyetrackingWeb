@@ -3,17 +3,12 @@
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.api.deps import can_access_course, can_manage_course
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    Lesson,
-)
+from app.models.course import Course, Lesson
 
 
 def validate_uuid(value: str, detail: str = "Không tìm thấy bài học") -> None:
@@ -24,7 +19,16 @@ def validate_uuid(value: str, detail: str = "Không tìm thấy bài học") -> 
 
 
 async def get_course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(Course, course_id)
+    course = await db.get(
+        Course,
+        course_id,
+        options=[
+            raiseload(Course.versions),
+            raiseload(Course.enrollments),
+            raiseload(Course.owner),
+            raiseload(Course.creator),
+        ],
+    )
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     return course
@@ -46,14 +50,30 @@ async def get_viewable_course(db: AsyncSession, course_id: str, user: User) -> C
 
 async def get_lesson_or_404(db: AsyncSession, lesson_id: str) -> Lesson:
     validate_uuid(lesson_id)
-    lesson = await db.get(Lesson, lesson_id)
+    lesson = await db.get(
+        Lesson,
+        lesson_id,
+        options=[
+            raiseload(Lesson.versions),
+            raiseload(Lesson.slides),
+        ],
+    )
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
     return lesson
 
 
 async def course_of_lesson(db: AsyncSession, lesson: Lesson) -> Course | None:
-    return await db.get(Course, lesson.course_id)
+    return await db.get(
+        Course,
+        lesson.course_id,
+        options=[
+            raiseload(Course.versions),
+            raiseload(Course.enrollments),
+            raiseload(Course.owner),
+            raiseload(Course.creator),
+        ],
+    )
 
 
 async def get_lesson_viewable(db: AsyncSession, lesson_id: str, user: User) -> Lesson:
@@ -66,45 +86,3 @@ async def get_lesson_viewable(db: AsyncSession, lesson_id: str, user: User) -> L
 
 def escape_like(q: str) -> str:
     return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-async def course_lesson_counts(
-    db: AsyncSession, course_ids: list[str]
-) -> dict[str, int]:
-    """Số item của version published (fallback draft) cho mỗi khóa."""
-    counts: dict[str, int] = {}
-    if not course_ids:
-        return counts
-    rows = (
-        await db.execute(
-            select(Course.id, Course.published_version_id).where(
-                Course.id.in_(course_ids)
-            )
-        )
-    ).all()
-    for course_id, published_version_id in rows:
-        version_id = published_version_id
-        if version_id is None:
-            version_id = (
-                await db.execute(
-                    select(CourseVersion.id)
-                    .where(
-                        CourseVersion.course_id == course_id,
-                        CourseVersion.state == "draft",
-                    )
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-        if version_id is None:
-            counts[course_id] = 0
-            continue
-        counts[course_id] = int(
-            (
-                await db.execute(
-                    select(func.count(CourseVersionItem.id)).where(
-                        CourseVersionItem.course_version_id == version_id
-                    )
-                )
-            ).scalar_one()
-        )
-    return counts

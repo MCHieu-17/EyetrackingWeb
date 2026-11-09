@@ -4,7 +4,7 @@
 #
 #   bash db/migrate.sh [THU_MUC_MIGRATION]     # mặc định: <dir của script>/migrations
 #
-# Nguyên tắc (PLAN.md Phase 1):
+# Nguyên tắc:
 #   * Một kết nối psql giữ advisory lock suốt lượt chạy.
 #   * Mỗi migration + checksum record commit atomically trong một transaction.
 #   * File đã áp mà checksum đổi -> fail.
@@ -17,10 +17,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="${1:-${SCRIPT_DIR}/migrations}"
+CHATBOT_ROLE_SQL="${SCRIPT_DIR}/chatbot_role.sql"
 
 if [ ! -d "${MIGRATIONS_DIR}" ]; then
     echo "LỖI: không thấy thư mục migration: ${MIGRATIONS_DIR}" >&2
     exit 1
+fi
+
+# Role chatbot được tạo/cập nhật ngay sau migrations để không bao giờ lệch
+# password/grants so với .env. Bỏ qua khi chạy ngoài compose mà không có biến.
+PROVISION_CHATBOT_ROLE=0
+if [ -n "${CHATBOT_DB_USER:-}" ] && [ -n "${CHATBOT_DB_PASSWORD:-}" ]; then
+    if [ ! -f "${CHATBOT_ROLE_SQL}" ]; then
+        echo "LỖI: thiếu file ${CHATBOT_ROLE_SQL} để tạo role chatbot." >&2
+        exit 1
+    fi
+    PROVISION_CHATBOT_ROLE=1
 fi
 
 list_migrations() {
@@ -122,7 +134,20 @@ SELECT (coalesce((SELECT checksum FROM schema_migrations WHERE filename = :'name
 SQL
     done
 
+    if [ "${PROVISION_CHATBOT_ROLE}" -eq 1 ]; then
+        echo "\\echo '=== chatbot role ==='"
+        echo "\\i '${CHATBOT_ROLE_SQL}'"
+    fi
+
     echo "SELECT pg_advisory_unlock_all();"
 } > "${tmpfile}"
 
-psql -v ON_ERROR_STOP=1 -f "${tmpfile}"
+psql_args=(-v ON_ERROR_STOP=1 -f "${tmpfile}")
+if [ "${PROVISION_CHATBOT_ROLE}" -eq 1 ]; then
+    psql_args+=(
+        -v "role=${CHATBOT_DB_USER}"
+        -v "password=${CHATBOT_DB_PASSWORD}"
+        -v "dbname=${PGDATABASE}"
+    )
+fi
+psql "${psql_args[@]}"

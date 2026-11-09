@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { changePassword, primaryRole, ROLE_HOME, type Role } from "@/lib/api/auth";
 import { fetchMyProfile } from "@/lib/api/profile";
+import { useMyProfile } from "@/hooks/use-profile";
 import { AUTH_USER_QUERY_KEY } from "@/hooks/use-stored-user";
 import { cn } from "@/lib/utils";
 
@@ -19,9 +21,21 @@ const inputClass =
 export function ChangePasswordForm({ className }: { className?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: profile, isLoading: profileLoading } = useMyProfile();
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
   const [show, setShow] = React.useState(false);
+
+  if (!profileLoading && profile && profile.hasPassword === false) {
+    return (
+      <div className={cn("w-full", className)}>
+        <Alert variant="info" title="Tài khoản đăng nhập bằng Microsoft 365">
+          Bạn đang đăng nhập bằng tài khoản trường, không cần mật khẩu GazeEdu.
+          Nếu muốn dùng thêm mật khẩu, hãy liên hệ quản trị viên.
+        </Alert>
+      </div>
+    );
+  }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

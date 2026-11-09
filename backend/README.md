@@ -6,23 +6,27 @@ FastAPI backend cho hệ thống học tập theo dõi hành vi mắt (eye-track
 
 ```
 backend/app/
-├── main.py              # FastAPI app, CORS, routers
+├── main.py              # FastAPI app, CORS, routers, schema guard
+├── content_worker.py    # worker chuyển đổi slide upload -> PDF + slide rows
+├── worker.py            # worker tính analysis runs
 ├── core/
-│   ├── config.py        # Settings (pydantic-settings, đọc .env)
+│   ├── config.py        # Settings (pydantic-settings, đọc .env gốc repo)
 │   ├── security.py      # bcrypt + JWT (access/refresh)
+│   ├── csrf.py          # CSRF double-submit cho cookie auth
+│   ├── ratelimit.py     # rate limit Redis/in-memory
 │   └── helpers.py       # gradient/color palette, relative time tiếng Việt
 ├── db/
 │   ├── base.py          # SQLAlchemy Base
-│   └── session.py       # async engine + session (asyncpg)
+│   ├── session.py       # async engine + session (asyncpg)
+│   └── redis.py         # Redis client
 ├── models/              # SQLAlchemy models ánh xạ db/migrations/*.sql
-├── schemas/             # Pydantic v2 — camelCase, khớp frontend/lib/types/domain.ts
+├── schemas/             # Pydantic v2 — camelCase, khớp frontend
 ├── crud/                # data access
-├── services/            # course_stats (aggregate), analytics (heatmap/fixation/hotspot)
+├── services/            # content, media, embedding, analysis, metrics, chat
 └── api/
     ├── deps.py          # get_current_user, require_roles (RBAC)
-    ├── access.py        # helper dùng chung: course/module/lesson + calibration
-    └── routes/          # auth, users, courses, modules, lessons, enrollments,
-                         # gaze, calibration, analytics, proxy (AI service)
+    ├── access.py        # helper course/module/lesson
+    └── routes/          # auth, users, courses, lessons, media, chat, gaze, ...
 ```
 
 ## Chạy
@@ -30,7 +34,7 @@ backend/app/
 ### Cách 1: Docker Compose (khuyến nghị)
 
 ```bash
-docker compose up -d --build    # cả stack (postgres, migrate, backend, frontend, nginx, ...)
+docker compose up -d --build
 ```
 
 ### Cách 2: Chạy trực tiếp (dev)
@@ -39,26 +43,35 @@ docker compose up -d --build    # cả stack (postgres, migrate, backend, fronte
 cd backend
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-# Dùng MỘT file env duy nhất ở gốc repo: copy .env.example .env (gốc repo)
-.venv/bin/python -m uvicorn app.main:app --port 8001 --reload
+.venv/bin/python -m uvicorn app.main:app --reload --port 8001
 ```
 
-Yêu cầu PostgreSQL đang chạy (`docker compose up -d postgres` từ gốc repo).
+Cần PostgreSQL + Redis đang chạy (có thể dùng service trong compose).
+
+### API và worker dùng chung image
+
+`backend/Dockerfile` có 2 target:
+
+| Target | Dùng cho | Nội dung |
+|---|---|---|
+| `api` | service `backend` + `worker` | FastAPI + `app.worker` (analysis), **không** LibreOffice |
+| `content-worker` | service `content-worker` | thêm LibreOffice + fonts để chuyển PPTX/PPT/ODP → PDF |
+
+API không cài LibreOffice nên image nhẹ và khởi động nhanh; chỉ content-worker
+có `soffice`. Cả hai chạy bằng user `appuser` (không phải root).
 
 ## Cấu hình (env — một file duy nhất ở gốc repo)
 
-Backend đọc mọi biến từ **`.env` ở gốc repo** (`backend/app/core/config.py` trỏ thẳng
-tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
+Backend đọc mọi biến từ **`.env` ở gốc repo** (`backend/app/core/config.py` trỏ
+thẳng tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 
 | Biến | Bắt buộc | Ý nghĩa |
 |---|---|---|
-| `DATABASE_URL` | Chỉ host | Chuỗi kết nối PG (asyncpg) khi chạy backend ngoài container |
+| `DATABASE_URL` | Chỉ host | Chuỗi kết nối PG (asyncpg) khi chạy backend ngoài container (`localhost:5435`) |
 | `DATABASE_URL_DOCKER` | Có (compose) | Chuỗi kết nối DB nội bộ cho container backend |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Có (compose) | Tạo DB của service `postgres` |
+| `REDIS_URL` | Không | Redis khi chạy host (`redis://localhost:6379/0`); trống = fallback in-memory |
 | `JWT_SECRET` | Có | Chuỗi random dài; không dùng giá trị mẫu |
-| `JWT_ALGORITHM` | Không | Mặc định `HS256` trong code; không cần đặt trong `.env` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Không | Mặc định 60 trong code |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | Không | Mặc định 30 trong code |
 | `CORS_ORIGINS` | Có | Phân tách bằng dấu phẩy |
 | `AI_HTTP_URL` | Có (compose) | Gaze service; compose tự set `http://gaze:8000` |
 | `CHATBOT_URL` | Chỉ host | Chatbot service khi backend chạy host (`http://localhost:8002`) |
@@ -67,88 +80,191 @@ tới `ROOT_ENV_FILE`). Không còn giá trị mẫu nhúng trong code.
 | `CHATBOT_INGEST_TIMEOUT_SECONDS` | Không | Timeout ingest slide (mặc định 600) |
 | `CHATBOT_INGEST_ATTEMPTS` | Không | Số lần retry ingest (mặc định 3) |
 | `CHATBOT_INGEST_BACKOFF_SECONDS` | Không | Backoff giữa các lần retry (mặc định 5) |
-| `GAZE_DOWNSAMPLE_HZ` | Không | Downsample `gaze_events` trước khi ghi DB (mặc định 4.0) |
-| `GAZE_RAW_HZ` | Không | Tần số lưu `gaze_raw_samples` (mặc định 15.0; `0` = lưu tất cả) |
-| `GAZE_BATCH_MAX` | Không | Batch gaze tối đa (mặc định 2000) |
+| `CHATBOT_INGEST_BATCH_SIZE` | Không | Số slide mỗi request ingest (mặc định 8) |
 | `R2_ACCOUNT_ID` / `R2_BUCKET_NAME` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_PUBLIC_URL` | Không | Điền đủ 5 để lưu slide trên Cloudflare R2; để trống dùng volume local |
+| `MEDIA_DIR` | Không | Thư mục media (mặc định `media`, tương đối theo cwd; Docker `/app/media`) |
+| `MAX_UPLOAD_BYTES` | Không | Giới hạn file upload (mặc định 50MB) |
+| `MAX_PDF_BYTES` | Không | Giới hạn PDF sau chuyển đổi (mặc định 100MB) |
+| `MAX_SLIDE_PAGES` | Không | Số trang PDF tối đa (mặc định 150) |
+| `LIBREOFFICE_TIMEOUT_SECONDS` | Không | Timeout LibreOffice (mặc định 120) |
+| `WORKER_POLL_SECONDS` | Không | Chu kỳ poll analysis worker (mặc định 5) |
+| `CONTENT_WORKER_POLL_SECONDS` | Không | Chu kỳ poll job chuyển slide (mặc định 3) |
+| `DB_POOL_MIN` / `DB_POOL_MAX` | Không | Kích thước pool DB tối thiểu/tối đa (mặc định 5/20) |
+| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT_ID` | Không | Bật đăng nhập Microsoft 365 (single tenant). Để trống = tắt |
+| `MICROSOFT_REDIRECT_URI` | Không | Phải khớp Redirect URI trong Azure App Registration |
+| `MICROSOFT_ALLOWED_DOMAINS` | Không | Giới hạn domain email, phẩy phân tách |
+| `FRONTEND_URL` | Không | Origin frontend để redirect sau OAuth callback |
 | `DEBUG` | Không | Bật debug (mặc định `false`) |
 
 ## Endpoints chính
 
 ### Auth (`/api/auth`)
-- `POST /api/auth/login` — `{email, password}` → `{accessToken, refreshToken, user}`
-- `POST /api/auth/refresh` — rotate refresh token
-- `POST /api/auth/logout` — revoke refresh token
+- `POST /api/auth/register` — **đã tắt** (403); tài khoản mới chỉ tạo qua Outlook
+- `POST /api/auth/login` — chỉ dành cho tài khoản seed
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/change-password`
+- `GET /api/auth/oauth/microsoft/start` — redirect sang Microsoft 365
+- `GET /api/auth/oauth/microsoft/callback` — nhận code, đăng nhập/tạo tài khoản sinh viên
 
 ### Hồ sơ
-- `GET/PATCH /api/me/profile` — khớp `MyProfile`/`ProfileUpdate` của frontend
+- `GET/PATCH /api/me/profile`
+
+### Admin (`/admin`)
+- `GET /admin/students?q=` — danh sách sinh viên đang hoạt động
+- `POST /admin/students/{user_id}/promote` — nâng cấp sinh viên lên giáo viên
+  (thêm role `teacher`, bỏ role `student`, tạo `teacher_profiles`)
 
 ### Khóa học (giáo viên — `/teacher`)
 - `GET/POST /teacher/courses`, `PATCH/DELETE /teacher/courses/{id}`
+- `DELETE /teacher/courses/{id}` — xóa vĩnh viễn khóa học, nội dung, đăng ký, dữ liệu gaze/AOI và tệp R2.
+- `GET /teacher/courses/{id}` — cây modules/lessons
+- `GET /teacher/courses/{id}/draft`
+- `POST /teacher/courses/{id}/publish` — chỉ thành công khi toàn bộ slide đã
+  index xong cho trợ lý học tập; nếu còn slide lỗi/đang chờ, trả `409` kèm
+  `code=slides_not_indexed` và **chạy nền** job index các slide thiếu (background
+  task gắn vào response 409, không bị FastAPI bỏ khi raise exception).
+- `PATCH /teacher/courses/{id}/gaze-dot`
+- `PATCH /teacher/courses/{id}/require-calibration`
 - `POST /teacher/courses/{id}/modules`, `PATCH/DELETE /teacher/modules/{id}`
 - `POST /teacher/modules/{id}/lessons`, `PATCH/DELETE /teacher/lessons/{id}`
-- `POST /teacher/modules/{id}/quizzes` — tạo nhanh item bài tập trắc nghiệm (nháp) trong chương
-- `POST /teacher/modules/{id}/items/reorder` — sắp xếp lại item (bài học + bài tập) trong chương
-- `POST /teacher/lessons/{id}/slides`, `DELETE /teacher/slides/{id}`
-- `GET /teacher/courses/{id}` — cây modules/lessons (kèm `kind`, thông tin quiz) + attention
-- `GET /teacher/courses/{id}/students` — danh sách học viên + mức quan sát từng bài
-- `GET /teacher/lessons/{id}/heatmap?studentId=` — SlideStat[] (onSlide, fixations, viewSec, hotspots)
-- `POST /teacher/courses/{id}/recompute` — batch tính lại `heatmap_aggregates` + `engagement_scores`
+- `POST /teacher/modules/{id}/quizzes`
+- `POST /teacher/modules/{id}/items/reorder`
+- `GET /teacher/courses/{id}/students`
+- `GET /teacher/students`
+- `POST /teacher/courses/{id}/students`
+- `DELETE /teacher/courses/{id}/students/{studentId}`
 
-### Bài tập trắc nghiệm (`/api/assignments`)
-- `GET /api/assignments/{id}` — nội dung bài tập (ẩn đáp án khi học viên chưa nộp; tạo phiên làm bài để đếm ngược theo `durationMinutes`); trả `allowRetry` để UI biết có được làm lại không
-- `PATCH /api/assignments/{id}` — sửa câu hỏi/tiêu đề/thời lượng/hạn nộp/trạng thái/`allowRetry`; publish cần ≥1 câu hỏi. Câu hỏi hỗ trợ nhiều đáp án đúng (`correctOptionIds`, `allowMultiple`) và chấm **tất cả-hoặc-không**.
-- `GET /api/assignments/{id}/attempt` / `POST /api/assignments/{id}/attempts` — nộp bài (mỗi học viên một lần)
-- `POST /api/assignments/{id}/retry` — **làm lại**: chỉ khi giáo viên bật `allowRetry` và bài còn mở; xoá lượt làm cũ, đặt lại đồng hồ làm bài (đáp án bị ẩn lại cho tới lần nộp kế tiếp)
+### Slide (giáo viên)
+- `POST /teacher/lessons/{id}/slides/upload` — nhận PDF/PPTX/PPT/ODP, trả `202 {jobId}`
+- `GET /teacher/lessons/{id}/slides/imports/{jobId}` — poll job
+- `GET /teacher/lessons/{id}/slides`
+- `POST /teacher/lessons/{id}/slides/reindex` — index lại các slide chưa sẵn
+  sàng của bài giảng đang soạn (chạy nền)
 
-Bài tập là một `lessons.kind='quiz'`; mọi item trong chương dùng chung `order_index` nên thứ tự bài học/bài tập được trộn theo đúng thiết kế khóa học.
-
-### Chatbot học tập (`/api/courses/{id}/chat`, `/api/chat/sessions`)
-- `GET /api/courses/{id}/chat/sessions` — phiên chat của sinh viên trong môn.
-- `POST /api/courses/{id}/chat` — hỏi đáp non-streaming; trả `{answer, citations, intent, verified}`.
-- `POST /api/courses/{id}/chat/stream` — SSE: `session → status → citations → token → done`.
-- `GET /api/chat/sessions/{id}/messages` — lịch sử tin nhắn.
-- `PATCH/DELETE /api/chat/sessions/{id}` — đổi tên/xoá phiên.
-- `POST /teacher/lessons/{id}/reindex`, `POST /teacher/courses/{id}/reindex` — ingest lại slide.
-- `GET /teacher/courses/{id}/embedding-status` — đếm slide theo trạng thái embedding.
-
-Backend dựng ngữ cảnh bài tập: trước khi nộp chỉ gửi đề + options + đáp án đã chọn
-(không gửi đáp án đúng); sau khi nộp mới gửi đáp án + giải thích để chữa bài.
+### Phân tích (giáo viên)
+- `GET /teacher/lessons/{id}/export` — JSONL analysis run hoàn tất mới nhất
 
 ### Học tập (sinh viên — `/api`)
 - `GET /api/me/enrollments`
-- `POST /api/courses/{id}/enroll`
 - `GET /api/courses/{id}` — outline
 - `GET /api/lessons/{id}/contents` — slides
-- `POST /api/learning-sessions` — bắt buộc `viewportWidthPx/HeightPx`, `calibrationWidthPx/HeightPx`, `devicePixelRatio`; viewport phải bằng calibration (nếu không → `409 viewport_mismatch`)
-- `PATCH /api/learning-sessions/{id}` — đóng phiên
-- `POST /api/lessons/{id}/gaze-samples` — batch `{samples: [{lessonContentId, x, y, slideX?, slideY?, faceDetected, ts}], viewportWidthPx, viewportHeightPx, layoutSnapshotId?}`. `x/y` là toạ độ RAW theo viewport (có thể <0/>1); `slideX/slideY` dùng cho `gaze_events`/analytics cũ. Backend ghi `gaze_raw_samples` (downsample `GAZE_RAW_HZ`) + `gaze_events` (downsample `GAZE_DOWNSAMPLE_HZ`). Viewport lệch calibration → `409 viewport_mismatch`.
-- `POST /api/learning-sessions/{id}/aoi-layout` — frontend gửi rect thật của mọi `[data-aoi]`; tạo `aoi_layout_snapshots` + `aoi_layout_rects`
+- `POST /api/learning-sessions`
+- `PATCH /api/learning-sessions/{id}`
+- `GET /api/learning-sessions/{id}/contents`
+- `POST /api/learning-sessions/{id}/gaze-batches`
+- `POST /api/learning-sessions/{id}/presentations`
+- `POST /api/presentations/{id}/layouts`
+
+### Bài tập trắc nghiệm
+- `GET /api/quiz-specs/{lesson_version_id}`
+- `GET/POST /api/lessons/{id}/attempts`
+- `POST /api/attempts/{id}/submit`
+- `POST /api/attempts/{id}/retry`
+- `PATCH /teacher/quiz-specs/{id}` — `status: "published"` xuất bản course version
+  nháp hiện tại để sinh viên thấy bài tập; `status: "draft"` chỉ lưu nháp.
+
+`quizStatus` trong cây nội dung phản ánh việc sinh viên có thấy bài tập trong
+**bản xuất bản** hay không, không dựa vào state của lesson version nháp. Vì vậy
+sửa một bài tập đã giao không làm cảnh báo “còn ở bản nháp” hiện lại.
+
+### Chatbot học tập
+- `GET /api/courses/{id}/chat/access`
+- `GET /api/courses/{id}/chat/sessions`
+- `POST /api/courses/{id}/chat/stream` — SSE: `session → status → citations → token → done`
+- `GET /api/chat/sessions/{id}/messages`
+- `PATCH/DELETE /api/chat/sessions/{id}`
 
 ### AOI (giáo viên/admin)
-- `GET /api/aoi-definitions?include_inactive=` — catalog AOI toàn hệ thống
-- `POST /api/aoi-definitions` — `{code, name, description?, parentId?, selector?}`
-- `PATCH /api/aoi-definitions/{id}` — sửa tên/mô tả/parent/selector/isActive
-- `DELETE /api/aoi-definitions/{id}` — soft delete (`isActive=false`)
-- `POST /api/aoi/rebuild` — `{sessionId?, lessonId?, courseId?, fromTime?, toTime?}`; tính lại `gaze_aoi_hits` từ raw + snapshot rects
+- `GET/POST /api/aoi-sets`
+- `PATCH /api/aoi-sets/{id}`
+- `POST /api/aoi-sets/{id}/publish`
+- `POST /api/aoi-sets/slide/{slide_version_id}/generate` — gợi ý `slide_n` + các vùng con `TEXT`/`IMAGE`/`TABLE` bằng PyMuPDF (mỗi block là một vùng)
+  - `replaceAuto: true` — thay các vùng gợi ý tự động cũ, giữ vùng tự vẽ
+  - `resetAll: true` — xoá cả vùng tự vẽ, chỉ giữ container `slide_n` rồi tạo lại các vùng gợi ý
+- `PUT /api/aoi-sets/slide/{slide_version_id}` — lưu + áp dụng bộ vùng slide
+- `POST /api/aoi-sets/ui/{ui_schema_version}/generate` — tạo bộ vùng giao diện
+- `PUT /api/aoi-sets/ui/{ui_schema_version}` — lưu + áp dụng bộ vùng giao diện
+- `POST /api/aoi/rebuild` — nhận `courseId`, `lessonId` tùy chọn; tạo run nền theo presentation
+
+Mỗi bộ vùng luôn có định nghĩa hệ thống `no_label`; mẫu gaze không rơi vào vùng lá
+nào được gán nhãn này. Phân tích chạy riêng cho slide và giao diện của từng
+`content_presentation`.
+
+Khi một mẫu gaze rơi vào nhiều vùng lá, backend chỉ ghi **một** hit theo thứ tự
+ưu tiên `custom > text > table > image > drawing > system`. Nhờ vậy text đè lên
+ảnh được tính là `TEXT`, không phải cả hai.
+
+Vùng slide có thể được **bỏ đánh dấu** bằng `isActive = false`: định nghĩa vẫn
+được giữ trong bộ vùng để bật lại, nhưng không tham gia matching; gaze trong vùng
+đó được tính là `no_label`.
 
 ### Calibration
-- `POST /api/calibrations` — JSON `{deviceFingerprint, numPoints, modelUbjBase64, maePx?, screenWidthPx?, screenHeightPx?}` — `modelUbjBase64` là file `.ubj` tải từ `GET /session/{sid}/model` của gaze service (base64, ~1-3KB); bất kỳ bản cũ nào của (user, device) tự deactivate. Ghi vào `calibration_params.model_ubj`.
-- `GET /api/calibrations/active?deviceFingerprint=` — metadata bản active (`calibrated`, `maePx`, `calibratedAt`)
-- `GET /api/calibrations/active/model?deviceFingerprint=` — `{modelUbjBase64, maePx}` của bản active để client nạp lại qua `POST /session/{sid}/import` (không cần hiệu chỉnh lại). `409` nếu bản ghi cũ chỉ có 6 tham số kappa.
-- `GET /api/calibrations/config` — ngưỡng `maePx` pass/fail do admin đặt.
+- `POST /api/calibrations` — lưu model `.ubj` + viewport/DPR + `screenXPx`/`screenYPx`
+  (toạ độ viewport trên màn hình lúc calibration)
+- `GET /api/calibrations/active`
+- `GET /api/calibrations/active/model`
 
-### AI service — kết nối trực tiếp
-- WebSocket `/session/{sid}/stream` và toàn bộ `POST /session...` của gaze service **gọi trực tiếp** (frontend → nginx `/gaze/*` → gaze; backend không proxy). Backend chỉ lưu model `.ubj` và kiểm soát quyền.
-- `GET /ai/health` — backend probe ML service còn sống không.
+Frontend dùng hình chữ nhật vật lý của viewport lúc calibration và hiện tại để
+quy đổi toạ độ gaze, nên zoom/resize/move cửa sổ không phải hiệu chỉnh lại.
+Backend không chặn phiên học khi viewport khác calibration.
 
-## Thiết kế đáng chú ý
+### Media
+- `GET /media/assets/{id}/file` — proxy PDF same-origin cho PDF.js
 
-- **JWT access ngắn hạn + refresh token** lưu dạng SHA-256 hash trong `auth_sessions`, rotation khi refresh.
-- **RBAC**: role trong JWT + kiểm tra `user_roles`; ownership khóa học theo `courses.owner_id`.
-- **Content versioning**: course/lesson/slide version bất biến sau publish; draft copy-on-write; `expectedGeneration` chống lost update.
-- **Gaze**: một nguồn `gaze_samples` (viewport raw, partition theo tháng); `gaze_batches` giữ ACK/idempotency; metadata calibration/viewport/pipeline nằm ở session/batch, không lặp trên từng sample.
-- **AOI/analysis**: `aoi_sets` versioned; `analysis_runs` chốt watermark + time range; `aoi_hits`/`presentation_metrics` là derived, rebuild theo run.
-- **Chat/RAG**: retrieval lọc `course_version_id` trước LIMIT; citation chứa version/membership/asset IDs; quiz hint/review theo đúng `attemptId`.
-- **Heatmap**: fixation detection (dispersion) + hotspot clustering (grid 24×24 + local maxima) tính on-the-fly từ `gaze_events`; `heatmap_aggregates`/`engagement_scores` được tự refresh gần thời gian thực sau mỗi batch gaze-sample (incremental, chỉ chạm slide của batch) + endpoint recompute (batch) để chạy lại toàn bài.
-- **camelCase**: toàn bộ response dùng alias generator `to_camel` — khớp `frontend/lib/types/domain.ts`, UI không cần sửa.
+### Nội bộ
+- `POST /internal/chat/lms-query` — chatbot gọi backend
+- `GET /ai/health` — probe gaze service
+
+## Slide storage
+
+- Upload nhận **PDF, PPTX, PPT, ODP**; mọi định dạng được chuẩn hóa thành một
+  `source.pdf` duy nhất cho mỗi lần upload.
+- Không lưu JPG: frontend dùng **PDF.js** render đúng trang từ PDF; mỗi trang là
+  một `slide_version` với `source_page` tương ứng.
+- Chuyển đổi chạy bất đồng bộ qua `slide_import_jobs` + service `content-worker`
+  (LibreOffice headless trong image `content-worker`; API không cài LibreOffice).
+- PDF được phục vụ same-origin qua `GET /media/assets/{id}/file`.
+
+## Chatbot RAG
+
+- Retrieval lọc `course_id` + `course_version_id` trước LIMIT; hybrid BM25
+  (Postgres FTS) + vector (pgvector HNSW), fuse bằng RRF.
+- Citation chứa `courseVersionId`, `lessonVersionId`, `slideVersionId`,
+  `membershipId`, `assetId`, `pdfUrl`, `pageNumber`.
+- Streaming SSE: `status → citations → token → done`.
+- Mỗi tài khoản chỉ gửi được **1 tin nhắn mỗi 5 giây** (`POST
+  /api/courses/{course_id}/chat/stream`); vượt quá trả `429` kèm `Retry-After`.
+  Giới hạn theo user (không theo IP) nên áp dụng trên mọi thiết bị.
+
+## Gaze
+
+- Calibration 25 điểm → train model `.ubj` → lưu bất biến vào `calibrations`.
+- WebSocket `/session/{sid}/stream` (qua nginx `/gaze/...`), protocol v2.
+- Frontend gửi batch gaze qua `POST /api/learning-sessions/{id}/gaze-batches`.
+- Worker `app.worker` tính `analysis_runs` + `presentation_metrics`.
+
+## Content versioning
+
+- Course/lesson/slide version bất biến sau publish; draft copy-on-write.
+- `expectedGeneration` chống lost update.
+- Publish chạy nền `embedding.sync_course_version` để ingest RAG.
+
+## Lint và test
+
+```bash
+# Lint + compile
+cd backend
+.venv/bin/ruff check app
+.venv/bin/python -m compileall -q app
+
+# Integration test trên database tạm (từ gốc repo; cần postgres compose)
+./scripts/test_backend.sh
+
+# Test migration (baseline + schema_generation=6)
+./scripts/test_migrations.sh
+```
+
+`scripts/test_backend.sh` tạo database `eyetracking_test`, chạy service
+`migrate`, rồi chạy `pytest` trong `backend/.venv`. `scripts/test_migrations.sh`
+kiểm tra đúng 1 migration và `schema_generation = 6`.

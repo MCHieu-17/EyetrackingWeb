@@ -7,7 +7,7 @@ import { questionIssues } from "@/lib/quiz-validation";
 import { cn } from "@/lib/utils";
 import type { QuizOption, QuizQuestion } from "@/lib/types/domain";
 
-export function newOption(): QuizOption {
+function newOption(): QuizOption {
   return { id: `opt-${crypto.randomUUID()}`, text: "" };
 }
 

@@ -142,7 +142,10 @@ class ManagedEmbedding(Embeddings):
         for start in range(0, len(texts), 8):
             futures = [self._submit(t, False) for t in texts[start : start + 8]]
             try:
-                result.extend(f.result(timeout=60) for f in futures)
+                # Ingest chạy nền, có thể xếp hàng sau nhiều slide khác; 60s
+                # trước đây làm rớt oan các slide cuối. 180s đủ rộng cho batch
+                # 8 slide trong khi chat vẫn được ưu tiên.
+                result.extend(f.result(timeout=180) for f in futures)
             except BaseException:
                 for f in futures:
                     f.cancel()

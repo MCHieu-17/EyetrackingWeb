@@ -3,6 +3,10 @@
 FastAPI + LangChain: ingest slide bằng VLM → hybrid retrieval (pgvector + Postgres
 FTS) → sinh câu trả lời → verify citation → SSE.
 
+Chatbot chạy **CPU-only**: embedding local `Qwen3-Embedding-0.6B` trên CPU,
+LLM/VLM gọi River API. Không cần GPU và không đặt `gpus: all` — GPU chỉ dành
+cho `services/gaze`.
+
 ## Endpoints
 
 | Method | Path | Auth | Mục đích |
@@ -42,9 +46,9 @@ General: whole-utterance greetings / short scope redirects
 | `LLM_NAME` | `river` | LLM qua River AI |
 | `VLM_NAME` | `river` | VLM cho ingest slide |
 | `EMBEDDING_NAME` | `local` | Embedding local Qwen3-Embedding-0.6B |
-| `EMBEDDING_DIM` | `1024` | Phải khớp `vector(1024)` của migration 024 |
+| `EMBEDDING_DIM` | `1024` | Phải khớp `vector(1024)` trong `001_baseline.sql` |
 | `EMBEDDING_MODEL_PATH` | `/app/weights/Qwen3-Embedding-0.6B` | Đường dẫn weights |
-| `EMBEDDING_DEVICE` | `cuda` | `cuda` \| `cpu` |
+| `EMBEDDING_DEVICE` | `cpu` | `cpu` (mặc định) \| `cuda` (chỉ khi tự build image GPU) |
 | `EMBEDDING_LOCAL_FILES_ONLY` | `true` | Chỉ đọc weights đã tải |
 | `EMBEDDING_HF_REPO` | `Qwen/Qwen3-Embedding-0.6B` | Repo HuggingFace |
 | `RIVER_API_KEY` | – | API key River AI (bắt buộc) |
@@ -79,11 +83,17 @@ Chatbot dùng role `chatbot_reader` (xem `CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`
 - **không** có quyền đọc `quiz_assignments`, `quiz_attempts`, `quiz_attempt_sessions`,
   `users`.
 
-Tạo/cập nhật role sau khi migrations đã áp:
+Role được service `migrate` tự tạo/cập nhật sau mỗi lần áp migrations (đọc
+`CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`). Chỉ chạy tay khi muốn cấp lại quyền
+ngay:
 
 ```bash
-./ops/create_chatbot_role.sh
+./scripts/create_chatbot_role.sh
 ```
+
+`GET /ready` trả `503` kèm `detail` nếu không kết nối được DB (sai role/password,
+DB chưa lên). Các endpoint `/ingest/*` trả `503` kèm lý do thật thay vì `500`;
+backend lưu lý do vào `slide_documents.ingestion_error`.
 
 Đây là lớp bảo vệ thứ hai: kể cả khi prompt injection yêu cầu lộ đáp án, chatbot
 cũng không đọc được bảng quiz.
@@ -106,6 +116,16 @@ Lần đầu cần tải weights:
 EMBEDDING_MODEL_PATH="$PWD/weights/Qwen3-Embedding-0.6B" \
   .venv/bin/python -m scripts.download_embedding
 ```
+
+## Docker và GPU
+
+- `services/chatbot/Dockerfile` là multi-stage: stage `ai-base` cài
+  torch/torchvision CPU, stage `runtime` cài deps chatbot.
+- Compose **không** đặt `gpus: all` cho chatbot; `EMBEDDING_DEVICE=cpu`.
+- Build: `docker compose build chatbot` hoặc `docker compose up -d --build`.
+- Không khuyến nghị đẩy embedding lên GPU: sửa stage `ai-base` trong
+  `services/chatbot/Dockerfile` sang wheel CUDA, đặt `EMBEDDING_DEVICE=cuda`
+  và thêm `gpus: all` — chỉ làm khi gaze không cần GPU.
 
 ## Kiến trúc mã
 

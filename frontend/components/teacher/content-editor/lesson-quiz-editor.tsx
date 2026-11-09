@@ -275,8 +275,8 @@ export function LessonQuizEditor({
         {status === "draft" && (
           <p className="flex items-start gap-2 rounded-[14px] border border-warning/30 bg-warning/8 px-3 py-2 text-xs leading-5 text-black/75">
             <Icon name="ri-information-line" className="mt-0.5 size-3.5 shrink-0 text-warning" />
-            Bài tập đang ở bản nháp nên học viên CHƯA thấy. Bấm “Giao bài cho học viên” để đưa vào
-            khóa học.
+            Bài tập chưa được giao cho học viên. Bấm “Giao bài cho học viên” để xuất bản khóa học
+            và đưa bài tập vào.
           </p>
         )}
 
@@ -519,6 +519,12 @@ export function LessonQuizEditor({
                 Còn {incompleteCount} câu chưa hoàn thiện — hoàn thiện trước khi giao bài.
               </p>
             )}
+            {status === "published" && dirty && (
+              <p className="text-xs font-medium text-warning">
+                Có thay đổi chưa xuất bản — bấm “Cập nhật cho học viên” để xuất bản khóa học và
+                sinh viên thấy thay đổi.
+              </p>
+            )}
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
@@ -535,13 +541,19 @@ export function LessonQuizEditor({
               className="rounded-full"
               disabled={
                 saving ||
-                status === "published" ||
+                (status === "published" && !dirty) ||
                 questions.length === 0 ||
                 incompleteCount > 0
               }
               onClick={() => void save("published")}
             >
-              {status === "published" ? "Đã giao bài" : saving ? "Đang lưu…" : "Giao bài cho học viên"}
+              {saving
+                ? "Đang lưu…"
+                : status === "published"
+                  ? dirty
+                    ? "Cập nhật cho học viên"
+                    : "Đã giao bài"
+                  : "Giao bài cho học viên"}
             </Button>
           </div>
         </div>

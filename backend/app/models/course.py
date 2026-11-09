@@ -446,9 +446,6 @@ class LessonVersionSlide(Base):
     title: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default=text("''")
     )
-    is_key: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
 
     lesson_version: Mapped["LessonVersion"] = relationship(back_populates="slides")
     slide_version: Mapped["SlideVersion"] = relationship(lazy="joined")

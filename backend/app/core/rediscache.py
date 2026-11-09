@@ -1,13 +1,9 @@
-"""Cache JSON + primitives trên Redis (fail-open, không có Redis thì no-op hoặc miss).
+"""Primitive tăng/đặt TTL trên Redis (fail-open, không có Redis thì no-op).
 
-Mọi lỗi kết nối đều gọi `report_failure()` rồi trả về giá trị "an toàn":
-- đọc -> None (miss -> caller tự tính lại từ DB);
-- ghi  -> bỏ qua;
-- khóa -> True (chạy bình thường, mất throttle chứ không mất dữ liệu).
+Module chỉ cung cấp `increment` và `expire`, dùng cho rate limit. Mọi lỗi kết
+nối đều gọi `report_failure()` rồi trả về giá trị "an toàn": `increment` trả
+None (caller bỏ qua throttle) và `expire` bỏ qua.
 """
-
-import json
-from typing import Any
 
 from app.core.config import settings
 from app.db.redis import get_redis, report_failure
@@ -15,50 +11,6 @@ from app.db.redis import get_redis, report_failure
 
 def _key(key: str) -> str:
     return f"{settings.app_instance_id}:{key}"
-
-
-async def json_get(key: str) -> Any | None:
-    client = await get_redis()
-    if client is None:
-        return None
-    try:
-        raw = await client.get(_key(key))
-    except Exception:  # noqa: BLE001
-        report_failure()
-        return None
-    if raw is None:
-        return None
-    try:
-        return json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return None
-
-
-async def json_set(key: str, value: Any, ttl: int) -> None:
-    client = await get_redis()
-    if client is None:
-        return
-    try:
-        await client.set(_key(key), json.dumps(value, default=str), ex=ttl)
-    except Exception:  # noqa: BLE001
-        report_failure()
-
-
-async def get_int(key: str) -> int | None:
-    client = await get_redis()
-    if client is None:
-        return None
-    try:
-        raw = await client.get(_key(key))
-    except Exception:  # noqa: BLE001
-        report_failure()
-        return None
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
 
 
 async def increment(key: str) -> int | None:
@@ -81,15 +33,3 @@ async def expire(key: str, ttl: int) -> None:
         await client.expire(_key(key), ttl)
     except Exception:  # noqa: BLE001
         report_failure()
-
-
-async def try_acquire_lock(key: str, ttl: int) -> bool:
-    """SET NX EX — chốt chống chạy lặp. Lỗi Redis -> True (fail-open, bỏ throttle)."""
-    client = await get_redis()
-    if client is None:
-        return True
-    try:
-        return bool(await client.set(_key(key), "1", nx=True, ex=ttl))
-    except Exception:  # noqa: BLE001
-        report_failure()
-        return True

@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +14,6 @@ from app.core.helpers import color_for
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import (
-    CourseVersion,
     Enrollment,
 )
 from app.models.profile import StudentProfile, UserProfile
@@ -41,11 +39,18 @@ router = APIRouter(tags=["courses"])
 async def list_teacher_courses(
     status_filter: str | None = Query(default=None, alias="status"),
     q: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     return await content.list_teacher_courses(
-        db, user, status_filter=status_filter, q=q
+        db,
+        user,
+        status_filter=status_filter,
+        q=q,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -162,7 +167,7 @@ async def delete_course(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_owned_course(db, course_id, user)
-    course.archived_at = datetime.now(timezone.utc)
+    await content.delete_course(db, course)
     await db.commit()
     return {"ok": True}
 
@@ -174,7 +179,10 @@ async def get_course_tree(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
-    return await content.get_draft_tree(db, course, user)
+    tree = await content.get_draft_tree(db, course, user)
+    # get_draft_tree có thể tạo draft version mới; commit để request sau dùng lại.
+    await db.commit()
+    return tree
 
 
 @router.get("/teacher/courses/{course_id}/draft", response_model=list[ModuleNodeOut])
@@ -184,7 +192,9 @@ async def get_course_draft(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
-    return await content.get_draft_tree(db, course, user)
+    tree = await content.get_draft_tree(db, course, user)
+    await db.commit()
+    return tree
 
 
 @router.post("/teacher/courses/{course_id}/publish")
@@ -196,61 +206,45 @@ async def publish_course(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_owned_course(db, course_id, user)
+    draft = await content.get_draft_version(db, course, user)
+    assert draft is not None
+
+    # Chặn xuất bản khi còn slide chưa index xong cho trợ lý học tập. Đồng thời
+    # đưa các slide còn thiếu vào hàng đợi để lần bấm sau thành công.
+    stats = await embedding.course_version_ingest_status_in_session(db, draft.id)
+    if stats["total"] and stats["ready"] < stats["total"]:
+        await embedding.mark_course_version_pending_in_session(db, draft.id)
+        background_tasks.add_task(
+            embedding.sync_course_version, draft.id, True, True
+        )
+        remaining = stats["total"] - stats["ready"]
+        # Không dùng `raise HTTPException` ở đây: FastAPI bỏ background task khi
+        # exception được xử lý, khiến job ingest không bao giờ chạy và người
+        # dùng kẹt ở "chưa index" mãi. Trả JSONResponse kèm background task.
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": {
+                    "code": "slides_not_indexed",
+                    "message": (
+                        f"Còn {remaining} trang chưa index xong cho trợ lý học "
+                        "tập. Hệ thống đang xử lý, vui lòng thử lại sau ít phút."
+                    ),
+                }
+            },
+            background=background_tasks,
+        )
+
     version = await content.publish_course(
         db, course, user, body.expected_generation
     )
     await db.commit()
-    background_tasks.add_task(embedding.sync_course_version, version.id)
+    # Lưới an toàn: sau khi publish, index nốt slide nào còn thiếu (thường không
+    # còn vì đã chặn ở trên).
+    background_tasks.add_task(
+        embedding.sync_course_version, version.id, False, True
+    )
     return {"ok": True, "courseVersionId": version.id}
-
-
-@router.get("/teacher/courses/{course_id}/versions")
-async def list_course_versions(
-    course_id: str,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_viewable_course(db, course_id, user)
-    rows = (
-        await db.execute(
-            select(CourseVersion)
-            .where(CourseVersion.course_id == course.id)
-            .order_by(CourseVersion.version_no.desc())
-        )
-    ).scalars().all()
-    return [
-        {
-            "id": row.id,
-            "versionNo": row.version_no,
-            "state": row.state,
-            "title": row.title,
-            "generation": row.generation,
-            "createdAt": row.created_at,
-            "publishedAt": row.published_at,
-        }
-        for row in rows
-    ]
-
-
-@router.post("/teacher/courses/{course_id}/restore")
-async def restore_course_version(
-    course_id: str,
-    body: dict,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_owned_course(db, course_id, user)
-    version_id = body.get("versionId")
-    source = await db.get(CourseVersion, version_id) if version_id else None
-    if source is None or source.course_id != course.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên bản")
-    existing = await content.get_draft_version(db, course, user, create=False)
-    if existing is not None:
-        await db.delete(existing)
-        await db.flush()
-    draft = await content.clone_course_version(db, source, user)
-    await db.commit()
-    return {"ok": True, "courseVersionId": draft.id}
 
 
 @router.get("/teacher/courses/{course_id}/students", response_model=list[StudentRowOut])

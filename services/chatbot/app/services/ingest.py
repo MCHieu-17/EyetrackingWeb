@@ -13,13 +13,15 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import openai
+import psycopg
 import pymupdf
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pgvector import Vector
+from psycopg_pool import PoolTimeout
 from pydantic import BaseModel, Field
 
-from app.db import get_pool
+from app.db import DatabaseUnavailableError, get_pool
 from app.services.storage import FileStorage
 from app.settings import embedding_dim, embedding_name, vlm_name
 from app.workflow.prompts import SLIDE_VLM_PROMPT
@@ -41,6 +43,16 @@ class VLMOutput(BaseModel):
             'under "Mô tả hình".'
         )
     )
+
+
+def _error_text(exc: Exception) -> str:
+    """Lỗi có message rỗng (vd TimeoutError) vẫn phải hiển thị dễ hiểu."""
+    text = str(exc).strip()
+    if text:
+        return text[:500]
+    if isinstance(exc, TimeoutError):
+        return "Hết thời gian chờ embedding. Hệ thống sẽ thử lại."
+    return type(exc).__name__
 
 
 class Ingestion:
@@ -69,6 +81,29 @@ class Ingestion:
         FROM v_published_course_outline o
     """
 
+    # Dùng khi index bản nháp trước khi xuất bản. View v_course_outline chứa
+    # cả draft lẫn published; retrieval vẫn chỉ đọc v_published_course_outline
+    # nên slide nháp chưa xuất hiện với sinh viên.
+    DRAFT_SLIDE_QUERY = """
+        SELECT
+            o.slide_version_id,
+            o.course_id,
+            o.course_version_id,
+            o.lesson_id,
+            o.lesson_version_id,
+            o.slide_id,
+            o.slide_title,
+            o.slide_position,
+            o.module_title,
+            o.lesson_title,
+            o.pdf_asset_id,
+            o.pdf_object_key,
+            o.pdf_storage_backend,
+            o.pdf_mime_type,
+            o.source_page
+        FROM v_course_outline o
+    """
+
     def __init__(self):
         vlm = get_vlm(vlm_name())
         self.slide_to_text_chain = self._create_chat_messages() | vlm.with_structured_output(
@@ -80,7 +115,15 @@ class Ingestion:
         self._embed_lock = threading.Lock()
         self._pdf_lock = threading.Lock()
         self._pdf_cache: OrderedDict[str, bytes] = OrderedDict()
-        self._verify_vector_dim()
+        try:
+            self._verify_vector_dim()
+        except (PoolTimeout, psycopg.Error) as exc:
+            raise DatabaseUnavailableError(
+                "Không kết nối được PostgreSQL cho chatbot. Kiểm tra "
+                "CHATBOT_DATABASE_URL và role CHATBOT_DB_USER/"
+                "CHATBOT_DB_PASSWORD (role phải được tạo bởi migration). "
+                f"Chi tiết: {exc}"
+            ) from exc
 
     def _connection(self):
         return (self._pool or get_pool()).connection()
@@ -109,39 +152,81 @@ class Ingestion:
             )
         logger.info("Embedding dimension khớp DB: vector(%s)", column_dim)
 
-    def _load_slide(self, slide_version_id: str) -> dict | None:
+    @staticmethod
+    def _dedupe(slides: list[dict]) -> list[dict]:
+        seen: set[object] = set()
+        unique: list[dict] = []
+        for slide in slides:
+            slide_version_id = slide["slide_version_id"]
+            if slide_version_id in seen:
+                continue
+            seen.add(slide_version_id)
+            unique.append(slide)
+        return unique
+
+    def _load_slide(
+        self, slide_version_id: str, include_draft: bool = False
+    ) -> dict | None:
+        query = self.DRAFT_SLIDE_QUERY if include_draft else self.SLIDE_QUERY
         with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    self.SLIDE_QUERY
+                    query
                     + " WHERE o.slide_version_id IS NOT NULL"
                     + " AND o.slide_version_id = %s",
                     (slide_version_id,),
                 )
                 return cur.fetchone()
 
-    def _load_slides_for_lesson_version(self, lesson_version_id: str) -> list[dict]:
+    def _load_slides_for_lesson_version(
+        self, lesson_version_id: str, include_draft: bool = False
+    ) -> list[dict]:
+        query = self.DRAFT_SLIDE_QUERY if include_draft else self.SLIDE_QUERY
         with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    self.SLIDE_QUERY
+                    query
                     + " WHERE o.slide_version_id IS NOT NULL"
                     + " AND o.lesson_version_id = %s ORDER BY o.slide_position",
                     (lesson_version_id,),
                 )
-                return list(cur.fetchall())
+                return self._dedupe(list(cur.fetchall()))
 
-    def _load_slides_for_course_version(self, course_version_id: str) -> list[dict]:
+    def _load_slides_for_course_version(
+        self, course_version_id: str, include_draft: bool = False
+    ) -> list[dict]:
+        query = self.DRAFT_SLIDE_QUERY if include_draft else self.SLIDE_QUERY
         with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    self.SLIDE_QUERY
+                    query
                     + " WHERE o.slide_version_id IS NOT NULL"
                     + " AND o.course_version_id = %s"
                     + " ORDER BY o.module_position, o.item_position, o.slide_position",
                     (course_version_id,),
                 )
-                return list(cur.fetchall())
+                return self._dedupe(list(cur.fetchall()))
+
+    def _ready_ids(self, slide_version_ids: list[str]) -> set[str]:
+        """Các slide đã ready tại thời điểm job thực sự chạy.
+
+        Backend có thể tính danh sách target trước khi một job khác ingest
+        xong; bỏ qua slide đã ready tránh ingest lại và tránh ghi đè kết quả.
+        """
+        if not slide_version_ids:
+            return set()
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT slide_version_id
+                    FROM slide_documents
+                    WHERE slide_version_id = ANY(%s::uuid[])
+                      AND ingestion_state = 'ready'
+                    """,
+                    (slide_version_ids,),
+                )
+                return {str(row["slide_version_id"]) for row in cur.fetchall()}
 
     def _load_pending_slides(self) -> list[dict]:
         with self._connection() as conn:
@@ -278,11 +363,11 @@ class Ingestion:
                 vector = self.embedding.embed_documents([transcript])[0]
             self._upsert(slide, transcript, vector)
         except VLMUnavailableError as exc:
-            self._mark(slide_version_id, "failed", str(exc)[:500])
+            self._mark(slide_version_id, "failed", _error_text(exc))
             raise
         except Exception as exc:  # noqa: BLE001
             logger.exception("Bỏ qua slide version %s do lỗi xử lý", slide_version_id)
-            self._mark(slide_version_id, "failed", str(exc)[:500])
+            self._mark(slide_version_id, "failed", _error_text(exc))
             raise
 
     def _process_slides(self, slides: list[dict]) -> tuple[int, int, list[str]]:
@@ -301,10 +386,10 @@ class Ingestion:
                 except VLMUnavailableError as exc:
                     failed += 1
                     vlm_down += 1
-                    errors.append(f"{slide['slide_version_id']}: {exc}")
+                    errors.append(f"{slide['slide_version_id']}: {_error_text(exc)}")
                 except Exception as exc:  # noqa: BLE001
                     failed += 1
-                    errors.append(f"{slide['slide_version_id']}: {exc}")
+                    errors.append(f"{slide['slide_version_id']}: {_error_text(exc)}")
 
         if vlm_down:
             raise VLMUnavailableError(
@@ -312,22 +397,76 @@ class Ingestion:
             )
         return processed, failed, errors
 
-    def embed_slide(self, slide_version_id: str) -> tuple[int, int, list[str]]:
-        slide = self._load_slide(slide_version_id)
+    def embed_slide(
+        self, slide_version_id: str, include_draft: bool = False
+    ) -> tuple[int, int, list[str]]:
+        slide = self._load_slide(slide_version_id, include_draft)
         if slide is None:
             raise LookupError(slide_version_id)
         return self._process_slides([slide])
 
-    def embed_lesson_version(self, lesson_version_id: str) -> tuple[int, int, list[str]]:
-        slides = self._load_slides_for_lesson_version(lesson_version_id)
+    def embed_lesson_version(
+        self,
+        lesson_version_id: str,
+        include_draft: bool = False,
+        slide_version_ids: list[str] | None = None,
+    ) -> tuple[int, int, list[str]]:
+        slides = self._load_slides_for_lesson_version(
+            lesson_version_id, include_draft
+        )
         if not slides:
             raise LookupError(lesson_version_id)
+        if slide_version_ids is not None:
+            wanted = set(slide_version_ids)
+            slides = [
+                slide
+                for slide in slides
+                if str(slide["slide_version_id"]) in wanted
+            ]
+            if not slides:
+                raise LookupError(lesson_version_id)
+            ready = self._ready_ids(
+                [str(slide["slide_version_id"]) for slide in slides]
+            )
+            slides = [
+                slide
+                for slide in slides
+                if str(slide["slide_version_id"]) not in ready
+            ]
+            if not slides:
+                return 0, 0, []
         return self._process_slides(slides)
 
-    def embed_course_version(self, course_version_id: str) -> tuple[int, int, list[str]]:
-        slides = self._load_slides_for_course_version(course_version_id)
+    def embed_course_version(
+        self,
+        course_version_id: str,
+        include_draft: bool = False,
+        slide_version_ids: list[str] | None = None,
+    ) -> tuple[int, int, list[str]]:
+        slides = self._load_slides_for_course_version(
+            course_version_id, include_draft
+        )
         if not slides:
             raise LookupError(course_version_id)
+        if slide_version_ids is not None:
+            wanted = set(slide_version_ids)
+            slides = [
+                slide
+                for slide in slides
+                if str(slide["slide_version_id"]) in wanted
+            ]
+            if not slides:
+                raise LookupError(course_version_id)
+            ready = self._ready_ids(
+                [str(slide["slide_version_id"]) for slide in slides]
+            )
+            slides = [
+                slide
+                for slide in slides
+                if str(slide["slide_version_id"]) not in ready
+            ]
+            if not slides:
+                return 0, 0, []
         return self._process_slides(slides)
 
     def reindex_all(self) -> tuple[int, int, list[str]]:

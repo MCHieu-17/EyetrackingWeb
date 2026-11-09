@@ -1,11 +1,23 @@
 import { apiFetch } from "./client";
 
+type AoiKind =
+  | "text"
+  | "image"
+  | "table"
+  | "drawing"
+  | "custom"
+  | "ui"
+  | "system";
+
 export interface AoiDefinition {
   id: string;
   code: string;
   name: string;
   parentId: string | null;
   geometry: Record<string, unknown>;
+  isContainer: boolean;
+  kind: AoiKind;
+  isActive: boolean;
 }
 
 export interface AoiSet {
@@ -26,13 +38,19 @@ export interface AoiDefinitionInput {
   name: string;
   parentId?: string | null;
   geometry: Record<string, unknown>;
+  isContainer?: boolean;
+  kind?: AoiKind;
+  isActive?: boolean;
 }
 
-export interface AoiSetInput {
-  scope: "slide" | "ui";
-  slideVersionId?: string | null;
-  uiSchemaVersion?: string | null;
+interface AoiSetSaveInput {
   definitions: AoiDefinitionInput[];
+  expectedRevision?: number;
+}
+
+export interface AoiUiComponent {
+  code: string;
+  name: string;
 }
 
 export interface AoiRect {
@@ -43,52 +61,20 @@ export interface AoiRect {
   yMax: number;
 }
 
-export interface AoiLayoutSnapshot {
+interface AoiLayoutSnapshot {
   id: string;
   presentationId: string;
   layoutGeneration: number;
   capturedAt: string;
 }
 
-export interface ContentPresentation {
+interface ContentPresentation {
   id: string;
   sessionId: string;
   lessonVersionSlideId: string | null;
   surface: "lesson" | "quiz";
   sequenceNo: number;
   startedAt: string;
-}
-
-export interface AnalysisRun {
-  id: string;
-  sessionId: string;
-  aoiSetId: string;
-  fromTime: string;
-  toTime: string;
-  batchWatermark: string | null;
-  algorithmVersion: string;
-  status: "pending" | "running" | "completed" | "failed";
-  error: string | null;
-  createdAt: string;
-  completedAt: string | null;
-}
-
-export interface PresentationMetric {
-  presentationId: string;
-  algorithmVersion: string;
-  batchWatermark: string | null;
-  sampleCount: number;
-  onSlideCount: number;
-  dwellMs: number;
-  fixationCount: number;
-  heatmapGrid: number[][];
-  computedAt: string;
-}
-
-export interface AnalysisRunResult {
-  run: AnalysisRun;
-  hitCount: number;
-  metrics: PresentationMetric[];
 }
 
 export function fetchAoiSets(params: {
@@ -100,52 +86,63 @@ export function fetchAoiSets(params: {
   return apiFetch<AoiSet[]>("/api/aoi-sets", { params });
 }
 
-export function createAoiSet(input: AoiSetInput): Promise<AoiSet> {
-  return apiFetch<AoiSet>("/api/aoi-sets", { method: "POST", body: input });
-}
-
-export function updateAoiSet(
-  id: string,
-  definitions: AoiDefinitionInput[],
-): Promise<AoiSet> {
-  return apiFetch<AoiSet>(`/api/aoi-sets/${id}`, {
-    method: "PATCH",
-    body: { definitions },
-  });
-}
-
-export function publishAoiSet(id: string): Promise<{ ok: boolean; id: string; state: string }> {
-  return apiFetch(`/api/aoi-sets/${id}/publish`, { method: "POST" });
-}
-
-export function createAnalysisRun(
+export function generateSlideAois(
+  slideVersionId: string,
   input: {
-    sessionId: string;
-    aoiSetId: string;
-    fromTime: string;
-    toTime: string;
-    algorithmVersion?: string;
-    config?: Record<string, unknown>;
-  },
-  idempotencyKey?: string,
-): Promise<AnalysisRunResult> {
-  return apiFetch<AnalysisRunResult>("/api/analysis-runs", {
+    slideNumber?: number;
+    merge?: boolean;
+    replaceAuto?: boolean;
+    resetAll?: boolean;
+  } = {},
+): Promise<AoiSet> {
+  return apiFetch<AoiSet>(`/api/aoi-sets/slide/${slideVersionId}/generate`, {
     method: "POST",
-    body: input,
-    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    body: {
+      slideNumber: input.slideNumber,
+      merge: input.merge ?? false,
+      replaceAuto: input.replaceAuto ?? false,
+      resetAll: input.resetAll ?? false,
+    },
+    // Sinh AOI bằng AI có thể lâu hơn timeout mặc định 30s.
+    timeoutMs: 120_000,
   });
 }
 
-export function fetchAnalysisRun(id: string): Promise<AnalysisRunResult> {
-  return apiFetch<AnalysisRunResult>(`/api/analysis-runs/${id}`);
+export function saveSlideAois(
+  slideVersionId: string,
+  input: AoiSetSaveInput,
+): Promise<AoiSet> {
+  return apiFetch<AoiSet>(`/api/aoi-sets/slide/${slideVersionId}`, {
+    method: "PUT",
+    body: input,
+  });
 }
 
-export function analysisExportUrl(id: string): string {
-  return `/api/analysis-runs/${id}/export`;
+export function generateUiAois(
+  uiSchemaVersion: string,
+  components: AoiUiComponent[],
+  merge = true,
+): Promise<AoiSet> {
+  return apiFetch<AoiSet>(`/api/aoi-sets/ui/${uiSchemaVersion}/generate`, {
+    method: "POST",
+    body: { components, merge },
+    timeoutMs: 120_000,
+  });
+}
+
+export function saveUiAois(
+  uiSchemaVersion: string,
+  input: AoiSetSaveInput,
+): Promise<AoiSet> {
+  return apiFetch<AoiSet>(`/api/aoi-sets/ui/${uiSchemaVersion}`, {
+    method: "PUT",
+    body: input,
+  });
 }
 
 export function rebuildAoiHits(input: {
   courseId: string;
+  lessonId?: string;
   fromTime?: string;
   toTime?: string;
   algorithmVersion?: string;
@@ -154,10 +151,12 @@ export function rebuildAoiHits(input: {
     method: "POST",
     body: {
       courseId: input.courseId,
+      lessonId: input.lessonId,
       fromTime: input.fromTime,
       toTime: input.toTime,
       algorithmVersion: input.algorithmVersion,
     },
+    timeoutMs: 120_000,
   });
 }
 

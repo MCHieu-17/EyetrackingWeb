@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     REAL,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -21,8 +22,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.course import ContentPresentation, SlideVersion
-    from app.models.gaze import GazeBatch, GazeSample, LearningSession
+    from app.models.course import SlideVersion
+    from app.models.gaze import (
+        ContentPresentation,
+        GazeBatch,
+        GazeSample,
+        LearningSession,
+    )
 
 
 class AoiSet(Base):
@@ -123,6 +129,15 @@ class AoiDefinition(Base):
     )
     geometry: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    is_container: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'custom'")
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
     )
 
     aoi_set: Mapped["AoiSet"] = relationship(back_populates="definitions")
@@ -229,6 +244,9 @@ class AnalysisRun(Base):
     session_id: Mapped[str] = mapped_column(
         ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
     )
+    presentation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("content_presentations.id", ondelete="CASCADE")
+    )
     aoi_set_id: Mapped[str] = mapped_column(
         ForeignKey("aoi_sets.id", ondelete="RESTRICT"), nullable=False
     )
@@ -251,6 +269,7 @@ class AnalysisRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     session: Mapped["LearningSession"] = relationship()
+    presentation: Mapped["ContentPresentation | None"] = relationship()
     aoi_set: Mapped["AoiSet"] = relationship()
     batch_watermark_batch: Mapped["GazeBatch | None"] = relationship()
 

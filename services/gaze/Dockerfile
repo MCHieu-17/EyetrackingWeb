@@ -1,16 +1,44 @@
 # syntax=docker/dockerfile:1
 #
-# Gaze service — build FROM image nền dùng chung (docker/ai-base) để chia sẻ
-# layer torch/CUDA 12.4 dùng chung. Base đã có torch/torchvision cu124,
-# numpy, libgomp1, curl; ở đây chỉ thêm thư viện riêng của gaze.
+# Gaze service — multi-stage:
+#   ai-base: python 3.12 + torch/torchvision CUDA 12.4 + libgomp1/curl
+#   runtime: thêm lib GL/EGL cho OpenCV/MediaPipe + deps gaze
 #
-# CUDA/cuDNN đến từ wheel pip cu124 trong base nên KHÔNG cần base image NVIDIA;
-# host chỉ cần NVIDIA driver + nvidia-container-toolkit (docker-compose đặt
-# `gpus: all`). Chạy CPU vẫn được qua DEVICE=cpu.
-ARG AI_BASE=eyelearning-ai-base:latest
-FROM ${AI_BASE}
+# Gaze là service DUY NHẤT cần GPU trong stack. CUDA/cuDNN đến từ wheel pip
+# cu124 nên KHÔNG cần base image NVIDIA; host chỉ cần NVIDIA driver +
+# nvidia-container-toolkit (docker-compose đặt `gpus: all`). Chạy CPU vẫn
+# được qua DEVICE=cpu nhưng rất chậm.
 
-# Thư viện hệ thống cho OpenCV / MediaPipe (GL, EGL) — base chỉ có libgomp1/curl.
+# ---- Stage 1: AI base (torch CUDA 12.4) ----
+FROM python:3.12.8-slim AS ai-base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    PYUBJSON_NO_EXTENSION=1
+
+# libgomp1: OpenMP cho torch/numpy. curl: dùng cho HEALTHCHECK của service.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Assert ngay trong build để phát hiện sớm nếu pip chọn nhầm wheel (CPU sai CUDA).
+# Cache wheel bằng BuildKit cache mount; `env -u` vì base tắt pip cache.
+COPY requirements-torch.txt .
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR pip install -r requirements-torch.txt \
+    && pip check \
+    && python -c "import torch, torchvision; assert torch.__version__.startswith('2.6.0'), torch.__version__; assert torch.version.cuda == '12.4', torch.version.cuda; assert torchvision.__version__.startswith('0.21.0'), torchvision.__version__"
+
+# ---- Stage 2: gaze runtime ----
+FROM ai-base AS runtime
+
+# Thư viện hệ thống cho OpenCV / MediaPipe (GL, EGL) — stage ai-base chỉ có
+# libgomp1/curl.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -20,15 +48,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Cài dependencies trước để tận dụng cache layer. Assert ngay trong build để
-# phát hiện sớm nếu thiếu deps hoặc unigaze không dựng được model. Dòng này build
-# thử b16 (ViT nhỏ nhất) như một smoke test phụ thuộc — KHÔNG phải model đang
-# dùng; model thật được kiểm tra ở RUN cuối (đọc từ app/services/pipeline.py),
-# vì dựng thử l16/h14 ngay lúc build sẽ cấp phát vài GB RAM.
+# Cài dependencies trước để tận dụng cache layer. Chỉ import + kiểm tra
+# metadata, KHÔNG build model ở bước này: build model có thể tải weights từ
+# HuggingFace (network) và cấp phát vài GB RAM. Model thật được kiểm tra ở RUN
+# cuối (đọc từ app/services/pipeline.py).
+#
+# Cache wheel của pip bằng BuildKit cache mount; stage ai-base đặt
+# PIP_NO_CACHE_DIR=1 nên phải `env -u` cho riêng lệnh pip.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR pip install -r requirements.txt \
     && pip check \
-    && python -c "import cv2, mediapipe, ubjson, unigaze.loader as l; l.build_unigaze_model('unigaze_b16_joint')"
+    && python -c "import cv2, mediapipe, ubjson, unigaze.loader as l; assert 'unigaze_b16_joint' in l.MODEL_INDEX"
 
 # Chạy bằng user không phải root. Tạo sẵn /app/weights thuộc appuser để volume
 # `gaze-weights` (mount đè lên đây) ghi được weights lúc runtime.

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.aoi import AoiSet
     from app.models.calibration import Calibration
     from app.models.course import CourseVersionItem, Enrollment, LessonVersionSlide
     from app.models.quiz import QuizAttempt
@@ -116,6 +117,9 @@ class ContentPresentation(Base):
     lesson_version_slide_id: Mapped[str | None] = mapped_column(
         ForeignKey("lesson_version_slides.id", ondelete="RESTRICT")
     )
+    slide_aoi_set_id: Mapped[str | None] = mapped_column(
+        ForeignKey("aoi_sets.id", ondelete="SET NULL")
+    )
     surface: Mapped[str] = mapped_column(String(16), nullable=False)
     sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[datetime] = mapped_column(
@@ -125,6 +129,7 @@ class ContentPresentation(Base):
 
     session: Mapped["LearningSession"] = relationship(back_populates="presentations")
     lesson_version_slide: Mapped["LessonVersionSlide | None"] = relationship()
+    slide_aoi_set: Mapped["AoiSet | None"] = relationship()
 
 
 class GazeBatch(Base):

@@ -18,6 +18,8 @@ class ProfileOut(CamelModel):
     program: str | None = None
     teacher_code: str | None = None
     department: str | None = None
+    # False = tài khoản chỉ đăng nhập bằng Microsoft 365, chưa có mật khẩu.
+    has_password: bool = True
 
 
 class ProfileUpdate(CamelModel):

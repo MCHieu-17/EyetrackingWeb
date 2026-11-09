@@ -43,6 +43,19 @@ def internal_token() -> str:
     return _env("CHATBOT_INTERNAL_TOKEN")
 
 
+def db_pool_timeout() -> float:
+    """Thời gian tối đa chờ một connection từ pool (giây).
+
+    Để thấp để `/ready` và ingest báo lỗi cấu hình DB nhanh thay vì treo 30s.
+    """
+    return float(_env("DB_POOL_TIMEOUT", "10"))
+
+
+def db_pool_reconnect_timeout() -> float:
+    """Chu kỳ thử kết nối lại của pool khi DB/role chưa sẵn sàng (giây)."""
+    return float(_env("DB_POOL_RECONNECT_TIMEOUT", "10"))
+
+
 def llm_name() -> str:
     return _env("LLM_NAME", "river")
 
@@ -65,8 +78,13 @@ def embedding_model_path() -> str:
 
 
 def embedding_device() -> str:
-    """Thiết bị suy luận embedding local: cuda | cpu (mặc định GPU)."""
-    return _env("EMBEDDING_DEVICE", "cuda")
+    """Thiết bị suy luận embedding local: cuda | cpu (mặc định CPU).
+
+    GPU chỉ dành cho services/gaze. Chatbot dùng River API cho LLM/VLM và
+    embedding local chạy CPU; đặt EMBEDDING_DEVICE=cuda chỉ khi chủ động muốn
+    dùng GPU cho chatbot.
+    """
+    return _env("EMBEDDING_DEVICE", "cpu")
 
 
 def embedding_local_files_only() -> bool:

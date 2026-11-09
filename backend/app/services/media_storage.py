@@ -1,3 +1,4 @@
+import shutil
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -41,21 +42,6 @@ def public_url(key: str) -> str:
     return f"/media/{quote(key, safe='/')}"
 
 
-def asset_url(asset_id: str, object_key: str, storage_backend: str) -> str:
-    """URL có kiểm tra quyền cho media asset.
-
-    Local: route `/media/assets/{id}` (backend kiểm tra quyền).
-    R2: presigned URL ngắn hạn, không dùng public URL cho draft.
-    """
-    if storage_backend == "r2" and settings.r2_enabled:
-        return _r2_client().generate_presigned_url(
-            "get_object",
-            Params={"Bucket": settings.r2_bucket_name, "Key": object_key},
-            ExpiresIn=3600,
-        )
-    return f"/media/assets/{asset_id}"
-
-
 def asset_file_url(asset_id: str) -> str:
     """URL same-origin để PDF.js tải file PDF (có kiểm tra quyền)."""
     return f"/media/assets/{asset_id}/file"
@@ -92,17 +78,6 @@ def put_bytes(key: str, data: bytes, content_type: str) -> str:
     return public_url(key)
 
 
-def _r2_keys(prefix: str) -> list[dict]:
-    objects: list[dict] = []
-    try:
-        paginator = _r2_client().get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=settings.r2_bucket_name, Prefix=prefix):
-            objects.extend(page.get("Contents", []))
-    except (BotoCoreError, ClientError) as exc:
-        raise StorageError("Không thể đọc danh sách tệp trên R2") from exc
-    return objects
-
-
 def _delete_r2_keys(keys: list[str]) -> None:
     try:
         for start in range(0, len(keys), 1000):
@@ -116,21 +91,6 @@ def _delete_r2_keys(keys: list[str]) -> None:
                     raise StorageError("R2 không xóa được một số tệp")
     except (BotoCoreError, ClientError) as exc:
         raise StorageError("Không thể xóa tệp trên R2") from exc
-
-
-def delete_prefix(prefix: str) -> None:
-    if settings.r2_enabled:
-        _delete_r2_keys([item["Key"] for item in _r2_keys(prefix)])
-    local = _safe_local_path(prefix)
-    try:
-        if local.is_dir():
-            from shutil import rmtree
-
-            rmtree(local)
-        elif local.is_file():
-            local.unlink(missing_ok=True)
-    except OSError as exc:
-        raise StorageError("Không thể xóa tệp khỏi volume") from exc
 
 
 def _get_r2_bytes(key: str) -> bytes | None:
@@ -195,3 +155,59 @@ def delete_key(key: str, backend: str | None = None) -> None:
         path.unlink(missing_ok=True)
     except OSError as exc:
         raise StorageError("Không thể xóa tệp khỏi volume") from exc
+
+
+def delete_keys(keys: list[str], backend: str | None = None) -> None:
+    """Xóa nhiều object cùng backend; R2 gom theo batch 1000."""
+    if not keys:
+        return
+    use_r2 = settings.r2_enabled if backend is None else backend == "r2"
+    if use_r2:
+        if not settings.r2_enabled:
+            raise StorageError("R2 chưa được cấu hình để xóa tệp")
+        _delete_r2_keys(keys)
+        return
+    for key in keys:
+        delete_key(key, backend="local")
+
+
+def delete_prefix(prefix: str, backend: str | None = None) -> int:
+    """Xóa toàn bộ object dưới prefix (R2) hoặc thư mục (local).
+
+    Trả về số object/tệp đã xóa. Dùng để dọn sạch mọi tệp của một khóa học,
+    kể cả các object không còn được tham chiếu trong DB.
+    """
+    if not prefix.strip("/"):
+        raise StorageError("Prefix xóa không hợp lệ")
+
+    use_r2 = settings.r2_enabled if backend is None else backend == "r2"
+    if use_r2:
+        if not settings.r2_enabled:
+            raise StorageError("R2 chưa được cấu hình để xóa tệp")
+        keys: list[str] = []
+        try:
+            paginator = _r2_client().get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=settings.r2_bucket_name, Prefix=prefix
+            ):
+                keys.extend(obj["Key"] for obj in page.get("Contents", []))
+        except (BotoCoreError, ClientError) as exc:
+            raise StorageError("Không thể liệt kê tệp trên R2") from exc
+        _delete_r2_keys(keys)
+        return len(keys)
+
+    target = _safe_local_path(prefix)
+    if not target.exists():
+        return 0
+    if target.is_dir():
+        count = sum(1 for path in target.rglob("*") if path.is_file())
+        try:
+            shutil.rmtree(target)
+        except OSError as exc:
+            raise StorageError("Không thể xóa thư mục media") from exc
+        return count
+    try:
+        target.unlink()
+    except OSError as exc:
+        raise StorageError("Không thể xóa tệp khỏi volume") from exc
+    return 1

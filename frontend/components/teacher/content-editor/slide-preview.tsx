@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { PdfPage } from "@/components/pdf/pdf-page";
+import { LazyPdfPage } from "@/components/pdf/lazy-pdf-page";
 import { resolveMediaUrl } from "@/lib/api/client";
 import type { SlideAdmin } from "@/lib/types/domain";
 
 /**
- * Lưới xem trước slide. `slides` do trình soạn bài giảng truyền xuống (một
- * nguồn dữ liệu duy nhất cho cả xem trước và phần "Cài đặt nâng cao").
+ * Lưới xem trước slide. `slides` do trình soạn bài giảng truyền xuống.
  */
 export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
   const [preview, setPreview] = useState<number | null>(null);
@@ -53,7 +52,7 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
               aria-label={`Xem trước trang ${slide.orderIndex + 1}`}
               className="group relative overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white p-1 outline-none transition hover:border-black/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-black/20"
             >
-              <PdfPage
+              <LazyPdfPage
                 url={url}
                 pageNumber={slide.pageNumber}
                 lazy
@@ -61,6 +60,22 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
                 className="aspect-[4/3] w-full overflow-hidden rounded-[14px] bg-white"
                 canvasClassName="transition group-hover:scale-[1.02]"
               />
+              {slide.embeddingStatus === "none" && (
+                <span
+                  className="absolute right-1.5 top-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground shadow-sm"
+                  title="Trang chưa được index cho trợ lý học tập"
+                >
+                  Chưa index
+                </span>
+              )}
+              {slide.embeddingStatus === "pending" && (
+                <span
+                  className="absolute right-1.5 top-1.5 rounded-full bg-info px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+                  title="Đang index cho trợ lý học tập"
+                >
+                  Đang index
+                </span>
+              )}
               {slide.embeddingStatus === "failed" && (
                 <span
                   className="absolute right-1.5 top-1.5 rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm"
@@ -94,7 +109,7 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
             {(() => {
               const url = resolveMediaUrl(previewSlide.pdfUrl);
               return url ? (
-                <PdfPage
+                <LazyPdfPage
                   key={previewSlide.id}
                   url={url}
                   pageNumber={previewSlide.pageNumber}

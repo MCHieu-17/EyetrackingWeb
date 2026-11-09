@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import { FullPageSpinner } from "@/components/ui/spinner";
-import { AoiEditor } from "@/components/teacher/aoi-editor";
+import { LazyAoiEditor } from "@/components/teacher/aoi/lazy-aoi-editor";
 import { ContentEditor } from "@/components/teacher/content-editor";
 import { NewCourseSetup } from "@/components/teacher/content-editor/new-course-setup";
 import { CourseInfoTab } from "@/components/teacher/course-info-tab";
@@ -152,7 +152,15 @@ function Workspace({ courseId }: { courseId: string }) {
         ) : null}
         {!isNew && view === "info" && <CourseInfoTab courseId={courseId} canManage={canManage} />}
         {!isNew && view === "students" && <StudentsTab courseId={courseId} canManage={canManage} />}
-        {!isNew && view === "aoi" && <AoiEditor courseId={courseId} />}
+        {!isNew && view === "aoi" && (
+          <div className="-mx-4 -my-8 sm:-mx-8 lg:-mx-12 lg:-my-12">
+            <LazyAoiEditor
+              courseId={courseId}
+              courseTitle={title}
+              canManage={canManage}
+            />
+          </div>
+        )}
       </main>
     </div>
   );

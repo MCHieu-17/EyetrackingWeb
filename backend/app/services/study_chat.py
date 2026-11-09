@@ -15,7 +15,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 TITLE_MAX = 60
 CONTEXT_MAX = 30000
 HISTORY_LIMIT = 10
+
+_chatbot_client: httpx.AsyncClient | None = None
 
 
 def question_correct_ids(question: dict) -> list[str]:
@@ -111,30 +113,25 @@ def _headers() -> dict[str, str]:
     return {"X-Chatbot-Token": settings.chatbot_internal_token}
 
 
+def _client() -> httpx.AsyncClient:
+    global _chatbot_client
+    if _chatbot_client is None:
+        _chatbot_client = httpx.AsyncClient(
+            timeout=settings.chatbot_timeout_seconds,
+            headers=_headers(),
+        )
+    return _chatbot_client
+
+
+async def close_chatbot_client() -> None:
+    global _chatbot_client
+    if _chatbot_client is not None:
+        await _chatbot_client.aclose()
+        _chatbot_client = None
+
+
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-def _citation_out(citation: dict) -> dict:
-    return {
-        "documentId": citation.get("document_id"),
-        "courseVersionId": citation.get("course_version_id"),
-        "lessonVersionId": citation.get("lesson_version_id"),
-        "slideVersionId": citation.get("slide_version_id"),
-        "membershipId": citation.get("membership_id"),
-        "assetId": citation.get("asset_id"),
-        "title": citation.get("title") or "",
-        "location": citation.get("location") or "",
-        "lessonId": citation.get("lesson_id"),
-        "lessonTitle": citation.get("lesson_title") or "",
-        "slideId": citation.get("slide_id"),
-        "slideIndex": citation.get("slide_index"),
-        "imageUrl": citation.get("image_url") or "",
-        "pdfUrl": citation.get("pdf_url") or citation.get("image_url") or "",
-        "pageNumber": citation.get("page_number"),
-        "snippet": citation.get("snippet") or "",
-        "score": citation.get("score") or 0.0,
-    }
 
 
 async def _history(db: AsyncSession, session_id: str) -> list[dict]:
@@ -198,18 +195,6 @@ def _payload(
         "assignment_context": context,
         "support_mode": support_mode,
     }
-
-
-async def _ask_chatbot(payload: dict) -> dict:
-    async with httpx.AsyncClient(
-        timeout=settings.chatbot_timeout_seconds,
-        headers=_headers(),
-    ) as client:
-        response = await client.post(
-            f"{settings.chatbot_url_resolved.rstrip('/')}/chat", json=payload
-        )
-        response.raise_for_status()
-        return response.json()
 
 
 async def _persist_assistant(
@@ -297,78 +282,6 @@ async def ensure_access_in_db(check: AsyncSession, session: ChatSession) -> None
         )
 
 
-async def answer_in_session(
-    db: AsyncSession,
-    *,
-    course: Course,
-    course_version: CourseVersion,
-    session: ChatSession,
-    message: str,
-    lesson: Lesson | None,
-    lesson_version: LessonVersion | None,
-    module_title: str | None,
-    quiz: QuizSpec | None,
-    attempt: QuizAttempt | None,
-    support_mode: str,
-    draft_answers: dict[str, list[str]] | None = None,
-) -> tuple[str, list[dict], str | None, bool]:
-    if not _chatbot_ready():
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Trợ lý học tập chưa được cấu hình",
-        )
-
-    history = await _history(db, session.id)
-    payload = _payload(
-        course=course,
-        course_version=course_version,
-        session=session,
-        message=message,
-        history=history,
-        lesson=lesson,
-        lesson_version=lesson_version,
-        module_title=module_title,
-        quiz=quiz,
-        attempt=attempt,
-        support_mode=support_mode,
-        draft_answers=draft_answers,
-    )
-
-    db.add(
-        ChatMessage(
-            session_id=session.id,
-            role="student",
-            content=message,
-            citations=[],
-            intent=None,
-        )
-    )
-    await db.commit()
-
-    try:
-        data = await _ask_chatbot(payload)
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            detail="Trợ lý học tập tạm thời không phản hồi",
-        ) from exc
-
-    await _ensure_access(session)
-    answer = data.get("answer") or ""
-    citations = data.get("citations") or []
-    intent = data.get("intent")
-    verified = bool(data.get("verified", True))
-
-    await _persist_assistant(
-        db,
-        session=session,
-        answer=answer,
-        citations=citations,
-        intent=intent,
-    )
-    return answer, citations, intent, verified
-
-
 async def _guarded_lines(
     response: httpx.Response, session: ChatSession
 ) -> AsyncIterator[str]:
@@ -447,31 +360,27 @@ async def stream_in_session(
     completed = False
 
     try:
-        async with httpx.AsyncClient(
-            timeout=settings.chatbot_timeout_seconds,
-            headers=_headers(),
-        ) as client:
-            async with client.stream(
-                "POST",
-                f"{settings.chatbot_url_resolved.rstrip('/')}/chat/stream",
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in _guarded_lines(response, session):
-                    if line.startswith("event: "):
-                        event = line[7:].strip()
-                        continue
-                    if not line.startswith("data: "):
-                        continue
-                    data = json.loads(line[6:])
-                    if event == "token":
-                        answer_parts.append(data.get("text") or "")
-                    elif event == "citations":
-                        citations = data.get("citations") or []
-                    elif event == "done":
-                        intent = data.get("intent")
-                        completed = True
-                    yield _sse(event, data)
+        async with _client().stream(
+            "POST",
+            f"{settings.chatbot_url_resolved.rstrip('/')}/chat/stream",
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            async for line in _guarded_lines(response, session):
+                if line.startswith("event: "):
+                    event = line[7:].strip()
+                    continue
+                if not line.startswith("data: "):
+                    continue
+                data = json.loads(line[6:])
+                if event == "token":
+                    answer_parts.append(data.get("text") or "")
+                elif event == "citations":
+                    citations = data.get("citations") or []
+                elif event == "done":
+                    intent = data.get("intent")
+                    completed = True
+                yield _sse(event, data)
     except (httpx.HTTPError, ValueError):
         yield _sse(
             "error",

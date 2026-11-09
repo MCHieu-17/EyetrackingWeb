@@ -1,10 +1,10 @@
-# Embedding local (EMBEDDING_NAME=local): Qwen3-Embedding-0.6B chạy trên GPU.
+# Embedding local (EMBEDDING_NAME=local): Qwen3-Embedding-0.6B chạy trên CPU.
 # Tách riêng để Docker image cài (cùng requirements.txt), còn môi trường dev
-# không phải kéo torch (~vài GB).
+# không phải kéo torch (~vài trăm MB).
 #
-# torch/torchvision (CUDA 12.4) KHÔNG khai báo ở đây — đã có sẵn trong image nền
-# dùng chung docker/ai-base (xem docker/ai-base/requirements-torch.txt).
-# Host cần NVIDIA driver + nvidia-container-toolkit (docker-compose đặt `gpus: all`).
+# torch/torchvision (CPU) KHÔNG khai báo ở đây — đã có sẵn trong stage `ai-base`
+# của services/chatbot/Dockerfile (xem requirements-torch-cpu.txt).
+# Chatbot không cần GPU/NVIDIA driver; GPU chỉ dành cho services/gaze.
 sentence-transformers==6.1.0
 langchain-huggingface==1.2.3
 # Import trực tiếp trong scripts/download_embedding.py (snapshot_download).

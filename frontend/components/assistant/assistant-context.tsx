@@ -9,9 +9,9 @@ import {
   type ReactNode,
 } from "react";
 
-export type AssistantMode = "reader" | "quiz" | "review";
+type AssistantMode = "reader" | "quiz" | "review";
 
-export interface AssistantQuizContext {
+interface AssistantQuizContext {
   mode: "quiz" | "review";
   assignmentId: string;
   attemptId?: string | null;

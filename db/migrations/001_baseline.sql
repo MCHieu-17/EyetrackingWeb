@@ -1,11 +1,15 @@
 -- =============================================================================
--- 001_baseline.sql — schema đích duy nhất của EyeLearning (Phase 1)
+-- 001_baseline.sql — schema đích duy nhất của EyeLearning.
 --
--- Baseline được dựng từ database rỗng. Không chứa dữ liệu mẫu, không chứa
--- migration lịch sử. Runner bọc mỗi file trong một transaction riêng.
+-- File này là bản gộp cuối cùng của toàn bộ schema + dữ liệu tham chiếu tối
+-- thiểu (roles, app_metadata). Được dựng từ database
+-- rỗng; runner bọc file trong một transaction riêng.
 --
 -- Thứ tự: identity/auth → media → content/version → quiz → calibration/session
---         → AOI/layout → gaze → analysis/metrics → chat → metadata → view/trigger.
+--         → AOI/layout → gaze → analysis/metrics → chat → metadata → view/trigger
+--         → reference seed.
+--
+-- schema_generation = 6.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -70,6 +74,19 @@ CREATE TABLE auth_sessions (
 CREATE UNIQUE INDEX ux_auth_sessions_refresh_token_hash
     ON auth_sessions (refresh_token_hash);
 CREATE INDEX idx_auth_sessions_user ON auth_sessions (user_id);
+
+CREATE TABLE user_identities (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider          VARCHAR(30) NOT NULL,
+    provider_user_id  VARCHAR(255) NOT NULL,
+    email             VARCHAR(255),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at     TIMESTAMPTZ,
+    CONSTRAINT user_identities_provider_user_unique
+        UNIQUE (provider, provider_user_id)
+);
+CREATE INDEX idx_user_identities_user ON user_identities (user_id);
 
 CREATE TABLE user_profiles (
     user_id         UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -159,6 +176,10 @@ CREATE TABLE media_assets (
     state             VARCHAR(16) NOT NULL DEFAULT 'staging'
                       CONSTRAINT media_assets_state_check
                       CHECK (state IN ('staging', 'ready', 'failed', 'deleted')),
+    kind              VARCHAR(16) NOT NULL DEFAULT 'source'
+                      CONSTRAINT media_assets_kind_check
+                      CHECK (kind IN ('source', 'normalized', 'thumbnail')),
+    metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (course_id, sha256),
     UNIQUE (storage_backend, object_key)
@@ -275,9 +296,8 @@ CREATE TABLE slide_versions (
     revision_no         INTEGER NOT NULL
                         CONSTRAINT slide_versions_revision_no_check
                         CHECK (revision_no > 0),
-    image_asset_id      UUID NOT NULL REFERENCES media_assets(id) ON DELETE RESTRICT,
-    source_pdf_asset_id UUID REFERENCES media_assets(id) ON DELETE RESTRICT,
-    source_page         INTEGER
+    source_pdf_asset_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE RESTRICT,
+    source_page         INTEGER NOT NULL
                         CONSTRAINT slide_versions_source_page_check
                         CHECK (source_page > 0),
     render_metadata     JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -287,7 +307,40 @@ CREATE TABLE slide_versions (
     UNIQUE (id, slide_id)
 );
 CREATE INDEX idx_slide_versions_slide ON slide_versions (slide_id);
-CREATE INDEX idx_slide_versions_image_asset ON slide_versions (image_asset_id);
+CREATE INDEX idx_slide_versions_source_pdf
+    ON slide_versions (source_pdf_asset_id, source_page);
+
+CREATE TABLE slide_import_jobs (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    lesson_version_id  UUID NOT NULL REFERENCES lesson_versions(id) ON DELETE CASCADE,
+    created_by         UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    status             VARCHAR(16) NOT NULL DEFAULT 'queued'
+                       CONSTRAINT slide_import_jobs_status_check
+                       CHECK (status IN ('queued', 'processing', 'ready', 'failed', 'cancelled')),
+    source_filename    TEXT NOT NULL,
+    source_mime        VARCHAR(127) NOT NULL,
+    source_size        BIGINT NOT NULL
+                       CONSTRAINT slide_import_jobs_source_size_check
+                       CHECK (source_size >= 0),
+    source_sha256      CHAR(64) NOT NULL
+                       CONSTRAINT slide_import_jobs_source_sha256_check
+                       CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
+    source_object_key  TEXT NOT NULL,
+    pdf_asset_id       UUID REFERENCES media_assets(id) ON DELETE RESTRICT,
+    page_count         INTEGER
+                       CONSTRAINT slide_import_jobs_page_count_check
+                       CHECK (page_count IS NULL OR page_count > 0),
+    error              TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ
+);
+CREATE INDEX idx_slide_import_jobs_status
+    ON slide_import_jobs (status, created_at);
+CREATE INDEX idx_slide_import_jobs_lesson
+    ON slide_import_jobs (lesson_id, created_at DESC);
 
 CREATE TABLE lesson_version_slides (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,7 +351,6 @@ CREATE TABLE lesson_version_slides (
                        CONSTRAINT lesson_version_slides_position_check
                        CHECK (position >= 0),
     title              VARCHAR(255) NOT NULL DEFAULT '',
-    is_key             BOOLEAN NOT NULL DEFAULT false,
     UNIQUE (lesson_version_id, position),
     UNIQUE (lesson_version_id, slide_id),
     UNIQUE (id, lesson_version_id),
@@ -419,9 +471,6 @@ CREATE TABLE calibrations (
                         CONSTRAINT calibrations_model_hash_check
                         CHECK (model_hash ~ '^[0-9a-f]{64}$'),
     model_version       VARCHAR(64) NOT NULL,
-    mae_px              REAL
-                        CONSTRAINT calibrations_mae_check
-                        CHECK (mae_px >= 0),
     viewport_width_px   INTEGER NOT NULL
                         CONSTRAINT calibrations_viewport_width_check
                         CHECK (viewport_width_px > 0),
@@ -436,18 +485,6 @@ CREATE TABLE calibrations (
 );
 CREATE INDEX idx_calibrations_device
     ON calibrations (device_id, created_at);
-
-CREATE TABLE calibration_settings (
-    id          SMALLINT PRIMARY KEY DEFAULT 1
-                CONSTRAINT calibration_settings_single_row_check
-                CHECK (id = 1),
-    enabled     BOOLEAN NOT NULL DEFAULT true,
-    threshold   REAL NOT NULL DEFAULT 0.12
-                CONSTRAINT calibration_settings_threshold_check
-                CHECK (threshold BETWEEN 0.01 AND 0.30),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL
-);
 
 -- ---------------------------------------------------------------------------
 -- 7) Learning sessions / presentations
@@ -477,6 +514,8 @@ CREATE INDEX idx_learning_sessions_item
     ON learning_sessions (course_version_item_id);
 CREATE INDEX idx_learning_sessions_status
     ON learning_sessions (status);
+CREATE INDEX idx_learning_sessions_enrollment_item_status
+    ON learning_sessions (enrollment_id, course_version_item_id, status);
 
 CREATE TABLE content_presentations (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -490,11 +529,15 @@ CREATE TABLE content_presentations (
                              CHECK (sequence_no >= 0),
     started_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at                 TIMESTAMPTZ,
+    -- Bộ vùng slide đã dùng lúc học; FK được thêm sau khi tạo aoi_sets.
+    slide_aoi_set_id         UUID,
     UNIQUE (session_id, sequence_no),
     UNIQUE (id, session_id)
 );
 CREATE INDEX idx_content_presentations_session
     ON content_presentations (session_id, started_at);
+CREATE INDEX idx_content_presentations_slide
+    ON content_presentations (lesson_version_slide_id);
 
 -- ---------------------------------------------------------------------------
 -- 8) AOI sets / definitions / layout
@@ -531,13 +574,22 @@ CREATE UNIQUE INDEX ux_aoi_sets_one_published_ui
     ON aoi_sets (ui_schema_version)
     WHERE state = 'published' AND ui_schema_version IS NOT NULL;
 
+ALTER TABLE content_presentations
+    ADD CONSTRAINT content_presentations_slide_aoi_set_id_fkey
+    FOREIGN KEY (slide_aoi_set_id) REFERENCES aoi_sets(id) ON DELETE SET NULL;
+
 CREATE TABLE aoi_definitions (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aoi_set_id  UUID NOT NULL REFERENCES aoi_sets(id) ON DELETE CASCADE,
-    code        VARCHAR(64) NOT NULL,
-    name        VARCHAR(100) NOT NULL,
-    parent_id   UUID REFERENCES aoi_definitions(id) ON DELETE SET NULL,
-    geometry    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aoi_set_id    UUID NOT NULL REFERENCES aoi_sets(id) ON DELETE CASCADE,
+    code          VARCHAR(64) NOT NULL,
+    name          VARCHAR(100) NOT NULL,
+    parent_id     UUID REFERENCES aoi_definitions(id) ON DELETE SET NULL,
+    geometry      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    is_container  BOOLEAN NOT NULL DEFAULT false,
+    kind          VARCHAR(16) NOT NULL DEFAULT 'custom'
+                  CONSTRAINT aoi_definitions_kind_check
+                  CHECK (kind IN ('text', 'image', 'table', 'drawing', 'custom', 'ui', 'system')),
+    is_active     BOOLEAN NOT NULL DEFAULT true,
     UNIQUE (aoi_set_id, code)
 );
 CREATE INDEX idx_aoi_definitions_set ON aoi_definitions (aoi_set_id);
@@ -697,6 +749,7 @@ CREATE TABLE analysis_runs (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id         UUID NOT NULL REFERENCES learning_sessions(id) ON DELETE CASCADE,
     aoi_set_id         UUID NOT NULL REFERENCES aoi_sets(id) ON DELETE RESTRICT,
+    presentation_id    UUID REFERENCES content_presentations(id) ON DELETE CASCADE,
     from_time          TIMESTAMPTZ NOT NULL,
     to_time            TIMESTAMPTZ NOT NULL,
     batch_watermark    UUID REFERENCES gaze_batches(id) ON DELETE SET NULL,
@@ -713,6 +766,10 @@ CREATE TABLE analysis_runs (
 CREATE INDEX idx_analysis_runs_session
     ON analysis_runs (session_id, created_at);
 CREATE INDEX idx_analysis_runs_status ON analysis_runs (status);
+CREATE INDEX idx_analysis_runs_status_created
+    ON analysis_runs (status, created_at);
+CREATE INDEX idx_analysis_runs_presentation
+    ON analysis_runs (presentation_id);
 
 CREATE TABLE aoi_hits (
     run_id         UUID NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE,
@@ -833,15 +890,13 @@ SELECT
     lvs.id                  AS lesson_version_slide_id,
     lvs.position            AS slide_position,
     lvs.title               AS slide_title,
-    lvs.is_key              AS is_key,
     sv.id                   AS slide_version_id,
     s.id                    AS slide_id,
     sv.revision_no          AS slide_revision_no,
-    sv.image_asset_id       AS image_asset_id,
-    ma.object_key           AS image_object_key,
-    ma.storage_backend      AS image_storage_backend,
-    ma.mime_type            AS image_mime_type,
-    sv.source_pdf_asset_id  AS source_pdf_asset_id,
+    sv.source_pdf_asset_id  AS pdf_asset_id,
+    ma.object_key           AS pdf_object_key,
+    ma.storage_backend      AS pdf_storage_backend,
+    ma.mime_type            AS pdf_mime_type,
     sv.source_page          AS source_page
 FROM courses c
 JOIN course_versions cv
@@ -861,7 +916,57 @@ LEFT JOIN slide_versions sv
 LEFT JOIN slides s
   ON s.id = lvs.slide_id
 LEFT JOIN media_assets ma
-  ON ma.id = sv.image_asset_id
+  ON ma.id = sv.source_pdf_asset_id
+WHERE c.archived_at IS NULL;
+
+-- Toàn bộ outline (draft + published) cho chatbot index trước khi xuất bản.
+-- Retrieval vẫn chỉ đọc v_published_course_outline; view này chỉ dùng để nạp
+-- slide_documents cho bản nháp.
+CREATE VIEW v_course_outline AS
+SELECT
+    c.id                    AS course_id,
+    cv.id                   AS course_version_id,
+    cv.version_no           AS course_version_no,
+    cvm.id                  AS module_id,
+    cvm.module_key          AS module_key,
+    cvm.title               AS module_title,
+    cvm.position            AS module_position,
+    cvi.id                  AS item_id,
+    cvi.position            AS item_position,
+    l.id                    AS lesson_id,
+    l.kind                  AS lesson_kind,
+    lv.id                   AS lesson_version_id,
+    lv.title                AS lesson_title,
+    lvs.id                  AS lesson_version_slide_id,
+    lvs.position            AS slide_position,
+    lvs.title               AS slide_title,
+    sv.id                   AS slide_version_id,
+    s.id                    AS slide_id,
+    sv.revision_no          AS slide_revision_no,
+    sv.source_pdf_asset_id  AS pdf_asset_id,
+    ma.object_key           AS pdf_object_key,
+    ma.storage_backend      AS pdf_storage_backend,
+    ma.mime_type            AS pdf_mime_type,
+    sv.source_page          AS source_page
+FROM courses c
+JOIN course_versions cv
+  ON cv.course_id = c.id
+JOIN course_version_modules cvm
+  ON cvm.course_version_id = cv.id
+JOIN course_version_items cvi
+  ON cvi.module_id = cvm.id
+JOIN lessons l
+  ON l.id = cvi.lesson_id
+JOIN lesson_versions lv
+  ON lv.id = cvi.lesson_version_id
+LEFT JOIN lesson_version_slides lvs
+  ON lvs.lesson_version_id = lv.id
+LEFT JOIN slide_versions sv
+  ON sv.id = lvs.slide_version_id
+LEFT JOIN slides s
+  ON s.id = lvs.slide_id
+LEFT JOIN media_assets ma
+  ON ma.id = sv.source_pdf_asset_id
 WHERE c.archived_at IS NULL;
 
 CREATE VIEW v_chatbot_slide_documents AS
@@ -873,10 +978,11 @@ SELECT
     o.lesson_version_id,
     o.lesson_version_slide_id,
     o.slide_id,
-    o.image_asset_id,
-    o.image_object_key,
-    o.image_storage_backend,
-    o.image_mime_type,
+    o.pdf_asset_id,
+    o.pdf_object_key,
+    o.pdf_storage_backend,
+    o.pdf_mime_type,
+    o.source_page,
     o.slide_title,
     o.module_title,
     o.lesson_title,
@@ -892,60 +998,6 @@ JOIN v_published_course_outline o
   ON o.slide_version_id = sd.slide_version_id
 WHERE sd.ingestion_state = 'ready';
 
-CREATE VIEW v_session_metrics AS
-SELECT
-    ls.id                     AS session_id,
-    ls.enrollment_id          AS enrollment_id,
-    ls.course_version_item_id AS course_version_item_id,
-    cvi.lesson_id             AS lesson_id,
-    cvi.lesson_version_id     AS lesson_version_id,
-    (SELECT count(*) FROM gaze_samples gs WHERE gs.session_id = ls.id) AS sample_count,
-    (SELECT count(*) FROM gaze_samples gs
-      WHERE gs.session_id = ls.id AND gs.status = 'ok') AS ok_sample_count,
-    (SELECT coalesce(sum(pm.dwell_ms), 0)
-       FROM content_presentations cp
-       JOIN presentation_metrics pm ON pm.presentation_id = cp.id
-      WHERE cp.session_id = ls.id) AS dwell_ms,
-    (SELECT coalesce(sum(pm.fixation_count), 0)
-       FROM content_presentations cp
-       JOIN presentation_metrics pm ON pm.presentation_id = cp.id
-      WHERE cp.session_id = ls.id) AS fixation_count
-FROM learning_sessions ls
-JOIN course_version_items cvi ON cvi.id = ls.course_version_item_id;
-
-CREATE VIEW v_lesson_version_metrics AS
-SELECT
-    ls.enrollment_id          AS enrollment_id,
-    cvi.lesson_version_id     AS lesson_version_id,
-    cvi.lesson_id             AS lesson_id,
-    count(DISTINCT lvs.id)    AS slides_total,
-    count(DISTINCT lvs.id) FILTER (WHERE pm.dwell_ms > 0) AS slides_viewed,
-    coalesce(sum(pm.dwell_ms), 0) AS dwell_ms,
-    coalesce(avg(CASE WHEN lvs.is_key THEN pm.dwell_ms END), 0) AS key_dwell_ms,
-    coalesce(avg(CASE WHEN NOT lvs.is_key THEN pm.dwell_ms END), 0) AS normal_dwell_ms
-FROM learning_sessions ls
-JOIN course_version_items cvi ON cvi.id = ls.course_version_item_id
-JOIN lesson_version_slides lvs ON lvs.lesson_version_id = cvi.lesson_version_id
-LEFT JOIN content_presentations cp
-  ON cp.session_id = ls.id AND cp.lesson_version_slide_id = lvs.id
-LEFT JOIN presentation_metrics pm ON pm.presentation_id = cp.id
-GROUP BY ls.enrollment_id, cvi.lesson_version_id, cvi.lesson_id;
-
-CREATE VIEW v_class_heatmap AS
-SELECT
-    cvi.lesson_version_id     AS lesson_version_id,
-    lvs.slide_version_id      AS slide_version_id,
-    pm.algorithm_version      AS algorithm_version,
-    jsonb_agg(pm.heatmap_grid) AS heatmap_grids,
-    sum(pm.sample_count)      AS sample_count,
-    sum(pm.dwell_ms)          AS dwell_ms
-FROM presentation_metrics pm
-JOIN content_presentations cp ON cp.id = pm.presentation_id
-JOIN learning_sessions ls ON ls.id = cp.session_id
-JOIN course_version_items cvi ON cvi.id = ls.course_version_item_id
-JOIN lesson_version_slides lvs ON lvs.id = cp.lesson_version_slide_id
-GROUP BY cvi.lesson_version_id, lvs.slide_version_id, pm.algorithm_version;
-
 -- ---------------------------------------------------------------------------
 -- 15) Immutability / consistency triggers
 -- ---------------------------------------------------------------------------
@@ -955,6 +1007,9 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        IF current_setting('app.allow_course_delete', true) = 'on' THEN
+            RETURN OLD;
+        END IF;
         IF OLD.state = 'published' THEN
             RAISE EXCEPTION 'cannot delete published course version %', OLD.id;
         END IF;
@@ -983,6 +1038,9 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        IF current_setting('app.allow_course_delete', true) = 'on' THEN
+            RETURN OLD;
+        END IF;
         IF OLD.state = 'published' THEN
             RAISE EXCEPTION 'cannot delete published lesson version %', OLD.id;
         END IF;
@@ -1007,6 +1065,10 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    IF TG_OP = 'DELETE'
+       AND current_setting('app.allow_course_delete', true) = 'on' THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'slide_versions are immutable';
 END;
 $$;
@@ -1060,6 +1122,9 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        IF current_setting('app.allow_course_delete', true) = 'on' THEN
+            RETURN OLD;
+        END IF;
         IF OLD.status = 'submitted' THEN
             RAISE EXCEPTION 'cannot delete submitted attempt %', OLD.id;
         END IF;
@@ -1466,6 +1531,9 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
+        IF current_setting('app.allow_course_delete', true) = 'on' THEN
+            RETURN OLD;
+        END IF;
         IF OLD.state = 'published' THEN
             RAISE EXCEPTION 'cannot delete published AOI set %', OLD.id;
         END IF;
@@ -1496,6 +1564,10 @@ DECLARE
     old_state VARCHAR(16);
     new_state VARCHAR(16);
 BEGIN
+    IF TG_OP = 'DELETE'
+       AND current_setting('app.allow_course_delete', true) = 'on' THEN
+        RETURN OLD;
+    END IF;
     IF TG_OP IN ('UPDATE', 'DELETE') THEN
         SELECT state INTO old_state FROM aoi_sets WHERE id = OLD.aoi_set_id;
         IF old_state <> 'draft' THEN
@@ -1539,3 +1611,19 @@ $$;
 CREATE TRIGGER trg_quiz_spec_lesson_kind
 BEFORE INSERT OR UPDATE ON quiz_specs
 FOR EACH ROW EXECUTE FUNCTION check_quiz_spec_lesson_kind();
+
+-- ---------------------------------------------------------------------------
+-- 16) Reference seed
+-- ---------------------------------------------------------------------------
+-- Chỉ roles + cấu hình hệ thống. KHÔNG tạo tài khoản mẫu; seed development nằm
+-- ở db/seed_dev_users.sql và chỉ chạy khi được chọn.
+INSERT INTO roles (code, label) VALUES
+    ('admin',   'Quản trị viên'),
+    ('teacher', 'Giáo viên'),
+    ('student', 'Học sinh')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO app_metadata (key, value) VALUES
+    ('schema_generation', '6')
+ON CONFLICT (key) DO UPDATE
+SET value = EXCLUDED.value, updated_at = now();

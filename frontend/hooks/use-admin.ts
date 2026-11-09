@@ -1,71 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  assignTeachers,
-  fetchCourseTeachers,
-  fetchTeachers,
-  unassignTeacher,
-  type CourseTeacher,
+  fetchAdminStudents,
+  promoteStudent,
+  type AdminStudent,
 } from "@/lib/api/admin";
-import {
-  fetchAdminCalibrationSettings,
-  updateAdminCalibrationSettings,
-  type CalibrationSettings,
-} from "@/lib/api/calibration";
 
-export function useTeacherDirectory(enabled = true) {
+export function useAdminStudents(query = "") {
+  const normalizedQuery = query.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState(normalizedQuery);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(normalizedQuery), 300);
+    return () => window.clearTimeout(timeout);
+  }, [normalizedQuery]);
+
   return useQuery({
-    queryKey: ["admin", "teachers"],
-    queryFn: () => fetchTeachers(),
-    enabled,
+    queryKey: ["admin", "students", debouncedQuery],
+    queryFn: () => fetchAdminStudents(debouncedQuery),
+    staleTime: 30_000,
   });
 }
 
-export function useCourseTeachers(courseId: string) {
-  return useQuery({
-    queryKey: ["admin", "course-teachers", courseId],
-    queryFn: () => fetchCourseTeachers(courseId),
-    enabled: Boolean(courseId),
-  });
-}
-
-export function useAssignTeachers(courseId: string) {
+export function usePromoteStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (teacherIds: string[]) => assignTeachers(courseId, teacherIds),
+    mutationFn: ({
+      student,
+      teacherCode,
+      department,
+    }: {
+      student: AdminStudent;
+      teacherCode?: string | null;
+      department?: string | null;
+    }) => promoteStudent(student.id, { teacherCode, department }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "course-teachers", courseId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "teachers"] });
-    },
-  });
-}
-
-export function useUnassignTeacher(courseId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (teacher: CourseTeacher) => unassignTeacher(courseId, teacher.teacherId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "course-teachers", courseId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "teachers"] });
-    },
-  });
-}
-
-export function useCalibrationSettings() {
-  return useQuery<CalibrationSettings>({
-    queryKey: ["admin", "calibration-settings"],
-    queryFn: () => fetchAdminCalibrationSettings(),
-  });
-}
-
-export function useUpdateCalibrationSettings() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (patch: { enabled: boolean; threshold: number }) =>
-      updateAdminCalibrationSettings(patch),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["admin", "calibration-settings"], data);
+      queryClient.invalidateQueries({ queryKey: ["admin", "students"] });
     },
   });
 }

@@ -1,10 +1,24 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
+import { existsSync } from "node:fs";
 import path from "path";
+import { config as loadEnv } from "dotenv";
+
+// Một nguồn env duy nhất: .env ở gốc repo. Docker build dùng build args
+// (không có file .env trong context frontend).
+const rootEnv = path.resolve(__dirname, "../.env");
+if (existsSync(rootEnv)) loadEnv({ path: rootEnv });
+
+const isDev = process.env.NODE_ENV !== "production";
 
 // URL nội bộ cho rewrite phía server (không lọt vào client bundle).
-// Docker: tên service; dev trên host: localhost (đặt trong .env.local).
-const API_URL = process.env.API_INTERNAL_URL?.trim() || "http://backend:8001";
-const GAZE_URL = process.env.GAZE_INTERNAL_URL?.trim() || "http://gaze:8000";
+// Docker: tên service; dev trên host: localhost (có thể override trong .env gốc).
+const API_URL =
+  process.env.API_INTERNAL_URL?.trim() ||
+  (isDev ? "http://localhost:8001" : "http://backend:8001");
+const GAZE_URL =
+  process.env.GAZE_INTERNAL_URL?.trim() ||
+  (isDev ? "http://localhost:8000" : "http://gaze:8000");
 
 // Origin công khai (chỉ cần khi browser gọi thẳng domain, không qua rewrite).
 const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
@@ -25,13 +39,10 @@ function wsOriginOf(raw: string): string | null {
   return origin.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
 }
 
-const isDev = process.env.NODE_ENV !== "production";
-
 // CSP không hardcode domain: lấy từ env + localhost cho dev.
 const connectSrc = [
   "'self'",
-  "http://localhost:*",
-  "ws://localhost:*",
+  ...(isDev ? ["http://localhost:*", "ws://localhost:*"] : []),
   originOf(PUBLIC_API_URL),
   originOf(PUBLIC_GAZE_URL),
   wsOriginOf(PUBLIC_GAZE_URL),
@@ -52,9 +63,17 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   `connect-src ${connectSrc}`,
   "media-src 'self' blob:",
+  "frame-ancestors 'none'",
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Không tự sinh AGENTS.md/CLAUDE.md khi chạy next dev.
+  agentRules: false,
+  poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
+    NEXT_PUBLIC_GAZE_URL: process.env.NEXT_PUBLIC_GAZE_URL ?? "",
+  },
   // Standalone (chỉ khi build Docker): bundle tối thiểu, chạy `node server.js`.
   // KHÔNG bật trên Vercel: Vercel không hỗ trợ và build sẽ lỗi
   // (ENOENT .next/next-server.js.nft.json). Vercel build không set NEXT_STANDALONE.
@@ -114,4 +133,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default bundleAnalyzer({ enabled: process.env.ANALYZE === "true" })(nextConfig);

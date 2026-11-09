@@ -10,6 +10,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import INET, UUID
@@ -57,11 +58,14 @@ class User(Base):
     profile: Mapped["UserProfile | None"] = relationship(  # noqa: F821
         back_populates="user", uselist=False, lazy="joined"
     )
+    # Không route nào đọc trực tiếp hai quan hệ này; hồ sơ được truy vấn qua
+    # crud.profile. `raise` tránh 2 query selectin trên mọi lần load User và
+    # báo lỗi sớm nếu sau này có code vô tình truy cập.
     student_profile: Mapped["StudentProfile | None"] = relationship(  # noqa: F821
-        back_populates="user", uselist=False, lazy="selectin"
+        back_populates="user", uselist=False, lazy="raise"
     )
     teacher_profile: Mapped["TeacherProfile | None"] = relationship(  # noqa: F821
-        back_populates="user", uselist=False, lazy="selectin"
+        back_populates="user", uselist=False, lazy="raise"
     )
 
     @property
@@ -90,6 +94,32 @@ class UserRole(Base):
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+
+
+class UserIdentity(Base):
+    __tablename__ = "user_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "provider_user_id",
+            name="user_identities_provider_user_unique",
+        ),
+        Index("idx_user_identities_user", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuthSession(Base):

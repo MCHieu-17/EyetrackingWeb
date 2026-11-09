@@ -48,32 +48,6 @@ class Calibration:
         point = self._coef @ np.array([pitch, yaw], dtype=float) + self._intercept
         return float(point[0]), float(point[1])
 
-    def evaluate(self, X, y) -> float | None:
-        """MAE bằng k-fold (k = min(5, N)). Trả None khi không đủ mẫu (< 3).
-
-        Fit lại toàn bộ dữ liệu ở cuối để model sẵn sàng dùng.
-        """
-        X = np.asarray(X, dtype=float).reshape(-1, 2)
-        y = np.asarray(y, dtype=float).reshape(-1, 2)
-        n = len(X)
-        if n < 3:
-            self.fit(X, y)
-            return None
-
-        k = min(5, n)
-        indices = np.random.default_rng(42).permutation(n)
-        folds = [f for f in np.array_split(indices, k) if len(f) > 0]
-
-        errs: list[float] = []
-        for i, test_idx in enumerate(folds):
-            train_idx = np.concatenate([f for j, f in enumerate(folds) if j != i])
-            self.fit(X[train_idx], y[train_idx])
-            pred = (self._coef @ X[test_idx].T + self._intercept[:, None]).T
-            errs.append(float(np.abs(pred - y[test_idx]).mean()))
-
-        self.fit(X, y)  # fit cuối trên toàn bộ mẫu
-        return float(np.mean(errs))
-
     # Serialize (ubjson v2, không pickle)
     def serialize(self) -> bytes:
         if self._coef is None:

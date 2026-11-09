@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -276,7 +275,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
                     </span>
                     <div className="flex shrink-0 items-center gap-2 lg:justify-self-end">
                       <Button type="button" variant="outline" size="sm" className="flex-1 rounded-full border-black/10 bg-white lg:flex-none" onClick={() => setOpenId(student.id)}>
-                        Xem heatmap
+                        Chi tiết
                         <Icon name="ri-arrow-right-line" className="size-3.5" />
                       </Button>
                       {canManage && student.status !== "dropped" && (
@@ -347,7 +346,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
               <SheetBody className="p-5">
                 <div className="mb-4">
                   <h3 className="text-sm font-semibold text-black">Bài học</h3>
-                  <p className="mt-1 text-xs text-black/40">Chọn một bài để mở heatmap của học viên.</p>
+                  <p className="mt-1 text-xs text-black/40">Mức độ quan sát của học viên theo từng bài.</p>
                 </div>
                 {openStudentLessons.length === 0 ? (
                   <div className="rounded-[18px] border border-dashed border-[#eeeee9] px-4 py-8 text-center text-sm text-black/40">Khóa học chưa có bài học.</div>
@@ -356,20 +355,14 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
                     {openStudentLessons.map((lesson) => {
                       return (
                         <li key={lesson.lessonId}>
-                          <Link
-                            href={`/teacher/courses/${courseId}/lessons/${lesson.lessonId}/heatmap?student=${openStudent.id}&from=students`}
-                            className="group block rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs transition hover:border-black/10 hover:shadow-sm"
-                          >
+                          <div className="block rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs">
                             <div className="flex items-start justify-between gap-3">
                               <p className="min-w-0 truncate text-sm font-medium text-black">{lessonTitle(lesson.lessonId)}</p>
                               <span className="shrink-0 text-xs text-black/45">
                                 Quan sát {lesson.attention === null ? "—" : `${lesson.attention}%`}
                               </span>
                             </div>
-                            <div className="mt-3 flex items-center justify-end gap-1 text-xs font-medium text-[#52704f]">
-                              Xem heatmap <Icon name="ri-arrow-right-line" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                            </div>
-                          </Link>
+                          </div>
                         </li>
                       );
                     })}

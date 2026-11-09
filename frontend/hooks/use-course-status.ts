@@ -17,7 +17,7 @@ export function useCourseStatus(courseId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const changeStatus = useCallback(
-    async (next: CourseStatus): Promise<boolean> => {
+    async (next: CourseStatus): Promise<string | null> => {
       setSaving(true);
       setError(null);
       try {
@@ -30,10 +30,16 @@ export function useCourseStatus(courseId: string) {
           queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] }),
           queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
         ]);
-        return true;
+        return null;
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Lỗi không xác định");
-        return false;
+        const message = e instanceof Error ? e.message : "Lỗi không xác định";
+        setError(message);
+        // Publish có thể bị chặn vì slide chưa index; làm mới cây để UI
+        // chuyển sang trạng thái pending và tự poll.
+        await queryClient.invalidateQueries({
+          queryKey: ["teacher", "course-tree", courseId],
+        });
+        return message;
       } finally {
         setSaving(false);
       }

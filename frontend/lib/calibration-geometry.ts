@@ -8,23 +8,23 @@ export interface CalPoint {
   y: number;
 }
 
-const GRID = 4;
+const GRID = 5;
 
 /**
  * Khoảng cách tối thiểu (px) từ TÂM của chấm ngoài cùng tới rìa màn hình.
  * Chấm lớn nhất có đường kính 64px (size-16) → bán kính 32px, cộng ~8px
  * khoảng thở để chấm (và vòng focus) không bị cắt khi nằm sát rìa.
  */
-export const CALIBRATION_EDGE_INSET_PX = 40;
+const CALIBRATION_EDGE_INSET_PX = 40;
 
 /** Chặn dưới/trên để màn hình siêu rộng hoặc rất nhỏ vẫn cân đối. */
 const MIN_MARGIN = 0.015;
 const MAX_MARGIN = 0.06;
 
 /** Dùng khi chưa biết kích thước viewport (SSR) — sát rìa nhưng an toàn. */
-export const DEFAULT_CALIBRATION_MARGIN = 0.04;
+const DEFAULT_CALIBRATION_MARGIN = 0.04;
 
-export interface CalibrationMargins {
+interface CalibrationMargins {
   x: number;
   y: number;
 }
@@ -36,7 +36,7 @@ function clampMargin(value: number): number {
 /**
  * Lề (tỷ lệ 0..1) cho từng trục, suy ra từ kích thước viewport sao cho
  * khoảng cách pixel tới rìa luôn đồng đều trên mọi loại màn hình:
- * màn hình 13" hay 27" đều đặt 16 điểm sát rìa/góc như nhau.
+ * màn hình 13" hay 27" đều đặt 25 điểm sát rìa/góc như nhau.
  */
 export function calibrationMargins(
   viewportWidth: number,
@@ -59,7 +59,7 @@ function axisPositions(margin: number): number[] {
 }
 
 /**
- * Lưới 4×4 (16 điểm). `margins` cho phép đẩy lưới sát rìa theo từng trục;
+ * Lưới 5×5 (25 điểm). `margins` cho phép đẩy lưới sát rìa theo từng trục;
  * bỏ trống thì dùng margin mặc định.
  */
 export function buildCalibrationPoints(margins?: CalibrationMargins): CalPoint[] {
@@ -78,58 +78,37 @@ export function buildCalibrationPoints(margins?: CalibrationMargins): CalPoint[]
   return points;
 }
 
-export interface SlideRect {
-  left: number;
-  top: number;
+/** Hình chữ nhật vật lý của viewport trên màn hình (CSS px + DPR). */
+export interface ViewportRect {
   width: number;
   height: number;
+  dpr: number;
+  screenX: number;
+  screenY: number;
 }
 
-export function getContainedImageRect(
-  container: SlideRect,
-  sourceWidth: number,
-  sourceHeight: number,
-): SlideRect | null {
-  if (
-    container.width <= 0 ||
-    container.height <= 0 ||
-    sourceWidth <= 0 ||
-    sourceHeight <= 0
-  ) {
-    return null;
-  }
-
-  const scale = Math.min(container.width / sourceWidth, container.height / sourceHeight);
-  const width = sourceWidth * scale;
-  const height = sourceHeight * scale;
-  return {
-    left: container.left + (container.width - width) / 2,
-    top: container.top + (container.height - height) / 2,
-    width,
-    height,
-  };
-}
-
-export function screenGazeToSlide(
+/**
+ * Quy đổi một điểm gaze từ viewport lúc calibration sang viewport hiện tại.
+ *
+ * Model gaze trả toạ độ chuẩn hoá theo viewport calibration. Cùng một điểm
+ * nhìn vật lý trên màn hình sẽ có toạ độ chuẩn hoá khác khi zoom/resize/move
+ * cửa sổ. Hàm này dùng hình chữ nhật vật lý của hai viewport để quy đổi.
+ */
+export function transformGazePoint(
   x: number,
   y: number,
-  rect: SlideRect,
-): { x: number; y: number } | null {
-  if (!(x >= 0 && x <= 1) || !(y >= 0 && y <= 1) || rect.width <= 0 || rect.height <= 0) {
-    return null;
-  }
-  const viewport = globalThis.visualViewport;
-  const viewportWidth = viewport?.width ?? globalThis.innerWidth;
-  const viewportHeight = viewport?.height ?? globalThis.innerHeight;
-  const viewportLeft = viewport?.offsetLeft ?? 0;
-  const viewportTop = viewport?.offsetTop ?? 0;
-  if (!(viewportWidth > 0) || !(viewportHeight > 0)) return null;
-
-  const gx = viewportLeft + x * viewportWidth;
-  const gy = viewportTop + y * viewportHeight;
-
-  const sx = (gx - rect.left) / rect.width;
-  const sy = (gy - rect.top) / rect.height;
-  if (sx < 0 || sx > 1 || sy < 0 || sy > 1) return null;
-  return { x: sx, y: sy };
+  calibration: ViewportRect,
+  current: ViewportRect,
+): { x: number; y: number } {
+  const calDpr = calibration.dpr || 1;
+  const curDpr = current.dpr || 1;
+  if (current.width <= 0 || current.height <= 0) return { x, y };
+  const screenX =
+    calibration.screenX * calDpr + x * calibration.width * calDpr;
+  const screenY =
+    calibration.screenY * calDpr + y * calibration.height * calDpr;
+  return {
+    x: (screenX - current.screenX * curDpr) / (current.width * curDpr),
+    y: (screenY - current.screenY * curDpr) / (current.height * curDpr),
+  };
 }

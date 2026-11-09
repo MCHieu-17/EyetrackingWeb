@@ -4,7 +4,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
-export function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
+function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
   if (!pdfjsPromise) {
     pdfjsPromise = import("pdfjs-dist").then((pdfjs) => {
       pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";

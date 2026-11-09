@@ -54,33 +54,8 @@ class CourseRequireCalibrationIn(CamelModel):
     require_calibration: bool
 
 
-class SlideCreateIn(CamelModel):
-    image_url: str
-    title: str | None = None
-
-
 class StudentsAddIn(CamelModel):
     student_ids: list[str]
-
-
-class TeacherAssignIn(CamelModel):
-    teacher_ids: list[str]
-
-
-class TeacherDirectoryOut(CamelModel):
-    id: str
-    name: str
-    code: str
-    email: str | None = None
-    department: str | None = None
-
-
-class CourseTeacherOut(CamelModel):
-    teacher_id: str
-    name: str
-    code: str
-    email: str | None = None
-    is_owner: bool = False
 
 
 class StudentDirectoryOut(CamelModel):
@@ -96,6 +71,10 @@ class LessonNodeOut(CamelModel):
     title: str
     kind: str = "lesson"  # 'lesson' | 'quiz'
     slides: int
+    # Trạng thái index RAG của các slide trong lesson version đang soạn.
+    slides_ready: int = 0
+    slides_failed: int = 0
+    slides_pending: int = 0
     attention: float | None = None
     mastery: float | None = None
     quiz_id: str | None = None
@@ -201,7 +180,6 @@ class SlideAdminOut(CamelModel):
     page_number: int = 1
     page_count: int = 1
     source_format: str | None = None
-    is_key: bool = False
     embedding_status: str = "none"
     embedding_error: str | None = None
     slide_version_id: str | None = None
@@ -218,25 +196,10 @@ class SlideImportJobOut(CamelModel):
     finished_at: datetime | None = None
 
 
-class EmbeddingSyncOut(CamelModel):
-    ready: int = 0
-    failed: int = 0
-
-
-class SlideKeyUpdateIn(CamelModel):
-    is_key: bool
-
-
-class SlideKeySetIn(CamelModel):
-    order_indexes: list[int]
-
-
 class StudentLessonOut(CamelModel):
     lesson_id: str
     attention: float | None = None
     mastery: float | None = None
-    key_done: int = 0
-    key_total: int = 0
 
 
 class StudentRowOut(CamelModel):

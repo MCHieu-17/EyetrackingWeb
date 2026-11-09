@@ -25,7 +25,8 @@ export function Topbar({
   const pathname = usePathname();
   // "Hồ sơ" đã nằm trong menu tài khoản (avatar) nên chỉ hiện nav chính.
   // Logo đã là link về trang chính của role (`/{role}`) nên bỏ luôn pill trùng
-  // đích đứng cạnh logo cho đỡ rối: "Khóa học" (học viên/giảng viên), "Phân công" (admin).
+  // đích đứng cạnh logo cho đỡ rối: "Khóa học" (học viên/giảng viên),
+  // "Nâng cấp giáo viên" (admin).
   const primaryItems = (NAV_BY_ROLE[role] ?? []).filter(
     (item) => !item.href.endsWith("/profile") && item.href !== `/${role}`,
   );

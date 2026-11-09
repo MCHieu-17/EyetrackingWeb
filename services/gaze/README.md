@@ -63,6 +63,18 @@ y = a3·pitch + a4·yaw + b2
 - Nếu không ghi mã HTTP cụ thể trong mục nào, mặc định là `200`.
 - Body trả về luôn là JSON.
 
+### 1.4 Yêu cầu GPU
+
+Gaze là **service duy nhất cần GPU** trong stack:
+
+- Dockerfile multi-stage: stage `ai-base` cài torch/torchvision CUDA 12.4;
+  stage `runtime` cài deps gaze.
+- Compose đặt `gpus: all` và `DEVICE=cuda`.
+- Host cần NVIDIA driver + `nvidia-container-toolkit`.
+- Không có GPU: đặt `DEVICE=cpu` và bỏ `gpus: all` ở service `gaze` — service
+  vẫn chạy nhưng chậm hơn nhiều (không phù hợp để dùng thật).
+- Chatbot không dùng GPU; embedding của chatbot chạy CPU.
+
 ## 2. Danh sách endpoint
 
 | Method | Path | Mục đích |
@@ -217,7 +229,7 @@ curl -X POST http://localhost:8000/session/6f1a2b3c.../calibrate \
 
 ### 3.6 POST `/session/{sid}/train` — Train mô hình
 
-Không cần body. Điều kiện: **mỗi điểm đã có ≥ 1 mẫu**. Server fit hồi quy tuyến tính mapping `(pitch, yaw) → (x, y)` chuẩn hóa và đánh giá bằng k-fold cross-validation (`k = min(5, số mẫu)`; `mae_px = null` nếu < 3 mẫu).
+Không cần body. Điều kiện: **mỗi điểm đã có ≥ 1 mẫu**. Server fit hồi quy tuyến tính mapping `(pitch, yaw) → (x, y)` chuẩn hóa.
 
 ```bash
 curl -X POST http://localhost:8000/session/6f1a2b3c.../train
@@ -226,14 +238,13 @@ curl -X POST http://localhost:8000/session/6f1a2b3c.../train
 **Thành công:**
 
 ```json
-{"status": "ok", "n_samples": 16, "mae_px": 0.018}
+{"status": "ok", "n_samples": 16}
 ```
 
 | Field | Kiểu | Ý nghĩa |
 |---|---|---|
 | `status` | string | `ok` |
 | `n_samples` | int | Tổng số mẫu dùng để train |
-| `mae_px` | float \| null | Sai số trung bình, đơn vị chuẩn hóa `[0, 1]` (0.018 ≈ lệch 1.8% màn hình). `null` khi chưa đủ dữ liệu ước lượng (< 3 mẫu) — không phải lỗi |
 
 **Lỗi:**
 
@@ -379,7 +390,7 @@ Bước 2 — Thu mẫu
 Bước 3 — Train
   Client gọi POST /session/{sid}/train.
   - 422 → đọc map detail, thu thêm mẫu cho các điểm còn thiếu.
-  - ok  → sang bước 4; gửi kèm mae_px cho backend (ngưỡng pass/fail).
+  - ok  → sang bước 4.
 
 Bước 4 — Lưu model để tái sử dụng
   Client gọi GET /session/{sid}/model → gửi bytes (.ubj) cho backend
@@ -424,7 +435,7 @@ sid = json.load(urllib.request.urlopen(req))["session_id"]
 
 # 3. Train
 resp = json.load(urllib.request.urlopen(f"{BASE}/session/{sid}/train", data=b""))
-print(resp)  # {"status": "ok", "n_samples": 16, "mae_px": ...}
+print(resp)  # {"status": "ok", "n_samples": 16}
 
 # 4. Lưu model: GET /session/{sid}/model -> gửi bytes cho backend
 
@@ -483,7 +494,8 @@ app/
     └── sessions.py     Session / SessionManager (RAM, TTL, giới hạn, thread-safe)
 scripts/download_weights.py   tải weights lúc khởi động (entrypoint.sh)
 requirements.txt              runtime; requirements-dev.txt: ruff/httpx
-Dockerfile                    FROM image nền dùng chung docker/ai-base (torch cu124)
+Dockerfile                    multi-stage: ai-base (torch cu124) + runtime (deps gaze)
+requirements-torch.txt        torch/torchvision CUDA 12.4 (stage ai-base)
 ```
 
 Bố cục giống `backend/` (gói `app/`). Service không ghi gì

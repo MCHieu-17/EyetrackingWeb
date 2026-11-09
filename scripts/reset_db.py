@@ -6,7 +6,7 @@ Muốn áp dụng phải chỉ định đủ:
 
     ./scripts/reset_db.sh --apply --database eyetracking --confirm-reset eyetracking
 
-Các guard bắt buộc (theo PLAN.md Phase 0):
+Các guard bắt buộc:
   1. Docker endpoint là local socket.
   2. Container PostgreSQL thuộc đúng Compose project/service/config/working dir.
   3. Database đích khớp POSTGRES_DB và không phải database hệ thống.
@@ -22,12 +22,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 from urllib.parse import unquote, urlparse
@@ -438,7 +437,7 @@ END;
         print("  1. stop backend/chatbot/worker/db-maintenance (nếu có)", file=self.out)
         print("  2. kiểm tra không còn kết nối lạ tới database đích", file=self.out)
         print("  3. drop/recreate database đích (ngoài transaction)", file=self.out)
-        print("  4. chạy 001_baseline.sql + 002_reference_seed.sql", file=self.out)
+        print("  4. chạy 001_baseline.sql (schema + reference seed)", file=self.out)
         print("  5. chạy grants cho chatbot role", file=self.out)
         print("  6. tạo app_metadata.db_instance_id mới", file=self.out)
         print("  7. (tùy chọn) seed development", file=self.out)
@@ -512,7 +511,7 @@ CREATE DATABASE :"dbname";
         self.runner.run(self._compose("run", "--rm", "migrate"))
 
     def _run_grants(self) -> None:
-        script = self.root / "ops" / "create_chatbot_role.sh"
+        script = self.root / "scripts" / "create_chatbot_role.sh"
         if script.is_file():
             self.runner.run(["bash", str(script)])
 
@@ -521,7 +520,7 @@ CREATE DATABASE :"dbname";
         sql = """
 INSERT INTO app_metadata (key, value)
 VALUES ('db_instance_id', :'instance_id'),
-       ('schema_generation', '1')
+       ('schema_generation', '6')
 ON CONFLICT (key) DO UPDATE
 SET value = EXCLUDED.value, updated_at = now();
 """
@@ -552,8 +551,8 @@ SELECT json_build_object(
             payload = json.loads(result.stdout.strip())
         except json.JSONDecodeError as exc:
             raise GuardError("Smoke test schema thất bại: output không hợp lệ.", exit_code=5) from exc
-        if int(payload.get("migrations", 0)) < 2:
-            raise GuardError("Smoke test: baseline/reference seed chưa được áp.", exit_code=5)
+        if int(payload.get("migrations", 0)) < 1:
+            raise GuardError("Smoke test: baseline chưa được áp.", exit_code=5)
         if int(payload.get("roles", 0)) < 3:
             raise GuardError("Smoke test: reference seed thiếu roles.", exit_code=5)
         if int(payload.get("core_tables", 0)) != 4:
@@ -580,7 +579,7 @@ SELECT json_build_object(
         print(f"Đã drop/recreate {database}.", file=self.out)
 
         self._run_migrations()
-        print("Đã chạy baseline + reference seed.", file=self.out)
+        print("Đã chạy baseline (schema + reference seed).", file=self.out)
 
         self._run_grants()
         print("Đã chạy grants.", file=self.out)

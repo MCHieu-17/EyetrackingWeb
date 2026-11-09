@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon";
 
 const HIGHLIGHTS = [
   { icon: "ri-focus-2-line", text: "Theo dõi hành vi mắt theo từng trang slide" },
-  { icon: "ri-bar-chart-box-line", text: "Heatmap và mức độ tập trung cho giảng viên" },
+  { icon: "ri-bar-chart-box-line", text: "Phân tích mức độ tập trung cho giảng viên" },
   { icon: "ri-rocket-2-line", text: "Calibration nhanh, học ngay trên trình duyệt" },
 ];
 

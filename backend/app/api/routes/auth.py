@@ -2,9 +2,13 @@ import asyncio
 import ipaddress
 import logging
 import time
-from datetime import date
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,15 +19,15 @@ from app.core.csrf import new_csrf_token
 from app.core.ratelimit import rate_limit
 from app.crud import user as user_crud
 from app.db.session import get_db
-from app.models.auth import User
+from app.models.auth import User, UserIdentity
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     RefreshRequest,
-    RegisterRequest,
     TokenPair,
     UserSummary,
 )
+from app.services import oauth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger("app.performance")
@@ -114,45 +118,246 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(key="csrf_token", path="/", domain=settings.cookie_domain)
 
 
-@router.post(
-    "/register",
-    response_model=TokenPair,
-    status_code=201,
-    dependencies=[Depends(rate_limit(5, 60, "register"))],
-)
-async def register(
-    body: RegisterRequest,
-    request: Request,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-):
-    """Đăng ký tài khoản học viên (email + tên + năm sinh)."""
-    existing = await user_crud.get_user_by_email(db, body.email)
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email đã được sử dụng",
+# ---------------------------------------------------------------------------
+# Microsoft 365 / Outlook OAuth
+# ---------------------------------------------------------------------------
+_OAUTH_TX_COOKIE = "oauth_tx"
+_OAUTH_TX_PATH = "/api/auth/oauth"
+_OAUTH_TX_MAX_AGE = 600
+
+
+def _clear_oauth_tx_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=_OAUTH_TX_COOKIE,
+        path=_OAUTH_TX_PATH,
+        domain=settings.cookie_domain,
+    )
+
+
+def _oauth_error_redirect(code: str) -> RedirectResponse:
+    url = f"{settings.frontend_url.rstrip('/')}/account/login?oauthError={quote(code)}"
+    response = RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+    _clear_oauth_tx_cookie(response)
+    return response
+
+
+def _set_oauth_tx_cookie(response: Response, tx: oauth.OAuthTransaction) -> None:
+    payload = {
+        "state": tx.state,
+        "nonce": tx.nonce,
+        "code_verifier": tx.code_verifier,
+        "next": tx.next_path,
+        "type": "oauth_tx",
+        "exp": datetime.now(timezone.utc) + timedelta(seconds=_OAUTH_TX_MAX_AGE),
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    response.set_cookie(
+        key=_OAUTH_TX_COOKIE,
+        value=token,
+        httponly=True,
+        secure=settings.cookie_secure_resolved,
+        samesite=settings.cookie_samesite,
+        max_age=_OAUTH_TX_MAX_AGE,
+        path=_OAUTH_TX_PATH,
+        domain=settings.cookie_domain,
+    )
+
+
+def _decode_oauth_tx(raw: str) -> dict:
+    payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    if payload.get("type") != "oauth_tx":
+        raise ValueError("invalid oauth transaction")
+    return payload
+
+
+def _home_for(user: User) -> str:
+    for code in ("teacher", "student", "admin"):
+        if code in user.role_codes:
+            return f"/{code}"
+    return "/student"
+
+
+def _safe_next(next_path: str | None, user: User) -> str:
+    if next_path and ".." not in next_path and "\\" not in next_path:
+        for code in user.role_codes:
+            if next_path == f"/{code}" or next_path.startswith(f"/{code}/"):
+                return next_path
+    return _home_for(user)
+
+
+async def _get_or_create_oauth_user(
+    db: AsyncSession, profile: oauth.MicrosoftProfile
+) -> User:
+    identity = (
+        await db.execute(
+            select(UserIdentity).where(
+                UserIdentity.provider == "microsoft",
+                UserIdentity.provider_user_id == profile.provider_user_id,
+            )
         )
-    password_hash = await asyncio.to_thread(security.hash_password, body.password)
+    ).scalar_one_or_none()
+    if identity is not None:
+        user = await user_crud.get_user_by_id(db, identity.user_id)
+        if user is None or user.deleted_at is not None or user.status != "active":
+            raise oauth.OAuthError("account_disabled")
+        identity.email = profile.email
+        identity.last_login_at = datetime.now(timezone.utc)
+        return user
+
+    user = await user_crud.get_user_by_email(db, profile.email)
+    if user is not None:
+        if user.deleted_at is not None or user.status != "active":
+            raise oauth.OAuthError("account_disabled")
+        existing_identity = (
+            await db.execute(
+                select(UserIdentity).where(
+                    UserIdentity.user_id == user.id,
+                    UserIdentity.provider == "microsoft",
+                )
+            )
+        ).scalar_one_or_none()
+        if (
+            existing_identity is not None
+            and existing_identity.provider_user_id != profile.provider_user_id
+        ):
+            raise oauth.OAuthError("identity_conflict")
+        if existing_identity is None:
+            db.add(
+                UserIdentity(
+                    user_id=user.id,
+                    provider="microsoft",
+                    provider_user_id=profile.provider_user_id,
+                    email=profile.email,
+                    last_login_at=datetime.now(timezone.utc),
+                )
+            )
+        else:
+            existing_identity.email = profile.email
+            existing_identity.last_login_at = datetime.now(timezone.utc)
+        return user
+
     try:
         user = await user_crud.create_student(
             db,
-            email=body.email,
-            password_hash=password_hash,
-            full_name=body.full_name.strip(),
+            email=profile.email,
+            password_hash=None,
+            full_name=profile.full_name,
         )
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider="microsoft",
+                provider_user_id=profile.provider_user_id,
+                email=profile.email,
+                last_login_at=datetime.now(timezone.utc),
+            )
+        )
+        await db.flush()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email đã được sử dụng",
+        user = await user_crud.get_user_by_email(db, profile.email)
+        if user is None:
+            raise oauth.OAuthError("server_error")
+
+    # Đảm bảo roles/profile đã load trước khi phát token.
+    loaded = await user_crud.get_user_by_id(db, user.id)
+    if loaded is None:
+        raise oauth.OAuthError("server_error")
+    return loaded
+
+
+@router.get(
+    "/oauth/microsoft/start",
+    dependencies=[Depends(rate_limit(10, 60, "oauth_start"))],
+)
+async def microsoft_start(
+    next_path: str | None = Query(default=None, alias="next"),
+):
+    """Bắt đầu đăng nhập Microsoft 365 (Outlook)."""
+    if not settings.microsoft_oauth_enabled:
+        return _oauth_error_redirect("not_configured")
+    tx = oauth.new_transaction(next_path)
+    response = RedirectResponse(
+        oauth.build_authorize_url(tx), status_code=status.HTTP_302_FOUND
+    )
+    _set_oauth_tx_cookie(response, tx)
+    return response
+
+
+@router.get(
+    "/oauth/microsoft/callback",
+    dependencies=[Depends(rate_limit(20, 60, "oauth_callback"))],
+)
+async def microsoft_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Nhận callback từ Microsoft, đăng nhập hoặc tạo tài khoản sinh viên."""
+    raw_tx = request.cookies.get(_OAUTH_TX_COOKIE)
+    if not raw_tx:
+        return _oauth_error_redirect("state_invalid")
+    try:
+        tx = _decode_oauth_tx(raw_tx)
+    except Exception:  # noqa: BLE001 — cookie hỏng/hết hạn
+        return _oauth_error_redirect("state_invalid")
+
+    if not state or state != tx.get("state"):
+        return _oauth_error_redirect("state_invalid")
+    if error:
+        return _oauth_error_redirect(
+            "access_denied" if error == "access_denied" else "oauth_failed"
         )
-    if user.profile is not None:
-        user.profile.date_of_birth = date(body.birth_year, 1, 1)
-    pair = await _issue_tokens(db, user, request)
-    await db.commit()
+    if not code:
+        return _oauth_error_redirect("oauth_failed")
+
+    try:
+        tokens = await oauth.exchange_code(code, str(tx.get("code_verifier") or ""))
+        id_token = tokens.get("id_token")
+        if not id_token:
+            raise oauth.OAuthError("token_invalid")
+        claims = await asyncio.to_thread(
+            oauth.validate_id_token, id_token, str(tx.get("nonce") or "")
+        )
+        profile = await oauth.resolve_profile(claims, tokens.get("access_token"))
+        user = await _get_or_create_oauth_user(db, profile)
+        pair = await _issue_tokens(db, user, request)
+        await db.commit()
+    except oauth.OAuthError as exc:
+        await db.rollback()
+        logger.warning("microsoft oauth failed: %s", exc.code)
+        return _oauth_error_redirect(exc.code)
+    except Exception:  # noqa: BLE001 — không lộ chi tiết lỗi ra ngoài
+        await db.rollback()
+        logger.exception("microsoft oauth unexpected error")
+        return _oauth_error_redirect("server_error")
+
+    response = RedirectResponse(
+        f"{settings.frontend_url.rstrip('/')}{_safe_next(tx.get('next'), user)}",
+        status_code=status.HTTP_302_FOUND,
+    )
     _set_auth_cookies(response, pair.access_token, pair.refresh_token)
-    return pair
+    _clear_oauth_tx_cookie(response)
+    return response
+
+
+@router.post(
+    "/register",
+    status_code=status.HTTP_403_FORBIDDEN,
+    dependencies=[Depends(rate_limit(5, 60, "register"))],
+)
+async def register():
+    """Đăng ký bằng email/mật khẩu đã bị tắt.
+
+    Tài khoản mật khẩu chỉ tồn tại từ seed development. Mọi tài khoản mới
+    phải được tạo qua Microsoft 365 (Outlook).
+    """
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Đăng ký bằng mật khẩu đã bị tắt. Vui lòng đăng nhập bằng Outlook.",
+    )
 
 
 @router.post(

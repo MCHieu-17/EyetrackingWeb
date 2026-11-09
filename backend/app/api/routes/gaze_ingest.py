@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -97,6 +97,7 @@ async def create_presentation(
     session = await _session_for_user(db, session_id, user)
     _ensure_open(session)
 
+    slide_aoi_set_id: str | None = None
     if body.lesson_version_slide_id is not None:
         item = await db.get(CourseVersionItem, session.course_version_item_id)
         slide = await db.get(LessonVersionSlide, body.lesson_version_slide_id)
@@ -105,6 +106,10 @@ async def create_presentation(
                 status.HTTP_400_BAD_REQUEST,
                 detail="Slide không thuộc phiên học",
             )
+        slide_set = await aoi_service.published_aoi_set(
+            db, slide_version_id=slide.slide_version_id
+        )
+        slide_aoi_set_id = slide_set.id if slide_set else None
 
     existing = (
         await db.execute(
@@ -141,6 +146,7 @@ async def create_presentation(
     presentation = ContentPresentation(
         session_id=session.id,
         lesson_version_slide_id=body.lesson_version_slide_id,
+        slide_aoi_set_id=slide_aoi_set_id,
         surface=body.surface,
         sequence_no=body.sequence_no,
         started_at=_now(),
@@ -346,20 +352,24 @@ async def ingest_gaze_batch(
     )
     db.add(batch)
     await db.flush()
-    for sample in body.samples:
-        db.add(
-            GazeSample(
-                session_id=session.id,
-                batch_id=batch.id,
-                sequence=sample.sequence,
-                capture_monotonic_ns=sample.capture_monotonic_ns,
-                event_time=_parse_time(sample.event_time),
-                viewport_x=sample.viewport_x,
-                viewport_y=sample.viewport_y,
-                status=sample.status,
-                quality_flags=sample.quality_flags,
-            )
+    await db.execute(
+        insert(GazeSample).values(
+            [
+                {
+                    "session_id": session.id,
+                    "batch_id": batch.id,
+                    "sequence": sample.sequence,
+                    "capture_monotonic_ns": sample.capture_monotonic_ns,
+                    "event_time": _parse_time(sample.event_time),
+                    "viewport_x": sample.viewport_x,
+                    "viewport_y": sample.viewport_y,
+                    "status": sample.status,
+                    "quality_flags": sample.quality_flags,
+                }
+                for sample in body.samples
+            ]
         )
+    )
     await db.commit()
     return GazeBatchAckOut(
         batch_id=body.batch_id,

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select
 
 from app.api.routes import (
     admin,
@@ -32,8 +32,11 @@ from app.api.routes import (
 from app.core.config import settings
 from app.db.redis import close_redis, init_redis
 from app.db.session import SessionLocal
+from app.models.metadata import AppMetadata
+from app.services.embedding import close_ingest_client
+from app.services.study_chat import close_chatbot_client
 
-EXPECTED_SCHEMA_GENERATION = "1"
+EXPECTED_SCHEMA_GENERATION = "6"
 
 
 @asynccontextmanager
@@ -47,22 +50,19 @@ async def lifespan(app: FastAPI):
     # chạy trên schema mới hoặc ngược lại.
     try:
         async with SessionLocal() as session:
-            generation = (
-                await session.execute(
-                    text(
-                        "SELECT value FROM app_metadata "
-                        "WHERE key = 'schema_generation'"
+            metadata = dict(
+                (
+                    await session.execute(
+                        select(AppMetadata.key, AppMetadata.value).where(
+                            AppMetadata.key.in_(
+                                ("schema_generation", "db_instance_id")
+                            )
+                        )
                     )
-                )
-            ).scalar_one_or_none()
-            instance_id = (
-                await session.execute(
-                    text(
-                        "SELECT value FROM app_metadata "
-                        "WHERE key = 'db_instance_id'"
-                    )
-                )
-            ).scalar_one_or_none()
+                ).all()
+            )
+            generation = metadata.get("schema_generation")
+            instance_id = metadata.get("db_instance_id")
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(
             "Database chưa có baseline mới (app_metadata). "
@@ -80,6 +80,8 @@ async def lifespan(app: FastAPI):
 
     await init_redis()
     yield
+    await close_chatbot_client()
+    await close_ingest_client()
     await close_redis()
 
 
@@ -127,7 +129,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Server-Timing", "X-Request-ID"],
+    expose_headers=["Server-Timing", "X-Request-ID", "Retry-After"],
 )
 
 app.include_router(auth.router)

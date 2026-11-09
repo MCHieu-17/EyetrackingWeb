@@ -1,6 +1,6 @@
 import type { Role } from "@/lib/api/auth";
 
-export interface NavItem {
+interface NavItem {
   href: string;
   label: string;
   icon: string;
@@ -22,8 +22,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { href: "/teacher/profile", label: "Hồ sơ", icon: "ri-user-line", match: under("/teacher/profile") },
   ],
   admin: [
-    { href: "/admin", label: "Phân công", icon: "ri-user-follow-line", match: (p) => p === "/admin" },
-    { href: "/admin/settings", label: "Cài đặt", icon: "ri-settings-3-line", match: under("/admin/settings") },
+    { href: "/admin", label: "Nâng cấp giáo viên", icon: "ri-user-follow-line", match: (p) => p === "/admin" },
     { href: "/admin/profile", label: "Hồ sơ", icon: "ri-user-line", match: under("/admin/profile") },
   ],
 };

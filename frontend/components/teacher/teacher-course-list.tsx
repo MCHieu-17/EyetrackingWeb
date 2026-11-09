@@ -15,12 +15,6 @@ import { cn } from "@/lib/utils";
 
 type SortMode = "recent" | "name";
 
-// Các lối vào nhanh trong workspace của khóa (khớp ?tab= của CourseWorkspace).
-const COURSE_TABS = [
-  { key: "content", label: "Nội dung" },
-  { key: "students", label: "Học viên" },
-] as const;
-
 const STATUS_CLS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   published: "bg-[#e8f1e6] text-[#52704f]",
@@ -29,20 +23,21 @@ const STATUS_CLS: Record<string, string> = {
 
 function CourseRow({ course }: { course: TeacherCourse }) {
   return (
-    <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:gap-5 sm:px-5">
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#eef3eb] text-[#52654f]">
+    <Link
+      prefetch={false}
+      href={`/teacher/courses/${course.id}?tab=content`}
+      aria-label={`Mở khóa ${course.title}`}
+      className="group flex flex-col gap-4 px-4 py-4 outline-none transition hover:bg-[#fafbf8] focus-visible:bg-[#fafbf8] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-5 sm:px-5"
+    >
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#eef3eb] text-[#52654f] transition group-hover:bg-[#e3ecdf] group-hover:text-[#3f563c]">
         <Icon name="ri-book-open-line" className="size-5" />
       </span>
 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Link
-            prefetch={false}
-            href={`/teacher/courses/${course.id}?tab=content`}
-            className="truncate text-base font-semibold leading-6 text-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <span className="truncate text-base font-semibold leading-6 text-foreground transition group-hover:text-primary">
             {course.title}
-          </Link>
+          </span>
           <span
             className={cn(
               "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
@@ -70,22 +65,7 @@ function CourseRow({ course }: { course: TeacherCourse }) {
           </span>
         </div>
       </div>
-
-      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
-        <nav aria-label={`Mở khóa ${course.title}`} className="flex items-center gap-1 rounded-full border border-border/80 bg-muted/40 p-1">
-          {COURSE_TABS.map((tab) => (
-            <Link
-              key={tab.key}
-              prefetch={false}
-              href={`/teacher/courses/${course.id}?tab=${tab.key}`}
-              className="rounded-full px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-    </div>
+    </Link>
   );
 }
 

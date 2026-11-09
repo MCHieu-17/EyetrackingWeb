@@ -1,7 +1,5 @@
 import { apiFetch, setMemoryAccessToken, clearMemoryToken, AUTH_CHANGE_EVENT } from "./client";
 
-export { AUTH_CHANGE_EVENT };
-
 export type Role = "student" | "teacher" | "admin";
 
 export interface AuthUser {
@@ -12,7 +10,7 @@ export interface AuthUser {
   avatarUrl?: string | null;
 }
 
-export interface LoginResult {
+interface LoginResult {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
@@ -30,7 +28,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   admin: "Quản trị viên",
 };
 
-export type AuthChangeReason =
+type AuthChangeReason =
   | "login"
   | "logout"
   | "session-expired"
@@ -76,17 +74,17 @@ export function subscribeAuthChange(callback: (reason: AuthChangeReason) => void
   };
 }
 
-export async function login(email: string, password: string): Promise<LoginResult> {
-  const { isDemoMode, setDemoEmail, setDemoCookies, demoUserForEmail } = await import("@/lib/demo");
-  if (isDemoMode()) {
-    setDemoEmail(email);
-    setDemoCookies();
-    const user = demoUserForEmail(email);
-    setMemoryAccessToken("demo-token");
-    notifyAuthChange("login");
-    return { accessToken: "demo-token", refreshToken: "demo-refresh", user };
-  }
+/** Chuyển trình duyệt sang endpoint bắt đầu OAuth Microsoft 365. */
+export function startMicrosoftLogin(next?: string | null): void {
+  const params = new URLSearchParams();
+  if (next) params.set("next", next);
+  const query = params.toString();
+  globalThis.window?.location.assign(
+    `/api/auth/oauth/microsoft/start${query ? `?${query}` : ""}`,
+  );
+}
 
+export async function login(email: string, password: string): Promise<LoginResult> {
   const data = await apiFetch<LoginResult>("/api/auth/login", {
     method: "POST",
     body: { email, password },
@@ -96,22 +94,6 @@ export async function login(email: string, password: string): Promise<LoginResul
   else if ((data as unknown as { access_token?: string })?.access_token) {
     setMemoryAccessToken((data as unknown as { access_token: string }).access_token);
   }
-  notifyAuthChange("login");
-  return data;
-}
-
-export async function register(
-  fullName: string,
-  email: string,
-  password: string,
-  birthYear: number,
-): Promise<LoginResult> {
-  const data = await apiFetch<LoginResult>("/api/auth/register", {
-    method: "POST",
-    body: { fullName, email, password, birthYear },
-    skipAuthRefresh: true,
-  });
-  if (data?.accessToken) setMemoryAccessToken(data.accessToken);
   notifyAuthChange("login");
   return data;
 }
@@ -143,7 +125,7 @@ export async function logout(): Promise<void> {
   clearAuth();
 }
 
-export function clearAuth(): void {
+function clearAuth(): void {
   clearMemoryToken();
   try {
     globalThis.localStorage?.removeItem("auth_token");

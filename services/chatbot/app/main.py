@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from app.api.chat import router as chat_router  # noqa: E402
 from app.api.ingest import close_ingestion  # noqa: E402
 from app.api.ingest import router as ingest_router  # noqa: E402
-from app.db import close_pool, get_pool  # noqa: E402
+from app.db import DatabaseUnavailableError, close_pool, get_pool  # noqa: E402
 from app.settings import validate as validate_settings  # noqa: E402
 from app.workflow.providers import get_embedding  # noqa: E402
 from app.workflow.retrieval import close_retriever  # noqa: E402
@@ -45,7 +45,12 @@ async def lifespan(app: FastAPI):
     await embedding.aembed_query("warm up")
     from app.workflow.graph import get_graph
     get_graph()
-    get_pool()
+    try:
+        get_pool()
+    except DatabaseUnavailableError:
+        # Không chặn service khởi động: /ready sẽ trả 503 kèm lý do, còn ingest
+        # trả 503 thay vì 500. Khi role/DB được sửa, pool tự kết nối lại.
+        logger.exception("Không mở được DB pool lúc khởi động")
 
     try:
         yield
@@ -81,6 +86,11 @@ async def health():
 async def ready():
     try:
         await run_in_threadpool(_db_reachable)
-    except Exception:
-        return JSONResponse({"status": "degraded"}, status_code=503)
+    except Exception as exc:  # noqa: BLE001
+        # Trả lý do thật (sai role/password, DB chưa lên...) để người vận hành
+        # sửa ngay, không phải đoán từ log container.
+        return JSONResponse(
+            {"status": "degraded", "detail": str(exc)[:500]},
+            status_code=503,
+        )
     return {"status": "ok"}

@@ -1,21 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isDemoMode, prototypeRouteRedirect } from "@/lib/demo-mode";
 
 const PROTECTED_PREFIXES = ["/teacher", "/student", "/admin"];
 const PUBLIC_ONLY = ["/account/login", "/account/register"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  const prototypeRedirect = prototypeRouteRedirect(pathname);
-  if (prototypeRedirect) {
-    return NextResponse.redirect(new URL(prototypeRedirect, request.url));
-  }
-
-  // Chế độ demo: bỏ qua kiểm tra đăng nhập để xem thẳng mọi màn.
-  if (isDemoMode()) {
-    return NextResponse.next();
-  }
 
   const hasAccess = request.cookies.has("access_token");
   const hasRefresh = request.cookies.has("refresh_token");
@@ -45,5 +34,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/demo/:path*", "/teacher/:path*", "/student/:path*", "/admin/:path*", "/account/login", "/account/register"],
+  matcher: ["/teacher/:path*", "/student/:path*", "/admin/:path*", "/account/login", "/account/register"],
 };

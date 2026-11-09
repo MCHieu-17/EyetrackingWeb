@@ -2,15 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ErrorState } from "@/components/ui/error-state";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -61,6 +56,7 @@ export function ContentEditor({
 }) {
   const queryClient = useQueryClient();
   const guard = useUnsavedGuard();
+  const searchParams = useSearchParams();
   const { changeStatus, saving: publishing } = useCourseStatus(courseId);
   const {
     data: tree = [],
@@ -69,7 +65,9 @@ export function ContentEditor({
     refetch: refetchTree,
   } = useCourseTree(courseId);
 
-  const [selection, setSelection] = useState<string | null>(null);
+  const [selection, setSelection] = useState<string | null>(
+    () => searchParams.get("lesson"),
+  );
   const [focusTitleToken, setFocusTitleToken] = useState(0);
   const [focusModuleId, setFocusModuleId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -121,17 +119,33 @@ export function ContentEditor({
     if (owner) setExpanded((prev) => ({ ...prev, [owner.id]: true }));
   };
 
+  /** Đưa khung soạn vào tầm nhìn — hữu ích khi mục lục đang cuộn sâu hoặc trên mobile. */
+  const scrollEditorIntoView = () => {
+    window.setTimeout(() => {
+      const el = document.getElementById("item-editor");
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // Chỉ cuộn khi phần đầu khung soạn bị khuất hoặc nằm ngoài màn hình,
+      // tránh giật trang khi mọi thứ đã hiển thị sẵn.
+      if (rect.top < 88 || rect.top > window.innerHeight - 120) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 0);
+  };
+
   /** Chọn mục — có cảnh báo nếu trình soạn đang có thay đổi chưa lưu. */
-  const selectItem = (lessonId: string, options?: { focusTitle?: boolean }) => {
+  const selectItem = (lessonId: string) => {
     if (lessonId === activeId) {
-      if (options?.focusTitle) setFocusTitleToken((token) => token + 1);
+      // Bấm lại mục đang mở: đóng mục lục (mobile) và đưa khung soạn vào tầm nhìn.
+      setOutlineOpen(false);
+      scrollEditorIntoView();
       return;
     }
     const proceed = () => {
       setSelection(lessonId);
       setOutlineOpen(false);
       openModuleOf(lessonId);
-      if (options?.focusTitle) setFocusTitleToken((token) => token + 1);
+      scrollEditorIntoView();
     };
     if (guard) guard.confirmLeave(proceed);
     else proceed();
@@ -261,7 +275,6 @@ export function ContentEditor({
   const outline = (
     <ContentOutline
       tree={tree}
-      courseId={courseId}
       canManage={canManage}
       selection={activeId}
       onSelect={(lessonId) => selectItem(lessonId)}
@@ -271,7 +284,7 @@ export function ContentEditor({
       }
       onAddModule={() => void addModule()}
       onAddItem={addItem}
-      onRenameLesson={(lesson) => selectItem(lesson.id, { focusTitle: true })}
+      onRenameLesson={(lesson, title) => void commitRenameItem(lesson, title)}
       onRenameModule={(moduleId, title) => void commitRenameModule(moduleId, title)}
       onDeleteLesson={setLessonToDelete}
       onDeleteModule={setModuleToDelete}
@@ -285,13 +298,7 @@ export function ContentEditor({
     <div className="space-y-5">
       <div className="flex flex-col gap-4 border-b border-black/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/45">
-            Nội dung khóa học
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-black">
-            Chương, bài giảng và bài tập
-          </h2>
-          <p className="mt-2 text-sm text-black/60">
+          <p className="text-sm text-black/60">
             {tree.length} chương · {totalLessons} bài giảng · {totalQuizzes} bài tập · {totalSlides} trang
             {treeFetching && <span className="ml-2 text-black/45">· đang cập nhật…</span>}
           </p>
@@ -313,28 +320,6 @@ export function ContentEditor({
                 {publishing ? "Đang xuất bản…" : "Xuất bản"}
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="rounded-full border-black/10 bg-white"
-                  disabled={saving || reordering}
-                >
-                  <Icon name="ri-more-2-fill" className="size-4" />
-                  Thao tác
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setChecklistOpen(true)}>
-                  <Icon name="ri-list-check-3" />
-                  Kiểm tra nội dung
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void addModule()} disabled={saving}>
-                  <Icon name="ri-add-line" />
-                  Thêm chương
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         )}
       </div>
@@ -379,7 +364,7 @@ export function ContentEditor({
           <div className="lg:grid lg:grid-cols-[21rem_minmax(0,1fr)] lg:items-start lg:gap-8">
             <div className="hidden lg:sticky lg:top-28 lg:block">{outline}</div>
 
-            <div className="min-w-0">
+            <div id="item-editor" className="min-w-0 scroll-mt-28">
               <ItemEditor
                 key={selectedLesson?.id ?? "empty"}
                 lesson={selectedLesson}
@@ -425,9 +410,9 @@ export function ContentEditor({
         loading={publishing}
         onConfirm={async () => {
           setConfirmPublish(false);
-          const ok = await changeStatus("published");
-          if (ok) flash("ok", "Đã xuất bản khóa học.");
-          else flash("err", "Không xuất bản được khóa học. Vui lòng thử lại.");
+          const error = await changeStatus("published");
+          if (!error) flash("ok", "Đã xuất bản khóa học.");
+          else flash("err", error);
         }}
       />
 

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
@@ -62,15 +63,35 @@ def _session_out(session: LearningSession, *, mode: str = "first") -> LearningSe
 async def _published_item(
     db: AsyncSession, lesson_id: str
 ) -> tuple[Lesson, Course, CourseVersion, CourseVersionItem, LessonVersion]:
-    lesson = await db.get(Lesson, lesson_id)
+    lesson = await db.get(
+        Lesson,
+        lesson_id,
+        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
+    )
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    course = await db.get(Course, lesson.course_id)
+    course = await db.get(
+        Course,
+        lesson.course_id,
+        options=[
+            raiseload(Course.versions),
+            raiseload(Course.enrollments),
+            raiseload(Course.owner),
+            raiseload(Course.creator),
+        ],
+    )
     if course is None or course.published_version_id is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
         )
-    published = await db.get(CourseVersion, course.published_version_id)
+    published = await db.get(
+        CourseVersion,
+        course.published_version_id,
+        options=[
+            raiseload(CourseVersion.modules),
+            raiseload(CourseVersion.items),
+        ],
+    )
     item = (
         await db.execute(
             select(CourseVersionItem).where(
@@ -83,7 +104,11 @@ async def _published_item(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Bài học chưa có trong bản xuất bản"
         )
-    lesson_version = await db.get(LessonVersion, item.lesson_version_id)
+    lesson_version = await db.get(
+        LessonVersion,
+        item.lesson_version_id,
+        options=[raiseload(LessonVersion.slides)],
+    )
     if lesson_version is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên bản bài học"
@@ -156,20 +181,8 @@ async def create_learning_session(
                 "message": "Cần hiệu chỉnh điểm nhìn trước khi học",
             },
         )
-    if calibration is not None:
-        if (
-            body.viewport_width_px != calibration.viewport_width_px
-            or body.viewport_height_px != calibration.viewport_height_px
-            or abs(body.device_pixel_ratio - calibration.device_pixel_ratio) > 1e-6
-        ):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "viewport_mismatch",
-                    "message": "Viewport hiện tại khác lúc hiệu chỉnh; hãy hiệu chỉnh lại",
-                },
-            )
-
+    # Không chặn khi viewport khác lúc calibration: frontend quy đổi toạ độ
+    # gaze từ viewport calibration sang viewport hiện tại (zoom/resize/move).
     config = {
         "lesson_id": lesson.id,
         "device_id": device.id,
@@ -226,21 +239,6 @@ async def create_learning_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    return _session_out(session)
-
-
-@router.get("/api/learning-sessions/{session_id}", response_model=LearningSessionOut)
-async def get_learning_session(
-    session_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    session = await db.get(LearningSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    enrollment = await db.get(Enrollment, session.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return _session_out(session)
 
 

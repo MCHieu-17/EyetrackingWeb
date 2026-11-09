@@ -1,5 +1,6 @@
 "use client";
 
+import "katex/dist/katex.min.css";
 import { type FormEvent, memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,8 +36,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { resolveMediaUrl } from "@/lib/api/client";
-import { PdfPage } from "@/components/pdf/pdf-page";
+import { ApiError, resolveMediaUrl } from "@/lib/api/client";
+import { LazyPdfPage } from "@/components/pdf/lazy-pdf-page";
 import type { ChatCitation } from "@/lib/api/chat";
 import {
   useChatMessages,
@@ -385,7 +386,12 @@ export function StudyAssistantChat({
       );
     } catch (err) {
       if (!active()) return;
-      setError(err instanceof Error ? err.message : "Trợ lý học tập tạm thời không phản hồi");
+      if (err instanceof ApiError && err.status === 429) {
+        const seconds = err.retryAfter ?? 5;
+        setError(`${err.message} Vui lòng thử lại sau ${seconds} giây.`);
+      } else {
+        setError(err instanceof Error ? err.message : "Trợ lý học tập tạm thời không phản hồi");
+      }
     } finally {
       if (!active()) return;
       sending.current = false;
@@ -697,11 +703,9 @@ export function StudyAssistantChat({
           </DialogHeader>
           <div className="max-h-[60vh] overflow-auto px-6 pb-6">
             {(() => {
-              const pdfUrl = resolveMediaUrl(
-                citationModal?.pdfUrl || citationModal?.imageUrl,
-              );
+              const pdfUrl = resolveMediaUrl(citationModal?.pdfUrl);
               return pdfUrl ? (
-                <PdfPage
+                <LazyPdfPage
                   url={pdfUrl}
                   pageNumber={citationModal?.pageNumber ?? 1}
                   alt={citationModal?.title ?? "Trang trích dẫn"}
@@ -713,7 +717,7 @@ export function StudyAssistantChat({
                 </p>
               );
             })()}
-            {citationModal?.snippet && (citationModal?.pdfUrl || citationModal?.imageUrl) && (
+            {citationModal?.snippet && citationModal?.pdfUrl && (
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
                 {citationModal.snippet}
               </p>

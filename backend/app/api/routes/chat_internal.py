@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import raiseload
 
 from app.core.config import settings
 from app.db.session import get_db
@@ -66,7 +67,11 @@ def _attempt_state(attempt: QuizAttempt | None, now: datetime) -> str:
 
 @router.post("/internal/chat/lms-query", dependencies=[Depends(internal_auth)])
 async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
-    session = await db.get(ChatSession, str(body.session_id))
+    session = await db.get(
+        ChatSession,
+        str(body.session_id),
+        options=[raiseload(ChatSession.messages)],
+    )
     if session is None or session.archived_at is not None:
         raise HTTPException(404, detail="Phiên chat không còn khả dụng")
     if session.context_key != body.context_key:
@@ -78,9 +83,25 @@ async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
     if body.operation == "access":
         return {**base, "allowed": True}
 
-    course = await db.get(Course, session.course_id)
+    course = await db.get(
+        Course,
+        session.course_id,
+        options=[
+            raiseload(Course.versions),
+            raiseload(Course.enrollments),
+            raiseload(Course.owner),
+            raiseload(Course.creator),
+        ],
+    )
     version = (
-        await db.get(CourseVersion, session.course_version_id)
+        await db.get(
+            CourseVersion,
+            session.course_version_id,
+            options=[
+                raiseload(CourseVersion.modules),
+                raiseload(CourseVersion.items),
+            ],
+        )
         if session.course_version_id
         else None
     )
@@ -155,6 +176,11 @@ async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
                 Lesson.kind == "quiz",
             )
             .order_by(CourseVersionItem.position)
+            .options(
+                raiseload(Lesson.versions),
+                raiseload(Lesson.slides),
+                raiseload(LessonVersion.slides),
+            )
         )
     ).all()
 

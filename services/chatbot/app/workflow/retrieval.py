@@ -113,12 +113,6 @@ class Retriever:
                 )
                 return [dict(row) for row in cur.fetchall()]
 
-    def search(
-        self, query: str, course_id: str, course_version_id: str
-    ) -> list[dict]:
-        vector = Vector(self.embedding.embed_query(query))
-        return self._query(vector, query, course_id, course_version_id)
-
     async def asearch(
         self, query: str, course_id: str, course_version_id: str
     ) -> list[dict]:
@@ -183,7 +177,6 @@ def build_citations(docs: list[dict]) -> list[dict]:
                 "lesson_title": doc.get("lesson_title") or "",
                 "slide_id": str(doc["slide_id"]) if doc.get("slide_id") else None,
                 "slide_index": doc.get("slide_index"),
-                "image_url": pdf_url,
                 "pdf_url": pdf_url,
                 "page_number": page_number,
                 "snippet": content[:300],

@@ -5,12 +5,12 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import { loadPdfDocument } from "@/lib/pdf/pdfjs";
 import { cn } from "@/lib/utils";
 
-export interface PdfPageSize {
+interface PdfPageSize {
   width: number;
   height: number;
 }
 
-interface PdfPageProps {
+export interface PdfPageProps {
   url: string;
   pageNumber: number;
   className?: string;

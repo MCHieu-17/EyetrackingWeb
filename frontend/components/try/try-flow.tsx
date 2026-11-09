@@ -6,15 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Progress } from "@/components/ui/progress";
 import { CalibrationStage } from "@/components/calibration/calibration-stage";
-import { HeatmapCanvas } from "@/components/heatmap/heatmap-canvas";
 import { useGazeTracker } from "@/hooks/use-gaze-tracker";
 import { useCalibration } from "@/hooks/use-calibration";
 import { clearStoredGazeSession } from "@/lib/api/calibration";
 
-const DEMO_SLIDES = [
-  { id: "demo-1", title: "Gradient Descent — Trang bìa", src: "/demo/slide-1.svg" },
-  { id: "demo-2", title: "Ý tưởng cốt lõi", src: "/demo/slide-2.svg" },
-  { id: "demo-3", title: "Tốc độ học (learning rate)", src: "/demo/slide-3.svg" },
+const TRY_SLIDES = [
+  { id: "try-1", title: "Gradient Descent — Trang bìa", src: "/try/slide-1.svg" },
+  { id: "try-2", title: "Ý tưởng cốt lõi", src: "/try/slide-2.svg" },
+  { id: "try-3", title: "Tốc độ học (learning rate)", src: "/try/slide-3.svg" },
 ];
 
 type Step = "intro" | "calibrate" | "view" | "result";
@@ -28,14 +27,14 @@ interface GazeRecord {
 const STEP_LABELS: Array<{ key: Step; label: string }> = [
   { key: "calibrate", label: "Hiệu chỉnh" },
   { key: "view", label: "Xem bài mẫu" },
-  { key: "result", label: "Heatmap của bạn" },
+  { key: "result", label: "Kết quả của bạn" },
 ];
 
 function IntroStep({ onStart }: { onStart: () => void }) {
   const steps = [
-    { icon: "ri-focus-2-line", title: "Hiệu chỉnh (16 điểm)", desc: "Nhìn vào từng chấm và bấm — mất khoảng 1 phút." },
+    { icon: "ri-focus-2-line", title: "Hiệu chỉnh (25 điểm)", desc: "Nhìn vào từng chấm và bấm — mất khoảng 1–2 phút." },
     { icon: "ri-eye-line", title: "Xem 3 trang bài giảng mẫu", desc: "Hệ thống thu điểm nhìn trong lúc bạn xem." },
-    { icon: "ri-bar-chart-line", title: "Nhận heatmap ngay", desc: "Bản đồ nhiệt tính tức thì từ dữ liệu vừa thu." },
+    { icon: "ri-bar-chart-line", title: "Xem kết quả ngay", desc: "Tổng hợp dữ liệu điểm nhìn vừa thu." },
   ];
   return (
     <main className="flex flex-1 items-center px-4 py-12 sm:px-6">
@@ -49,7 +48,7 @@ function IntroStep({ onStart }: { onStart: () => void }) {
             Xem cách ánh mắt tương tác với nội dung.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-            Không cần tài khoản. Webcam ước lượng điểm nhìn khi bạn đọc ba trang mẫu, sau đó dựng heatmap ngay trên thiết bị.
+            Không cần tài khoản. Webcam ước lượng điểm nhìn khi bạn đọc ba trang mẫu, sau đó tổng hợp kết quả ngay trên thiết bị.
           </p>
           <Button size="lg" onClick={onStart} className="mt-8 bg-black px-6 text-white shadow-xs hover:bg-[#292a27]">
             Bắt đầu hiệu chỉnh
@@ -94,7 +93,7 @@ export function TryFlow() {
     slideRef.current = currentSlide;
   }, [currentSlide]);
 
-  const total = DEMO_SLIDES.length;
+  const total = TRY_SLIDES.length;
 
   const handlePoint = useCallback((x: number, y: number) => {
     gazeRef.current.push({ slide: slideRef.current, x, y });
@@ -114,13 +113,12 @@ export function TryFlow() {
 
   const results = useMemo(
     () =>
-      DEMO_SLIDES.map((slide, i) => {
+      TRY_SLIDES.map((slide, i) => {
         const records = resultRecords.filter((r) => r.slide === i);
         const valid = records.filter((r) => r.x >= 0 && r.x <= 1 && r.y >= 0 && r.y <= 1);
         const onSlide = records.length ? Math.round((valid.length / records.length) * 100) : 0;
         return {
           slide,
-          points: valid.map((r) => [r.x, r.y] as [number, number]),
           total: records.length,
           valid: valid.length,
           onSlide,
@@ -200,7 +198,7 @@ export function TryFlow() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[11px] text-muted-foreground">Bài mẫu · Gradient Descent</p>
                 <h1 className="mt-0.5 truncate text-sm font-medium">
-                  {DEMO_SLIDES[currentSlide].title}
+                  {TRY_SLIDES[currentSlide].title}
                 </h1>
               </div>
               <div className="shrink-0 rounded-full bg-muted px-3 py-1.5">
@@ -228,8 +226,8 @@ export function TryFlow() {
               <div className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={DEMO_SLIDES[currentSlide].src}
-                  alt={DEMO_SLIDES[currentSlide].title}
+                  src={TRY_SLIDES[currentSlide].src}
+                  alt={TRY_SLIDES[currentSlide].title}
                   className="absolute inset-0 block h-full w-full bg-white object-contain"
                 />
               </div>
@@ -238,7 +236,7 @@ export function TryFlow() {
               </p>
               {gazeSource === "off" && (
                 <p className="mx-auto mt-2 rounded-xl bg-muted px-3 py-2 text-center text-xs font-medium text-foreground">
-                  Chưa kết nối được camera hoặc dịch vụ theo dõi — kiểm tra camera rồi tải lại trang. Heatmap sẽ
+                  Chưa kết nối được camera hoặc dịch vụ theo dõi — kiểm tra camera rồi tải lại trang. Kết quả sẽ
                   trống nếu không có dữ liệu điểm nhìn.
                 </p>
               )}
@@ -305,10 +303,10 @@ export function TryFlow() {
             <div className="mx-auto max-w-xl text-center">
               <p className="inline-flex rounded-full bg-[#e8f1e6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#52704f]">Kết quả phiên thử</p>
               <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-foreground">
-                Heatmap điểm nhìn
+                Kết quả điểm nhìn
               </h1>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Vùng màu đỏ là nơi bạn nhìn lâu nhất, xanh là nơi nhìn ít hơn.
+                Tổng hợp số mẫu và tỷ lệ nhìn vào trang trong phiên này.
               </p>
             </div>
 
@@ -328,18 +326,18 @@ export function TryFlow() {
               ))}
             </div>
 
-            <div className="mt-10 space-y-8">
+            <div className="mt-10 space-y-2">
               {results.map((r, i) => (
-                <div key={r.slide.id}>
-                  <div className="mb-3 flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                    <span className="font-semibold text-foreground">
-                      Trang {i + 1} · {r.slide.title}
-                    </span>
-                    <span>
-                      {r.valid} mẫu · nhìn vào trang {r.onSlide}%
-                    </span>
-                  </div>
-                  <HeatmapCanvas src={r.slide.src} title={r.slide.title} points={r.points} />
+                <div
+                  key={r.slide.id}
+                  className="flex flex-col gap-1 rounded-[16px] border border-border/80 bg-white px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="font-semibold text-foreground">
+                    Trang {i + 1} · {r.slide.title}
+                  </span>
+                  <span>
+                    {r.valid} mẫu · nhìn vào trang {r.onSlide}%
+                  </span>
                 </div>
               ))}
             </div>
