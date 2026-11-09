@@ -305,6 +305,18 @@ Khi cần tạo thêm:
 Worker `worker` chạy `analysis_runs` pending; watermark/trạng thái nằm trong
 PostgreSQL nên restart không mất việc.
 
+## Backup & bảo trì
+
+```bash
+./scripts/backup.sh                   # backup DB → backups/eyelearning-*.dump
+./scripts/backup.sh --restore <file>  # restore (hỏi xác nhận, trừ khi --yes)
+./scripts/maintenance.sh              # dọn session hết hạn (bảo trì định kỳ)
+```
+
+Xem chi tiết backup/restore, logging (`LOG_FORMAT=json`, `LOG_LEVEL`) và cảnh
+báo `docker compose down -v` tại
+[`docs/cleanup/OPERATIONS.md`](docs/cleanup/OPERATIONS.md).
+
 ## Dọn dung lượng Docker
 
 ```bash
