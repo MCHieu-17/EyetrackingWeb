@@ -94,6 +94,9 @@
   --brand-cyan-soft: #e8f1e6;
   --brand-dark: #20221f;
 
+  /* System monospace stack (Geist Mono is no longer loaded in the root layout). */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
   /* Primary interactive */
   --primary: #20211f;
   --primary-hover: #343632;

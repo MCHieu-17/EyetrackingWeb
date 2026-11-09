@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-sans" });
 const geist = Geist({ subsets: ["latin"], variable: "--font-heading" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "GazeEdu – Webcam Eye Tracking for Learning Analytics",
@@ -24,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="vi"
-      className={cn(inter.variable, geist.variable, geistMono.variable, "h-full")}
+      className={cn(inter.variable, geist.variable, "h-full")}
       suppressHydrationWarning
     >
       <body className="min-h-full bg-background font-sans text-foreground antialiased">

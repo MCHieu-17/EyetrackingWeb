@@ -1,41 +1,16 @@
-"use client";
-
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
-  RiArrowRightUpLine,
   RiBarChartLine,
   RiBookOpenLine,
   RiCheckLine,
-  RiCloseLine,
   RiEyeLine,
-  RiMenuLine,
 } from "@remixicon/react";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { Arrow } from "./landing-arrow";
+import { LandingHeader } from "./landing-header";
+import { LandingRoleTabs } from "./landing-role-tabs";
 import "./landing-v2.css";
-
-type Role = "student" | "teacher";
-
-const roles: Record<Role, { title: string; desc: string; points: string[] }> = {
-  student: {
-    title: "Chủ động với hành trình của mình.",
-    desc: "Quản lý khóa học và đọc tài liệu bài giảng trong cùng một nơi.",
-    points: [
-      "Khóa học và tài liệu trong cùng một nơi",
-      "Xem bài giảng dạng slide",
-      "Xem lại kết quả và quá trình học",
-    ],
-  },
-  teacher: {
-    title: "Thấu hiểu cách người học tương tác.",
-    desc: "Tổ chức nội dung giảng dạy và tham khảo trực quan hóa điểm nhìn để hiểu rõ hơn cách học viên tiếp cận tài liệu.",
-    points: [
-      "Tổ chức và quản lý khóa học",
-      "Quan sát bản đồ nhiệt điểm nhìn",
-      "Tham khảo dữ liệu hỗ trợ giảng dạy",
-    ],
-  },
-};
 
 const menuItems = [
   ["Giải pháp", "#features"],
@@ -45,10 +20,6 @@ const menuItems = [
 
 function Eyebrow({ children }: { children: ReactNode }) {
   return <span className="ge-eyebrow">{children}</span>;
-}
-
-function Arrow() {
-  return <RiArrowRightUpLine size={17} aria-hidden="true" />;
 }
 
 function Lines({ widths }: { widths: string[] }) {
@@ -228,56 +199,9 @@ function HeatIllustration() {
 }
 
 export default function LandingV2() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [role, setRole] = useState<Role>("student");
-  const current = roles[role];
-
   return (
     <div className="ge-page" id="top">
-      <header className="ge-header">
-        <div className="ge-container ge-nav">
-          <Link className="ge-logo" href="/" aria-label="GazeEdu - Trang chủ">
-            <BrandLogo variant="light" className="h-[28px]" priority />
-          </Link>
-          <nav className="ge-navlinks" aria-label="Điều hướng chính">
-            {menuItems.map(([label, href]) => (
-              <a href={href} key={href}>
-                {label}
-              </a>
-            ))}
-          </nav>
-          <div className="ge-nav-actions">
-            <Link href="/account/login" className="ge-login">
-              Đăng nhập
-            </Link>
-            <Link className="ge-btn ge-btn-dark ge-btn-sm" href="/try">
-              Bắt đầu khám phá <Arrow />
-            </Link>
-            <button
-              type="button"
-              className="ge-menu"
-              onClick={() => setMobileOpen((open) => !open)}
-              aria-expanded={mobileOpen}
-              aria-label={mobileOpen ? "Đóng menu" : "Mở menu"}
-            >
-              {mobileOpen ? <RiCloseLine size={23} /> : <RiMenuLine size={23} />}
-            </button>
-          </div>
-        </div>
-        {mobileOpen && (
-          <nav className="ge-mobile-panel" aria-label="Menu di động">
-            {menuItems.map(([label, href]) => (
-              <a href={href} key={href} onClick={() => setMobileOpen(false)}>
-                {label}
-              </a>
-            ))}
-            <Link href="/account/login">Đăng nhập</Link>
-            <Link className="ge-btn ge-btn-dark" href="/try">
-              Bắt đầu khám phá <Arrow />
-            </Link>
-          </nav>
-        )}
-      </header>
+      <LandingHeader menuItems={menuItems} />
       <main>
         <section className="ge-hero" aria-labelledby="hero-title">
           <div className="ge-container ge-hero-grid">
@@ -466,46 +390,7 @@ export default function LandingV2() {
                 Mỗi vai trò có một góc nhìn riêng, cùng hướng tới hành trình học tập rõ ràng hơn.
               </p>
             </div>
-            <div className="ge-role-tabs-wrap">
-              <div className="ge-tabs" role="tablist" aria-label="Vai trò sử dụng">
-                {(["student", "teacher"] as const).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className="ge-tab"
-                    role="tab"
-                    id={`role-${key}`}
-                    aria-controls="ge-role-panel"
-                    aria-selected={role === key}
-                    onClick={() => setRole(key)}
-                  >
-                    {key === "student" ? "Người học" : "Giảng viên"}
-                  </button>
-                ))}
-              </div>
-              <div
-                id="ge-role-panel"
-                role="tabpanel"
-                aria-labelledby={`role-${role}`}
-                className="ge-role-detail"
-              >
-                <div className="ge-role-icon">
-                  <RiBookOpenLine size={21} />
-                </div>
-                <div>
-                  <h3>{current.title}</h3>
-                  <p>{current.desc}</p>
-                  <ul className="ge-role-points">
-                    {current.points.map((point) => (
-                      <li key={point}>{point}</li>
-                    ))}
-                  </ul>
-                  <Link href="/try" className="ge-text-link">
-                    Khám phá trải nghiệm học tập <Arrow />
-                  </Link>
-                </div>
-              </div>
-            </div>
+            <LandingRoleTabs />
           </div>
         </section>
         <div className="ge-container">
