@@ -188,6 +188,7 @@ function Workspace({ courseId }: { courseId: string }) {
             <LazyAoiEditor
               courseId={courseId}
               courseTitle={title}
+              courseStatus={status}
               canManage={canManage}
             />
           </div>

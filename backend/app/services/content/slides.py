@@ -382,10 +382,38 @@ async def process_pending_slide_imports(limit: int = 1) -> int:
 
 
 async def list_lesson_slides_admin(
-    db: AsyncSession, course: Course, user: User, lesson_id: str
+    db: AsyncSession,
+    course: Course,
+    user: User,
+    lesson_id: str,
+    *,
+    version: str = "draft",
 ) -> list[SlideAdminOut]:
-    draft, item = await _draft_item(db, course, lesson_id, user)
-    lesson_version = await ensure_draft_lesson_version(db, item, user)
+    """Liệt kê slide của bài giảng theo bản nháp hoặc bản xuất bản.
+
+    Bản xuất bản là bản sinh viên đang học và là bản citation trong chatbot
+    trỏ tới. Khi giáo viên đánh AOI cho slide citation, phải đọc đúng slide
+    version của bản xuất bản thay vì bản nháp.
+    """
+    if version == "published":
+        published = await get_published_version(db, course)
+        if published is None:
+            raise _not_found("Khóa học chưa được xuất bản")
+        item = (
+            await db.execute(
+                select(CourseVersionItem).where(
+                    CourseVersionItem.course_version_id == published.id,
+                    CourseVersionItem.lesson_id == lesson_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if item is None:
+            raise _not_found("Không tìm thấy bài học trong bản xuất bản")
+        lesson_version_id = item.lesson_version_id
+    else:
+        _, item = await _draft_item(db, course, lesson_id, user)
+        lesson_version = await ensure_draft_lesson_version(db, item, user)
+        lesson_version_id = lesson_version.id
     rows = (
         await db.execute(
             select(
@@ -407,7 +435,7 @@ async def list_lesson_slides_admin(
                 SlideDocument.slide_version_id
                 == LessonVersionSlide.slide_version_id,
             )
-            .where(LessonVersionSlide.lesson_version_id == lesson_version.id)
+            .where(LessonVersionSlide.lesson_version_id == lesson_version_id)
             .order_by(LessonVersionSlide.position)
             .options(
                 raiseload(LessonVersionSlide.slide_version),

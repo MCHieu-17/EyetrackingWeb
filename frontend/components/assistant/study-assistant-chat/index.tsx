@@ -34,10 +34,13 @@ export function StudyAssistantChat({
   courseId,
   open,
   onClose,
+  onCitationNavigate,
 }: {
   courseId: string;
   open: boolean;
   onClose: () => void;
+  /** Trả true nếu đã điều hướng tới slide; false để mở dialog như cũ. */
+  onCitationNavigate?: (citation: ChatCitation) => boolean;
 }) {
   const { mode, assignmentId, attemptId, lessonId, draftAnswers } = useAssistant();
   const { user } = useAuthState();
@@ -76,6 +79,24 @@ export function StudyAssistantChat({
     setDeleteOpen(false);
     onClose();
   }, [onClose]);
+
+  // Citation có slide: nhảy thẳng tới slide trong reader thay vì mở dialog.
+  // Quiz/review giữ dialog để không làm gián đoạn bài đang làm.
+  const handleCitationClick = useCallback(
+    (citation: ChatCitation) => {
+      if (
+        mode === "reader" &&
+        onCitationNavigate &&
+        citation.lessonId &&
+        citation.slideVersionId &&
+        onCitationNavigate(citation)
+      ) {
+        return;
+      }
+      setCitationModal(citation);
+    },
+    [mode, onCitationNavigate],
+  );
 
   const sessionsQuery = useChatSessions(
     allowed && open ? courseId : null,
@@ -329,7 +350,7 @@ export function StudyAssistantChat({
           mode={mode}
           showEmpty={showEmpty}
           onSuggestion={(suggestion) => void send(suggestion)}
-          onCitationClick={setCitationModal}
+          onCitationClick={handleCitationClick}
           onScroll={(event) => {
             nearBottom.current = isNearBottom(event.currentTarget);
           }}

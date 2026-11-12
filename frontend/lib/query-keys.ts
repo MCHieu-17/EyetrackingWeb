@@ -1,3 +1,4 @@
+import type { AdminDbTableRowsParams } from "@/lib/api/admin-db";
 import { MY_PROFILE_QUERY_KEY } from "@/lib/api/profile";
 import type { CourseListQuery } from "@/lib/api/teacher";
 
@@ -11,6 +12,9 @@ export const queryKeys = {
   admin: {
     studentsRoot: ["admin", "students"] as const,
     students: (query: string) => ["admin", "students", query] as const,
+    dbSchema: ["admin", "db", "schema"] as const,
+    dbTableRows: (params: AdminDbTableRowsParams | null) =>
+      ["admin", "db", "table-rows", params] as const,
   },
   teacher: {
     coursesRoot: ["teacher", "courses"] as const,
@@ -18,8 +22,10 @@ export const queryKeys = {
     courseTree: (courseId: string) => ["teacher", "course-tree", courseId] as const,
     courseStudents: (courseId: string) =>
       ["teacher", "course-students", courseId] as const,
-    lessonSlides: (lessonId: string) =>
-      ["teacher", "lesson-slides", lessonId] as const,
+    lessonSlides: (
+      lessonId: string,
+      version: "draft" | "published" = "draft",
+    ) => ["teacher", "lesson-slides", lessonId, version] as const,
     studentDirectory: (query: string) =>
       ["teacher", "student-directory", query] as const,
   },

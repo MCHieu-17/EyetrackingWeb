@@ -1,3 +1,4 @@
 # Dependencies CHỈ dùng khi phát triển service chatbot (không cài trong
 # image Docker). Cài: pip install -r requirements-dev.txt
 ruff==0.17.1
+pytest==9.1.1

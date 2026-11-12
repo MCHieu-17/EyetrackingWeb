@@ -16,11 +16,11 @@ export function useMyEnrollments() {
   });
 }
 
-export function useCourseOutline(courseId: string) {
+export function useCourseOutline(courseId: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.student.courseOutline(courseId),
     queryFn: () => fetchCourseOutline(courseId),
-    enabled: Boolean(courseId),
+    enabled: Boolean(courseId) && enabled,
   });
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findCitationSlideIndex,
   findNextLesson,
   getReaderLayoutKey,
   hashPayload,
@@ -98,5 +99,30 @@ describe("isGazeDotVisible", () => {
     expect(isGazeDotVisible({ x: 0.1, y: 0.2, key: "a:0" }, "a", 0)).toBe(true);
     expect(isGazeDotVisible({ x: 0.1, y: 0.2, key: "a:0" }, "a", 1)).toBe(false);
     expect(isGazeDotVisible(null, "a", 0)).toBe(false);
+  });
+});
+
+describe("findCitationSlideIndex", () => {
+  const slides = [
+    { slideVersionId: "v1" },
+    { slideVersionId: "v2" },
+    { slideVersionId: "v3" },
+  ];
+
+  it("prefers the slide version", () => {
+    expect(findCitationSlideIndex({ slideVersionId: "v2" }, slides)).toBe(1);
+  });
+
+  it("falls back to the slide index", () => {
+    expect(
+      findCitationSlideIndex({ slideVersionId: "missing", slideIndex: 2 }, slides),
+    ).toBe(2);
+  });
+
+  it("returns -1 when neither matches", () => {
+    expect(
+      findCitationSlideIndex({ slideVersionId: "missing", slideIndex: 9 }, slides),
+    ).toBe(-1);
+    expect(findCitationSlideIndex({}, slides)).toBe(-1);
   });
 });

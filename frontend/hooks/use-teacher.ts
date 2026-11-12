@@ -44,10 +44,13 @@ export function useCourseStudents(courseId: string) {
   });
 }
 
-export function useLessonSlidesAdmin(lessonId: string) {
+export function useLessonSlidesAdmin(
+  lessonId: string,
+  version: "draft" | "published" = "draft",
+) {
   return useQuery({
-    queryKey: queryKeys.teacher.lessonSlides(lessonId),
-    queryFn: () => fetchLessonSlidesAdmin(lessonId),
+    queryKey: queryKeys.teacher.lessonSlides(lessonId, version),
+    queryFn: () => fetchLessonSlidesAdmin(lessonId, version),
     enabled: Boolean(lessonId),
     // Đang index thì tự làm mới để trạng thái pending → ready/failed.
     refetchInterval: (query) => {

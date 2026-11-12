@@ -39,12 +39,10 @@ logger = logging.getLogger("app.chat")
 async def lifespan(app: FastAPI):
     """Khởi tạo pool + warm-up embedding một lần, giải phóng khi tắt service."""
     validate_settings()
-    # Warm-up embedding (local: load weights lên GPU) để /ready phản ánh đúng và
+    # Warm-up embedding (local: load weights) để /ready phản ánh đúng và
     # request đầu không phải chờ load model.
     embedding = await run_in_threadpool(get_embedding)
     await embedding.aembed_query("warm up")
-    from app.workflow.graph import get_graph
-    get_graph()
     try:
         get_pool()
     except DatabaseUnavailableError:
@@ -59,9 +57,9 @@ async def lifespan(app: FastAPI):
         close_ingestion()
         close_pool()
         embedding.close()
+        from app.workflow.llm import get_llm_client
         from app.workflow.lms import backend_client
-        from app.workflow.river import get_river
-        await get_river().close()
+        await get_llm_client().close()
         await backend_client().aclose()
 
 

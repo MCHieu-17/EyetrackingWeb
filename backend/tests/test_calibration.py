@@ -3,7 +3,8 @@ import uuid
 
 import pytest
 
-from tests.conftest import create_user, login, seed_course
+from app.models.course import Course
+from tests.conftest import SessionLocal, create_user, login, seed_course
 
 
 @pytest.mark.asyncio
@@ -70,3 +71,49 @@ async def test_calibration_screen_origin_and_viewport_change(client):
         },
     )
     assert session_response.status_code == 201, session_response.text
+
+
+@pytest.mark.asyncio
+async def test_require_calibration_toggle_bumps_updated_at_and_invalidates_cache(
+    client, monkeypatch
+):
+    """Đổi cờ hiệu chỉnh phải làm mới cache outline và cache enrollment."""
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(
+        teacher_id=teacher_id,
+        student_id=student_id,
+        require_calibration=True,
+    )
+
+    async with SessionLocal() as db:
+        course = await db.get(Course, ids["course_id"])
+        assert course is not None
+        before = course.updated_at
+
+    deleted: list[str] = []
+
+    async def fake_delete(key: str) -> None:
+        deleted.append(key)
+
+    monkeypatch.setattr("app.api.routes.courses.cache_delete", fake_delete)
+
+    token = await login(client, teacher_email)
+    headers = {"Authorization": f"Bearer {token}"}
+    response = await client.patch(
+        f"/teacher/courses/{ids['course_id']}/require-calibration",
+        headers=headers,
+        json={"requireCalibration": False},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["requireCalibration"] is False
+
+    async with SessionLocal() as db:
+        course = await db.get(Course, ids["course_id"])
+        assert course is not None
+        assert course.require_calibration is False
+        assert course.updated_at > before
+
+    assert f"student:enrollments:{student_id}" in deleted

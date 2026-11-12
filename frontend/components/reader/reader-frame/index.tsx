@@ -121,7 +121,6 @@ export function ReaderFrame({
       )}
     >
       <ReaderTopbar
-        courseTitle={courseTitle}
         preview={preview}
         chatOpen={chatOpen}
         chatAllowed={chatAllowed}

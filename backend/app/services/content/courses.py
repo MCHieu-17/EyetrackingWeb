@@ -229,6 +229,9 @@ async def update_course_metadata(
         course.require_calibration = require_calibration
     if archived is not None:
         course.archived_at = _now() if archived else None
+    # Cache outline dùng `course.updated_at` trong key; bump để metadata mới
+    # (đặc biệt require_calibration/show_gaze_dot) không bị cache cũ 60s.
+    course.updated_at = _now()
     bump_generation(draft)
     await db.flush()
     return draft

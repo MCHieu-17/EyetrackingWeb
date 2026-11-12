@@ -18,6 +18,9 @@ export function useQuizAssignment(id: string) {
     queryKey: queryKeys.quiz.assignment(id),
     queryFn: () => getQuizAssignment(id),
     enabled: Boolean(id),
+    // Cờ allowRetry/allowChatbot có thể đổi từ phía giáo viên; luôn lấy bản
+    // mới khi mở bài thay vì dùng cache 120s toàn cục.
+    staleTime: 0,
   });
 }
 

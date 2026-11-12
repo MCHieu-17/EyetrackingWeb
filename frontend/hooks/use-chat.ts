@@ -68,7 +68,7 @@ export function useChatStream() {
       const controller = new AbortController();
       abortRef.current = controller;
       setStreaming(true);
-      setStatus("routing");
+      setStatus("rewriting");
       try {
         await streamChatMessage(
           input,

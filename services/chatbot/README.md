@@ -1,11 +1,11 @@
 # Chatbot service (RAG hỗ trợ học tập)
 
-FastAPI + LangChain: ingest slide bằng VLM → hybrid retrieval (pgvector + Postgres
-FTS) → sinh câu trả lời → verify citation → SSE.
+FastAPI + NEU LLM/VLM: ingest slide bằng VLM → hybrid retrieval (Postgres FTS +
+pgvector + HyDE) → một LLM call streaming → kiểm tra citation bằng code → SSE.
 
 Chatbot chạy **CPU-only**: embedding local `Qwen3-Embedding-0.6B` trên CPU,
-LLM/VLM gọi River API. Không cần GPU và không đặt `gpus: all` — GPU chỉ dành
-cho `services/gaze`.
+LLM/VLM gọi NEU API (Qwen 3.5 35B). Không cần GPU và không đặt `gpus: all` —
+GPU chỉ dành cho `services/gaze`.
 
 ## Endpoints
 
@@ -16,26 +16,52 @@ cho `services/gaze`.
 | POST | `/chat` | `X-Chatbot-Token` | Hỏi đáp non-streaming |
 | POST | `/chat/stream` | `X-Chatbot-Token` | SSE: status → citations → token → done |
 | POST | `/ingest/slide` | `X-Chatbot-Token` | Embed 1 slide |
-| POST | `/ingest/lesson` | `X-Chatbot-Token` | Embed toàn bộ slide của bài |
-| POST | `/ingest/course` | `X-Chatbot-Token` | Embed toàn bộ slide của khóa |
+| POST | `/ingest/lesson-version` | `X-Chatbot-Token` | Embed toàn bộ slide của bài |
+| POST | `/ingest/course-version` | `X-Chatbot-Token` | Embed toàn bộ slide của khóa |
 | POST | `/ingest/reindex-all` | `X-Chatbot-Token` | Backfill slide chưa ready |
 
 ## Luồng xử lý
 
 ```
-router → Knowledge QA | LMS Assistant | General Conversation
-Knowledge QA: hybrid retrieval → NDJSON blocks → cumulative verification → approved SSE
-LMS: authenticated backend read tools → Markdown templates
-General: whole-utterance greetings / short scope redirects
+POST /chat/stream
+  ├─ greeting/thanks fast path (không retrieval)
+  ├─ LMS detection (regex) → pure LMS: backend query + render Markdown
+  ├─ query prep (0–1 LLM call nhỏ)
+  │    ├─ rewrite theo history (nếu có đại từ/ngữ cảnh)
+  │    └─ HyDE (nếu câu ngắn/mơ hồ)
+  ├─ retrieval
+  │    ├─ BM25-like: Postgres FTS ts_rank_cd
+  │    ├─ dense: pgvector với query đã rewrite
+  │    └─ dense: pgvector với HyDE text (nếu có)
+  │         └─ RRF fusion → top-k docs
+  ├─ generation: một LLM call streaming
+  └─ citation gate: code check + retry 1 lần + fallback source list
 ```
 
-- **Citation**: mỗi claim về môn học phải có `[n]`; verifier trả `evidence_quote`
-  và code kiểm tra quote có thật trong tài liệu. Không verify được → câu an toàn.
-- **Bài tập**: `exercise_hints` không lộ đáp án/lời giải; `exercise_review` được
-  chữa bài vì backend chỉ gửi đáp án sau khi sinh viên đã nộp.
-- **General knowledge**: phải nằm dưới label `Ngoài tài liệu môn học:` và không
-  được gắn citation.
-- **Streaming**: chỉ phát block hoàn chỉnh đã kiểm chứng; hàng đợi tối đa hai block. Phần đã phát được giữ nguyên khi sửa tối đa một lần trong lượt. `route`, `block_id`, `routes`, `finish_reason` bổ sung vào SSE.
+- **Không còn router LLM, verifier LLM, NDJSON block hay LangGraph.** Mỗi
+  request tối đa 2 LLM call (1 query prep nhỏ + 1 answer streaming), cộng tối đa
+  1 retry streaming nếu citation gate thất bại.
+- **Một chatbot duy nhất** cho bài giảng và bài tập. Không còn prompt/verifier
+  riêng cho exercise.
+- **Citation**: mỗi claim về môn học phải có `[n]`. Code kiểm tra `[n]` nằm
+  trong khoảng hợp lệ; nếu model không cite, pipeline retry một lần với prompt
+  chặt hơn, sau đó chèn "Nguồn tham khảo" để vẫn có nguồn.
+- **Bài tập chưa nộp**: prompt-level không lộ đáp án/lời giải; chỉ gợi ý phương
+  pháp và câu hỏi dẫn dắt. Không còn leakage verifier.
+- **Bài tập đã nộp**: được giải thích đáp án đúng/lỗi sai từ ngữ cảnh bài tập
+  của backend.
+- **Kiến thức ngoài tài liệu**: phải nằm dưới label `Ngoài tài liệu môn học:`
+  và không gắn citation.
+- **LMS**: deadline/điểm/cấu trúc khóa được nhận diện bằng regex, gọi
+  `/internal/chat/lms-query`; câu hỏi thuần LMS được render trực tiếp, câu hỏi
+  mixed được inject context vào prompt.
+- **Streaming**: token được stream trực tiếp. Citation gate buffer tối đa
+  `CITATION_GATE_TOKENS` từ trước khi kiểm tra, nên first token có thể chậm hơn
+  một chút nhưng không phải chờ verify từng block.
+- **HyDE trên CPU**: embedding local chạy CPU nên HyDE text càng dài càng tốn
+  thời gian. Pipeline chỉ dùng HyDE cho câu ngắn/mơ hồ, không dùng cho follow-up
+  (rewrite xử lý) và câu đã có chủ thể cụ thể. Nếu ưu tiên latency tuyệt đối, đặt
+  `HYDE_ENABLED=false`; retrieval vẫn chạy BM25 + dense query gốc.
 
 ## Cấu hình (biến môi trường)
 
@@ -43,31 +69,41 @@ General: whole-utterance greetings / short scope redirects
 |---|---|---|
 | `CHATBOT_DATABASE_URL` | – | DSN psycopg (`postgresql://...`), không dùng `+asyncpg` |
 | `CHATBOT_INTERNAL_TOKEN` | – | Token nội bộ (bắt buộc) |
-| `LLM_NAME` | `river` | LLM qua River AI |
-| `VLM_NAME` | `river` | VLM cho ingest slide |
 | `EMBEDDING_NAME` | `local` | Embedding local Qwen3-Embedding-0.6B |
 | `EMBEDDING_DIM` | `1024` | Phải khớp `vector(1024)` trong `001_baseline.sql` |
 | `EMBEDDING_MODEL_PATH` | `/app/weights/Qwen3-Embedding-0.6B` | Đường dẫn weights |
 | `EMBEDDING_DEVICE` | `cpu` | `cpu` (mặc định) \| `cuda` (chỉ khi tự build image GPU) |
 | `EMBEDDING_LOCAL_FILES_ONLY` | `true` | Chỉ đọc weights đã tải |
 | `EMBEDDING_HF_REPO` | `Qwen/Qwen3-Embedding-0.6B` | Repo HuggingFace |
-| `RIVER_API_KEY` | – | API key River AI (bắt buộc) |
-| `RIVER_BASE_URL` | `https://api.river.ai/v1` | Endpoint OpenAI-compatible |
-| `RIVER_LLM_MODEL` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | Model LLM |
-| `RIVER_VLM_MODEL` | `deepseek-ai/DeepSeek-V4.1-Flash-1017` | Model VLM |
-| `RIVER_LLM_MAX_TOKENS` | `8192` | Max output cho answer |
-| `RIVER_ROUTER_MAX_TOKENS` | `1024` | Max output cho router |
-| `RIVER_VERIFIER_MAX_TOKENS` | `8192` | Max output cho verifier |
-| `RIVER_VLM_MAX_TOKENS` | `16384` | Max output cho VLM |
-| `RIVER_REASONING_EFFORT` | `low` | `low` \| `high` \| `max` \| `none` |
-| `RIVER_ROUTER_REASONING_EFFORT` | `none` | Tắt reasoning cho router |
-| `RIVER_VERIFIER_REASONING_EFFORT` | `none` | Tắt reasoning cho verifier |
-| `RIVER_VLM_REASONING_EFFORT` | `none` | Tắt reasoning cho VLM |
-| `RAG_TOP_K` | `8` | Số slide trả về |
-| `RAG_CANDIDATES` | `20` | Số candidate mỗi nhánh hybrid |
+| `NEU_BASE_URL` | – | Endpoint OpenAI-compatible của NEU server (bắt buộc) |
+| `NEU_API_KEY` | – | API key/seckey NEU (bắt buộc nếu dùng auth header) |
+| `NEU_AUTH_HEADER` | `x-ollama-seckey` | Tên header auth |
+| `NEU_AUTH_SCHEME` | – | Scheme auth (vd `Bearer`); để trống nếu raw key |
+| `NEU_LLM_MODEL` | `qwen3.5-35b-a3b-int4` | Model LLM cho query prep/answer |
+| `NEU_VLM_MODEL` | `qwen3.5-35b-a3b-int4` | Model VLM cho ingest slide |
+| `NEU_ENABLE_THINKING` | `false` | Bật reasoning của Qwen (không khuyến nghị) |
+| `NEU_TIMEOUT` | `180` | Timeout mặc định cho LLM call |
+| `NEU_MAX_RETRIES` | `2` | Retry cho VLM ChatOpenAI |
+| `ANSWER_MAX_TOKENS` | `2048` | Max output cho answer |
+| `ANSWER_TEMPERATURE` | `0.2` | Nhiệt độ sinh answer |
+| `NEU_QUERY_MAX_TOKENS` | `400` | Max output cho query rewrite/HyDE |
+| `NEU_QUERY_TIMEOUT` | `30` | Timeout cho query prep |
+| `NEU_ANSWER_TIMEOUT` | `120` | Timeout cho answer streaming |
+| `NEU_VLM_MAX_TOKENS` | `8192` | Max output cho VLM |
+| `NEU_VLM_TIMEOUT` | `300` | Timeout cho VLM ingest |
+| `RAG_TOP_K` | `8` | Số slide trả về sau RRF |
+| `RAG_BM25_CANDIDATES` | `20` | Candidate nhánh BM25-like |
+| `RAG_DENSE_CANDIDATES` | `20` | Candidate nhánh dense |
+| `RAG_HYDE_CANDIDATES` | `20` | Candidate nhánh HyDE |
+| `RAG_HYDE_WEIGHT` | `0.7` | Trọng số RRF cho nhánh HyDE |
 | `RAG_RRF_K` | `60` | Hằng số RRF |
-| `RAG_SCORE_THRESHOLD` | `0.25` | Ngưỡng cosine tối thiểu |
-| `CITATION_MAX_ATTEMPTS` | `2` | Số lần sinh lại tối đa |
+| `RAG_SCORE_THRESHOLD` | `0.2` | Ngưỡng cosine tối thiểu |
+| `QUERY_REWRITE_ENABLED` | `true` | Bật rewrite theo history |
+| `HYDE_ENABLED` | `true` | Bật HyDE |
+| `HYDE_MIN_QUERY_WORDS` | `8` | Câu ngắn hơn + mơ hồ/không có chủ thể → HyDE |
+| `CITATION_GATE_TOKENS` | `200` | Số từ buffer trước khi kiểm tra citation |
+| `CITATION_RETRY_MAX` | `1` | Số lần retry citation |
+| `LMS_DETECTION_ENABLED` | `true` | Bật regex LMS |
 | `LOCAL_MEDIA_DIR` | `/app/media` | Thư mục slide local |
 | `STORAGE_HTTP_ALLOWED_HOSTS` | – | Host HTTP được phép fetch slide |
 | `R2_*` | – | Cloudflare R2 (nếu dùng) |
@@ -142,35 +178,52 @@ app/
 │   ├── ingest.py           slide -> VLM -> embedding -> pgvector
 │   └── storage.py          đọc file từ local/S3/R2/URL (chống SSRF)
 └── workflow/
-    ├── router.py           phân loại intent
-    ├── retrieval.py        hybrid BM25 + vector (RRF)
-    ├── answer.py           sinh câu trả lời theo intent
-    ├── guardrails.py       citation + no-solution verifier
-    ├── citations.py        parse/sanitize/quote matching
-    ├── pipeline.py         orchestration + SSE events
-    ├── prompts.py          prompt router/answer/verifier/VLM
-    └── providers.py        LLM/embedding/VLM factories
+    ├── query.py            rewrite + adaptive HyDE
+    ├── retrieval.py        BM25-like + dense + HyDE + RRF
+    ├── generation.py       prompt + stream answer
+    ├── citations.py        parse/validate citation
+    ├── lms.py              LMS detection + backend query + render
+    ├── pipeline.py         orchestration tuyến tính + SSE events
+    ├── prompts.py          prompt query/answer/VLM
+    ├── history.py          chuẩn hoá lịch sử
+    ├── llm.py              AsyncOpenAI transport + concurrency
+    ├── providers.py        embedding/VLM factories
+    ├── embedding_queue.py  một worker embedding cho chat + ingest
+    └── workload.py         ingest nhường ưu tiên cho chat
 ```
 
-## Graph runtime and rollout
+## Runtime và rollout
 
-`workflow/graph.py` compiles one parent and three subgraphs at startup, without a
-checkpointer. The backend remains the only history store. `pipeline.py` is now an
-SSE adapter; the previous whole-answer orchestration is no longer called.
+- Không dùng checkpointer; backend là nguồn sự thật cho lịch sử.
+- `pipeline.py` là async generator tự viết, không phải LangGraph.
+- NEU dùng chung AsyncOpenAI transport, giới hạn generation/total concurrency
+  và request pacing. Cấu hình `NEU_GENERATION_CONCURRENCY` (4),
+  `NEU_TOTAL_CONCURRENCY` (6), `NEU_REQUESTS_PER_SECOND` (0 = tắt pacing),
+  `NEU_QUEUE_TIMEOUT` (30 giây). Nếu server dùng chung, đặt
+  `NEU_REQUESTS_PER_SECOND` = 1–2 để tránh quá tải.
+- `CHATBOT_BACKEND_URL` phải trỏ trực tiếp tới backend (Compose:
+  `http://backend:8001`). Các operation `/internal/chat/lms-query` xác định
+  student/course từ session đã lưu và kiểm tra lại enrollment, teacher lock,
+  assignment version.
+- Một embedding worker sở hữu model Qwen và phục vụ cả chat lẫn ingest. Chat
+  được ưu tiên; batch tối đa 8 input với cửa sổ gom 10 ms. Chỉ cache query
+  vector (1.024 entry / 15 phút).
 
-The service uses a shared AsyncOpenAI transport for River, task-specific limits,
-separate generator/verifier capacity, a total limit and request pacing. Configure
-`RIVER_GENERATION_CONCURRENCY` (4), `RIVER_VERIFY_CONCURRENCY` (2),
-`RIVER_TOTAL_CONCURRENCY` (6), `RIVER_REQUESTS_PER_SECOND` (1), and
-`RIVER_QUEUE_TIMEOUT` (30 seconds) against the actual provider quota. Timeout
-budgets exclude time queued. The router has no HTTP retry. Generator/verifier allow one bounded SDK transport retry for transient failures; accepted/raw stream content is never replayed.
+## Test
 
-`CHATBOT_BACKEND_URL` must point directly to the backend (Compose:
-`http://backend:8001`). The fixed `/internal/chat/lms-query` operations resolve
-student/course from the persisted session and recheck enrollment, teacher locks,
-and assignment version. Nginx rejects `/internal/` and disables buffering for SSE.
+```bash
+cd services/chatbot
+.venv/bin/python -m pytest -q
+ruff check app tests scripts
+```
 
-One embedding worker owns the Qwen model and serves both chat and ingestion.
-Chat has priority, batches contain at most eight inputs with a 10 ms collection
-window. Only query vectors are cached (1,024 entries / 15 minutes). Existing
-embeddings and selective ingestion endpoints are preserved.
+Bộ test hiện có:
+- `test_citations.py` — parse/validate/sanitize citation.
+- `test_retrieval.py` — RRF, citation building, format context.
+- `test_query.py` — trigger rewrite/HyDE, fallback khi provider lỗi.
+- `test_llm.py` — header auth NEU, tắt thinking, fallback VLM model.
+- `test_lms.py` — detect operation, pure LMS, render.
+- `test_pipeline.py` — greeting, LMS fast path, citation gate, no-docs.
+- `test_history.py` — chuẩn hoá lịch sử.
+
+Script đánh giá: `scripts/eval_chatbot.py` (xem `tests/eval/README.md`).

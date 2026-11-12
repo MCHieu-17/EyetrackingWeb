@@ -1,10 +1,14 @@
-"""Truy hồi hybrid (pgvector + Postgres FTS) trong đúng course version.
+"""Truy hồi hybrid: BM25-like (Postgres FTS) + dense (pgvector) + HyDE.
 
-Cả vector và keyword đều lọc `course_id` + `course_version_id` **trước LIMIT**.
-Không đưa title/chương/order mutable vào embedding text; metadata citation lấy
-từ membership published tại thời điểm truy hồi.
+Mỗi nhánh lọc `course_id` + `course_version_id` **trước LIMIT**. Các nhánh được
+fuse bằng Reciprocal Rank Fusion (RRF) trong Python để dễ test và tune trọng số.
+
+BM25 ở đây dùng Postgres FTS `ts_rank_cd` (không phải BM25 chuẩn) vì stack hiện
+tại không có extension BM25. Nếu sau này cần BM25 thật, chỉ cần thay
+`_search_bm25` mà không đổi pipeline.
 """
 
+import asyncio
 import threading
 
 from pgvector import Vector
@@ -12,42 +16,17 @@ from psycopg.rows import dict_row
 
 from app.db import get_pool
 from app.settings import (
-    rag_candidates,
+    rag_bm25_candidates,
+    rag_dense_candidates,
+    rag_hyde_candidates,
+    rag_hyde_weight,
     rag_rrf_k,
     rag_score_threshold,
     rag_top_k,
 )
 from app.workflow.providers import get_embedding
 
-SEARCH_SQL = """
-WITH vec AS (
-    SELECT
-        d.slide_version_id,
-        row_number() OVER (ORDER BY d.embedding <=> %s) AS rank,
-        1 - (d.embedding <=> %s) AS cosine
-    FROM v_chatbot_slide_documents d
-    WHERE d.course_id = %s
-      AND d.course_version_id = %s
-      AND 1 - (d.embedding <=> %s) >= %s
-    ORDER BY d.embedding <=> %s
-    LIMIT %s
-),
-kw AS (
-    SELECT
-        d.slide_version_id,
-        row_number() OVER (
-            ORDER BY ts_rank_cd(d.content_tsv, q) DESC
-        ) AS rank,
-        ts_rank_cd(d.content_tsv, q) AS rank_score
-    FROM v_chatbot_slide_documents d,
-         plainto_tsquery('simple', immutable_unaccent(%s)) q
-    WHERE d.course_id = %s
-      AND d.course_version_id = %s
-      AND d.content_tsv @@ q
-    ORDER BY ts_rank_cd(d.content_tsv, q) DESC
-    LIMIT %s
-)
-SELECT
+_DOC_COLUMNS = """
     d.slide_version_id AS id,
     d.course_id,
     d.course_version_id,
@@ -64,67 +43,154 @@ SELECT
     d.slide_title,
     d.module_title,
     d.lesson_title,
-    d.slide_position AS slide_index,
-    COALESCE(1.0 / (%s + vec.rank), 0)
-        + COALESCE(1.0 / (%s + kw.rank), 0) AS score,
-    vec.cosine,
-    kw.rank_score
-FROM v_chatbot_slide_documents d
-LEFT JOIN vec ON vec.slide_version_id = d.slide_version_id
-LEFT JOIN kw ON kw.slide_version_id = d.slide_version_id
-WHERE (vec.slide_version_id IS NOT NULL OR kw.slide_version_id IS NOT NULL)
-ORDER BY score DESC
+    d.slide_position AS slide_index
+"""
+
+BM25_SQL = f"""
+SELECT
+    {_DOC_COLUMNS},
+    ts_rank_cd(d.content_tsv, q) AS rank_score
+FROM v_chatbot_slide_documents d,
+     plainto_tsquery('simple', immutable_unaccent(%s)) q
+WHERE d.course_id = %s
+  AND d.course_version_id = %s
+  AND d.content_tsv @@ q
+ORDER BY rank_score DESC
 LIMIT %s
 """
+
+DENSE_SQL = f"""
+SELECT
+    {_DOC_COLUMNS},
+    1 - (d.embedding <=> %s) AS cosine
+FROM v_chatbot_slide_documents d
+WHERE d.course_id = %s
+  AND d.course_version_id = %s
+  AND 1 - (d.embedding <=> %s) >= %s
+ORDER BY d.embedding <=> %s
+LIMIT %s
+"""
+
+
+def rrf_fuse(
+    branches: list[tuple[list[dict], float]], k: int, top_k: int
+) -> list[dict]:
+    """Fuse nhiều ranked lists bằng RRF.
+
+    `branches` là danh sách (docs, weight). Mỗi docs đã được xếp hạng từ 1.
+    """
+    scores: dict[str, float] = {}
+    docs: dict[str, dict] = {}
+    for branch, weight in branches:
+        for rank, doc in enumerate(branch, start=1):
+            key = str(doc["id"])
+            docs.setdefault(key, doc)
+            scores[key] = scores.get(key, 0.0) + weight / (k + rank)
+
+    ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:top_k]
+    result: list[dict] = []
+    for key, score in ordered:
+        doc = dict(docs[key])
+        doc["score"] = score
+        result.append(doc)
+    return result
 
 
 class Retriever:
     def __init__(self):
         self.embedding = get_embedding()
         self.top_k = rag_top_k()
-        self.candidates = rag_candidates()
+        self.bm25_candidates = rag_bm25_candidates()
+        self.dense_candidates = rag_dense_candidates()
+        self.hyde_candidates = rag_hyde_candidates()
+        self.hyde_weight = rag_hyde_weight()
         self.rrf_k = rag_rrf_k()
         self.threshold = rag_score_threshold()
 
-    def _query(
-        self, vector: Vector, query: str, course_id: str, course_version_id: str
+    def _search_bm25(
+        self, query: str, course_id: str, course_version_id: str
     ) -> list[dict]:
         with get_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
-                    SEARCH_SQL,
+                    BM25_SQL,
+                    (query, course_id, course_version_id, self.bm25_candidates),
+                )
+                return [dict(row) for row in cur.fetchall()]
+
+    def _search_dense(
+        self,
+        vector: Vector,
+        course_id: str,
+        course_version_id: str,
+        limit: int,
+    ) -> list[dict]:
+        with get_pool().connection() as conn:
+            with conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    DENSE_SQL,
                     (
-                        vector,
                         vector,
                         course_id,
                         course_version_id,
                         vector,
                         self.threshold,
                         vector,
-                        self.candidates,
-                        query,
-                        course_id,
-                        course_version_id,
-                        self.candidates,
-                        self.rrf_k,
-                        self.rrf_k,
-                        self.top_k,
+                        limit,
                     ),
                 )
                 return [dict(row) for row in cur.fetchall()]
 
     async def asearch(
-        self, query: str, course_id: str, course_version_id: str
+        self,
+        query: str,
+        hyde: str,
+        course_id: str,
+        course_version_id: str,
     ) -> list[dict]:
-        import asyncio
-
-        vector = Vector(await self.embedding.aembed_query(query))
-        return await asyncio.to_thread(
-            self._query, vector, query, course_id, course_version_id
+        query_vector, hyde_vector = await asyncio.gather(
+            self.embedding.aembed_query(query),
+            self.embedding.aembed_query(hyde) if hyde else _none(),
         )
+
+        tasks = [
+            asyncio.to_thread(
+                self._search_bm25, query, course_id, course_version_id
+            ),
+            asyncio.to_thread(
+                self._search_dense,
+                Vector(query_vector),
+                course_id,
+                course_version_id,
+                self.dense_candidates,
+            ),
+        ]
+        if hyde_vector is not None:
+            tasks.append(
+                asyncio.to_thread(
+                    self._search_dense,
+                    Vector(hyde_vector),
+                    course_id,
+                    course_version_id,
+                    self.hyde_candidates,
+                )
+            )
+        results = await asyncio.gather(*tasks)
+
+        branches: list[tuple[list[dict], float]] = [
+            (results[0], 1.0),
+            (results[1], 1.0),
+        ]
+        if hyde_vector is not None:
+            branches.append((results[2], self.hyde_weight))
+        return rrf_fuse(branches, self.rrf_k, self.top_k)
 
     def close(self):
         return
+
+
+async def _none():
+    return None
 
 
 _retriever: Retriever | None = None
@@ -179,7 +245,7 @@ def build_citations(docs: list[dict]) -> list[dict]:
                 "slide_index": doc.get("slide_index"),
                 "pdf_url": pdf_url,
                 "page_number": page_number,
-                "snippet": content[:300],
+                "snippet": content[:500],
                 "score": float(doc.get("score") or 0.0),
             }
         )

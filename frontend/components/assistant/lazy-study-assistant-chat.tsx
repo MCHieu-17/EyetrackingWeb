@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import type { ChatCitation } from "@/lib/api/chat";
 
 /**
  * Chat chỉ được tải khi người dùng mở panel lần đầu. Sau đó giữ component
@@ -24,10 +25,12 @@ export function LazyStudyAssistantChat({
   courseId,
   open,
   onClose,
+  onCitationNavigate,
 }: {
   courseId: string;
   open: boolean;
   onClose: () => void;
+  onCitationNavigate?: (citation: ChatCitation) => boolean;
 }) {
   const [loaded, setLoaded] = useState(open);
   if (open && !loaded) setLoaded(true);
@@ -38,6 +41,7 @@ export function LazyStudyAssistantChat({
       courseId={courseId}
       open={open}
       onClose={onClose}
+      onCitationNavigate={onCitationNavigate}
     />
   );
 }

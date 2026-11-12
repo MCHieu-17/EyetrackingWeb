@@ -46,6 +46,13 @@ export function getRetryError(
     : "Chưa thể làm lại bài. Vui lòng thử lại.";
 }
 
+/** Chỉ màn hình review mới hiển thị khi lượt làm đã nộp. */
+export function shouldShowReview(
+  attempt: { status?: string } | null | undefined,
+): boolean {
+  return attempt?.status === "submitted";
+}
+
 export function getSubmitError(
   isError: boolean,
   error: unknown,

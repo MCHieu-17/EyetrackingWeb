@@ -66,3 +66,33 @@ export function isGazeDotVisible(
     gazeDot && gazeDot.key === `${activeLessonId}:${currentSlide}`,
   );
 }
+
+/**
+ * Tìm slide mà citation trỏ tới trong danh sách slide của reader.
+ *
+ * Ưu tiên `slideVersionId` (ổn định qua các lần đổi bài), fallback
+ * `slideIndex` (vị trí 0-based) khi slide version không còn trong bản
+ * xuất bản hiện tại.
+ */
+export function findCitationSlideIndex(
+  citation: {
+    slideVersionId?: string | null;
+    slideIndex?: number | null;
+  },
+  slides: readonly { slideVersionId?: string | null }[],
+): number {
+  if (citation.slideVersionId) {
+    const index = slides.findIndex(
+      (slide) => slide.slideVersionId === citation.slideVersionId,
+    );
+    if (index >= 0) return index;
+  }
+  if (
+    citation.slideIndex != null &&
+    citation.slideIndex >= 0 &&
+    citation.slideIndex < slides.length
+  ) {
+    return citation.slideIndex;
+  }
+  return -1;
+}

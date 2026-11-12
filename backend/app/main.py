@@ -12,6 +12,7 @@ from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 from app.api.routes import (
     admin,
+    admin_db,
     analytics,
     aoi,
     auth,
@@ -157,6 +158,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(courses.router)
 app.include_router(admin.router)
+app.include_router(admin_db.router)
 app.include_router(modules.router)
 app.include_router(module_items.router)
 app.include_router(lessons.router)

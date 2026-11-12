@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
@@ -35,6 +37,25 @@ from app.schemas.course import (
 from app.services import content, embedding, embedding_jobs
 
 router = APIRouter(tags=["courses"])
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _invalidate_enrollment_cache(db: AsyncSession, course_id: str) -> None:
+    """Xóa cache danh sách khóa học của sinh viên trong khóa.
+
+    `/api/me/enrollments` cache 30s và trả kèm `requireCalibration`; không xóa
+    thì sinh viên còn thấy link cũ (prepare vs vào thẳng) sau khi giáo viên đổi.
+    """
+    student_ids = (
+        await db.execute(
+            select(Enrollment.student_id).where(Enrollment.course_id == course_id)
+        )
+    ).scalars().all()
+    for student_id in student_ids:
+        await cache_delete(f"student:enrollments:{student_id}")
 
 
 @router.get("/teacher/courses", response_model=list[TeacherCourseOut])
@@ -112,6 +133,8 @@ async def update_course(
     )
     await db.commit()
     await db.refresh(course)
+    if data.get("require_calibration") is not None:
+        await _invalidate_enrollment_cache(db, course.id)
     published = await content.get_published_version(db, course)
     return TeacherCourseOut(
         id=course.id,
@@ -145,6 +168,9 @@ async def set_course_gaze_dot(
 ):
     course = await get_owned_course(db, course_id, user)
     course.show_gaze_dot = body.show_gaze_dot
+    # Cache outline dùng `course.updated_at` trong key; bump để sinh viên
+    # refresh là thấy cờ mới thay vì bản cache 60s.
+    course.updated_at = _now()
     await db.commit()
     return {"ok": True, "showGazeDot": course.show_gaze_dot}
 
@@ -158,7 +184,11 @@ async def set_course_require_calibration(
 ):
     course = await get_owned_course(db, course_id, user)
     course.require_calibration = body.require_calibration
+    # Cache outline dùng `course.updated_at` trong key; bump để sinh viên
+    # refresh là thấy cờ mới thay vì bản cache 60s.
+    course.updated_at = _now()
     await db.commit()
+    await _invalidate_enrollment_cache(db, course.id)
     return {"ok": True, "requireCalibration": course.require_calibration}
 
 

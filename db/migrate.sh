@@ -18,6 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="${1:-${SCRIPT_DIR}/migrations}"
 CHATBOT_ROLE_SQL="${SCRIPT_DIR}/chatbot_role.sql"
+ADMIN_ROLE_SQL="${SCRIPT_DIR}/admin_reader_role.sql"
 
 if [ ! -d "${MIGRATIONS_DIR}" ]; then
     echo "LỖI: không thấy thư mục migration: ${MIGRATIONS_DIR}" >&2
@@ -33,6 +34,16 @@ if [ -n "${CHATBOT_DB_USER:-}" ] && [ -n "${CHATBOT_DB_PASSWORD:-}" ]; then
         exit 1
     fi
     PROVISION_CHATBOT_ROLE=1
+fi
+
+# Role chỉ đọc cho trang Truy vấn CSDL của admin. Bỏ qua nếu không cấu hình.
+PROVISION_ADMIN_ROLE=0
+if [ -n "${ADMIN_DB_USER:-}" ] && [ -n "${ADMIN_DB_PASSWORD:-}" ]; then
+    if [ ! -f "${ADMIN_ROLE_SQL}" ]; then
+        echo "LỖI: thiếu file ${ADMIN_ROLE_SQL} để tạo role admin read-only." >&2
+        exit 1
+    fi
+    PROVISION_ADMIN_ROLE=1
 fi
 
 list_migrations() {
@@ -139,6 +150,11 @@ SQL
         echo "\\i '${CHATBOT_ROLE_SQL}'"
     fi
 
+    if [ "${PROVISION_ADMIN_ROLE}" -eq 1 ]; then
+        echo "\\echo '=== admin read-only role ==='"
+        echo "\\i '${ADMIN_ROLE_SQL}'"
+    fi
+
     echo "SELECT pg_advisory_unlock_all();"
 } > "${tmpfile}"
 
@@ -147,6 +163,13 @@ if [ "${PROVISION_CHATBOT_ROLE}" -eq 1 ]; then
     psql_args+=(
         -v "role=${CHATBOT_DB_USER}"
         -v "password=${CHATBOT_DB_PASSWORD}"
+        -v "dbname=${PGDATABASE}"
+    )
+fi
+if [ "${PROVISION_ADMIN_ROLE}" -eq 1 ]; then
+    psql_args+=(
+        -v "admin_role=${ADMIN_DB_USER}"
+        -v "admin_password=${ADMIN_DB_PASSWORD}"
         -v "dbname=${PGDATABASE}"
     )
 fi

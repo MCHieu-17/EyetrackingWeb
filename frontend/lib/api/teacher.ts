@@ -214,8 +214,13 @@ export function fetchSlideImportJob(
   );
 }
 
-export function fetchLessonSlidesAdmin(lessonId: string): Promise<SlideAdmin[]> {
-  return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`);
+export function fetchLessonSlidesAdmin(
+  lessonId: string,
+  version: "draft" | "published" = "draft",
+): Promise<SlideAdmin[]> {
+  return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`, {
+    params: { version },
+  });
 }
 
 export function reindexLessonSlides(

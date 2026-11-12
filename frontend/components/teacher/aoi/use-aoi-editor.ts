@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCourseOutline } from "@/hooks/use-student";
 import { useCourseTree, useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import {
   fetchAoiSets,
@@ -25,29 +26,79 @@ import {
   UI_SCHEMA_VERSION,
   friendlyUiName,
 } from "@/lib/aoi/ui-components";
-import type { LessonItem, ModuleItem } from "@/lib/types/domain";
+import type { LessonItem, ModuleItem, ModuleNode } from "@/lib/types/domain";
 import { useAoiAutosave } from "./use-aoi-autosave";
 
 type AoiEditorMode = "edit" | "interact";
 type AoiEditorTab = "slide" | "ui";
+export type AoiEditorVersion = "draft" | "published";
 
 export function useAoiEditor({
   courseId,
+  courseStatus,
   canManage,
 }: {
   courseId: string;
+  courseStatus: "draft" | "published" | "archived";
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const hasPublished = courseStatus !== "draft";
+  const versionParam = searchParams.get("version");
+  const [version, setVersion] = useState<AoiEditorVersion>(() =>
+    versionParam === "draft" || versionParam === "published"
+      ? versionParam
+      : hasPublished
+        ? "published"
+        : "draft",
+  );
+  const effectiveVersion: AoiEditorVersion = hasPublished ? version : "draft";
+
   const {
-    data: tree = [],
-    isLoading: treeLoading,
-    isError: treeError,
-    refetch: refetchTree,
+    data: draftTree = [],
+    isLoading: draftTreeLoading,
+    isError: draftTreeError,
+    refetch: refetchDraftTree,
   } = useCourseTree(courseId);
+  const {
+    data: publishedOutline,
+    isLoading: publishedTreeLoading,
+    isError: publishedTreeError,
+    refetch: refetchPublishedTree,
+  } = useCourseOutline(courseId, effectiveVersion === "published");
+
+  const tree: ModuleNode[] = useMemo(
+    () =>
+      effectiveVersion === "published"
+        ? (publishedOutline?.modules ?? []).map((module) => ({
+            id: module.id,
+            title: module.title,
+            lessons: module.lessons.map((lesson) => ({
+              id: lesson.id,
+              title: lesson.title,
+              kind: lesson.kind,
+              slides: lesson.slideCount,
+              attention: null,
+              quizId: lesson.quizId,
+              quizStatus: lesson.quizStatus,
+              questionCount: lesson.questionCount,
+              durationMinutes: lesson.durationMinutes,
+              dueAt: lesson.dueAt,
+            })),
+          }))
+        : draftTree,
+    [draftTree, effectiveVersion, publishedOutline],
+  );
+
+  const treeLoading =
+    effectiveVersion === "published" ? publishedTreeLoading : draftTreeLoading;
+  const treeError =
+    effectiveVersion === "published" ? publishedTreeError : draftTreeError;
+  const refetchTree =
+    effectiveVersion === "published" ? refetchPublishedTree : refetchDraftTree;
 
   const lessons = useMemo(
     () => tree.flatMap((module) => module.lessons),
@@ -81,14 +132,22 @@ export function useAoiEditor({
     isLoading: slidesLoading,
     isError: slidesError,
     refetch: refetchSlides,
-  } = useLessonSlidesAdmin(activeIsQuiz ? "" : resolvedLessonId);
+  } = useLessonSlidesAdmin(
+    activeIsQuiz ? "" : resolvedLessonId,
+    effectiveVersion,
+  );
 
   const [activeSlideId, setActiveSlideId] = useState(
     () => searchParams.get("slide") ?? "",
   );
+  const slideVersionParam = searchParams.get("slideVersion") ?? "";
   const resolvedSlideId = slides.some((item) => item.id === activeSlideId)
     ? activeSlideId
-    : slides[0]?.id ?? "";
+    : slideVersionParam
+      ? (slides.find((item) => item.slideVersionId === slideVersionParam)?.id ??
+        slides[0]?.id ??
+        "")
+      : (slides[0]?.id ?? "");
   if (resolvedSlideId !== activeSlideId) {
     setActiveSlideId(resolvedSlideId);
   }
@@ -320,13 +379,27 @@ export function useAoiEditor({
     else params.delete("lesson");
     if (activeSlideId) params.set("slide", activeSlideId);
     else params.delete("slide");
+    if (activeSlide?.slideVersionId) {
+      params.set("slideVersion", activeSlide.slideVersionId);
+    } else {
+      params.delete("slideVersion");
+    }
+    params.set("version", effectiveVersion);
     const next = params.toString();
     if (next !== searchParams.toString()) {
       router.replace(`/teacher/courses/${courseId}?${next}`, {
         scroll: false,
       });
     }
-  }, [activeLessonId, activeSlideId, courseId, router, searchParams]);
+  }, [
+    activeLessonId,
+    activeSlide?.slideVersionId,
+    activeSlideId,
+    courseId,
+    effectiveVersion,
+    router,
+    searchParams,
+  ]);
 
   const selectLesson = useCallback(
     (lessonId: string) => {
@@ -521,6 +594,19 @@ export function useAoiEditor({
     setSelectedCode(null);
   }, []);
 
+  const changeVersion = useCallback(
+    (next: AoiEditorVersion) => {
+      if (next === "published" && !hasPublished) return;
+      if (next === effectiveVersion) return;
+      void slideSave.flush();
+      void uiSave.flush();
+      setVersion(next);
+      setActiveSlideId("");
+      setSelectedCode(null);
+    },
+    [effectiveVersion, hasPublished, slideSave, uiSave],
+  );
+
   const retryGenerateSlide = useCallback(() => {
     if (!slideVersionId) return;
     generatedSlideRef.current = null;
@@ -591,6 +677,9 @@ export function useAoiEditor({
     treeLoading,
     treeError,
     refetchTree,
+    version: effectiveVersion,
+    hasPublished,
+    changeVersion,
     lessons,
     activeLesson,
     activeModule,

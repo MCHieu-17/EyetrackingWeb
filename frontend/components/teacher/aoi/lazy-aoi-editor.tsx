@@ -19,16 +19,19 @@ const AoiEditorDynamic = dynamic(
 export function LazyAoiEditor({
   courseId,
   courseTitle,
+  courseStatus,
   canManage,
 }: {
   courseId: string;
   courseTitle: string;
+  courseStatus: "draft" | "published" | "archived";
   canManage: boolean;
 }) {
   return (
     <AoiEditorDynamic
       courseId={courseId}
       courseTitle={courseTitle}
+      courseStatus={courseStatus}
       canManage={canManage}
     />
   );

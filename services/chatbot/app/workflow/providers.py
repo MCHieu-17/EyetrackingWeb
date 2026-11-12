@@ -1,13 +1,12 @@
-"""Factory tạo LLM / embedding / VLM theo tên trong biến môi trường.
+"""Factory tạo embedding / VLM theo tên trong biến môi trường.
 
-Các factory được **cache** (`get_llm`/`get_embedding`/`get_vlm`) để cả tiến trình
-dùng chung một client cho mỗi loại model thay vì mỗi node tạo một instance.
+Các factory được **cache** (`get_embedding`/`get_vlm`) để cả tiến trình dùng
+chung một client cho mỗi loại model thay vì mỗi request tạo một instance.
 
-LLM (router/answer/verify) và VLM (mô tả slide lúc ingest) đều gọi qua **River AI**
-— endpoint OpenAI-compatible, KHÔNG tốn VRAM local.
-Embedding chạy local (Qwen3-Embedding-0.6B trên GPU).
-
-`message_text` chuẩn hóa nội dung model trả về thành string.
+LLM chat dùng trực tiếp `app.workflow.llm.LLMClient` (AsyncOpenAI), không dùng
+LangChain ChatOpenAI cho answer/query. VLM (mô tả slide lúc ingest) vẫn dùng
+ChatOpenAI vì có structured output + prompt template, trỏ cùng endpoint NEU.
+Embedding chạy local (Qwen3-Embedding-0.6B trên CPU).
 """
 
 from functools import lru_cache
@@ -21,75 +20,32 @@ from app.settings import (
     embedding_local_files_only,
     embedding_model_path,
     embedding_name,
-    llm_name,
-    river_api_key,
-    river_base_url,
-    river_llm_max_tokens,
-    river_llm_model,
-    river_max_retries,
-    river_reasoning_effort,
-    river_router_max_tokens,
-    river_router_reasoning_effort,
-    river_timeout,
-    river_verifier_max_tokens,
-    river_verifier_reasoning_effort,
-    river_vlm_max_tokens,
-    river_vlm_model,
-    river_vlm_reasoning_effort,
-    vlm_name,
+    neu_api_key,
+    neu_base_url,
+    neu_enable_thinking,
+    neu_headers,
+    neu_max_retries,
+    neu_vlm_max_tokens,
+    neu_vlm_model,
+    neu_vlm_timeout,
 )
 
 
-def _river_chat(model: str, max_tokens: int, effort: str) -> ChatOpenAI:
-    """Client ChatOpenAI trỏ tới River AI (LLM và VLM dùng chung cấu hình)."""
-    kwargs: dict = {}
-    if effort:
-        # River AI/DeepSeek nhận reasoning_effort ở body. `extra_body` được
-        # langchain-openai chuyển nguyên vào request.
-        kwargs["extra_body"] = {"reasoning_effort": effort}
-
+def _neu_chat(model: str, max_tokens: int, timeout: float) -> ChatOpenAI:
+    """Client ChatOpenAI trỏ tới NEU LLM/VLM server (dùng cho VLM ingest)."""
     return ChatOpenAI(
         model=model,
-        base_url=river_base_url(),
-        api_key=river_api_key(),
+        base_url=neu_base_url(),
+        api_key=neu_api_key() or "not-needed",
+        default_headers=neu_headers(),
         temperature=0,
         max_tokens=max_tokens,
-        timeout=river_timeout(),
-        max_retries=river_max_retries(),
-        **kwargs,
+        timeout=timeout,
+        max_retries=neu_max_retries(),
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": neu_enable_thinking()}
+        },
     )
-
-
-def _build_llm(name: str, purpose: str) -> BaseChatModel:
-    if name == "river":
-        if purpose == "router":
-            return _river_chat(
-                river_llm_model(),
-                river_router_max_tokens(),
-                river_router_reasoning_effort(),
-            )
-        if purpose == "verify":
-            return _river_chat(
-                river_llm_model(),
-                river_verifier_max_tokens(),
-                river_verifier_reasoning_effort(),
-            )
-        return _river_chat(
-            river_llm_model(),
-            river_llm_max_tokens(),
-            river_reasoning_effort(),
-        )
-    raise ValueError(f"LLM không được hỗ trợ: {name!r}")
-
-
-@lru_cache(maxsize=None)
-def get_llm(name: str | None = None, purpose: str = "answer") -> BaseChatModel:
-    """LLM dùng chung (cache theo tên + purpose).
-
-    purpose: "router" | "answer" | "verify" — mỗi purpose có max_tokens và
-    reasoning_effort riêng để tránh đốt token vào reasoning không cần thiết.
-    """
-    return _build_llm(name or llm_name(), purpose)
 
 
 def _build_embedding(name: str) -> Embeddings:
@@ -120,35 +76,21 @@ def _build_embedding(name: str) -> Embeddings:
 def get_embedding(name: str | None = None) -> Embeddings:
     """Embedding dùng chung (cache theo tên). Mặc định từ EMBEDDING_NAME."""
     from app.workflow.embedding_queue import ManagedEmbedding
-    return ManagedEmbedding(_build_embedding(name or embedding_name()), embedding_model_path())
+
+    return ManagedEmbedding(
+        _build_embedding(name or embedding_name()), embedding_model_path()
+    )
 
 
-def _build_vlm(name: str) -> BaseChatModel:
-    if name == "river":
-        return _river_chat(
-            river_vlm_model(),
-            river_vlm_max_tokens(),
-            river_vlm_reasoning_effort(),
-        )
-    raise ValueError(f"VLM không được hỗ trợ: {name!r}")
+def _build_vlm() -> BaseChatModel:
+    return _neu_chat(
+        neu_vlm_model(),
+        neu_vlm_max_tokens(),
+        neu_vlm_timeout(),
+    )
 
 
-@lru_cache(maxsize=None)
-def get_vlm(name: str | None = None) -> BaseChatModel:
-    """VLM dùng chung (cache theo tên). Mặc định từ VLM_NAME."""
-    return _build_vlm(name or vlm_name())
-
-
-def message_text(content: object) -> str:
-    """Chuẩn hóa nội dung trả về của model thành string."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict) and isinstance(block.get("text"), str):
-                parts.append(block["text"])
-        return "".join(parts)
-    return str(content) if content is not None else ""
+@lru_cache(maxsize=1)
+def get_vlm() -> BaseChatModel:
+    """VLM dùng chung. Mặc định từ NEU_VLM_MODEL."""
+    return _build_vlm()

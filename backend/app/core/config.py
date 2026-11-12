@@ -142,6 +142,19 @@ class Settings(BaseSettings):
     # maintenance. Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
     gaze_retention_days: int = 180
 
+    # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống ở dev → fallback
+    # DATABASE_URL + read-only transaction. Production nên trỏ tới role chỉ
+    # đọc (admin_reader) để tránh dùng nhầm tài khoản có quyền ghi.
+    admin_db_url: str = ""
+    admin_db_statement_timeout_ms: int = 10000
+    admin_db_lock_timeout_ms: int = 2000
+    admin_db_idle_in_transaction_timeout_ms: int = 15000
+    admin_db_max_rows: int = 500
+    admin_db_schema_cache_seconds: int = 60
+    admin_db_max_sql_length: int = 20000
+    admin_db_max_cell_chars: int = 10000
+    admin_db_max_response_bytes: int = 5 * 1024 * 1024
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

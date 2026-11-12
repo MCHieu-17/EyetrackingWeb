@@ -4,6 +4,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
@@ -145,12 +146,15 @@ async def get_slide_import_job(
 )
 async def list_lesson_slides(
     lesson_id: str,
+    version: str = Query(default="draft", pattern="^(draft|published)$"),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await get_viewable_lesson(db, lesson_id, user)
-    slides = await content.list_lesson_slides_admin(db, course, user, lesson.id)
-    # Hàm trên có thể clone lesson version (copy-on-write); phải commit để
+    slides = await content.list_lesson_slides_admin(
+        db, course, user, lesson.id, version=version
+    )
+    # Bản nháp có thể clone lesson version (copy-on-write); phải commit để
     # các request sau (và worker index) thấy cùng một bản nháp.
     await db.commit()
     return slides

@@ -31,6 +31,13 @@ describe("queryKeys", () => {
       "teacher",
       "lesson-slides",
       "lesson-1",
+      "draft",
+    ]);
+    expect(queryKeys.teacher.lessonSlides("lesson-1", "published")).toEqual([
+      "teacher",
+      "lesson-slides",
+      "lesson-1",
+      "published",
     ]);
     expect(queryKeys.teacher.studentDirectory("an")).toEqual([
       "teacher",

@@ -49,6 +49,13 @@ x-backend-env: &backend-env
   DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
   DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-0}
   GAZE_RETENTION_DAYS: ${GAZE_RETENTION_DAYS:-180}
+  # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống → fallback DATABASE_URL
+  # ở dev; production nên trỏ tới role admin_reader.
+  ADMIN_DB_URL: ${ADMIN_DATABASE_URL_DOCKER:-}
+  ADMIN_DB_STATEMENT_TIMEOUT_MS: ${ADMIN_DB_STATEMENT_TIMEOUT_MS:-10000}
+  ADMIN_DB_LOCK_TIMEOUT_MS: ${ADMIN_DB_LOCK_TIMEOUT_MS:-2000}
+  ADMIN_DB_MAX_ROWS: ${ADMIN_DB_MAX_ROWS:-500}
+  ADMIN_DB_SCHEMA_CACHE_SECONDS: ${ADMIN_DB_SCHEMA_CACHE_SECONDS:-60}
 
 # ============================================================
 # Stack LOCAL — build toàn bộ image từ source trên máy.
@@ -163,6 +170,9 @@ services:
       # service chatbot (CHATBOT_DATABASE_URL_DOCKER).
       CHATBOT_DB_USER: ${CHATBOT_DB_USER:-}
       CHATBOT_DB_PASSWORD: ${CHATBOT_DB_PASSWORD:-}
+      # Role chỉ đọc cho trang Truy vấn CSDL của admin.
+      ADMIN_DB_USER: ${ADMIN_DB_USER:-}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:-}
     mem_limit: 512m
     cpus: 1.0
 
@@ -267,8 +277,9 @@ services:
     restart: unless-stopped
     logging: *default-logging
     # Analysis dùng SKIP LOCKED nên scale ngang an toàn.
+    # Số replica cấu hình qua WORKER_REPLICAS (mặc định 2).
     deploy:
-      replicas: 2
+      replicas: ${WORKER_REPLICAS:-2}
     command: ["python", "-m", "app.worker"]
     depends_on:
       migrate:
@@ -334,8 +345,6 @@ services:
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-10}
       DB_POOL_RECONNECT_TIMEOUT: ${DB_POOL_RECONNECT_TIMEOUT:-10}
-      LLM_NAME: ${LLM_NAME:-river}
-      VLM_NAME: ${VLM_NAME:-river}
       EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
@@ -343,38 +352,50 @@ services:
       EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
       EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
       HF_TOKEN: ${HF_TOKEN:-}
-      RIVER_API_KEY: ${RIVER_API_KEY}
-      RIVER_BASE_URL: ${RIVER_BASE_URL:-https://api.river.ai/v1}
-      RIVER_LLM_MODEL: ${RIVER_LLM_MODEL}
-      RIVER_VLM_MODEL: ${RIVER_VLM_MODEL}
-      RIVER_LLM_MAX_TOKENS: ${RIVER_LLM_MAX_TOKENS:-8192}
-      RIVER_ROUTER_MAX_TOKENS: ${RIVER_ROUTER_MAX_TOKENS:-1024}
-      RIVER_VERIFIER_MAX_TOKENS: ${RIVER_VERIFIER_MAX_TOKENS:-8192}
-      RIVER_VLM_MAX_TOKENS: ${RIVER_VLM_MAX_TOKENS:-16384}
-      RIVER_TIMEOUT: ${RIVER_TIMEOUT:-180}
-      RIVER_MAX_RETRIES: ${RIVER_MAX_RETRIES:-2}
-      RIVER_REASONING_EFFORT: ${RIVER_REASONING_EFFORT:-low}
-      RIVER_ROUTER_REASONING_EFFORT: ${RIVER_ROUTER_REASONING_EFFORT:-none}
-      RIVER_VERIFIER_REASONING_EFFORT: ${RIVER_VERIFIER_REASONING_EFFORT:-none}
-      RIVER_VLM_REASONING_EFFORT: ${RIVER_VLM_REASONING_EFFORT:-none}
+      # NEU LLM/VLM server (OpenAI-compatible, auth bằng custom header).
+      NEU_BASE_URL: ${NEU_BASE_URL:-http://101.96.66.232:8037/vllm/v1}
+      NEU_API_KEY: ${NEU_API_KEY}
+      NEU_AUTH_HEADER: ${NEU_AUTH_HEADER:-x-ollama-seckey}
+      NEU_AUTH_SCHEME: ${NEU_AUTH_SCHEME:-}
+      NEU_LLM_MODEL: ${NEU_LLM_MODEL:-qwen3.5-35b-a3b-int4}
+      NEU_VLM_MODEL: ${NEU_VLM_MODEL:-qwen3.5-35b-a3b-int4}
+      NEU_ENABLE_THINKING: ${NEU_ENABLE_THINKING:-false}
+      NEU_TIMEOUT: ${NEU_TIMEOUT:-180}
+      NEU_MAX_RETRIES: ${NEU_MAX_RETRIES:-2}
+      NEU_VLM_MAX_TOKENS: ${NEU_VLM_MAX_TOKENS:-8192}
+      NEU_VLM_TIMEOUT: ${NEU_VLM_TIMEOUT:-300}
+      # Query rewrite + HyDE: tối đa 1 structured call nhỏ mỗi request.
+      NEU_QUERY_MAX_TOKENS: ${NEU_QUERY_MAX_TOKENS:-400}
+      NEU_QUERY_TIMEOUT: ${NEU_QUERY_TIMEOUT:-30}
+      QUERY_REWRITE_ENABLED: ${QUERY_REWRITE_ENABLED:-true}
+      HYDE_ENABLED: ${HYDE_ENABLED:-true}
+      HYDE_MIN_QUERY_WORDS: ${HYDE_MIN_QUERY_WORDS:-8}
+      # Answer: một LLM call streaming.
+      ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-2048}
+      ANSWER_TEMPERATURE: ${ANSWER_TEMPERATURE:-0.2}
+      # Citation gate bằng code; retry tối đa 1 lần.
+      CITATION_GATE_TOKENS: ${CITATION_GATE_TOKENS:-200}
+      CITATION_RETRY_MAX: ${CITATION_RETRY_MAX:-1}
+      # Hybrid retrieval: BM25 (Postgres FTS) + dense pgvector + HyDE, fuse RRF.
       RAG_TOP_K: ${RAG_TOP_K:-8}
-      RAG_CANDIDATES: ${RAG_CANDIDATES:-20}
+      RAG_BM25_CANDIDATES: ${RAG_BM25_CANDIDATES:-20}
+      RAG_DENSE_CANDIDATES: ${RAG_DENSE_CANDIDATES:-20}
+      RAG_HYDE_CANDIDATES: ${RAG_HYDE_CANDIDATES:-20}
+      RAG_HYDE_WEIGHT: ${RAG_HYDE_WEIGHT:-0.7}
       RAG_RRF_K: ${RAG_RRF_K:-60}
-      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.25}
+      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.2}
+      # LMS: regex detection + backend /internal/chat/lms-query.
+      LMS_DETECTION_ENABLED: ${LMS_DETECTION_ENABLED:-true}
       CHATBOT_BACKEND_URL: http://backend:8001
       CHATBOT_MAX_CONCURRENT: ${CHATBOT_MAX_CONCURRENT:-20}
       CHATBOT_QUEUE_TIMEOUT: ${CHATBOT_QUEUE_TIMEOUT:-2}
-      RIVER_GENERATION_CONCURRENCY: ${RIVER_GENERATION_CONCURRENCY:-4}
-      RIVER_VERIFY_CONCURRENCY: ${RIVER_VERIFY_CONCURRENCY:-2}
-      RIVER_TOTAL_CONCURRENCY: ${RIVER_TOTAL_CONCURRENCY:-6}
-      RIVER_REQUESTS_PER_SECOND: ${RIVER_REQUESTS_PER_SECOND:-1}
-      RIVER_ROUTER_TIMEOUT: ${RIVER_ROUTER_TIMEOUT:-15}
-      RIVER_ANSWER_TIMEOUT: ${RIVER_ANSWER_TIMEOUT:-60}
-      RIVER_VERIFY_TIMEOUT: ${RIVER_VERIFY_TIMEOUT:-60}
+      NEU_GENERATION_CONCURRENCY: ${NEU_GENERATION_CONCURRENCY:-4}
+      NEU_TOTAL_CONCURRENCY: ${NEU_TOTAL_CONCURRENCY:-6}
+      NEU_REQUESTS_PER_SECOND: ${NEU_REQUESTS_PER_SECOND:-0}
+      NEU_ANSWER_TIMEOUT: ${NEU_ANSWER_TIMEOUT:-120}
       VLM_INGEST_CONCURRENCY: ${VLM_INGEST_CONCURRENCY:-1}
       VLM_INGEST_QUEUE_TIMEOUT: ${VLM_INGEST_QUEUE_TIMEOUT:-60}
-      RIVER_QUEUE_TIMEOUT: ${RIVER_QUEUE_TIMEOUT:-30}
-      CITATION_MAX_ATTEMPTS: ${CITATION_MAX_ATTEMPTS:-2}
+      NEU_QUEUE_TIMEOUT: ${NEU_QUEUE_TIMEOUT:-30}
       LOCAL_MEDIA_DIR: /app/media
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_HTTP_ALLOWED_HOSTS: ${STORAGE_HTTP_ALLOWED_HOSTS:-}
@@ -406,9 +427,10 @@ services:
     image: eyelearning-gaze:local
     restart: unless-stopped
     logging: *default-logging
-    # 2 replica chia sẻ GPU; nginx dùng cookie gaze_affinity để sticky session.
+    # Các replica chia sẻ GPU; nginx dùng cookie gaze_affinity để sticky session.
+    # Số replica cấu hình qua GAZE_REPLICAS (mặc định 2).
     deploy:
-      replicas: 2
+      replicas: ${GAZE_REPLICAS:-2}
     environment:
       - DEVICE=${DEVICE:-cuda}
       # Làm mượt One-Euro cho POG (xem services/gaze/app/services/smoothing.py).
@@ -458,9 +480,10 @@ services:
     image: eyelearning-frontend:local
     restart: unless-stopped
     logging: *default-logging
-    # 2 replica sau nginx; static assets đã được nginx cache.
+    # Các replica chạy sau nginx; static assets đã được nginx cache.
+    # Số replica cấu hình qua FRONTEND_REPLICAS (mặc định 2).
     deploy:
-      replicas: 2
+      replicas: ${FRONTEND_REPLICAS:-2}
     healthcheck:
       # 127.0.0.1 thay vì localhost: trong container localhost có thể resolve ::1
       # còn Next.js chỉ listen IPv4 -> healthcheck fail dù web vẫn chạy.

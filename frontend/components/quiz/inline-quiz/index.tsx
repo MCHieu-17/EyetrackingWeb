@@ -27,6 +27,7 @@ import {
   getRemainingMinutes,
   getRetryError,
   getSubmitError,
+  shouldShowReview,
 } from "./quiz-helpers";
 
 export function InlineQuiz({
@@ -102,7 +103,7 @@ export function InlineQuiz({
     );
   }
 
-  if (attempt) {
+  if (attempt && shouldShowReview(attempt)) {
     return (
       <ReviewView
         assignment={assignment}
@@ -130,7 +131,7 @@ export function InlineQuiz({
     );
   }
 
-  if (assignment.status === "closed" || expired) {
+  if (assignment.status === "closed" || expired || attempt?.status === "expired") {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-border/80 bg-white p-10 text-center shadow-xs">
         <p className="text-sm font-semibold text-foreground">Bài tập đã đóng</p>

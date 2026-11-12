@@ -1,60 +1,269 @@
-"""Graph orchestration helpers and API collection.
+"""Pipeline RAG tuyến tính: query prep → retrieval → generation → citation check.
 
-Không dùng checkpointer: backend gửi history theo từng request và là nguồn sự
-thật cho lịch sử hiển thị. Pipeline chỉ giữ state trong bộ nhớ của request.
-
-Streaming emits only complete approved blocks.
+Không còn LangGraph, router, verifier, NDJSON block. Mỗi request tối đa:
+- 1 structured call cho query rewrite/HyDE (nếu cần)
+- 1 streaming call cho câu trả lời
+- 1 retry streaming nếu citation gate thất bại
 """
 
 import logging
 import re
+import time
+import unicodedata
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 
+from app.settings import (
+    citation_gate_tokens,
+    citation_retry_max,
+    lms_detection_enabled,
+)
+from app.workflow import lms
+from app.workflow.citations import has_valid_citation, strip_invalid_citations
+from app.workflow.generation import stream_answer
+from app.workflow.query import prepare_query
+from app.workflow.retrieval import build_citations, get_retriever
 from app.workflow.state import ChatState
 
 logger = logging.getLogger(__name__)
 
+_GREETINGS = {
+    "xin chào",
+    "chào",
+    "chào bạn",
+    "hello",
+    "hi",
+    "hey",
+}
+_THANKS = {"cảm ơn", "cảm ơn bạn", "thanks", "thank you"}
+_HELP = {"bạn giúp được gì", "bạn làm được gì", "bạn có thể giúp gì"}
 
-def retrieval_query(state: ChatState) -> str:
-    """Resolve references like 'câu cuối' using trusted server quiz prompts."""
-    question = state["question"]
-    prompts = {
-        int(n): prompt
-        for n, prompt in re.findall(
-            r"^Câu (\d+): ([^\n]+)", state.get("assignment_context") or "", re.MULTILINE
+_NO_CITATION_OK = re.compile(
+    r"(không tìm thấy|không có trong tài liệu|không chứa thông tin|"
+    r"ngoài tài liệu môn học)",
+    re.IGNORECASE,
+)
+
+
+def greeting_reply(question: str) -> str | None:
+    """Chỉ match toàn bộ câu, để không nuốt câu hỏi có chủ đề."""
+    text = unicodedata.normalize("NFC", question).lower().strip()
+    text = re.sub(r"[.!?,;:]+$", "", text).strip()
+    if text in _GREETINGS:
+        return (
+            "Chào bạn! Mình có thể giúp bạn tìm hiểu nội dung slide và hỗ trợ "
+            "học tập trong khóa học."
         )
+    if text in _THANKS:
+        return "Không có gì! Bạn có thể hỏi tiếp về nội dung khóa học nhé."
+    if text in _HELP:
+        return (
+            "Mình hỗ trợ giải thích nội dung slide, gợi ý trước khi nộp bài và "
+            "chữa bài sau khi nộp."
+        )
+    return None
+
+
+def _status(stage: str) -> dict:
+    return {"event": "status", "data": {"stage": stage}}
+
+
+def _token(state: ChatState, text: str) -> dict:
+    state.answer += text
+    return {"event": "token", "data": {"text": text}}
+
+
+def _done(state: ChatState) -> dict:
+    return {
+        "event": "done",
+        "data": {
+            "intent": state.intent,
+            "verified": state.verified,
+            "routes": state.routes or ["knowledge"],
+            "finish_reason": state.finish_reason,
+            "citation_count": len(state.citations),
+        },
     }
-    if not prompts:
-        return question
-    requested = {int(n) for n in re.findall(r"câu\s*(\d+)", question, re.IGNORECASE)}
-    lower = question.lower()
-    numbers = sorted(prompts)
-    if "câu cuối" in lower:
-        requested.add(numbers[-1])
-    if "câu đầu" in lower:
-        requested.add(numbers[0])
-    if "câu giữa" in lower:
-        requested.add(numbers[(len(numbers) - 1) // 2])
-    selected = (
-        [prompts[n] for n in numbers if n in requested] if requested else list(prompts.values())
+
+
+def _source_list(citations: list[dict]) -> str:
+    if not citations:
+        return ""
+    lines = ["Nguồn tham khảo:"]
+    for index, citation in enumerate(citations, start=1):
+        title = citation.get("title") or "Tài liệu môn học"
+        slide = citation.get("slide_index")
+        suffix = f" (slide {slide})" if slide else ""
+        lines.append(f"[{index}] {title}{suffix}")
+    return "\n".join(lines)
+
+
+def _allows_no_citation(text: str) -> bool:
+    return bool(_NO_CITATION_OK.search(text or ""))
+
+
+async def _stream_with_citation_gate(state: ChatState) -> AsyncIterator[dict]:
+    """Stream câu trả lời, đảm bảo có citation hoặc fallback source list."""
+    count = len(state.citations)
+    attempts = citation_retry_max() + 1
+    last_buffer = ""
+
+    for attempt in range(attempts):
+        strict = attempt > 0
+        buffer = ""
+        gate_passed = False
+        async with aclosing(stream_answer(state, strict=strict)) as source:
+            async for chunk in source:
+                buffer += chunk
+                if not gate_passed:
+                    if has_valid_citation(buffer, count):
+                        gate_passed = True
+                        yield _token(state, buffer)
+                        buffer = ""
+                    elif len(buffer.split()) >= citation_gate_tokens():
+                        # Hết gate mà chưa có citation: hủy stream để retry.
+                        break
+                    continue
+                yield _token(state, chunk)
+
+        if gate_passed:
+            state.verified = True
+            state.finish_reason = "stop"
+            return
+
+        last_buffer = buffer
+        if _allows_no_citation(buffer):
+            yield _token(state, buffer)
+            state.verified = False
+            state.finish_reason = "insufficient_evidence"
+            return
+
+        logger.info(
+            "citation_gate_failed attempt=%s chars=%s", attempt, len(buffer)
+        )
+
+    # Fallback: phát phần cuối + danh sách nguồn để vẫn có trích dẫn.
+    if last_buffer:
+        yield _token(state, last_buffer)
+    sources = _source_list(state.citations)
+    if sources:
+        yield _token(state, "\n\n" + sources)
+    state.verified = False
+    state.finish_reason = "citation_failed"
+
+
+async def _run_chat(state: ChatState) -> AsyncIterator[dict]:
+    started = time.perf_counter()
+    await lms.check_access(state)
+
+    # 1. Fast path cho lời chào/cảm ơn.
+    reply = greeting_reply(state.question)
+    if reply:
+        yield _status("generating")
+        yield _token(state, reply)
+        state.intent = "general"
+        state.routes = ["general"]
+        yield _done(state)
+        return
+
+    # 2. LMS detection (regex, không LLM). Làm trước query prep để câu hỏi
+    # thuần LMS không tốn thêm một LLM call.
+    operation = lms.detect_operation(state.question) if lms_detection_enabled() else None
+    if operation:
+        try:
+            data = await lms.query(state, operation)
+            state.lms_data = data
+            state.lms_text = lms.render(data, operation)
+        except lms.AccessRevoked:
+            raise
+        except Exception:
+            logger.warning("LMS query failed; continuing without LMS data", exc_info=True)
+
+    if operation and lms.is_pure_lms(state.question) and state.lms_text:
+        yield _status("generating")
+        yield _token(state, state.lms_text)
+        state.intent = "lms"
+        state.routes = ["lms"]
+        yield _done(state)
+        return
+
+    # 3. Query rewrite + HyDE adaptive.
+    yield _status("rewriting")
+    prep = await prepare_query(state)
+    state.query = prep.query or state.question
+    state.hyde = prep.hypothetical_answer
+    state.used_hyde = bool(state.hyde)
+
+    # 4. Retrieval.
+    yield _status("retrieving")
+    if not state.course_version_id:
+        raise ValueError("Missing course_version_id for retrieval")
+    docs = await get_retriever().asearch(
+        state.query,
+        state.hyde,
+        state.course_id,
+        state.course_version_id,
     )
-    # Only the search query has a bound; the answer/verifier still see ALL quiz data.
-    return question + "\nChủ đề câu hỏi trong bài tập: " + "\n".join(selected)[:8000]
+    # Không tin metadata để mở rộng phạm vi truy cập.
+    if any(
+        str(doc.get("course_id")) != str(state.course_id)
+        or str(doc.get("course_version_id")) != str(state.course_version_id)
+        for doc in docs
+    ):
+        raise ValueError("Retrieval returned foreign course/version")
+
+    state.retrieved_docs = docs
+    state.citations = build_citations(docs)
+    yield {"event": "citations", "data": {"citations": state.citations}}
+
+    if not docs:
+        text = (
+            "Mình chưa tìm thấy nội dung phù hợp trong tài liệu môn học cho câu "
+            "hỏi này. Bạn thử hỏi cụ thể hơn hoặc nêu tên bài/chương nhé."
+        )
+        yield _status("generating")
+        yield _token(state, text)
+        state.verified = False
+        state.finish_reason = "insufficient_evidence"
+        state.intent = "course_qa"
+        state.routes = ["knowledge"]
+        yield _done(state)
+        return
+
+    # 5. Generation + citation gate.
+    yield _status("generating")
+    async for event in _stream_with_citation_gate(state):
+        yield event
+
+    state.intent = "course_qa"
+    state.routes = ["lms", "knowledge"] if state.lms_text else ["knowledge"]
+    yield _status("checking_citations")
+    yield _done(state)
+    logger.info(
+        "chat_complete seconds=%.3f hyde=%s docs=%s verified=%s finish=%s",
+        time.perf_counter() - started,
+        state.used_hyde,
+        len(state.retrieved_docs),
+        state.verified,
+        state.finish_reason,
+    )
 
 
 async def run_chat(state: ChatState) -> AsyncIterator[dict]:
-    """Only approved, explicitly selected custom graph events reach callers."""
-    from app.workflow.graph import stream_graph
+    """Chỉ phát các event SSE đã được kiểm soát."""
     try:
-        async with aclosing(stream_graph(state)) as stream:
-            async for event in stream:
-                if event["event"] == "done":
-                    state.update(event["data"])
-                yield event
+        async for event in _run_chat(state):
+            yield event
     except Exception:
-        logger.exception("Graph request failed")
-        yield {"event": "error", "data": {"message": "Trợ lý tạm thời không thể hoàn tất. Vui lòng gửi lại câu hỏi."}}
+        logger.exception("Chat request failed")
+        yield {
+            "event": "error",
+            "data": {
+                "message": (
+                    "Trợ lý tạm thời không thể hoàn tất. Vui lòng gửi lại câu hỏi."
+                )
+            },
+        }
 
 
 async def collect_chat(state: ChatState) -> tuple[str, list[dict], str, bool]:
@@ -75,4 +284,6 @@ async def collect_chat(state: ChatState) -> tuple[str, list[dict], str, bool]:
         elif event["event"] == "error":
             raise RuntimeError(event["data"]["message"])
 
+    # Non-streaming: sanitize citation sai trước khi trả.
+    answer_text = strip_invalid_citations(answer_text, len(citations))
     return answer_text, citations, intent, verified

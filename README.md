@@ -27,7 +27,7 @@ giáo viên.
       ▼
 ┌────────────────────┐
 │ services/chatbot   │  LangChain + pgvector hybrid search (BM25 + vector)
-│  (:8002, CPU)      │  DeepSeek qua River AI + Qwen3-Embedding-0.6B (CPU)
+│  (:8002, CPU)      │  Qwen 3.5 35B qua NEU API + Qwen3-Embedding-0.6B (CPU)
 └────────────────────┘
 ```
 
@@ -50,7 +50,7 @@ Yêu cầu: Docker + Docker Compose v2. Nếu dùng GPU: NVIDIA driver +
 # 1) Tạo file env local
 cp .env.example .env
 #    Điền các secret bắt buộc: POSTGRES_PASSWORD, JWT_SECRET,
-#    CHATBOT_INTERNAL_TOKEN, CHATBOT_DB_PASSWORD, RIVER_API_KEY...
+#    CHATBOT_INTERNAL_TOKEN, CHATBOT_DB_PASSWORD, NEU_API_KEY...
 #    Nếu đổi POSTGRES_PASSWORD/CHATBOT_DB_PASSWORD, sửa cả DSN tương ứng.
 #    Khối R2 để trống nếu dùng volume local; các biến tuning còn lại đã có
 #    default trong compose.
@@ -132,6 +132,53 @@ Trang `/admin` chỉ dành cho quản trị viên:
   và khoa/bộ môn.
 - Sau khi nâng cấp, tài khoản nhận role `teacher`, mất role `student` và cần
   đăng nhập lại để thấy khu vực giảng viên.
+
+### Truy vấn cơ sở dữ liệu (admin)
+
+Trang `/admin/database` cho phép quản trị viên chạy câu lệnh `SELECT`/`WITH`
+trên CSDL để tra cứu dữ liệu:
+
+- **Chỉ đọc**: transaction read-only + role DB hạn chế; không hỗ trợ
+  `INSERT/UPDATE/DELETE/DDL`.
+- Giới hạn: tối đa **500 dòng**, timeout **10 giây**, rate limit
+  **30 truy vấn/phút/admin**.
+- Schema explorer: tìm bảng/cột, click bảng để sinh `SELECT`, click cột để chèn
+  tên cột.
+- Kết quả: bảng có type badge, xem giá trị đầy đủ, copy, xuất **CSV/JSON**.
+- **Duyệt bảng**: chọn bảng/view, chọn cột, thêm bộ lọc, sắp xếp và phân trang
+  (50/100/200 dòng) mà không cần viết SQL.
+- Lịch sử 20 truy vấn gần nhất lưu trong `localStorage` của trình duyệt.
+- Không hiển thị `users.password_hash`, `auth_sessions`, `user_identities`.
+
+Cấu hình trong `.env`:
+
+```env
+ADMIN_DB_USER=admin_reader
+ADMIN_DB_PASSWORD=<random>
+ADMIN_DB_URL=postgresql+asyncpg://admin_reader:<random>@localhost:5435/eyetracking
+ADMIN_DATABASE_URL_DOCKER=postgresql+asyncpg://admin_reader:<random>@postgres:5432/eyetracking
+ADMIN_DB_STATEMENT_TIMEOUT_MS=10000
+ADMIN_DB_LOCK_TIMEOUT_MS=2000
+ADMIN_DB_MAX_ROWS=500
+ADMIN_DB_SCHEMA_CACHE_SECONDS=60
+```
+
+Role `admin_reader` được tạo/cập nhật tự động bởi `db/migrate.sh` khi có
+`ADMIN_DB_USER` + `ADMIN_DB_PASSWORD`. Có thể chạy tay:
+
+```bash
+./scripts/create_admin_reader_role.sh
+```
+
+Nếu production thiếu `ADMIN_DB_URL`, trang trả `503` với thông báo chưa cấu
+hình; backend vẫn chạy bình thường. Ở dev có thể để trống `ADMIN_DB_URL` để
+fallback `DATABASE_URL` + read-only transaction, nhưng không nên dùng ở
+production.
+
+Chế độ **Duyệt bảng** dùng endpoint `POST /admin/db/tables/{table}/rows` với
+tham số có cấu trúc (không nhận raw SQL). Backend validate table/column/order/
+filter với schema đã lọc quyền, quote identifier và bind value; giới hạn
+200 dòng/trang, tối đa 10 bộ lọc.
 
 ## GPU
 
@@ -258,13 +305,25 @@ chạy tay; nếu muốn cấp lại quyền ngay mà không chạy migration:
   để bài dài không vượt timeout; slide đã `ready` không bị ingest lại.
 - Lỗi DB/role của chatbot trả `503` kèm lý do thật (thay vì `500`), backend lưu
   lý do vào `slide_documents.ingestion_error` để UI hiển thị.
-- Retrieval lọc `course_id` + `course_version_id` **trước LIMIT**; hybrid BM25
-  (Postgres FTS) + vector (pgvector HNSW), fuse bằng RRF.
-- Model: DeepSeek V4.1 Flash qua River AI cho router/answer/verifier/VLM;
-  embedding local `Qwen3-Embedding-0.6B` chạy **CPU** (1024 chiều). Chatbot
-  không dùng GPU — GPU chỉ dành cho gaze.
-- Citation chứa `courseVersionId`, `lessonVersionId`, `slideVersionId`,
-  `membershipId`, `assetId`, `pdfUrl`, `pageNumber`; verifier kiểm tra evidence quote.
+- Pipeline tuyến tính, **không còn router/verifier LLM, NDJSON block hay
+  LangGraph**: query rewrite + HyDE thích nghi (0-1 LLM call nhỏ) → hybrid
+  retrieval BM25 (Postgres FTS `ts_rank_cd`) + dense pgvector + HyDE dense, fuse
+  bằng RRF → một LLM call streaming → kiểm tra citation bằng code (retry tối đa
+  1 lần nếu thiếu).
+- Một chatbot duy nhất cho cả bài giảng và bài tập; không tách
+  exercise/lecture. Bài tập chưa nộp được chặn lộ đáp án ở prompt (không có
+  verifier riêng).
+- LMS (deadline/điểm/cấu trúc khóa) nhận diện bằng regex rồi gọi backend
+  `/internal/chat/lms-query`; không dùng router LLM.
+- Retrieval lọc `course_id` + `course_version_id` **trước LIMIT**; BM25 dùng
+  Postgres FTS `ts_rank_cd`, dense dùng pgvector HNSW; RRF fuse 2-3 nhánh.
+- Model: Qwen 3.5 35B qua NEU API cho answer/query prep/VLM; embedding
+  local `Qwen3-Embedding-0.6B` chạy **CPU** (1024 chiều). Chatbot không dùng
+  GPU — GPU chỉ dành cho gaze.
+- Citation chứa `course_version_id`, `lesson_version_id`, `slide_version_id`,
+  `membership_id`, `asset_id`, `pdf_url`, `page_number`; citation sai bị lọc
+  bằng code. Nếu model không cite sau retry, chatbot thêm fallback
+  "Nguồn tham khảo".
 - Streaming SSE: `status → citations → token → done`.
 - Chat quiz dùng đúng `attemptId`; attempt đã nộp cũ không mở quyền attempt mới.
 

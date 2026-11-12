@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { getGazeStatus } from "./reader-helpers";
 
 export function ReaderTopbar({
-  courseTitle,
   preview,
   chatOpen,
   chatAllowed,
@@ -19,7 +18,6 @@ export function ReaderTopbar({
   calibrationRequired,
   onOpenMobileOutline,
 }: {
-  courseTitle: string;
   preview: boolean;
   chatOpen: boolean;
   chatAllowed: boolean;
@@ -51,12 +49,6 @@ export function ReaderTopbar({
           <span className="hidden sm:inline">Khóa học của tôi</span>
         </Link>
       )}
-
-      <div className="mx-auto hidden min-w-0 px-4 md:block">
-        <p className="max-w-[460px] truncate text-center text-xs font-medium text-muted-foreground">
-          {courseTitle}
-        </p>
-      </div>
 
       <div className="ml-auto flex items-center gap-2">
         <Button

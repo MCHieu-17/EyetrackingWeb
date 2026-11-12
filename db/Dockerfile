@@ -19,5 +19,6 @@ ENV PGHOST=postgres \
 COPY migrations /migrations
 COPY migrate.sh /migrate.sh
 COPY chatbot_role.sql /chatbot_role.sql
+COPY admin_reader_role.sql /admin_reader_role.sql
 
 CMD ["bash", "/migrate.sh", "/migrations"]

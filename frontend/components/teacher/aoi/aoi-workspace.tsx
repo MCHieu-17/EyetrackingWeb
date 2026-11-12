@@ -8,13 +8,15 @@ import { useAoiEditor } from "./use-aoi-editor";
 export function AoiWorkspace({
   courseId,
   courseTitle,
+  courseStatus,
   canManage,
 }: {
   courseId: string;
   courseTitle: string;
+  courseStatus: "draft" | "published" | "archived";
   canManage: boolean;
 }) {
-  const controller = useAoiEditor({ courseId, canManage });
+  const controller = useAoiEditor({ courseId, courseStatus, canManage });
   const [hoveredCode, setHoveredCode] = useState<string | null>(null);
   const [hiddenCodes, setHiddenCodes] = useState<Set<string>>(new Set());
 

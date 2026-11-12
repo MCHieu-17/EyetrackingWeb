@@ -451,6 +451,41 @@ export function AoiPanel({
           </Button>
         </div>
 
+        <div className="mt-3">
+          <div className="flex rounded-full border border-[#eeeee9] bg-[#f7f7f4] p-1">
+            <button
+              type="button"
+              onClick={() => controller.changeVersion("draft")}
+              className={cn(
+                "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                controller.version === "draft"
+                  ? "bg-black text-white"
+                  : "text-black/55 hover:text-black",
+              )}
+            >
+              Bản nháp
+            </button>
+            <button
+              type="button"
+              onClick={() => controller.changeVersion("published")}
+              disabled={!controller.hasPublished}
+              className={cn(
+                "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40",
+                controller.version === "published"
+                  ? "bg-black text-white"
+                  : "text-black/55 hover:text-black",
+              )}
+            >
+              Bản xuất bản
+            </button>
+          </div>
+          <p className="mt-1.5 text-[10px] leading-4 text-black/45">
+            {controller.version === "published"
+              ? "Sinh viên đang học bản này."
+              : "Bản đang soạn, chưa áp dụng cho sinh viên."}
+          </p>
+        </div>
+
         {controller.activeIsQuiz ? (
           <p className="mt-3 rounded-full bg-muted px-3 py-1.5 text-center text-xs font-medium text-foreground">
             Bài tập

@@ -180,10 +180,22 @@ describe("formatCitationLocation", () => {
 });
 
 describe("getStatusLabel", () => {
-  it("trả về nhãn cho trạng thái đã biết", () => {
+  it("trả về nhãn cho các trạng thái của pipeline mới", () => {
+    expect(getStatusLabel("rewriting")).toBe("Đang hiểu câu hỏi…");
     expect(getStatusLabel("retrieving")).toBe(
       "Đang tìm trong tài liệu môn học…",
     );
+    expect(getStatusLabel("generating")).toBe("Đang soạn câu trả lời…");
+    expect(getStatusLabel("checking_citations")).toBe(
+      "Đang kiểm tra trích dẫn…",
+    );
+  });
+
+  it("vẫn trả về nhãn cho trạng thái cũ làm fallback", () => {
+    expect(getStatusLabel("routing")).toBe("Đang hiểu câu hỏi…");
+    expect(getStatusLabel("waiting")).toBe("Đang chờ xử lý…");
+    expect(getStatusLabel("verifying")).toBe("Đang kiểm tra trích dẫn…");
+    expect(getStatusLabel("retrying")).toBe("Đang sửa lại câu trả lời…");
   });
 
   it("trả về null khi không có trạng thái", () => {
@@ -198,8 +210,12 @@ describe("getStatusLabel", () => {
 describe("getAssistantSubtitle", () => {
   it("trả về phụ đề theo từng mode", () => {
     expect(getAssistantSubtitle("reader")).toBe("Hỏi đáp trong môn học");
-    expect(getAssistantSubtitle("quiz")).toBe("Gợi ý bài tập · không giải hộ");
-    expect(getAssistantSubtitle("review")).toBe("Chữa bài đã nộp · có đáp án");
+    expect(getAssistantSubtitle("quiz")).toBe(
+      "Hỗ trợ bài tập · gợi ý từng bước",
+    );
+    expect(getAssistantSubtitle("review")).toBe(
+      "Chữa bài đã nộp · giải thích đáp án",
+    );
   });
 });
 
@@ -207,7 +223,7 @@ describe("getEmptyState", () => {
   it("trả về nội dung và gợi ý cho reader", () => {
     const state = getEmptyState("reader");
 
-    expect(state.description).toContain("trích dẫn slide");
+    expect(state.description).toContain("trích dẫn từ tài liệu môn học");
     expect(state.suggestions).toHaveLength(3);
     expect(state.suggestions[0]).toBe("Tóm tắt nội dung chính của bài này");
   });

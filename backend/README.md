@@ -228,10 +228,18 @@ Backend không chặn phiên học khi viewport khác calibration.
 
 ## Chatbot RAG
 
-- Retrieval lọc `course_id` + `course_version_id` trước LIMIT; hybrid BM25
-  (Postgres FTS) + vector (pgvector HNSW), fuse bằng RRF.
-- Citation chứa `courseVersionId`, `lessonVersionId`, `slideVersionId`,
-  `membershipId`, `assetId`, `pdfUrl`, `pageNumber`.
+- Pipeline tuyến tính: query rewrite + HyDE thích nghi (0-1 LLM call nhỏ) →
+  hybrid retrieval BM25 (Postgres FTS `ts_rank_cd`) + dense pgvector + HyDE
+  dense, fuse RRF → một LLM call streaming → citation gate bằng code (retry
+  tối đa 1 lần). Không còn router/verifier LLM, NDJSON block hay LangGraph.
+- Một chatbot duy nhất cho bài giảng + bài tập; bài tập chưa nộp chỉ gợi ý ở
+  prompt, không lộ đáp án, không có verifier riêng.
+- LMS (deadline/điểm/cấu trúc khóa) nhận diện bằng regex rồi gọi
+  `POST /internal/chat/lms-query`; không dùng router LLM.
+- Retrieval lọc `course_id` + `course_version_id` trước LIMIT; citation chứa
+  `course_version_id`, `lesson_version_id`, `slide_version_id`, `membership_id`,
+  `asset_id`, `pdf_url`, `page_number`; citation sai bị lọc, fallback
+  "Nguồn tham khảo" nếu model không cite.
 - Streaming SSE: `status → citations → token → done`.
 - Mỗi tài khoản chỉ gửi được **1 tin nhắn mỗi 5 giây** (`POST
   /api/courses/{course_id}/chat/stream`); vượt quá trả `429` kèm `Retry-After`.

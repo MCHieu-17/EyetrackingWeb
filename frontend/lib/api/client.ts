@@ -22,6 +22,8 @@ export class ApiError extends Error {
     message: string,
     /** Giây phải chờ (header Retry-After) khi bị giới hạn tần suất. */
     public retryAfter?: number,
+    /** Payload lỗi gốc từ backend (nếu có), dùng cho các trang cần chi tiết. */
+    public detail?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -156,17 +158,19 @@ function extractError(status: number, data: unknown): string {
 
 /** Đọc lỗi JSON của backend và header Retry-After (nếu có). */
 export async function parseApiError(response: Response): Promise<ApiError> {
-  let message = `HTTP ${response.status}`;
+  let data: unknown = null;
   try {
-    message = extractError(response.status, await response.json());
+    data = await response.json();
   } catch {
     /* body không phải JSON */
   }
+  const message = extractError(response.status, data);
   const retryAfter = Number(response.headers.get("Retry-After"));
   return new ApiError(
     response.status,
     message,
     Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    data,
   );
 }
 

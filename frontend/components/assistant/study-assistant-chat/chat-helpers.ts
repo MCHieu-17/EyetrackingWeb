@@ -26,10 +26,13 @@ export type ChatMessageLike = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  routing: "Đang phân loại câu hỏi…",
-  waiting: "Đang chờ xử lý và kiểm chứng…",
+  rewriting: "Đang hiểu câu hỏi…",
   retrieving: "Đang tìm trong tài liệu môn học…",
   generating: "Đang soạn câu trả lời…",
+  checking_citations: "Đang kiểm tra trích dẫn…",
+  // Nhãn cũ, giữ làm fallback cho pipeline trước đây.
+  routing: "Đang hiểu câu hỏi…",
+  waiting: "Đang chờ xử lý…",
   verifying: "Đang kiểm tra trích dẫn…",
   retrying: "Đang sửa lại câu trả lời…",
 };
@@ -101,8 +104,8 @@ export function getStatusLabel(status: string | null): string | null {
 }
 
 export function getAssistantSubtitle(mode: AssistantMode): string {
-  if (mode === "quiz") return "Gợi ý bài tập · không giải hộ";
-  if (mode === "review") return "Chữa bài đã nộp · có đáp án";
+  if (mode === "quiz") return "Hỗ trợ bài tập · gợi ý từng bước";
+  if (mode === "review") return "Chữa bài đã nộp · giải thích đáp án";
   return "Hỏi đáp trong môn học";
 }
 
@@ -134,7 +137,7 @@ export function getEmptyState(mode: AssistantMode): {
   }
   return {
     description:
-      "Hỏi về khái niệm trong bài. Câu trả lời sẽ kèm trích dẫn slide liên quan.",
+      "Hỏi về khái niệm trong bài. Câu trả lời sẽ kèm trích dẫn từ tài liệu môn học.",
     suggestions: [
       "Tóm tắt nội dung chính của bài này",
       "Giải thích khái niệm quan trọng nhất",

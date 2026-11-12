@@ -31,6 +31,7 @@ import {
   subscribeCalibrationScreen,
 } from "@/lib/api/calibration";
 import { resolveMediaUrl } from "@/lib/api/client";
+import type { ChatCitation } from "@/lib/api/chat";
 import { LazyInlineQuiz } from "@/components/quiz/lazy-inline-quiz";
 import { ReaderFrame } from "@/components/reader/reader-frame";
 import { LazyStudyAssistantChat } from "@/components/assistant/lazy-study-assistant-chat";
@@ -40,6 +41,7 @@ import { ReaderError, ReaderLoading } from "./reader-states";
 import { ReaderSlideContent } from "./reader-slide-content";
 import { useReaderChat } from "./use-reader-chat";
 import {
+  findCitationSlideIndex,
   findNextLesson,
   getReaderLayoutKey,
   hashPayload,
@@ -63,6 +65,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
 
   const [activeLessonId, setActiveLessonId] = useState(requestedLessonId ?? "");
   const [currentSlide, setCurrentSlide] = useState(0);
+  // Citation đang chờ slide của bài mới tải xong (khi citation trỏ sang bài khác).
+  const [pendingCitation, setPendingCitation] = useState<ChatCitation | null>(null);
   const [learningSessionIds, setLearningSessionIds] = useState<Record<string, string>>({});
   const [trackingLessons, setTrackingLessons] = useState<Record<string, boolean>>({});
   // Phiên hiệu chỉnh đọc thẳng từ localStorage ngay lần render đầu (client):
@@ -280,6 +284,16 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const total = slides.length;
   // Render-phase adjust: đổi bài có ít slide hơn → quay về slide đầu.
   if (total > 0 && currentSlide > total - 1) setCurrentSlide(0);
+  // Citation trỏ sang bài khác: chờ slide của bài mới tải xong rồi nhảy tới.
+  if (
+    pendingCitation &&
+    pendingCitation.lessonId === activeLessonId &&
+    !slidesLoading
+  ) {
+    const index = findCitationSlideIndex(pendingCitation, slides);
+    if (index >= 0 && index !== currentSlide) setCurrentSlide(index);
+    setPendingCitation(null);
+  }
   const currentContent = slides[currentSlide];
 
   const slidePdfUrl = useMemo(
@@ -460,12 +474,41 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     };
   }, [closeLearningSession]);
 
-  const selectLesson = (lessonId: string) => {
-    // Đóng phiên bài cũ trước khi chuyển
-    if (activeLessonId !== lessonId) closeLearningSession(activeLessonId);
-    setActiveLessonId(lessonId);
-    setCurrentSlide(0);
-  };
+  const selectLesson = useCallback(
+    (lessonId: string) => {
+      // Đóng phiên bài cũ trước khi chuyển
+      if (activeLessonId !== lessonId) closeLearningSession(activeLessonId);
+      setPendingCitation(null);
+      setActiveLessonId(lessonId);
+      setCurrentSlide(0);
+    },
+    [activeLessonId, closeLearningSession],
+  );
+
+  // Bấm citation: nhảy thẳng tới slide trong bài đang đọc thay vì mở dialog.
+  // Trả false để chat mở dialog cho citation không phải slide (LMS, quiz...).
+  const handleCitationNavigate = useCallback(
+    (citation: ChatCitation): boolean => {
+      if (!citation.lessonId) return false;
+      const lesson = allItems.find((item) => item.id === citation.lessonId);
+      if (!lesson || lesson.kind === "quiz") return false;
+
+      if (citation.lessonId !== activeLessonId) {
+        selectLesson(citation.lessonId);
+        setPendingCitation(citation);
+        return true;
+      }
+
+      const index = findCitationSlideIndex(citation, slides);
+      if (index >= 0) {
+        setCurrentSlide(index);
+      } else {
+        setPendingCitation(citation);
+      }
+      return true;
+    },
+    [activeLessonId, allItems, selectLesson, slides],
+  );
 
   if (courseLoading) {
     return <ReaderLoading />;
@@ -535,6 +578,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
             courseId={courseId}
             open={chatOpen}
             onClose={closeChat}
+            onCitationNavigate={handleCitationNavigate}
           />
         }
         className="h-dvh"

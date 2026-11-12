@@ -23,6 +23,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
   admin: [
     { href: "/admin", label: "Nâng cấp giáo viên", icon: "ri-user-follow-line", match: (p) => p === "/admin" },
+    { href: "/admin/database", label: "Truy vấn CSDL", icon: "ri-database-2-line", match: under("/admin/database") },
     { href: "/admin/profile", label: "Hồ sơ", icon: "ri-user-line", match: under("/admin/profile") },
   ],
 };

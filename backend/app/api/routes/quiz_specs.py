@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload
 
@@ -6,12 +7,47 @@ from app.api.access import get_course_or_404
 from app.api.deps import can_manage_course, require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import Lesson, LessonVersion
+from app.models.course import Course, CourseVersionItem, Lesson, LessonVersion
 from app.models.quiz import QuizSpec
 from app.schemas.quiz import QuizAssignmentOut, QuizAssignmentUpdate
 from app.services import content
 
 router = APIRouter(tags=["quiz-specs"])
+
+
+async def _sync_published_quiz_flags(
+    db: AsyncSession,
+    course: Course,
+    lesson_id: str,
+    *,
+    allow_retry: bool | None,
+    allow_chatbot: bool | None,
+) -> None:
+    """Đồng bộ cờ vận hành sang QuizSpec của bản xuất bản.
+
+    `allow_retry`/`allow_chatbot` là thiết lập runtime, không phải nội dung.
+    Giáo viên bật/tắt phải có hiệu lực ngay với sinh viên mà không cần publish
+    lại toàn bộ khóa học.
+    """
+    if course.published_version_id is None:
+        return
+    published_item = (
+        await db.execute(
+            select(CourseVersionItem).where(
+                CourseVersionItem.course_version_id == course.published_version_id,
+                CourseVersionItem.lesson_id == lesson_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if published_item is None:
+        return
+    published_quiz = await db.get(QuizSpec, published_item.lesson_version_id)
+    if published_quiz is None:
+        return
+    if allow_retry is not None:
+        published_quiz.allow_retry = allow_retry
+    if allow_chatbot is not None:
+        published_quiz.allow_chatbot = allow_chatbot
 
 
 @router.patch(
@@ -80,6 +116,20 @@ async def update_quiz_spec(
         # viên thấy. Bản xuất bản là bất biến nên cách duy nhất là xuất bản
         # course version nháp hiện tại (kéo theo các thay đổi nháp khác).
         await content.publish_course(db, course, user, None)
+    else:
+        # Cờ làm lại/chatbot phải có hiệu lực với sinh viên ngay, kể cả khi
+        # giáo viên chưa publish lại nội dung. Chỉ chạy khi có đổi cờ để
+        # không thêm query cho các lần lưu nội dung thông thường.
+        allow_retry = data.get("allow_retry")
+        allow_chatbot = data.get("allow_chatbot")
+        if allow_retry is not None or allow_chatbot is not None:
+            await _sync_published_quiz_flags(
+                db,
+                course,
+                lesson.id,
+                allow_retry=allow_retry,
+                allow_chatbot=allow_chatbot,
+            )
     await db.commit()
     await db.refresh(quiz)
     await db.refresh(draft_lesson_version)

@@ -50,6 +50,80 @@ async def test_quiz_flow(client):
 
 
 @pytest.mark.asyncio
+async def test_teacher_toggle_allow_retry_applies_to_published_quiz(client):
+    """Bật/tắt làm lại phải có hiệu lực với sinh viên ngay, không cần publish lại."""
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_quiz(teacher_id=teacher_id, student_id=student_id)
+
+    teacher_token = await login(client, teacher_email)
+    student_token = await login(client, student_email)
+    teacher_headers = {"Authorization": f"Bearer {teacher_token}"}
+    student_headers = {"Authorization": f"Bearer {student_token}"}
+
+    # Tắt làm lại: sinh viên thấy cờ mới dù chưa publish lại.
+    saved = await client.patch(
+        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        headers=teacher_headers,
+        json={"allowRetry": False},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["allowRetry"] is False
+
+    spec = await client.get(
+        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+    )
+    assert spec.status_code == 200, spec.text
+    assert spec.json()["allowRetry"] is False
+
+    # Bật lại: sinh viên thấy cờ mới.
+    saved = await client.patch(
+        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        headers=teacher_headers,
+        json={"allowRetry": True},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["allowRetry"] is True
+
+    spec = await client.get(
+        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+    )
+    assert spec.status_code == 200, spec.text
+    assert spec.json()["allowRetry"] is True
+
+
+@pytest.mark.asyncio
+async def test_teacher_toggle_allow_chatbot_applies_to_published_quiz(client):
+    """Tắt chatbot khi làm bài phải có hiệu lực với sinh viên ngay."""
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_quiz(teacher_id=teacher_id, student_id=student_id)
+
+    teacher_token = await login(client, teacher_email)
+    student_token = await login(client, student_email)
+    teacher_headers = {"Authorization": f"Bearer {teacher_token}"}
+    student_headers = {"Authorization": f"Bearer {student_token}"}
+
+    saved = await client.patch(
+        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        headers=teacher_headers,
+        json={"allowChatbot": False},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["allowChatbot"] is False
+
+    spec = await client.get(
+        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+    )
+    assert spec.status_code == 200, spec.text
+    assert spec.json()["allowChatbot"] is False
+
+
+@pytest.mark.asyncio
 async def test_teacher_tree_marks_published_quiz_as_published(client):
     """Bản nháp trỏ tới lesson version đã xuất bản thì bài tập không còn cảnh báo nháp."""
     teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"

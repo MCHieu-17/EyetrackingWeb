@@ -5,3 +5,4 @@
 !migrations/*.sql
 !migrate.sh
 !chatbot_role.sql
+!admin_reader_role.sql

@@ -54,7 +54,7 @@ và các nút thắt còn lại.
 
 ### 6. Frontend
 
-- 2 replica Next standalone sau nginx (`deploy.replicas: 2`).
+- 2 replica Next standalone sau nginx (`FRONTEND_REPLICAS`, mặc định 2).
 - Static assets vẫn được nginx cache 1 năm.
 
 ### 7. Gaze service
@@ -64,9 +64,10 @@ và các nút thắt còn lại.
 - `MIN_FRAME_INTERVAL_MS` (mặc định 80ms): giới hạn ~12.5 FPS/session.
 - Calibration trả 503 + `Retry-After` khi queue đầy; WebSocket trả trạng thái
   `overloaded` và giữ stream.
-- Chạy **2 replica** gaze sau nginx. Frontend tạo cookie `gaze_affinity` trước
-  request đầu; nginx `hash $cookie_gaze_affinity` giữ mọi request/WS của cùng
-  browser trên một replica vì session calibration nằm trong RAM.
+- Chạy **2 replica** gaze sau nginx (`GAZE_REPLICAS`, mặc định 2). Frontend
+  tạo cookie `gaze_affinity` trước request đầu; nginx dùng
+  `hash $cookie_gaze_affinity` giữ mọi request/WS của cùng browser trên một
+  replica vì session calibration nằm trong RAM.
 - Nếu không có cookie, mọi request hash rỗng nên vẫn về cùng một replica
   (đúng, nhưng không phân tải). Xoá cookie giữa phiên sẽ mất session và phải
   calibration lại.
@@ -76,11 +77,12 @@ và các nút thắt còn lại.
 - `CHATBOT_MAX_CONCURRENT` (mặc định 20): giới hạn số chat xử lý đồng thời.
 - `CHATBOT_QUEUE_TIMEOUT` (mặc định 2s): quá thời gian chờ trả 429 +
   `Retry-After` thay vì xếp hàng vô hạn.
-- River vẫn là nút thắt bên ngoài; tăng `RIVER_*` theo quota thực tế.
+- NEU vẫn là nút thắt bên ngoài; tăng `NEU_*` theo capacity thực tế.
 
 ### 9. Worker & retention
 
-- Analysis worker chạy **2 replica** (dùng `SKIP LOCKED`).
+- Analysis worker chạy **2 replica** (`WORKER_REPLICAS`, mặc định 2; dùng
+  `SKIP LOCKED`).
 - `python -m app.maintenance` giờ:
   - tạo partition gaze_samples trước 3 tháng;
   - drop partition cũ hơn `GAZE_RETENTION_DAYS` (mặc định 180 ngày);
@@ -153,7 +155,7 @@ Các số trên là đo trên máy dev, không phải cam kết production. Cầ
 - **Gaze throughput**: vẫn 1 inference worker/GPU mỗi replica. Nếu cần
   > 100 stream đồng thời, đo GPU rồi cân nhắc TensorRT/ONNX hoặc thêm GPU.
 - **Chatbot**: đã có giới hạn concurrency + 429; nút thắt còn lại là quota
-  River (`RIVER_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
+  NEU (`NEU_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
 - **Worker**: analysis đã 2 replica; content/embedding có thể scale thêm khi
   backlog lớn (chú ý RAM LibreOffice).
 - **Disk**: gaze đã có retention 180 ngày; vẫn cần retention log/backup và

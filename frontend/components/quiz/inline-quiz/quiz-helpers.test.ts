@@ -10,6 +10,7 @@ import {
   getRetryError,
   getSubmitError,
   isAnswerCorrect,
+  shouldShowReview,
 } from "./quiz-helpers";
 
 const questions: QuizQuestion[] = [
@@ -105,5 +106,15 @@ describe("getOptionLetter", () => {
   it("maps an index to a letter", () => {
     expect(getOptionLetter(0)).toBe("A");
     expect(getOptionLetter(25)).toBe("Z");
+  });
+});
+
+describe("shouldShowReview", () => {
+  it("only shows review for submitted attempts", () => {
+    expect(shouldShowReview(null)).toBe(false);
+    expect(shouldShowReview(undefined)).toBe(false);
+    expect(shouldShowReview({ status: "in_progress" })).toBe(false);
+    expect(shouldShowReview({ status: "expired" })).toBe(false);
+    expect(shouldShowReview({ status: "submitted" })).toBe(true);
   });
 });

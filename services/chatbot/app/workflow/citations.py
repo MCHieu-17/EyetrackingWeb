@@ -1,61 +1,36 @@
-"""Tiện ích citation: parse, sanitize, so khớp evidence quote.
+"""Tiện ích citation tối giản.
 
-Citation do LLM sinh ra không được tin tuyệt đối:
-- Chỉ giữ [n] nằm trong khoảng 1..len(citations).
-- Verifier phải trả `evidence_quote`; code kiểm tra quote thật sự có trong
-  tài liệu được cite (exact substring, fallback token overlap).
+Không còn LLM verifier. Citation do model sinh ra được kiểm tra bằng code:
+- Chỉ chấp nhận [n] nằm trong khoảng 1..len(citations).
+- Citation sai bị bỏ khỏi câu trả lời (non-streaming) hoặc bị frontend bỏ qua
+  (streaming, vì frontend đã kiểm tra n < 1 || n > count).
 """
 
 import re
-import unicodedata
 
-WORD_RE = re.compile(r"\w+", re.UNICODE)
-
-
-def normalize_text(text: str) -> str:
-    """Chuẩn hoá để so khớp quote: NFC, lowercase, gộp whitespace."""
-    text = unicodedata.normalize("NFC", text or "").lower()
-    return re.sub(r"\s+", " ", text).strip()
+CITATION_RE = re.compile(r"\[(\d+)\]")
 
 
-def quote_supported(quote: str, document: str) -> bool:
-    """True nếu quote thật sự xuất hiện trong document.
-
-    Ưu tiên exact substring sau normalize. Nếu model trích hơi khác dấu câu,
-    cho phép fallback token overlap >= 0.85 (nhưng quote phải đủ dài).
-    """
-    q = normalize_text(quote)
-    d = normalize_text(document)
-    if not q or not d:
-        return False
-
-    # Quote quá ngắn không đủ để chứng minh một claim (vd "abc").
-    q_tokens = WORD_RE.findall(q)
-    if len(q_tokens) < 4:
-        return False
-    if q in d:
-        return True
-
-    d_tokens = set(WORD_RE.findall(d))
-    overlap = sum(1 for token in q_tokens if token in d_tokens) / len(q_tokens)
-    return overlap >= 0.85
+def citation_ids(text: str) -> list[int]:
+    """Trả về tất cả số citation xuất hiện trong text, theo thứ tự."""
+    return [int(number) for number in CITATION_RE.findall(text or "")]
 
 
-def claim_in_answer(claim: str, answer: str) -> bool:
-    """True nếu claim verifier trả về thật sự có trong answer.
+def valid_citation_ids(text: str, count: int) -> list[int]:
+    """Trả về các citation hợp lệ trong khoảng 1..count."""
+    return [number for number in citation_ids(text) if 1 <= number <= count]
 
-    Chặn trường hợp verifier bịa thêm claim không tồn tại để đánh giá.
-    """
-    c = normalize_text(claim)
-    a = normalize_text(answer)
-    if not c or not a:
-        return False
-    if c in a:
-        return True
 
-    c_tokens = WORD_RE.findall(c)
-    if len(c_tokens) < 4:
-        return False
-    a_tokens = set(WORD_RE.findall(a))
-    overlap = sum(1 for token in c_tokens if token in a_tokens) / len(c_tokens)
-    return overlap >= 0.8
+def has_valid_citation(text: str, count: int) -> bool:
+    """True nếu text có ít nhất một citation hợp lệ."""
+    return bool(valid_citation_ids(text, count))
+
+
+def strip_invalid_citations(text: str, count: int) -> str:
+    """Bỏ các citation nằm ngoài khoảng 1..count."""
+
+    def replace(match: re.Match[str]) -> str:
+        number = int(match.group(1))
+        return match.group(0) if 1 <= number <= count else ""
+
+    return CITATION_RE.sub(replace, text or "")

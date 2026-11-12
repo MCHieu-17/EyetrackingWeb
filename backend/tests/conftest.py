@@ -11,6 +11,7 @@ import os
 import tempfile
 import uuid
 from collections.abc import AsyncIterator
+from urllib.parse import urlparse
 
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
@@ -20,11 +21,19 @@ from sqlalchemy import select
 # Phải set env TRƯỚC khi import app.* vì settings là singleton.
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 if not TEST_DATABASE_URL:
-    raise RuntimeError(
-        "Thiếu TEST_DATABASE_URL. Chạy ./scripts/test_backend.sh hoặc set biến này."
-    )
+    raise RuntimeError("Thiếu TEST_DATABASE_URL. Chạy ./scripts/test_backend.sh hoặc set biến này.")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Dùng role read-only admin_reader trên test DB để test đúng quyền thật.
+# Role được db/migrate.sh tạo khi có ADMIN_DB_USER + ADMIN_DB_PASSWORD.
+_admin_user = os.environ.get("ADMIN_DB_USER", "")
+_admin_password = os.environ.get("ADMIN_DB_PASSWORD", "")
+if _admin_user and _admin_password:
+    _parsed = urlparse(TEST_DATABASE_URL)
+    _admin_netloc = f"{_admin_user}:{_admin_password}@{_parsed.hostname}:{_parsed.port}"
+    os.environ["ADMIN_DB_URL"] = _parsed._replace(netloc=_admin_netloc).geturl()
+else:
+    os.environ["ADMIN_DB_URL"] = ""
 os.environ["JWT_SECRET"] = "test-secret-not-for-production-32-bytes-min"
 os.environ["CORS_ORIGINS"] = "http://testserver"
 os.environ["AI_HTTP_URL"] = "http://localhost:8000"
@@ -97,9 +106,7 @@ async def create_user(
             full_name=full_name,
         )
         if role != "student":
-            role_row = (
-                await db.execute(select(Role).where(Role.code == role))
-            ).scalar_one()
+            role_row = (await db.execute(select(Role).where(Role.code == role))).scalar_one()
             db.add(UserRole(user_id=user.id, role_id=role_row.id))
             if role == "teacher":
                 db.add(
@@ -296,6 +303,7 @@ async def seed_slide(
     lesson_id: str,
     lesson_version_id: str,
     teacher_id: str,
+    position: int = 0,
 ) -> dict[str, str]:
     async with SessionLocal() as db:
         asset = MediaAsset(
@@ -330,8 +338,8 @@ async def seed_slide(
             lesson_version_id=lesson_version_id,
             slide_id=slide.id,
             slide_version_id=slide_version.id,
-            position=0,
-            title="Slide 1",
+            position=position,
+            title=f"Slide {position + 1}",
         )
         db.add(membership)
         await db.flush()

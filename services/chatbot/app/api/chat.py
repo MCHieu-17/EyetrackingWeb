@@ -50,24 +50,23 @@ def require_internal_token(x_chatbot_token: str = Header(default="")) -> None:
 
 
 def _state_from_request(payload: ChatRequest) -> ChatState:
-    return {
-        "question": payload.message,
-        "context_key": payload.context_key,
-        "course_id": payload.course_id,
-        "course_version_id": payload.course_version_id,
-        "thread_id": payload.thread_id,
-        "history": [item.model_dump() for item in payload.history],
-        "lesson_id": payload.lesson_id,
-        "lesson_version_id": payload.lesson_version_id,
-        "lesson_title": payload.lesson_title,
-        "module_title": payload.module_title,
-        "attempt_id": payload.attempt_id,
-        "assignment_id": payload.assignment_id,
-        "assignment_title": payload.assignment_title,
-        "assignment_context": payload.assignment_context,
-        "support_mode": payload.support_mode,
-        "attempts": 0,
-    }
+    return ChatState(
+        question=payload.message,
+        context_key=payload.context_key,
+        course_id=payload.course_id,
+        course_version_id=payload.course_version_id,
+        thread_id=payload.thread_id,
+        history=[item.model_dump() for item in payload.history],
+        lesson_id=payload.lesson_id,
+        lesson_version_id=payload.lesson_version_id,
+        lesson_title=payload.lesson_title,
+        module_title=payload.module_title,
+        attempt_id=payload.attempt_id,
+        assignment_id=payload.assignment_id,
+        assignment_title=payload.assignment_title,
+        assignment_context=payload.assignment_context,
+        support_mode=payload.support_mode,
+    )
 
 
 def _sse(event: str, data: dict) -> str:
@@ -97,8 +96,8 @@ async def chat(payload: ChatRequest):
         citations=[CitationOut(**citation) for citation in citations],
         intent=intent,
         verified=verified,
-        routes=state.get("routes", []),
-        finish_reason=state.get("finish_reason", "stop"),
+        routes=state.routes,
+        finish_reason=state.finish_reason,
     )
 
 
@@ -107,7 +106,7 @@ async def chat(payload: ChatRequest):
     dependencies=[Depends(require_internal_token)],
 )
 async def chat_stream(payload: ChatRequest):
-    """SSE: status -> citations -> token (sau verify) -> done."""
+    """SSE: status -> citations -> token -> done."""
     state = _state_from_request(payload)
     await _acquire_chat_slot()
 
