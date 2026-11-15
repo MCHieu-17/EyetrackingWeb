@@ -11,6 +11,7 @@ import {
   type CourseListQuery,
 } from "@/lib/api/teacher";
 import { queryKeys } from "@/lib/query-keys";
+import { fetchStudentVisits } from "@/lib/api/visits";
 
 export function useTeacherCourses(query: CourseListQuery = {}) {
   return useQuery({
@@ -44,13 +45,10 @@ export function useCourseStudents(courseId: string) {
   });
 }
 
-export function useLessonSlidesAdmin(
-  lessonId: string,
-  version: "draft" | "published" = "draft",
-) {
+export function useLessonSlidesAdmin(lessonId: string) {
   return useQuery({
-    queryKey: queryKeys.teacher.lessonSlides(lessonId, version),
-    queryFn: () => fetchLessonSlidesAdmin(lessonId, version),
+    queryKey: queryKeys.teacher.lessonSlides(lessonId),
+    queryFn: () => fetchLessonSlidesAdmin(lessonId),
     enabled: Boolean(lessonId),
     // Đang index thì tự làm mới để trạng thái pending → ready/failed.
     refetchInterval: (query) => {
@@ -60,6 +58,14 @@ export function useLessonSlidesAdmin(
         ? 5000
         : false;
     },
+  });
+}
+
+export function useStudentVisits(courseId: string, studentId: string) {
+  return useQuery({
+    queryKey: queryKeys.teacher.studentVisits(courseId, studentId),
+    queryFn: () => fetchStudentVisits(studentId, courseId),
+    enabled: Boolean(courseId && studentId),
   });
 }
 

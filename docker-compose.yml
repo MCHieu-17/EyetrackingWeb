@@ -238,7 +238,7 @@ services:
     mem_limit: 3g
     cpus: 4.0
 
-  # Worker chuyển đổi slide upload (LibreOffice) và tạo slide_version.
+  # Worker chuyển đổi slide upload (LibreOffice) và tạo các row slides.
   # Image riêng có LibreOffice/fonts; API không cần và không cài.
   content-worker:
     build:
@@ -267,7 +267,7 @@ services:
     mem_limit: 4g
     cpus: 2.0
 
-  # Worker tính analysis_runs (không cần LibreOffice → dùng image API).
+  # Worker phân tích gaze/AOI từ background_jobs(kind=analyze_lesson).
   worker:
     build:
       context: ./backend
@@ -289,13 +289,14 @@ services:
     environment:
       <<: *backend-env
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      WORKER_STALE_SECONDS: ${WORKER_STALE_SECONDS:-600}
     # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
     healthcheck:
       disable: true
     mem_limit: 1536m
     cpus: 1.0
 
-  # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs. Dùng image API
+  # Worker đồng bộ index RAG qua background_jobs(kind=index_slides). Dùng image API
   # (không cần LibreOffice); job nằm trong PostgreSQL nên restart không mất.
   embedding-worker:
     build:
@@ -341,10 +342,11 @@ services:
     environment:
       CHATBOT_DATABASE_URL: ${CHATBOT_DATABASE_URL_DOCKER}
       CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
-      DB_POOL_MIN: ${DB_POOL_MIN:-1}
-      DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-10}
-      DB_POOL_RECONNECT_TIMEOUT: ${DB_POOL_RECONNECT_TIMEOUT:-10}
+      # Chatbot có pool riêng, không dùng chung DB_POOL_* của backend.
+      DB_POOL_MIN: ${CHATBOT_DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${CHATBOT_DB_POOL_MAX:-10}
+      DB_POOL_TIMEOUT: ${CHATBOT_DB_POOL_TIMEOUT:-10}
+      DB_POOL_RECONNECT_TIMEOUT: ${CHATBOT_DB_POOL_RECONNECT_TIMEOUT:-10}
       EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
@@ -446,7 +448,9 @@ services:
       - INFER_WORKERS=${INFER_WORKERS:-1}
       - MAX_INFERENCE_QUEUE=${MAX_INFERENCE_QUEUE:-32}
       - MIN_FRAME_INTERVAL_MS=${MIN_FRAME_INTERVAL_MS:-80}
-      - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-5242880}
+      # Giới hạn ảnh calibration/import riêng của gaze; không dùng chung
+      # MAX_UPLOAD_BYTES (50 MiB) của backend.
+      - MAX_UPLOAD_BYTES=${GAZE_MAX_UPLOAD_BYTES:-5242880}
     # Không publish port host: 2 replica sẽ tranh cổng. Truy cập qua nginx
     # /gaze/... hoặc `docker compose exec gaze ...` khi debug.
     expose:

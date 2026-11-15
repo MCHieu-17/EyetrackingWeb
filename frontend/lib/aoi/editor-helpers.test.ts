@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { AoiDefinition, AoiSet } from "@/lib/api/aoi";
+import type { AoiDefinition, AoiCollection } from "@/lib/api/aoi";
 import {
+  collectAoiCodes,
   countCustom,
+  hasStoredAois,
   nextCustomCode,
+  nextSlideLabel,
   nextUiCustomCode,
-  pickLatest,
+  firstAoiCollection,
   toInputs,
 } from "@/lib/aoi/editor-helpers";
 
@@ -25,44 +28,82 @@ function makeDefinition(
   };
 }
 
-function makeSet(overrides: Partial<AoiSet> = {}): AoiSet {
+function makeCollection(
+  overrides: Partial<AoiCollection> = {},
+): AoiCollection {
   return {
-    id: "set-1",
+    id: "collection-1",
     scope: "slide",
-    slideVersionId: "sv-1",
-    uiSchemaVersion: null,
-    revision: 1,
-    state: "draft",
-    createdBy: "user-1",
-    createdAt: "2026-01-01T00:00:00Z",
-    publishedAt: null,
+    slideId: "slide-1",
+    uiSchema: null,
     definitions: [],
     ...overrides,
   };
 }
 
-describe("pickLatest", () => {
+describe("firstAoiCollection", () => {
   it("trả về null khi không có dữ liệu", () => {
-    expect(pickLatest(undefined)).toBeNull();
-    expect(pickLatest([])).toBeNull();
+    expect(firstAoiCollection(undefined)).toBeNull();
+    expect(firstAoiCollection([])).toBeNull();
   });
 
-  it("ưu tiên bộ draft", () => {
-    const draft = makeSet({ id: "draft", state: "draft" });
-    const published = makeSet({ id: "published", state: "published" });
+  it("trả về collection hiện hành đầu tiên", () => {
+    const first = makeCollection({ id: "first" });
+    const second = makeCollection({ id: "second" });
+    expect(firstAoiCollection([first, second])).toBe(first);
+  });
+});
 
-    expect(pickLatest([published, draft])).toBe(draft);
+describe("hasStoredAois", () => {
+  it("coi collection rỗng/chỉ no_label là chưa có AOI", () => {
+    expect(hasStoredAois(null)).toBe(false);
+    expect(hasStoredAois(makeCollection())).toBe(false);
+    expect(
+      hasStoredAois(
+        makeCollection({
+          definitions: [makeDefinition({ code: "no_label" })],
+        }),
+      ),
+    ).toBe(false);
   });
 
-  it("dùng bộ published khi không có draft", () => {
-    const published = makeSet({ id: "published", state: "published" });
-    const archived = makeSet({ id: "archived", state: "archived" });
+  it("coi root container là đã có dữ liệu", () => {
+    expect(
+      hasStoredAois(
+        makeCollection({ definitions: [makeDefinition({ code: "slide_1" })] }),
+      ),
+    ).toBe(true);
+  });
+});
 
-    expect(pickLatest([archived, published])).toBe(published);
+describe("nextSlideLabel", () => {
+  it("bắt đầu từ AOI_1", () => {
+    expect(nextSlideLabel([])).toBe("AOI_1");
   });
 
-  it("bỏ qua bộ archived", () => {
-    expect(pickLatest([makeSet({ state: "archived" })])).toBeNull();
+  it("tăng theo nhãn lớn nhất", () => {
+    const definitions = [
+      { label: "AOI_2" },
+      { label: "AOI_7" },
+      { label: null },
+    ] as Parameters<typeof nextSlideLabel>[0];
+    expect(nextSlideLabel(definitions)).toBe("AOI_8");
+  });
+});
+
+describe("collectAoiCodes", () => {
+  it("gom vùng con đệ quy", () => {
+    const definitions = [
+      { code: "root", parentId: null },
+      { code: "child", parentId: "root" },
+      { code: "grandchild", parentId: "child" },
+      { code: "other", parentId: null },
+    ] as Parameters<typeof collectAoiCodes>[0];
+    expect([...collectAoiCodes(definitions, "root")]).toEqual([
+      "root",
+      "child",
+      "grandchild",
+    ]);
   });
 });
 
@@ -97,6 +138,18 @@ describe("toInputs", () => {
         isActive: true,
       },
     ]);
+  });
+
+  it("giữ nhãn phân tích của vùng slide", () => {
+    const leaf = makeDefinition({
+      id: "leaf-id",
+      code: "slide_1_text_1",
+      label: "AOI_1",
+      parentId: "root-id",
+      isContainer: false,
+      kind: "text",
+    });
+    expect(toInputs([leaf])[0].label).toBe("AOI_1");
   });
 
   it("bỏ vùng no_label", () => {

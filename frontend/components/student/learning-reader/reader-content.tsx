@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useGazeTracker, type GazeFrameResult } from "@/hooks/use-gaze-tracker";
 import { useAoiSnapshot } from "@/hooks/use-aoi-snapshot";
+import { useCourseVisit } from "@/hooks/use-course-visit";
 import {
   useCourseOutline,
   useLessonSlides,
@@ -26,26 +28,31 @@ import {
 import { flushGazeQueue, queueGazeBatch } from "@/lib/gaze-sender";
 import { createPresentation } from "@/lib/api/aoi";
 import {
+  isFrameForActiveContext,
+  isValidGazeSequence,
+} from "@/lib/gaze/frame-protocol";
+import {
+  createPresentationRequestTracker,
+  presentationContextKey,
+} from "@/lib/gaze/presentation-context";
+import {
   getCalibrationScreenSnapshot,
   getStoredGazeSessionId,
   subscribeCalibrationScreen,
 } from "@/lib/api/calibration";
 import { resolveMediaUrl } from "@/lib/api/client";
 import type { ChatCitation } from "@/lib/api/chat";
-import { LazyInlineQuiz } from "@/components/quiz/lazy-inline-quiz";
-import { ReaderFrame } from "@/components/reader/reader-frame";
-import { LazyStudyAssistantChat } from "@/components/assistant/lazy-study-assistant-chat";
 import { useAssistant } from "@/components/assistant/assistant-context";
-import { ReaderBanners } from "./reader-banners";
 import { ReaderError, ReaderLoading } from "./reader-states";
-import { ReaderSlideContent } from "./reader-slide-content";
+import { ReaderView } from "./reader-view";
 import { useReaderChat } from "./use-reader-chat";
 import {
   findCitationSlideIndex,
   findNextLesson,
+  getNextSlideIndex,
+  getPreviousSlideIndex,
   getReaderLayoutKey,
   hashPayload,
-  isGazeDotVisible,
   resolveActiveLessonId,
   type GazeDotPosition,
 } from "./reader-helpers";
@@ -103,6 +110,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const layoutKeyRef = useRef("reader");
   const [presentationId, setPresentationId] = useState<string | null>(null);
   const presentationIdRef = useRef<string | null>(null);
+  const activePresentationKeyRef = useRef<string | null>(null);
+  const presentationRequestRef = useRef(createPresentationRequestTracker());
   const presentationSequenceRef = useRef(0);
   const layoutGenerationRef = useRef(0);
   const batchNoRef = useRef<Record<string, number>>({});
@@ -166,6 +175,10 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   }, [activeLessonId, setReaderLessonId]);
 
   const enrollmentId = enrollments.find((enrollment) => enrollment.course.id === courseId)?.enrollmentId;
+  const { visitId: courseVisitId } = useCourseVisit({
+    courseId,
+    enrollmentId: enrollmentId ?? null,
+  });
 
   // Flush đúng batch của bài/phiên cũ trước khi phiên bị đóng.
   const flushGazeForLesson = useCallback((lessonId: string, sessionId?: string, keepalive = false) => {
@@ -173,7 +186,17 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     const sid = sessionId ?? sessionsRef.current[lessonId];
     const buf = gazeBufferRef.current;
     const presentation = presentationIdRef.current;
-    if (!sid || !presentation || buf.length === 0) return;
+    if (!sid || !presentation) {
+      // Không có presentation/session hợp lệ: bỏ buffer thay vì gán nhầm
+      // sample sang presentation kế tiếp.
+      gazeBufferRef.current = [];
+      gazeBufferLessonRef.current = null;
+      return;
+    }
+    if (buf.length === 0) {
+      gazeBufferLessonRef.current = null;
+      return;
+    }
     gazeBufferRef.current = [];
     gazeBufferLessonRef.current = null;
     const batchNo = batchNoRef.current[sid] ?? 0;
@@ -183,7 +206,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}-${batchNo}`,
       batchNo,
       presentationId: presentation,
-      layoutSnapshotId: aoiSnapshotIdRef.current,
+      layoutId: aoiSnapshotIdRef.current,
       sequenceStart: Math.min(...sequences),
       sequenceEnd: Math.max(...sequences),
       payloadHash: hashPayload(buf),
@@ -215,6 +238,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       !courseReady ||
       !activeLessonId ||
       !enrollmentId ||
+      !courseVisitId ||
       sessionsRef.current[activeLessonId]
     ) {
       return;
@@ -230,6 +254,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     createLearningSession({
       enrollmentId,
       lessonId,
+      courseVisitId,
       deviceFingerprint: getDeviceFingerprint(),
       viewportWidthPx: viewportWidth,
       viewportHeightPx: viewportHeight,
@@ -258,6 +283,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     courseReady,
     activeLessonId,
     enrollmentId,
+    courseVisitId,
     closeLearningSession,
     calibrationRequired,
     calibrationScreen,
@@ -311,12 +337,19 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     flushGazeForLesson(activeLessonId);
   }, [activeLessonId, flushGazeForLesson]);
 
+  // Flush buffer của đúng bài đang giữ sample (có thể là bài cũ trong lúc
+  // chuyển bài) trước khi invalidate presentation.
+  const flushPendingGaze = useCallback(() => {
+    const lessonId = gazeBufferLessonRef.current;
+    if (lessonId) flushGazeForLesson(lessonId);
+  }, [flushGazeForLesson]);
+
   // Trước khi đo layout mới: dừng nhận sample + flush batch cũ ngay lập tức,
   // tránh sample bị gán sang snapshot mới.
   const pauseAndFlushGaze = useCallback(() => {
     aoiReadyRef.current = false;
-    flushGazeForLesson(activeLessonId);
-  }, [activeLessonId, flushGazeForLesson]);
+    flushPendingGaze();
+  }, [flushPendingGaze]);
 
   // Layout key đổi khi mở/đóng chat để snapshot AOI phản ánh đúng bố cục.
   const layoutKey = getReaderLayoutKey(activeIsQuiz, chatOpen);
@@ -325,28 +358,61 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     layoutKeyRef.current = layoutKey;
   }, [layoutKey]);
 
-  // Mỗi slide/quiz là một presentation riêng. Đổi presentation phải flush
-  // batch cũ trước để batch không trộn context.
-  const presentationKeyRef = useRef("");
-  useEffect(() => {
-    if (!learningSessionId || !activeLessonId) return;
-    if (!activeIsQuiz && !slides[currentSlide]) return;
-    const key = `${learningSessionId}:${activeLessonId}:${activeIsQuiz ? "quiz" : currentSlide}`;
-    if (presentationKeyRef.current === key) return;
-    presentationKeyRef.current = key;
-    flushGazeForLesson(activeLessonId);
+  // Mỗi slide/quiz là một presentation riêng. Đổi context phải flush batch cũ
+  // TRƯỚC khi vô hiệu hoá presentation, sau đó chặn mọi frame cũ bằng key +
+  // request token. Dùng layout effect để refs đổi trước khi timer camera chạy.
+  const presentationKeyRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const surface = activeIsQuiz ? "quiz" : "lesson";
+    const slide = activeIsQuiz ? null : slides[currentSlide] ?? null;
+    const nextKey =
+      learningSessionId && activeLessonId && (activeIsQuiz || slide)
+        ? presentationContextKey({
+            sessionId: learningSessionId,
+            lessonId: activeLessonId,
+            surface,
+            slideId: slide?.id ?? null,
+            slideIndex: currentSlide,
+          })
+        : null;
+
+    if (presentationKeyRef.current === nextKey) return;
+    presentationKeyRef.current = nextKey;
+
+    // Buffer vẫn thuộc presentation cũ tại thời điểm này.
+    flushPendingGaze();
+
+    // Invalidate ngay: onFrame sẽ bỏ mọi frame cho tới khi presentation mới
+    // được tạo và AOI snapshot mới sẵn sàng.
+    activePresentationKeyRef.current = null;
+    presentationIdRef.current = null;
+    aoiSnapshotIdRef.current = null;
+    aoiReadyRef.current = false;
+    layoutGenerationRef.current = 0;
+    setPresentationId(null);
+
+    if (!nextKey || !learningSessionId) {
+      presentationRequestRef.current.invalidate();
+      return;
+    }
+
+    const token = presentationRequestRef.current.begin(nextKey);
     const sequenceNo = presentationSequenceRef.current;
     presentationSequenceRef.current += 1;
     createPresentation(learningSessionId, {
-      lessonVersionSlideId: activeIsQuiz ? null : slides[currentSlide]?.id ?? null,
-      surface: activeIsQuiz ? "quiz" : "lesson",
+      slideId: slide?.id ?? null,
+      surface,
       sequenceNo,
     })
       .then((presentation) => {
+        if (!presentationRequestRef.current.isActive(token)) return;
+        activePresentationKeyRef.current = nextKey;
         presentationIdRef.current = presentation.id;
         setPresentationId(presentation.id);
       })
       .catch(() => {
+        if (!presentationRequestRef.current.isActive(token)) return;
+        activePresentationKeyRef.current = null;
         presentationIdRef.current = null;
         setPresentationId(null);
       });
@@ -356,8 +422,19 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     activeIsQuiz,
     currentSlide,
     slides,
-    flushGazeForLesson,
+    flushPendingGaze,
   ]);
+
+  // Chặn response presentation đến sau khi component đã unmount.
+  useEffect(
+    () => () => {
+      presentationRequestRef.current.invalidate();
+      activePresentationKeyRef.current = null;
+      presentationIdRef.current = null;
+      aoiReadyRef.current = false;
+    },
+    [],
+  );
 
   // Đo layout DOM và tạo snapshot AOI. Tạm dừng ghi gaze trong lúc đo để
   // sample không bị gán sang layout mới.
@@ -369,13 +446,30 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     ),
     layoutKey,
     onBeforeSnapshot: pauseAndFlushGaze,
+    requireImageTransform: !activeIsQuiz && total > 0,
   });
 
   useEffect(() => {
+    if (
+      !presentationId ||
+      presentationIdRef.current !== presentationId ||
+      aoiSnapshot.presentationId !== presentationId
+    ) {
+      aoiSnapshotIdRef.current = null;
+      aoiReadyRef.current = false;
+      layoutGenerationRef.current = 0;
+      return;
+    }
     aoiSnapshotIdRef.current = aoiSnapshot.snapshotId;
     aoiReadyRef.current = aoiSnapshot.ready;
     layoutGenerationRef.current = aoiSnapshot.layoutGeneration;
-  }, [aoiSnapshot.snapshotId, aoiSnapshot.ready, aoiSnapshot.layoutGeneration]);
+  }, [
+    presentationId,
+    aoiSnapshot.snapshotId,
+    aoiSnapshot.presentationId,
+    aoiSnapshot.ready,
+    aoiSnapshot.layoutGeneration,
+  ]);
 
   const enqueueGaze = useCallback(
     (sample: GazeSample) => {
@@ -408,8 +502,10 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     calibrated: gazeCalibrated,
     allowSimulation: false,
     getContext: () => ({
-      presentationId: presentationIdRef.current,
-      layoutGeneration: layoutGenerationRef.current,
+      // Chỉ gắn presentation/layout khi snapshot AOI đã sẵn sàng; frame gửi
+      // trong lúc đo layout sẽ có presentationId=null và bị ingest bỏ.
+      presentationId: aoiReadyRef.current ? presentationIdRef.current : null,
+      layoutGeneration: aoiReadyRef.current ? layoutGenerationRef.current : 0,
       surface: activeIsQuiz ? "quiz" : "lesson",
     }),
     onPoint: useCallback(
@@ -426,20 +522,60 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     onFrame: useCallback(
       (frame: GazeFrameResult) => {
         if (!learningSessionId || !trackingAllowed) return;
-        if (!aoiReadyRef.current || !presentationIdRef.current) return;
+        const activePresentationId = presentationIdRef.current;
+        const activeKey = activePresentationKeyRef.current;
+        if (!activePresentationId || !activeKey || !aoiReadyRef.current) return;
+
+        const surface = activeIsQuiz ? "quiz" : "lesson";
+        const slide = activeIsQuiz ? null : slides[currentSlide] ?? null;
+        const expectedKey = presentationContextKey({
+          sessionId: learningSessionId,
+          lessonId: activeLessonId,
+          surface,
+          slideId: slide?.id ?? null,
+          slideIndex: currentSlide,
+        });
+        // Context React hiện tại phải trùng presentation đã resolve; nếu
+        // presentationId mới chưa về thì mọi frame đều bị bỏ.
+        if (expectedKey !== activeKey) return;
+        if (
+          !isFrameForActiveContext(frame, {
+            presentationId: activePresentationId,
+            layoutGeneration: layoutGenerationRef.current,
+            surface,
+          })
+        ) {
+          return;
+        }
+        if (!isValidGazeSequence(frame.sequence)) return;
+
         const faceDetected = frame.status === "ok";
+        if (faceDetected && (frame.x === null || frame.y === null)) return;
         enqueueGaze({
-          sequence: frame.sequence ?? 0,
+          sequence: frame.sequence,
           captureMonotonicNs:
             frame.captureMonotonicNs ?? Math.round(performance.now() * 1e6),
           eventTime: frame.eventTime,
-          viewportX: faceDetected ? frame.x : null,
-          viewportY: faceDetected ? frame.y : null,
+          // viewportX/Y: vị trí trong viewport hiện tại (để hiển thị/legacy).
+          // originalViewportX/Y: vị trí trong viewport gốc lúc calibration
+          // (nguồn sự thật cho mapping AOI).
+          viewportX: faceDetected ? frame.currentX : null,
+          viewportY: faceDetected ? frame.currentY : null,
+          originalViewportX: faceDetected ? frame.x : null,
+          originalViewportY: faceDetected ? frame.y : null,
           status: frame.status,
           qualityFlags: {},
         });
       },
-      [learningSessionId, trackingAllowed, enqueueGaze],
+      [
+        learningSessionId,
+        trackingAllowed,
+        enqueueGaze,
+        activeLessonId,
+        activeIsQuiz,
+        currentSlide,
+        slides,
+      ],
     ),
   });
 
@@ -447,10 +583,10 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowRight") {
-        setCurrentSlide((value) => Math.min(Math.max(total - 1, 0), value + 1));
+        setCurrentSlide((value) => getNextSlideIndex(value, total));
       }
       if (event.key === "ArrowLeft") {
-        setCurrentSlide((value) => Math.max(0, value - 1));
+        setCurrentSlide((value) => getPreviousSlideIndex(value));
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -510,6 +646,14 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     [activeLessonId, allItems, selectLesson, slides],
   );
 
+  const goToPreviousSlide = useCallback(() => {
+    setCurrentSlide((value) => getPreviousSlideIndex(value));
+  }, []);
+
+  const goToNextSlide = useCallback(() => {
+    setCurrentSlide((value) => getNextSlideIndex(value, total));
+  }, [total]);
+
   if (courseLoading) {
     return <ReaderLoading />;
   }
@@ -518,80 +662,39 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     return <ReaderError onRetry={() => refetch()} />;
   }
 
-  const quizContent = activeQuizId ? (
-    <LazyInlineQuiz
-      quizId={activeQuizId}
-      onNext={nextLesson ? () => selectLesson(nextLesson.id) : undefined}
-      hasNext={Boolean(nextLesson)}
-    />
-  ) : (
-    <p className="p-8 text-center text-sm text-muted-foreground">
-      Bài tập chưa sẵn sàng.
-    </p>
-  );
-
   return (
-    <>
-      <ReaderFrame
-        courseTitle={course.title}
-        modules={course.modules}
-        activeLessonId={activeLessonId}
-        activeLesson={activeLesson ?? null}
-        activeModule={activeModule ?? null}
-        slides={slides}
-        currentSlide={currentSlide}
-        activeIsQuiz={activeIsQuiz}
-        chatOpen={chatOpen}
-        chatAllowed={chatAllowed}
-        chatButtonRef={assistantButtonRef}
-        chatReason={
-          chatAccess.data?.reason ??
-          (chatAccess.isError ? "Không kiểm tra được quyền dùng chatbot" : null)
-        }
-        onToggleChat={toggleChat}
-        onSelectLesson={selectLesson}
-        onPrevSlide={() => setCurrentSlide((value) => Math.max(0, value - 1))}
-        onNextSlide={() =>
-          setCurrentSlide((value) => Math.min(Math.max(total - 1, 0), value + 1))
-        }
-        gazeSource={gazeSource}
-        calibrationRequired={calibrationRequired}
-        banners={
-          <ReaderBanners
-            courseId={courseId}
-            activeLessonId={activeLessonId}
-            calibrationRequired={calibrationRequired}
-            gazeSource={gazeSource}
-            hasContent={total > 0 || activeIsQuiz}
-          />
-        }
-        slideContent={
-          <ReaderSlideContent
-            slidesLoading={slidesLoading}
-            slidePdfUrl={slidePdfUrl}
-            currentContent={currentContent}
-          />
-        }
-        quizContent={quizContent}
-        chatPanel={
-          <LazyStudyAssistantChat
-            courseId={courseId}
-            open={chatOpen}
-            onClose={closeChat}
-            onCitationNavigate={handleCitationNavigate}
-          />
-        }
-        className="h-dvh"
-      />
-
-      {showGazeDot && isGazeDotVisible(gazeDot, activeLessonId, currentSlide) && (
-        <div className="pointer-events-none fixed inset-0 z-30">
-          <span
-            className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black shadow-[0_1px_5px_rgba(0,0,0,0.2)]"
-            style={{ left: `${gazeDot.x * 100}%`, top: `${gazeDot.y * 100}%` }}
-          />
-        </div>
-      )}
-    </>
+    <ReaderView
+      courseId={courseId}
+      courseTitle={course.title}
+      modules={course.modules}
+      activeLessonId={activeLessonId}
+      activeLesson={activeLesson ?? null}
+      activeModule={activeModule ?? null}
+      slides={slides}
+      currentSlide={currentSlide}
+      activeIsQuiz={activeIsQuiz}
+      quizId={activeQuizId}
+      nextLesson={nextLesson}
+      slidesLoading={slidesLoading}
+      slidePdfUrl={slidePdfUrl}
+      currentContent={currentContent}
+      chatOpen={chatOpen}
+      chatAllowed={chatAllowed}
+      chatReason={
+        chatAccess.data?.reason ??
+        (chatAccess.isError ? "Không kiểm tra được quyền dùng chatbot" : null)
+      }
+      chatButtonRef={assistantButtonRef}
+      onToggleChat={toggleChat}
+      onCloseChat={closeChat}
+      onSelectLesson={selectLesson}
+      onPrevSlide={goToPreviousSlide}
+      onNextSlide={goToNextSlide}
+      onCitationNavigate={handleCitationNavigate}
+      gazeSource={gazeSource}
+      calibrationRequired={calibrationRequired}
+      showGazeDot={showGazeDot}
+      gazeDot={gazeDot}
+    />
   );
 }

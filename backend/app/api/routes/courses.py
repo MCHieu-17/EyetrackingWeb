@@ -17,10 +17,8 @@ from app.core.rediscache import delete as cache_delete
 from app.core.rediscache import get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import (
-    Enrollment,
-)
-from app.models.profile import StudentProfile, UserProfile
+from app.models.course import Enrollment
+from app.models.profile import StudentProfile
 from app.schemas.course import (
     CourseCreateIn,
     CourseGazeDotIn,
@@ -28,7 +26,6 @@ from app.schemas.course import (
     CourseRequireCalibrationIn,
     CourseUpdateIn,
     ModuleNodeOut,
-    PublishIn,
     StudentDirectoryOut,
     StudentRowOut,
     StudentsAddIn,
@@ -93,12 +90,10 @@ async def create_course(
     )
     await db.commit()
     await db.refresh(course)
-    draft = await content.get_draft_version(db, course, user)
-    assert draft is not None
     return TeacherCourseOut(
         id=course.id,
-        title=draft.title,
-        description=draft.description or "",
+        title=course.title,
+        description=course.description or "",
         gradient="",
         status="draft",
         students=0,
@@ -121,7 +116,7 @@ async def update_course(
 ):
     course = await get_owned_course(db, course_id, user)
     data = body.model_dump(exclude_unset=True)
-    draft = await content.update_course_metadata(
+    await content.update_course_metadata(
         db,
         course,
         user,
@@ -129,25 +124,18 @@ async def update_course(
         description=data.get("description"),
         show_gaze_dot=data.get("show_gaze_dot"),
         require_calibration=data.get("require_calibration"),
-        archived=(data.get("status") == "archived") if data.get("status") else None,
+        status=data.get("status"),
     )
     await db.commit()
     await db.refresh(course)
     if data.get("require_calibration") is not None:
         await _invalidate_enrollment_cache(db, course.id)
-    published = await content.get_published_version(db, course)
     return TeacherCourseOut(
         id=course.id,
-        title=(published or draft).title,
-        description=(published or draft).description or "",
+        title=course.title,
+        description=course.description or "",
         gradient="",
-        status=(
-            "archived"
-            if course.archived_at is not None
-            else "published"
-            if published is not None
-            else "draft"
-        ),
+        status=course.status,
         students=0,
         attention=None,
         sessions=0,
@@ -211,10 +199,7 @@ async def get_course_tree(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
-    tree = await content.get_draft_tree(db, course, user)
-    # get_draft_tree có thể tạo draft version mới; commit để request sau dùng lại.
-    await db.commit()
-    return tree
+    return await content.get_course_tree(db, course, user)
 
 
 @router.get("/teacher/courses/{course_id}/draft", response_model=list[ModuleNodeOut])
@@ -224,30 +209,23 @@ async def get_course_draft(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_viewable_course(db, course_id, user)
-    tree = await content.get_draft_tree(db, course, user)
-    await db.commit()
-    return tree
+    return await content.get_course_tree(db, course, user)
 
 
 @router.post("/teacher/courses/{course_id}/publish")
 async def publish_course(
     course_id: str,
-    body: PublishIn,
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_owned_course(db, course_id, user)
-    draft = await content.get_draft_version(db, course, user)
-    assert draft is not None
 
     # Chặn xuất bản khi còn slide chưa index xong cho trợ lý học tập. Đồng thời
     # đưa các slide còn thiếu vào hàng đợi để lần bấm sau thành công.
-    stats = await embedding.course_version_ingest_status_in_session(db, draft.id)
+    stats = await embedding.course_ingest_status_in_session(db, course.id)
     if stats["total"] and stats["ready"] < stats["total"]:
-        await embedding.mark_course_version_pending_in_session(db, draft.id)
-        await embedding_jobs.enqueue_course_version(
-            db, draft.id, include_draft=True, force=True
-        )
+        await embedding.mark_course_pending_in_session(db, course.id)
+        await embedding_jobs.enqueue_course_index(db, course.id, force=True)
         await db.commit()
         remaining = stats["total"] - stats["ready"]
         # Không dùng `raise HTTPException` ở đây: response 409 vẫn phải giữ
@@ -265,17 +243,9 @@ async def publish_course(
             },
         )
 
-    version = await content.publish_course(
-        db, course, user, body.expected_generation
-    )
+    await content.publish_course(db, course, user)
     await db.commit()
-    # Lưới an toàn: sau khi publish, index nốt slide nào còn thiếu (thường không
-    # còn vì đã chặn ở trên).
-    await embedding_jobs.enqueue_course_version(
-        db, version.id, include_draft=False, force=True
-    )
-    await db.commit()
-    return {"ok": True, "courseVersionId": version.id}
+    return {"ok": True}
 
 
 @router.get("/teacher/courses/{course_id}/students", response_model=list[StudentRowOut])
@@ -295,15 +265,14 @@ async def list_student_directory(
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
-        select(User, UserProfile, StudentProfile)
-        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        select(User, StudentProfile)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
         .where(
             User.deleted_at.is_(None),
             User.status == "active",
-            User.roles.any(code="student"),
+            User.role == "student",
         )
-        .order_by(UserProfile.full_name)
+        .order_by(User.full_name)
         .limit(200)
     )
     if q and q.strip():
@@ -311,7 +280,7 @@ async def list_student_directory(
         like = f"%{esc}%"
         stmt = stmt.where(
             or_(
-                UserProfile.full_name.ilike(like, escape="\\"),
+                User.full_name.ilike(like, escape="\\"),
                 StudentProfile.student_code.ilike(like, escape="\\"),
                 User.email.ilike(like, escape="\\"),
             )
@@ -320,12 +289,12 @@ async def list_student_directory(
     return [
         StudentDirectoryOut(
             id=u.id,
-            name=p.full_name if p else u.email,
+            name=u.full_name or u.email,
             code=sp.student_code if sp else "",
             email=u.email,
             color=color_for(u.id),
         )
-        for u, p, sp in rows
+        for u, sp in rows
     ]
 
 
@@ -345,7 +314,7 @@ async def add_course_students(
         User.id.in_(ids),
         User.deleted_at.is_(None),
         User.status == "active",
-        User.roles.any(code="student"),
+        User.role == "student",
     )
     valid_ids = set((await db.execute(valid_stmt)).scalars().all())
 
@@ -412,13 +381,11 @@ async def get_course_outline(
     is_owner = await can_access_course(db, course, user)
     if not is_owner and enrolled is None:
         # Khóa đã publish được phép xem outline để sinh viên quyết định đăng ký.
-        if course.published_version_id is None or course.archived_at is not None:
+        if course.status != "published":
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
-    # Outline chỉ đổi khi publish version hoặc metadata khóa học đổi; khóa cache
-    # gồm cả hai nên không cần xóa thủ công.
     cache_key = (
-        f"course:outline:{course.id}:{course.published_version_id}:"
+        f"course:outline:{course.id}:{course.status}:"
         f"{course.updated_at.isoformat() if course.updated_at else ''}"
     )
     cached = await get_json(cache_key)

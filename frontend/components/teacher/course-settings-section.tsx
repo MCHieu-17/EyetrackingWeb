@@ -7,7 +7,7 @@ import { CourseCalibrationToggle } from "@/components/teacher/calibration-toggle
 import { CourseGazeDotToggle } from "@/components/teacher/gaze-dot-toggle";
 import { useTeacherCourses } from "@/hooks/use-teacher";
 import { setCourseGazeDot, setCourseRequireCalibration } from "@/lib/api/teacher";
-import type { TeacherCourse } from "@/lib/types/domain";
+import { updateCourseFlag } from "./course-settings-cache";
 
 /**
  * Khối "Thiết lập khóa học" nằm trong tab Thông tin.
@@ -40,61 +40,53 @@ export function CourseSettingsSection({
   }
 
   const toggle = async (value: boolean) => {
-    const key = ["teacher", "courses"];
-    const previous = queryClient.getQueryData<TeacherCourse[]>(key);
     setShowGazeDot(value);
     setBusy(true);
     setMessage(null);
-    queryClient.setQueryData<TeacherCourse[]>(key, (list) =>
-      list?.map((item) => (item.id === courseId ? { ...item, showGazeDot: value } : item)),
+    const error = await updateCourseFlag({
+      queryClient,
+      courseId,
+      field: "showGazeDot",
+      value,
+      request: () => setCourseGazeDot(courseId, value),
+    });
+    if (error) setShowGazeDot(!value);
+    setMessage(
+      error
+        ? { tone: "err", text: `Không đổi được thiết lập: ${error}` }
+        : {
+            tone: "ok",
+            text: value
+              ? "Đã bật chấm điểm nhìn cho sinh viên."
+              : "Đã tắt chấm điểm nhìn.",
+          },
     );
-    try {
-      await setCourseGazeDot(courseId, value);
-      setMessage({
-        tone: "ok",
-        text: value ? "Đã bật chấm điểm nhìn cho sinh viên." : "Đã tắt chấm điểm nhìn.",
-      });
-    } catch (error) {
-      setShowGazeDot(!value);
-      if (previous) queryClient.setQueryData(key, previous);
-      setMessage({
-        tone: "err",
-        text: `Không đổi được thiết lập: ${error instanceof Error ? error.message : "lỗi không xác định"}`,
-      });
-    } finally {
-      setBusy(false);
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-    }
+    setBusy(false);
   };
 
   const toggleCalibration = async (value: boolean) => {
-    const key = ["teacher", "courses"];
-    const previous = queryClient.getQueryData<TeacherCourse[]>(key);
     setRequireCalibration(value);
     setCalibrationBusy(true);
     setMessage(null);
-    queryClient.setQueryData<TeacherCourse[]>(key, (list) =>
-      list?.map((item) =>
-        item.id === courseId ? { ...item, requireCalibration: value } : item,
-      ),
+    const error = await updateCourseFlag({
+      queryClient,
+      courseId,
+      field: "requireCalibration",
+      value,
+      request: () => setCourseRequireCalibration(courseId, value),
+    });
+    if (error) setRequireCalibration(!value);
+    setMessage(
+      error
+        ? { tone: "err", text: `Không đổi được thiết lập: ${error}` }
+        : {
+            tone: "ok",
+            text: value
+              ? "Đã bật bắt buộc hiệu chỉnh."
+              : "Đã tắt bắt buộc hiệu chỉnh.",
+          },
     );
-    try {
-      await setCourseRequireCalibration(courseId, value);
-      setMessage({
-        tone: "ok",
-        text: value ? "Đã bật bắt buộc hiệu chỉnh." : "Đã tắt bắt buộc hiệu chỉnh.",
-      });
-    } catch (error) {
-      setRequireCalibration(!value);
-      if (previous) queryClient.setQueryData(key, previous);
-      setMessage({
-        tone: "err",
-        text: `Không đổi được thiết lập: ${error instanceof Error ? error.message : "lỗi không xác định"}`,
-      });
-    } finally {
-      setCalibrationBusy(false);
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-    }
+    setCalibrationBusy(false);
   };
 
   return (

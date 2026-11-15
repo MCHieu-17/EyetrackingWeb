@@ -34,47 +34,62 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
 log "chạy migrations"
 docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 
-log "kiểm tra schema"
-count="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
-    "SELECT count(*) FROM schema_migrations;")"
-[ "$count" = "1" ] || { echo "expected 1 migration, got $count" >&2; exit 1; }
+log "kiểm tra migration đã áp khớp file nguồn"
+expected_migrations="$(
+    cd "$ROOT_DIR/db/migrations"
+    for file in *.sql; do
+        printf '%s|%s\n' "$file" "$(sha256sum "$file" | cut -d' ' -f1)"
+    done | sort
+)"
+actual_migrations="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT filename || '|' || checksum FROM schema_migrations ORDER BY filename;")"
+[ "$actual_migrations" = "$expected_migrations" ] || {
+    echo "applied migrations/checksums do not match db/migrations" >&2
+    printf 'expected:\n%s\nactual:\n%s\n' "$expected_migrations" "$actual_migrations" >&2
+    exit 1
+}
 
+log "kiểm tra chạy lại migration là idempotent"
+docker compose run --rm -e PGDATABASE="$TEST_DB" migrate >/dev/null
+after_rerun="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT filename || '|' || checksum FROM schema_migrations ORDER BY filename;")"
+[ "$after_rerun" = "$actual_migrations" ] || {
+    echo "migration rerun changed schema_migrations" >&2
+    exit 1
+}
+
+log "kiểm tra schema generation 12"
 generation="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT value FROM app_metadata WHERE key = 'schema_generation';")"
-[ "$generation" = "8" ] || { echo "expected schema_generation=8, got $generation" >&2; exit 1; }
+[ "$generation" = "12" ] || { echo "expected schema_generation=12, got $generation" >&2; exit 1; }
 
-identity_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
-    "SELECT to_regclass('public.user_identities');")"
-[ "$identity_table" = "user_identities" ] || {
-    echo "user_identities missing (got $identity_table)" >&2
-    exit 1
-}
-
-embedding_jobs_table="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
-    "SELECT to_regclass('public.embedding_jobs');")"
-[ "$embedding_jobs_table" = "embedding_jobs" ] || {
-    echo "embedding_jobs missing (got $embedding_jobs_table)" >&2
-    exit 1
-}
-
-dropped_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+core_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
-       AND tablename = 'content_audit_events';")"
-[ "$dropped_tables" = "0" ] || {
-    echo "dead tables still present (got $dropped_tables)" >&2
+       AND tablename <> 'schema_migrations';")"
+[ "$core_tables" = "24" ] || {
+    echo "expected 24 core tables, got $core_tables" >&2
     exit 1
 }
 
-dropped_columns="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
-    "SELECT count(*) FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND ((table_name = 'users' AND column_name IN ('must_change_password', 'updated_at'))
-          OR (table_name = 'course_versions' AND column_name = 'thumbnail_asset_id')
-          OR (table_name = 'media_assets' AND column_name IN ('image_width', 'image_height', 'kind'))
-          OR (table_name = 'learning_sessions' AND column_name = 'clock_uncertainty_ms')
-          OR (table_name = 'analysis_runs' AND column_name IN ('config', 'error')));")"
-[ "$dropped_columns" = "0" ] || {
-    echo "dead columns still present (got $dropped_columns)" >&2
+for table in oauth_accounts background_jobs aois content_views view_layouts slides; do
+    exists="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+        "SELECT to_regclass('public.$table');")"
+    [ "$exists" = "$table" ] || {
+        echo "$table missing (got $exists)" >&2
+        exit 1
+    }
+done
+
+legacy_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+    "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
+       AND tablename IN (
+         'course_versions', 'lesson_versions', 'slide_versions',
+         'course_version_items', 'lesson_version_slides', 'quiz_specs',
+         'gaze_batches', 'aoi_sets', 'aoi_hits', 'analysis_runs',
+         'presentation_metrics', 'slide_documents'
+       );")"
+[ "$legacy_tables" = "0" ] || {
+    echo "legacy versioning/analysis tables still present (got $legacy_tables)" >&2
     exit 1
 }
 

@@ -7,6 +7,12 @@ import {
   getStoredGazeSessionId,
 } from "@/lib/api/calibration";
 import { transformGazePoint } from "@/lib/calibration-geometry";
+import {
+  parseGazeFrameResponse,
+  type GazeFrameResult,
+} from "@/lib/gaze/frame-protocol";
+
+export type { GazeFrameResult } from "@/lib/gaze/frame-protocol";
 
 type GazeSource = "real" | "simulated" | "off";
 
@@ -14,16 +20,6 @@ interface GazeFrameContext {
   presentationId: string | null;
   layoutGeneration: number;
   surface: "lesson" | "quiz";
-}
-
-export interface GazeFrameResult {
-  frameId: string | null;
-  sequence: number | null;
-  captureMonotonicNs: number | null;
-  eventTime: string;
-  x: number | null;
-  y: number | null;
-  status: "ok" | "no_face" | "error" | "offscreen";
 }
 
 interface UseGazeTrackerOptions {
@@ -44,10 +40,6 @@ const FPS = 12;
 const FRAME_INTERVAL_MS = 1000 / FPS;
 const MAX_RECONNECTS = 5;
 const MAX_BUFFERED_BYTES = 1024 * 1024;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 /**
  * Quy đổi toạ độ gaze từ viewport lúc calibration sang viewport hiện tại.
@@ -109,12 +101,68 @@ export function useGazeTracker({
     let disposed = false;
     let simTimer = 0;
     let streamCleanup: (() => void) | null = null;
+    let activeWs: WebSocket | null = null;
+    let finishActiveWs: ((result: "retry" | "abort") => void) | null = null;
+    let delayTimer = 0;
+    let wakeDelay: (() => void) | null = null;
+
+    const clearDelayWait = () => {
+      if (delayTimer) {
+        window.clearTimeout(delayTimer);
+        delayTimer = 0;
+      }
+      const wake = wakeDelay;
+      wakeDelay = null;
+      wake?.();
+    };
+
+    const waitForDelay = (ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        if (disposed) {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (delayTimer) {
+            window.clearTimeout(delayTimer);
+            delayTimer = 0;
+          }
+          wakeDelay = null;
+          resolve();
+        };
+        delayTimer = window.setTimeout(finish, ms);
+        wakeDelay = finish;
+      });
+
+    const closeActiveSocket = () => {
+      const ws = activeWs;
+      activeWs = null;
+      const finish = finishActiveWs;
+      finishActiveWs = null;
+      finish?.("abort");
+
+      if (!ws) return;
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
 
     const startSimulation = () => {
+      if (disposed) return;
       if (!allowSimulation) {
         setSource("off");
         return;
       }
+      window.clearInterval(simTimer);
       simTimer = window.setInterval(() => {
         const x = 0.12 + Math.random() * 0.76;
         const y = 0.14 + Math.random() * 0.68;
@@ -123,7 +171,9 @@ export function useGazeTracker({
       setSource("simulated");
     };
 
-    const captureFrame = async (video: HTMLVideoElement): Promise<Blob | null> => {
+    const captureFrame = async (
+      video: HTMLVideoElement,
+    ): Promise<Blob | null> => {
       if (video.videoWidth === 0 || video.videoHeight === 0) return null;
       const scale = Math.min(1, 480 / video.videoWidth);
       const width = Math.round(video.videoWidth * scale);
@@ -138,42 +188,83 @@ export function useGazeTracker({
       const context = canvas.getContext("2d");
       if (!context) return null;
       context.drawImage(video, 0, 0, width, height);
-      return new Promise((resolve) => canvas!.toBlob(resolve, "image/jpeg", 0.78));
+      return new Promise((resolve) =>
+        canvas!.toBlob(resolve, "image/jpeg", 0.78),
+      );
     };
 
-    const runWsSession = async (
+    const runWsSession = (
       video: HTMLVideoElement,
       url: string,
-    ): Promise<"retry" | "abort"> => {
-      return new Promise<"retry" | "abort">((resolve) => {
-        const ws = new WebSocket(url);
+      sequenceState: { value: number },
+    ): Promise<"retry" | "abort"> =>
+      new Promise<"retry" | "abort">((resolve) => {
+        if (disposed) {
+          resolve("abort");
+          return;
+        }
+
+        let ws: WebSocket;
+        try {
+          ws = new WebSocket(url);
+        } catch {
+          resolve("retry");
+          return;
+        }
+
+        activeWs = ws;
+        let settled = false;
         let sendTimer = 0;
-        let sequence = 0;
+
+        const finish = (result: "retry" | "abort") => {
+          if (settled) return;
+          settled = true;
+          if (sendTimer) {
+            window.clearTimeout(sendTimer);
+            sendTimer = 0;
+          }
+          if (activeWs === ws) activeWs = null;
+          if (finishActiveWs === finish) finishActiveWs = null;
+          resolve(result);
+        };
+        finishActiveWs = finish;
 
         const scheduleSend = () => {
-          if (disposed) {
-            resolve("abort");
+          if (disposed || settled) {
+            if (disposed) finish("abort");
             return;
           }
           sendTimer = window.setTimeout(async () => {
-            if (disposed || ws.readyState !== WebSocket.OPEN) return;
+            sendTimer = 0;
+            if (disposed || settled) {
+              if (disposed) finish("abort");
+              return;
+            }
+            if (ws.readyState !== WebSocket.OPEN) return;
             // Backpressure: bỏ frame nếu socket còn tồn đọng quá nhiều dữ liệu.
             if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
               scheduleSend();
               return;
             }
+
+            // Lấy context trước khi capture để header khớp thời điểm frame.
+            const context = getContextRef.current?.() ?? null;
             const blob = await captureFrame(video);
+            if (disposed || settled) {
+              if (disposed) finish("abort");
+              return;
+            }
+
             if (blob && ws.readyState === WebSocket.OPEN) {
-              const context = getContextRef.current?.() ?? null;
               const frameId =
                 globalThis.crypto?.randomUUID?.() ??
-                `frame-${Date.now()}-${sequence}`;
+                `frame-${Date.now()}-${sequenceState.value}`;
               const captureMonotonicNs = Math.round(performance.now() * 1e6);
               const eventTime = new Date().toISOString();
               const header = {
                 v: 2,
                 frameId,
-                sequence,
+                sequence: sequenceState.value,
                 captureMonotonicNs,
                 eventTime,
                 presentationId: context?.presentationId ?? null,
@@ -183,21 +274,40 @@ export function useGazeTracker({
                 viewportHeight: window.innerHeight,
                 dpr: window.devicePixelRatio || 1,
               };
-              const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+              const headerBytes = new TextEncoder().encode(
+                JSON.stringify(header),
+              );
               const jpegBytes = new Uint8Array(await blob.arrayBuffer());
-              const frame = new Uint8Array(4 + headerBytes.length + jpegBytes.length);
+              if (disposed || settled) {
+                if (disposed) finish("abort");
+                return;
+              }
+              const frame = new Uint8Array(
+                4 + headerBytes.length + jpegBytes.length,
+              );
               new DataView(frame.buffer).setUint32(0, headerBytes.length);
               frame.set(headerBytes, 4);
               frame.set(jpegBytes, 4 + headerBytes.length);
-              ws.send(frame);
-              sequence += 1;
+              try {
+                ws.send(frame);
+                sequenceState.value += 1;
+              } catch {
+                finish(disposed ? "abort" : "retry");
+                try {
+                  ws.close();
+                } catch {
+                  /* ignore */
+                }
+                return;
+              }
             }
             scheduleSend();
           }, FRAME_INTERVAL_MS);
         };
 
         ws.onopen = () => {
-          if (disposed) {
+          if (disposed || settled) {
+            finish("abort");
             try {
               ws.close();
             } catch {
@@ -209,62 +319,54 @@ export function useGazeTracker({
         };
 
         ws.onmessage = (event: MessageEvent) => {
+          if (disposed || settled) return;
+          const frame = parseGazeFrameResponse(
+            event.data,
+            new Date().toISOString(),
+          );
+          if (!frame) return;
+
+          let currentX: number | null = null;
+          let currentY: number | null = null;
+          if (
+            frame.status === "ok" &&
+            frame.x !== null &&
+            frame.y !== null
+          ) {
+            const point = transformGazeToViewport(frame.x, frame.y);
+            currentX = point.x;
+            currentY = point.y;
+            if (disposed) return;
+            onPointRef.current(point.x, point.y, "real");
+          } else if (frame.status === "no_face") {
+            onPointRef.current(-1, -1, "real");
+          }
+          if (disposed) return;
+          onFrameRef.current?.({ ...frame, currentX, currentY });
+        };
+
+        ws.onclose = () => {
+          finish(disposed ? "abort" : "retry");
+        };
+
+        ws.onerror = () => {
+          finish(disposed ? "abort" : "retry");
           try {
-            const data = JSON.parse(String(event.data)) as {
-              ok?: boolean;
-              error?: string;
-              status?: string;
-              x?: number;
-              y?: number;
-              frameId?: string;
-              sequence?: number;
-              captureMonotonicNs?: number;
-            };
-            const status =
-              data.status === "no_face" || data.error === "no_face"
-                ? "no_face"
-                : data.ok && typeof data.x === "number" && typeof data.y === "number"
-                  ? "ok"
-                  : "error";
-            const point =
-              status === "ok"
-                ? transformGazeToViewport(data.x as number, data.y as number)
-                : null;
-            if (point) {
-              onPointRef.current(point.x, point.y, "real");
-            } else if (status === "no_face") {
-              onPointRef.current(-1, -1, "real");
-            }
-            onFrameRef.current?.({
-              frameId: data.frameId ?? null,
-              sequence: data.sequence ?? null,
-              captureMonotonicNs: data.captureMonotonicNs ?? null,
-              eventTime: new Date().toISOString(),
-              x: point?.x ?? null,
-              y: point?.y ?? null,
-              status,
-            });
+            ws.close();
           } catch {
             /* ignore */
           }
         };
-
-        ws.onclose = () => {
-          window.clearTimeout(sendTimer);
-          resolve(disposed ? "abort" : "retry");
-        };
-
-        ws.onerror = () => {
-          window.clearTimeout(sendTimer);
-          if (!disposed) resolve("retry");
-        };
       });
-    };
 
     const run = async () => {
       try {
         const media = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: "user",
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
           audio: false,
         });
         if (disposed) {
@@ -281,12 +383,17 @@ export function useGazeTracker({
         await video.play().catch(() => undefined);
 
         const startedAt = Date.now();
-        while (!disposed && video.videoWidth === 0 && Date.now() - startedAt < 4000) {
-          await sleep(100);
+        while (
+          !disposed &&
+          video.videoWidth === 0 &&
+          Date.now() - startedAt < 4000
+        ) {
+          await waitForDelay(100);
         }
         if (disposed) return;
         if (video.videoWidth === 0) {
           streamCleanup?.();
+          streamCleanup = null;
           setStream(null);
           startSimulation();
           return;
@@ -296,56 +403,70 @@ export function useGazeTracker({
         if (disposed) return;
         if (!sessionId) {
           streamCleanup?.();
+          streamCleanup = null;
           setStream(null);
           startSimulation();
           return;
         }
 
+        // Sequence phải tăng liên tục trong một presentation, kể cả khi
+        // WebSocket reconnect để batch không bị đảo thứ tự.
+        const sequenceState = { value: 0 };
         let attempts = 0;
         while (!disposed && attempts < MAX_RECONNECTS) {
-          const result = await runWsSession(video, gazeStreamUrl(sessionId));
+          const result = await runWsSession(
+            video,
+            gazeStreamUrl(sessionId),
+            sequenceState,
+          );
           if (result === "abort") return;
           attempts += 1;
           if (attempts >= MAX_RECONNECTS) break;
-          await sleep(Math.min(5000, 500 * 1.5 ** attempts));
+          await waitForDelay(Math.min(5000, 500 * 1.5 ** attempts));
+          if (disposed) return;
         }
         if (!disposed) {
           streamCleanup?.();
+          streamCleanup = null;
           setStream(null);
           startSimulation();
         }
       } catch {
         if (!disposed) {
           streamCleanup?.();
+          streamCleanup = null;
           setStream(null);
           startSimulation();
         }
       }
     };
 
-    if (!enabled) return;
+    const cleanup = () => {
+      disposed = true;
+      window.clearInterval(simTimer);
+      simTimer = 0;
+      clearDelayWait();
+      closeActiveSocket();
+      streamCleanup?.();
+      streamCleanup = null;
+      setStream(null);
+      setSource("off");
+    };
+
+    if (!enabled) {
+      return;
+    }
 
     if (!calibrated) {
       startSimulation();
-      return () => {
-        disposed = true;
-        window.clearInterval(simTimer);
-        streamCleanup?.();
-      };
+      return cleanup;
     }
 
-    const runStart = () => {
-      queueMicrotask(() => {
-        if (!disposed) setSource("real");
-      });
-      void run();
-    };
-    runStart();
-    return () => {
-      disposed = true;
-      window.clearInterval(simTimer);
-      streamCleanup?.();
-    };
+    queueMicrotask(() => {
+      if (!disposed) setSource("real");
+    });
+    void run();
+    return cleanup;
   }, [enabled, calibrated, allowSimulation]);
 
   return { stream, source };

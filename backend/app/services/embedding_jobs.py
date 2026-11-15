@@ -1,28 +1,25 @@
-"""Hàng đợi job đồng bộ embedding (RAG ingest) trong PostgreSQL.
-
-API chỉ ghi job vào `embedding_jobs`; worker riêng (`app.embedding_worker`)
-claim và gọi `app.services.embedding.sync_*`. Nhờ vậy job sống sót qua
-restart và nhiều backend replica dùng chung một hàng đợi.
-"""
+"""Hàng đợi index RAG dùng chung bảng `background_jobs`."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.embedding_job import EmbeddingJob
+from app.models.background_job import BackgroundJob
 from app.services import embedding
+from app.services.job_queue import claim_next_jobs
+from app.services.job_queue import recover_stale_jobs as recover_stale_kind
 
 logger = logging.getLogger(__name__)
 
-COURSE_VERSION = "course_version"
-LESSON_VERSION = "lesson_version"
-ACTIVE_STATUSES = ("pending", "running")
+INDEX_KIND = "index_slides"
+ANALYZE_KIND = "analyze_lesson"
+ACTIVE_STATUSES = ("queued", "processing")
 
 
 def _now() -> datetime:
@@ -30,129 +27,88 @@ def _now() -> datetime:
 
 
 async def _enqueue(
-    db: AsyncSession,
-    *,
-    kind: str,
-    target_id: str,
-    include_draft: bool,
-    force: bool,
-) -> EmbeddingJob:
-    """Trả job pending/running trùng cấu hình, hoặc tạo job mới.
-
-    Không commit; caller commit cùng transaction nghiệp vụ. Job trùng chỉ là
-    tối ưu: nếu hai request đua nhau, cả hai job đều idempotent khi chạy.
-    """
+    db: AsyncSession, *, lesson_id: str, kind: str, payload: dict | None = None
+) -> BackgroundJob:
     existing = (
         await db.execute(
-            select(EmbeddingJob)
+            select(BackgroundJob)
             .where(
-                EmbeddingJob.kind == kind,
-                EmbeddingJob.target_id == target_id,
-                EmbeddingJob.include_draft == include_draft,
-                EmbeddingJob.force == force,
-                EmbeddingJob.status.in_(ACTIVE_STATUSES),
+                BackgroundJob.lesson_id == lesson_id,
+                BackgroundJob.kind == kind,
+                BackgroundJob.status.in_(ACTIVE_STATUSES),
             )
-            .order_by(EmbeddingJob.created_at)
+            .order_by(BackgroundJob.created_at)
             .limit(1)
         )
     ).scalar_one_or_none()
     if existing is not None:
+        existing.payload = {**(existing.payload or {}), **(payload or {})}
         return existing
 
-    job = EmbeddingJob(
+    job = BackgroundJob(
+        lesson_id=lesson_id,
         kind=kind,
-        target_id=target_id,
-        include_draft=include_draft,
-        force=force,
+        status="queued",
+        payload=payload or {},
     )
     db.add(job)
     await db.flush()
     return job
 
 
-async def enqueue_course_version(
-    db: AsyncSession,
-    course_version_id: str,
-    *,
-    include_draft: bool = False,
-    force: bool = False,
-) -> EmbeddingJob:
+async def enqueue_index_lesson(
+    db: AsyncSession, lesson_id: str, *, force: bool = False
+) -> BackgroundJob:
     return await _enqueue(
-        db,
-        kind=COURSE_VERSION,
-        target_id=course_version_id,
-        include_draft=include_draft,
-        force=force,
+        db, lesson_id=lesson_id, kind=INDEX_KIND, payload={"force": force}
     )
 
 
-async def enqueue_lesson_version(
-    db: AsyncSession,
-    lesson_version_id: str,
-    *,
-    include_draft: bool = False,
-    force: bool = False,
-) -> EmbeddingJob:
-    return await _enqueue(
-        db,
-        kind=LESSON_VERSION,
-        target_id=lesson_version_id,
-        include_draft=include_draft,
-        force=force,
-    )
+async def enqueue_course_index(
+    db: AsyncSession, course_id: str, *, force: bool = False
+) -> int:
+    from app.models.course import CourseModule, Lesson
 
-
-async def claim_next_job(db: AsyncSession) -> EmbeddingJob | None:
-    """Khóa job pending cũ nhất (bỏ qua job replica khác đang giữ) và đánh dấu running."""
-    job = (
+    lesson_ids = (
         await db.execute(
-            select(EmbeddingJob)
-            .where(EmbeddingJob.status == "pending")
-            .order_by(EmbeddingJob.created_at)
-            .with_for_update(skip_locked=True)
-            .limit(1)
+            select(Lesson.id)
+            .join(CourseModule, CourseModule.id == Lesson.module_id)
+            .where(CourseModule.course_id == course_id, Lesson.kind == "lesson")
         )
-    ).scalar_one_or_none()
-    if job is None:
-        return None
+    ).scalars().all()
+    for lesson_id in lesson_ids:
+        await enqueue_index_lesson(db, lesson_id, force=force)
+    return len(lesson_ids)
 
-    now = _now()
-    job.status = "running"
-    job.started_at = now
-    job.attempts += 1
-    job.updated_at = now
-    await db.commit()
-    return job
+
+async def enqueue_analysis_lesson(
+    db: AsyncSession, lesson_id: str
+) -> BackgroundJob:
+    return await _enqueue(db, lesson_id=lesson_id, kind=ANALYZE_KIND)
+
+
+async def claim_next_job(db: AsyncSession) -> BackgroundJob | None:
+    jobs = await claim_next_jobs(db, kind=INDEX_KIND, limit=1)
+    return jobs[0] if jobs else None
 
 
 async def process_job(job_id: str) -> None:
-    """Chạy một job đã claim; lỗi được ghi lại và retry tới `max_attempts`."""
     async with SessionLocal() as db:
-        job = await db.get(EmbeddingJob, job_id)
+        job = await db.get(BackgroundJob, job_id)
         if job is None:
-            logger.warning("Embedding job %s không còn tồn tại", job_id)
             return
-
         try:
-            if job.kind == COURSE_VERSION:
-                await embedding.sync_course_version(
-                    job.target_id, job.include_draft, job.force
-                )
-            elif job.kind == LESSON_VERSION:
-                await embedding.sync_lesson_version(
-                    job.target_id, job.include_draft, job.force
-                )
-            else:
-                raise ValueError(f"Loại embedding job không hợp lệ: {job.kind}")
+            force = bool((job.payload or {}).get("force"))
+            await embedding.sync_lesson(job.lesson_id, only_pending=not force)
         except Exception as exc:  # noqa: BLE001
             now = _now()
             job.error = str(exc)[:1000]
             job.finished_at = now
             job.updated_at = now
             if job.attempts < job.max_attempts:
-                job.status = "pending"
+                job.status = "queued"
                 logger.warning(
-                    "Embedding job %s lỗi (lần %s/%s), sẽ thử lại: %s",
+                    "Index job %s lỗi (lần %s/%s), sẽ thử lại: %s",
                     job.id,
                     job.attempts,
                     job.max_attempts,
@@ -160,17 +116,12 @@ async def process_job(job_id: str) -> None:
                 )
             else:
                 job.status = "failed"
-                logger.error(
-                    "Embedding job %s thất bại sau %s lần: %s",
-                    job.id,
-                    job.attempts,
-                    exc,
-                )
+                logger.error("Index job %s thất bại: %s", job.id, exc)
             await db.commit()
             return
 
         now = _now()
-        job.status = "completed"
+        job.status = "ready"
         job.error = None
         job.finished_at = now
         job.updated_at = now
@@ -180,48 +131,17 @@ async def process_job(job_id: str) -> None:
 async def recover_stale_jobs(
     db: AsyncSession, *, stale_seconds: int | None = None
 ) -> int:
-    """Đưa job running quá lâu trở lại pending (hoặc failed nếu hết lượt).
-
-    Worker chết giữa chừng không còn giữ lock; job sẽ kẹt running mãi nếu
-    không có bước này.
-    """
     seconds = (
         settings.embedding_worker_stale_seconds
         if stale_seconds is None
         else stale_seconds
     )
-    if seconds <= 0:
-        return 0
-    cutoff = _now() - timedelta(seconds=seconds)
-    jobs = (
-        await db.execute(
-            select(EmbeddingJob)
-            .where(
-                EmbeddingJob.status == "running",
-                EmbeddingJob.started_at < cutoff,
-            )
-            .with_for_update(skip_locked=True)
-        )
-    ).scalars().all()
-    now = _now()
-    for job in jobs:
-        job.updated_at = now
-        if job.attempts < job.max_attempts:
-            job.status = "pending"
-            job.error = "stale running job; retrying"
-            job.finished_at = None
-        else:
-            job.status = "failed"
-            job.error = "stale running job; max attempts reached"
-            job.finished_at = now
-    if jobs:
-        await db.commit()
-        logger.warning("Recovered %s stale embedding job(s)", len(jobs))
-    return len(jobs)
+    return await recover_stale_kind(
+        db, kind=INDEX_KIND, stale_seconds=seconds
+    )
 
 
 async def process_pending_jobs(limit: int = 1) -> int:
-    """Worker entrypoint: claim và xử lý tối đa `limit` job."""
     job_ids: list[str] = []
     async with SessionLocal() as db:
         await recover_stale_jobs(db)
@@ -231,7 +151,6 @@ async def process_pending_jobs(limit: int = 1) -> int:
                 break
             job_ids.append(job.id)
 
-    # Xử lý ngoài session claim để không giữ connection trong lúc ingest lâu.
     for job_id in job_ids:
         await process_job(job_id)
     return len(job_ids)

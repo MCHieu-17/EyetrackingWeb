@@ -18,7 +18,7 @@ export interface QuizAssignmentPatch {
 }
 
 export async function getQuizAssignment(id: string): Promise<QuizAssignment | null> {
-  return apiFetch<QuizAssignment>(`/api/quiz-specs/${id}`);
+  return apiFetch<QuizAssignment>(`/api/lessons/${id}/quiz`);
 }
 
 export async function getQuizAttempt(lessonId: string): Promise<QuizAttempt | null> {
@@ -48,7 +48,7 @@ export async function updateQuizAssignment(
   id: string,
   patch: QuizAssignmentPatch,
 ): Promise<QuizAssignment> {
-  return apiFetch<QuizAssignment>(`/api/teacher/quiz-specs/${id}`, {
+  return apiFetch<QuizAssignment>(`/api/teacher/lessons/${id}/quiz`, {
     method: "PATCH",
     body: patch,
   });

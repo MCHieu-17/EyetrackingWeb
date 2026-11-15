@@ -43,6 +43,7 @@ import { EditorHeader } from "./editor-header";
 import { ItemEditor } from "./item-editor";
 import { PublishChecklistDialog, publishReport } from "./publish-checklist";
 import { PublishConfirmDialog } from "./publish-confirm-dialog";
+import { queryKeys } from "@/lib/query-keys";
 
 /**
  * Tab "Nội dung": mục lục (trái) + trình soạn mục đang chọn (phải).
@@ -94,8 +95,8 @@ export function ContentEditor({
   }, []);
 
   const refreshTree = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
-    if (courseId) queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
+    if (courseId) queryClient.invalidateQueries({ queryKey: queryKeys.teacher.courseTree(courseId) });
   }, [queryClient, courseId]);
 
   // Mục đang mở: lựa chọn rõ ràng, hoặc mặc định mục đầu tiên (không cần effect).
@@ -211,7 +212,7 @@ export function ContentEditor({
   // Kéo thả: gửi lại toàn bộ thứ tự item của chương (backend yêu cầu danh sách
   // đầy đủ). Cập nhật lạc quan trước để thao tác mượt, lỗi thì khôi phục.
   const persistOrder = async (module: ModuleNode, next: LessonNode[]) => {
-    const key = ["teacher", "course-tree", courseId];
+    const key = queryKeys.teacher.courseTree(courseId);
     const previous = queryClient.getQueryData<ModuleNode[]>(key);
     queryClient.setQueryData<ModuleNode[]>(key, (modules) =>
       modules?.map((item) => (item.id === module.id ? { ...item, lessons: next } : item)),

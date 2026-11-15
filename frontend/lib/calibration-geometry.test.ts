@@ -86,11 +86,44 @@ describe("transformGazePoint", () => {
     expect(transformGazePoint(0.25, 0.25, calibration, current)).toEqual({ x: 0.5, y: 0.5 });
   });
 
-  it("tính cả device pixel ratio", () => {
+  it("không nhân screenX với DPR khi page zoom", () => {
     const calibration = viewport({ dpr: 2 });
     const current = viewport({ dpr: 1 });
 
-    expect(transformGazePoint(0.5, 0.5, calibration, current)).toEqual({ x: 1, y: 1 });
+    // Cùng vị trí/kích thước cửa sổ; DPR khác nhau không làm lệch gaze.
+    expect(transformGazePoint(0.5, 0.5, calibration, current)).toEqual({
+      x: 0.5,
+      y: 0.5,
+    });
+  });
+
+  it("quy đổi theo cửa sổ hiện tại nằm trong viewport gốc", () => {
+    const calibration = viewport({ width: 1700, height: 900 });
+    const current = viewport({
+      width: 1200,
+      height: 600,
+      screenX: 200,
+      screenY: 200,
+    });
+
+    // Gaze ở chính giữa cửa sổ hiện tại: raw = 800/1700, 500/900.
+    const center = transformGazePoint(
+      800 / 1700,
+      500 / 900,
+      calibration,
+      current,
+    );
+    expect(center.x).toBeCloseTo(0.5, 10);
+    expect(center.y).toBeCloseTo(0.5, 10);
+    // Gaze ở góc trên-trái cửa sổ hiện tại: raw = 200/1700, 200/900.
+    const topLeft = transformGazePoint(
+      200 / 1700,
+      200 / 900,
+      calibration,
+      current,
+    );
+    expect(topLeft.x).toBeCloseTo(0, 10);
+    expect(topLeft.y).toBeCloseTo(0, 10);
   });
 
   it("tính cả độ lệch cửa sổ trên màn hình", () => {

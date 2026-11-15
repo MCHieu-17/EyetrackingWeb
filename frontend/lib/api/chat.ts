@@ -1,11 +1,7 @@
-import { API_BASE_URL, getAuthHeaders, parseApiError } from "@/lib/api/client";
+import { apiFetch, apiFetchStream, parseApiError } from "@/lib/api/client";
 
 export interface ChatCitation {
   documentId: string;
-  courseVersionId?: string | null;
-  lessonVersionId?: string | null;
-  slideVersionId?: string | null;
-  membershipId?: string | null;
   assetId?: string | null;
   title: string;
   location: string;
@@ -23,9 +19,7 @@ interface ChatSessionSummary {
   canContinue?: boolean;
   id: string;
   courseId: string;
-  courseVersionId?: string | null;
   lessonId: string | null;
-  lessonVersionId?: string | null;
   assignmentId: string | null;
   attemptId?: string | null;
   title: string;
@@ -50,7 +44,7 @@ export interface SendChatInput {
   sessionId?: string | null;
   /** Bài học đang học (chỉ dùng làm ngữ cảnh prompt). */
   lessonId?: string | null;
-  /** Bài tập đang làm/chữa (lesson_version_id). */
+  /** Bài tập đang làm/chữa; giá trị là lessons.id. */
   assignmentId?: string | null;
   /** Lượt làm cụ thể; bắt buộc để hint/review đúng attempt. */
   attemptId?: string | null;
@@ -84,25 +78,15 @@ export async function listChatSessions(
   if (assignmentId) params.set("assignmentId", assignmentId);
   if (attemptId) params.set("attemptId", attemptId);
   const query = params.toString();
-  const response = await fetch(
-    `${API_BASE_URL}/api/courses/${courseId}/chat/sessions${query ? `?${query}` : ""}`,
-    {
-      credentials: "include",
-      headers: getAuthHeaders(),
-    },
-  );
-  if (!response.ok) throw await parseApiError(response);
-  const data = await response.json();
+  const path = `/api/courses/${courseId}/chat/sessions${query ? `?${query}` : ""}`;
+  const data = await apiFetch<ChatSessionSummary[]>(path);
   return Array.isArray(data) ? data : [];
 }
 
 export async function listChatMessages(sessionId: string): Promise<ChatMessageItem[]> {
-  const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}/messages`, {
-    credentials: "include",
-    headers: getAuthHeaders(),
-  });
-  if (!response.ok) throw await parseApiError(response);
-  const data = await response.json();
+  const data = await apiFetch<ChatMessageItem[]>(
+    `/api/chat/sessions/${sessionId}/messages`,
+  );
   return Array.isArray(data) ? data : [];
 }
 
@@ -110,23 +94,50 @@ export async function renameChatSession(
   sessionId: string,
   title: string,
 ): Promise<ChatSessionSummary> {
-  const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}`, {
+  return apiFetch<ChatSessionSummary>(`/api/chat/sessions/${sessionId}`, {
     method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ title }),
+    body: { title },
   });
-  if (!response.ok) throw await parseApiError(response);
-  return response.json();
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/chat/sessions/${sessionId}`, {
-    method: "DELETE",
-    credentials: "include",
-    headers: getAuthHeaders(),
-  });
-  if (!response.ok) throw await parseApiError(response);
+  await apiFetch(`/api/chat/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+function optionalString(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === "string" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseCitation(value: unknown): ChatCitation | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.documentId !== "string" ||
+    typeof item.title !== "string" ||
+    typeof item.location !== "string"
+  ) {
+    return null;
+  }
+  return {
+    documentId: item.documentId,
+    assetId: optionalString(item.assetId),
+    title: item.title,
+    location: item.location,
+    lessonId: optionalString(item.lessonId),
+    lessonTitle: optionalString(item.lessonTitle) ?? undefined,
+    slideId: optionalString(item.slideId),
+    slideIndex: optionalNumber(item.slideIndex),
+    pdfUrl: optionalString(item.pdfUrl) ?? undefined,
+    pageNumber: optionalNumber(item.pageNumber),
+    snippet: optionalString(item.snippet) ?? undefined,
+    score: optionalNumber(item.score) ?? undefined,
+  };
 }
 
 function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
@@ -153,7 +164,13 @@ function parseFrame(frame: string, handlers: ChatStreamHandlers): void {
       handlers.onStatus?.(String(data.stage ?? ""));
       break;
     case "citations":
-      handlers.onCitations?.((data.citations as ChatCitation[]) ?? []);
+      handlers.onCitations?.(
+        Array.isArray(data.citations)
+          ? data.citations
+              .map(parseCitation)
+              .filter((item): item is ChatCitation => item !== null)
+          : [],
+      );
       break;
     case "token":
       handlers.onToken?.(String(data.text ?? ""), { route: typeof data.route === "string" ? data.route : undefined, block_id: typeof data.block_id === "string" || typeof data.block_id === "number" ? data.block_id : undefined });
@@ -182,11 +199,8 @@ export async function streamChatMessage(
   signal?: AbortSignal,
 ): Promise<void> {
   const { courseId, ...body } = input;
-  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/stream`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify(body),
+  const response = await apiFetchStream(`/api/courses/${courseId}/chat/stream`, {
+    body,
     signal,
   });
 
@@ -230,9 +244,5 @@ interface ChatAccess {
 }
 
 export async function getChatAccess(courseId: string): Promise<ChatAccess> {
-  const response = await fetch(`${API_BASE_URL}/api/courses/${courseId}/chat/access`, {
-    credentials: "include", headers: getAuthHeaders(), cache: "no-store",
-  });
-  if (!response.ok) throw await parseApiError(response);
-  return response.json();
+  return apiFetch<ChatAccess>(`/api/courses/${courseId}/chat/access`);
 }

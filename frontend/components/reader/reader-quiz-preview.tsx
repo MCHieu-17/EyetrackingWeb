@@ -20,10 +20,10 @@ export function ReaderQuizPreview() {
   const [submitted, setSubmitted] = useState(false);
 
   return (
-    <div data-aoi="quiz" className="space-y-5">
+    <div className="flex h-full min-h-0 flex-col">
       <div
         data-aoi="quiz-question"
-        className="rounded-[18px] border border-border/80 bg-white p-5 shadow-xs"
+        className="shrink-0 rounded-[18px] border border-border/80 bg-white p-5 shadow-xs"
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Câu 1 / 3
@@ -33,7 +33,10 @@ export function ReaderQuizPreview() {
         </p>
       </div>
 
-      <fieldset data-aoi="quiz-options" className="space-y-2.5">
+      <fieldset
+        data-aoi="quiz-options"
+        className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1"
+      >
         <legend className="sr-only">Các đáp án</legend>
         {OPTIONS.map((option) => {
           const active = selected === option;
@@ -68,7 +71,7 @@ export function ReaderQuizPreview() {
         })}
       </fieldset>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="mt-4 flex shrink-0 items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           {submitted
             ? "Đã nộp bài mẫu — đây chỉ là bản xem trước."

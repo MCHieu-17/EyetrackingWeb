@@ -13,6 +13,7 @@ export interface AoiDefinition {
   id: string;
   code: string;
   name: string;
+  label?: string | null;
   parentId: string | null;
   geometry: Record<string, unknown>;
   isContainer: boolean;
@@ -20,22 +21,18 @@ export interface AoiDefinition {
   isActive: boolean;
 }
 
-export interface AoiSet {
+export interface AoiCollection {
   id: string;
   scope: "slide" | "ui";
-  slideVersionId: string | null;
-  uiSchemaVersion: string | null;
-  revision: number;
-  state: "draft" | "published" | "archived";
-  createdBy: string;
-  createdAt: string;
-  publishedAt: string | null;
+  slideId: string | null;
+  uiSchema: string | null;
   definitions: AoiDefinition[];
 }
 
 export interface AoiDefinitionInput {
   code: string;
   name: string;
+  label?: string | null;
   parentId?: string | null;
   geometry: Record<string, unknown>;
   isContainer?: boolean;
@@ -43,9 +40,8 @@ export interface AoiDefinitionInput {
   isActive?: boolean;
 }
 
-interface AoiSetSaveInput {
+interface AoiSaveInput {
   definitions: AoiDefinitionInput[];
-  expectedRevision?: number;
 }
 
 export interface AoiUiComponent {
@@ -61,41 +57,50 @@ export interface AoiRect {
   yMax: number;
 }
 
-interface AoiLayoutSnapshot {
+export interface VisibleRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export type AoiCoordinateSpace = "current-v1" | "original-v1";
+
+export interface AoiLayoutSnapshot {
   id: string;
   presentationId: string;
   layoutGeneration: number;
+  coordinateSpace: AoiCoordinateSpace;
+  visibleRect: VisibleRect | Record<string, never>;
   capturedAt: string;
 }
 
 interface ContentPresentation {
   id: string;
   sessionId: string;
-  lessonVersionSlideId: string | null;
+  slideId: string | null;
   surface: "lesson" | "quiz";
   sequenceNo: number;
   startedAt: string;
 }
 
-export function fetchAoiSets(params: {
-  scope?: "slide" | "ui";
-  slideVersionId?: string;
-  uiSchemaVersion?: string;
-  state?: "draft" | "published" | "archived";
-} = {}): Promise<AoiSet[]> {
-  return apiFetch<AoiSet[]>("/api/aoi-sets", { params });
+export function fetchAois(params: {
+  slideId?: string;
+  uiSchema?: string;
+} = {}): Promise<AoiCollection[]> {
+  return apiFetch<AoiCollection[]>("/api/aois", { params });
 }
 
 export function generateSlideAois(
-  slideVersionId: string,
+  slideId: string,
   input: {
     slideNumber?: number;
     merge?: boolean;
     replaceAuto?: boolean;
     resetAll?: boolean;
   } = {},
-): Promise<AoiSet> {
-  return apiFetch<AoiSet>(`/api/aoi-sets/slide/${slideVersionId}/generate`, {
+): Promise<AoiCollection> {
+  return apiFetch<AoiCollection>(`/api/aois/slides/${slideId}/generate`, {
     method: "POST",
     body: {
       slideNumber: input.slideNumber,
@@ -109,21 +114,21 @@ export function generateSlideAois(
 }
 
 export function saveSlideAois(
-  slideVersionId: string,
-  input: AoiSetSaveInput,
-): Promise<AoiSet> {
-  return apiFetch<AoiSet>(`/api/aoi-sets/slide/${slideVersionId}`, {
+  slideId: string,
+  input: AoiSaveInput,
+): Promise<AoiCollection> {
+  return apiFetch<AoiCollection>(`/api/aois/slides/${slideId}`, {
     method: "PUT",
     body: input,
   });
 }
 
 export function generateUiAois(
-  uiSchemaVersion: string,
+  uiSchema: string,
   components: AoiUiComponent[],
   merge = true,
-): Promise<AoiSet> {
-  return apiFetch<AoiSet>(`/api/aoi-sets/ui/${uiSchemaVersion}/generate`, {
+): Promise<AoiCollection> {
+  return apiFetch<AoiCollection>(`/api/aois/ui/${uiSchema}/generate`, {
     method: "POST",
     body: { components, merge },
     timeoutMs: 120_000,
@@ -131,10 +136,10 @@ export function generateUiAois(
 }
 
 export function saveUiAois(
-  uiSchemaVersion: string,
-  input: AoiSetSaveInput,
-): Promise<AoiSet> {
-  return apiFetch<AoiSet>(`/api/aoi-sets/ui/${uiSchemaVersion}`, {
+  uiSchema: string,
+  input: AoiSaveInput,
+): Promise<AoiCollection> {
+  return apiFetch<AoiCollection>(`/api/aois/ui/${uiSchema}`, {
     method: "PUT",
     body: input,
   });
@@ -163,7 +168,7 @@ export function rebuildAoiHits(input: {
 export function createPresentation(
   sessionId: string,
   input: {
-    lessonVersionSlideId?: string | null;
+    slideId?: string | null;
     surface: "lesson" | "quiz";
     sequenceNo: number;
   },
@@ -179,6 +184,8 @@ export function createPresentationLayout(
   input: {
     sequenceNo: number;
     layoutGeneration: number;
+    coordinateSpace?: AoiCoordinateSpace;
+    visibleRect?: VisibleRect;
     imageTransform?: Record<string, unknown>;
     rects: AoiRect[];
   },

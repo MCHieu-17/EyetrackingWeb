@@ -1,199 +1,144 @@
-import uuid
-from datetime import datetime, timedelta, timezone
-
-import pytest
-from sqlalchemy import select
-
-from app.models.aoi import AnalysisRun, AoiDefinition, AoiHit, AoiSet
-from app.models.course import Slide, SlideVersion
-from app.models.media import MediaAsset
-from app.services import analysis
-from tests.conftest import SessionLocal, create_user, login, seed_course
+from app.models.aoi import Aoi
+from app.services.metrics import (
+    SLIDE_NO_LABEL,
+    UI_NO_LABEL,
+    _slide_aoi_label,
+    _ui_aoi_label,
+    map_viewport_to_slide,
+)
 
 
-@pytest.mark.asyncio
-async def test_slide_leaf_priority_prefers_text_over_image(client):
-    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
-    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
-    teacher_id = await create_user(email=teacher_email, role="teacher")
-    student_id = await create_user(email=student_email)
-    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
-
-    token = await login(client, student_email)
-    headers = {"Authorization": f"Bearer {token}"}
-
-    session_response = await client.post(
-        "/api/learning-sessions",
-        headers=headers,
-        json={
-            "enrollmentId": ids["enrollment_id"],
-            "lessonId": ids["lesson_id"],
-            "deviceFingerprint": "test-device",
-            "viewportWidthPx": 1280,
-            "viewportHeightPx": 720,
-            "calibrationWidthPx": 1280,
-            "calibrationHeightPx": 720,
-            "devicePixelRatio": 1.0,
-            "trackingConsent": True,
-        },
+def _aoi(
+    code: str,
+    kind: str,
+    geom: dict,
+    *,
+    name: str | None = None,
+    label: str | None = None,
+    container: bool = False,
+) -> Aoi:
+    return Aoi(
+        id=code,
+        slide_id="s",
+        code=code,
+        name=name or code,
+        label=label,
+        geometry=geom,
+        is_container=container,
+        kind=kind,
+        is_active=True,
     )
-    assert session_response.status_code == 201, session_response.text
-    session_id = session_response.json()["id"]
 
-    presentation_response = await client.post(
-        f"/api/learning-sessions/{session_id}/presentations",
-        headers=headers,
-        json={"surface": "lesson", "sequenceNo": 0},
-    )
-    assert presentation_response.status_code == 201, presentation_response.text
-    presentation_id = presentation_response.json()["id"]
 
-    layout_response = await client.post(
-        f"/api/presentations/{presentation_id}/layouts",
-        headers=headers,
-        json={
-            "sequenceNo": 0,
-            "layoutGeneration": 0,
-            "imageTransform": {"left": 0, "top": 0, "width": 1, "height": 1},
-            "rects": [],
-        },
-    )
-    assert layout_response.status_code == 201, layout_response.text
-    layout_id = layout_response.json()["id"]
+def test_slide_returns_one_best_leaf_label():
+    aois = [
+        _aoi(
+            "slide_1",
+            "system",
+            {"xMin": 0, "yMin": 0, "xMax": 1, "yMax": 1},
+            container=True,
+        ),
+        _aoi(
+            "img",
+            "image",
+            {"xMin": 0.1, "yMin": 0.1, "xMax": 0.9, "yMax": 0.9},
+            label="AOI_1",
+        ),
+        _aoi(
+            "text",
+            "text",
+            {"xMin": 0.2, "yMin": 0.2, "xMax": 0.8, "yMax": 0.8},
+            label="AOI_2",
+        ),
+        _aoi("no_label", "system", {}),
+    ]
+    # Text thắng image; chỉ trả một nhãn, không trả container.
+    assert _slide_aoi_label(0.5, 0.5, aois) == "SLIDE_AOI_2"
 
-    batch_response = await client.post(
-        f"/api/learning-sessions/{session_id}/gaze-batches",
-        headers=headers,
-        json={
-            "batchId": str(uuid.uuid4()),
-            "batchNo": 0,
-            "presentationId": presentation_id,
-            "layoutSnapshotId": layout_id,
-            "sequenceStart": 0,
-            "sequenceEnd": 0,
-            "payloadHash": "a" * 64,
-            "samples": [
-                {
-                    "sequence": 0,
-                    "captureMonotonicNs": 1,
-                    "eventTime": datetime.now(timezone.utc).isoformat(),
-                    "viewportX": 0.5,
-                    "viewportY": 0.5,
-                    "status": "ok",
-                    "qualityFlags": {},
-                }
-            ],
-        },
-    )
-    assert batch_response.status_code == 200, batch_response.text
 
-    async with SessionLocal() as db:
-        asset = MediaAsset(
-            course_id=ids["course_id"],
-            storage_backend="local",
-            object_key=f"test/{uuid.uuid4().hex}.pdf",
-            sha256=uuid.uuid4().hex + uuid.uuid4().hex,
-            mime_type="application/pdf",
-            byte_size=1,
-            state="ready",
-        )
-        db.add(asset)
-        await db.flush()
-        slide = Slide(lesson_id=ids["lesson_id"])
-        db.add(slide)
-        await db.flush()
-        slide_version = SlideVersion(
-            slide_id=slide.id,
-            revision_no=1,
-            source_pdf_asset_id=asset.id,
-            source_page=1,
-            created_by=teacher_id,
-        )
-        db.add(slide_version)
-        await db.flush()
+def test_slide_no_label_when_inside_but_outside_all_leaf():
+    aois = [
+        _aoi(
+            "text",
+            "text",
+            {"xMin": 0.1, "yMin": 0.1, "xMax": 0.2, "yMax": 0.2},
+            label="AOI_1",
+        ),
+        _aoi("no_label", "system", {}),
+    ]
+    assert _slide_aoi_label(0.8, 0.8, aois) == SLIDE_NO_LABEL
 
-        aoi_set = AoiSet(
-            scope="slide",
-            slide_version_id=slide_version.id,
-            revision=1,
-            state="draft",
-            created_by=teacher_id,
-        )
-        db.add(aoi_set)
-        await db.flush()
-        db.add_all(
-            [
-                AoiDefinition(
-                    aoi_set_id=aoi_set.id,
-                    code="slide_1",
-                    name="Slide 1",
-                    geometry={"xMin": 0, "yMin": 0, "xMax": 1, "yMax": 1},
-                    is_container=True,
-                    kind="system",
-                    is_active=True,
-                ),
-                AoiDefinition(
-                    aoi_set_id=aoi_set.id,
-                    code="slide_1_image_1",
-                    name="ẢNH",
-                    geometry={"xMin": 0.1, "yMin": 0.1, "xMax": 0.9, "yMax": 0.9},
-                    is_container=False,
-                    kind="image",
-                    is_active=True,
-                ),
-                AoiDefinition(
-                    aoi_set_id=aoi_set.id,
-                    code="slide_1_text_1",
-                    name="TEXT",
-                    geometry={"xMin": 0.2, "yMin": 0.2, "xMax": 0.8, "yMax": 0.8},
-                    is_container=False,
-                    kind="text",
-                    is_active=True,
-                ),
-                AoiDefinition(
-                    aoi_set_id=aoi_set.id,
-                    code="no_label",
-                    name="Chưa đánh dấu",
-                    geometry={},
-                    is_container=False,
-                    kind="system",
-                    is_active=True,
-                ),
-            ]
-        )
-        await db.flush()
-        aoi_set.state = "published"
-        await db.flush()
 
-        now = datetime.now(timezone.utc)
-        run = AnalysisRun(
-            session_id=session_id,
-            presentation_id=presentation_id,
-            aoi_set_id=aoi_set.id,
-            from_time=now - timedelta(minutes=1),
-            to_time=now + timedelta(minutes=1),
-            algorithm_version="gaze-metrics-v1",
-            status="pending",
-        )
-        db.add(run)
-        await db.commit()
-        await db.refresh(run)
-        run_id = run.id
+def test_viewport_mapping_and_ui_smallest_label():
+    assert map_viewport_to_slide(
+        0.5, 0.5, {"left": 0, "top": 0, "width": 1, "height": 1}
+    ) == (0.5, 0.5)
 
-    async with SessionLocal() as db:
-        await analysis.execute_run(db, run_id)
+    aois = [
+        Aoi(
+            id="chatbot",
+            slide_id=None,
+            ui_schema="reader-v1",
+            code="chatbot",
+            name="Trợ lý học tập",
+            geometry={"selector": "[data-aoi='chatbot']"},
+            is_container=False,
+            kind="ui",
+            is_active=True,
+        ),
+        Aoi(
+            id="chat-send",
+            slide_id=None,
+            ui_schema="reader-v1",
+            code="chat-send",
+            name="Nút gửi",
+            geometry={"selector": "[data-aoi='chat-send']"},
+            is_container=False,
+            kind="ui",
+            is_active=True,
+        ),
+    ]
+    elements = [
+        {"code": "chatbot", "xMin": 0.6, "yMin": 0.0, "xMax": 1.0, "yMax": 1.0},
+        {"code": "chat-send", "xMin": 0.9, "yMin": 0.8, "xMax": 0.98, "yMax": 0.9},
+    ]
+    assert _ui_aoi_label(0.94, 0.85, aois, elements) == "Nút gửi"
+    assert _ui_aoi_label(0.7, 0.5, aois, elements) == "Trợ lý học tập"
+    assert _ui_aoi_label(0.1, 0.1, aois, elements) == UI_NO_LABEL
 
-    async with SessionLocal() as db:
-        hit_codes = set(
-            (
-                await db.execute(
-                    select(AoiDefinition.code)
-                    .join(AoiHit, AoiHit.definition_id == AoiDefinition.id)
-                    .where(AoiHit.run_id == run_id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert "slide_1_text_1" in hit_codes
-        assert "slide_1_image_1" not in hit_codes
+
+def test_ui_custom_wins_over_component():
+    aois = [
+        Aoi(
+            id="chat",
+            slide_id=None,
+            ui_schema="reader-v1",
+            code="chatbot",
+            name="Trợ lý học tập",
+            geometry={"selector": "[data-aoi='chatbot']"},
+            is_container=False,
+            kind="ui",
+            is_active=True,
+        ),
+        Aoi(
+            id="custom",
+            slide_id=None,
+            ui_schema="reader-v1",
+            code="ui_custom_1",
+            name="Vùng chat của tôi",
+            geometry={
+                "anchor": "chatbot",
+                "xMin": 0.0,
+                "yMin": 0.0,
+                "xMax": 1.0,
+                "yMax": 1.0,
+            },
+            is_container=False,
+            kind="custom",
+            is_active=True,
+        ),
+    ]
+    elements = [
+        {"code": "chatbot", "xMin": 0.6, "yMin": 0.0, "xMax": 1.0, "yMax": 1.0},
+    ]
+    assert _ui_aoi_label(0.8, 0.5, aois, elements) == "Vùng chat của tôi"

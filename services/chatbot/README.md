@@ -15,9 +15,7 @@ GPU chỉ dành cho `services/gaze`.
 | GET | `/ready` | – | Readiness, 503 khi DB không truy cập được |
 | POST | `/chat` | `X-Chatbot-Token` | Hỏi đáp non-streaming |
 | POST | `/chat/stream` | `X-Chatbot-Token` | SSE: status → citations → token → done |
-| POST | `/ingest/slide` | `X-Chatbot-Token` | Embed 1 slide |
-| POST | `/ingest/lesson-version` | `X-Chatbot-Token` | Embed toàn bộ slide của bài |
-| POST | `/ingest/course-version` | `X-Chatbot-Token` | Embed toàn bộ slide của khóa |
+| POST | `/ingest/slides` | `X-Chatbot-Token` | Embed danh sách slide ID |
 | POST | `/ingest/reindex-all` | `X-Chatbot-Token` | Backfill slide chưa ready |
 
 ## Luồng xử lý
@@ -68,6 +66,9 @@ POST /chat/stream
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `CHATBOT_DATABASE_URL` | – | DSN psycopg (`postgresql://...`), không dùng `+asyncpg` |
+| `CHATBOT_DB_POOL_MIN/MAX` | `1/10` | Pool PostgreSQL riêng của chatbot |
+| `CHATBOT_DB_POOL_TIMEOUT` | `10` | Chờ connection tối đa (giây) |
+| `CHATBOT_DB_POOL_RECONNECT_TIMEOUT` | `10` | Chu kỳ reconnect (giây) |
 | `CHATBOT_INTERNAL_TOKEN` | – | Token nội bộ (bắt buộc) |
 | `EMBEDDING_NAME` | `local` | Embedding local Qwen3-Embedding-0.6B |
 | `EMBEDDING_DIM` | `1024` | Phải khớp `vector(1024)` trong `001_baseline.sql` |
@@ -114,10 +115,11 @@ thiếu/sai.
 ## DB role hạn chế
 
 Chatbot dùng role `chatbot_reader` (xem `CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`):
-- được `SELECT` course/module/lesson/slide + `INSERT/UPDATE/DELETE` embedding;
-- được `UPDATE` các cột `embedding_status/embedding_error/embedding_updated_at`;
-- **không** có quyền đọc `quiz_assignments`, `quiz_attempts`, `quiz_attempt_sessions`,
-  `users`.
+- được `SELECT` các view outline;
+- được `SELECT` và `UPDATE` các cột index trên `slides`
+  (`transcript`, `embedding`, `index_status`, `index_error`,
+  `pipeline_version`, `model_version`);
+- **không** có quyền đọc `quiz_attempts`, `users`, `chat_*`.
 
 Role được service `migrate` tự tạo/cập nhật sau mỗi lần áp migrations (đọc
 `CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`). Chỉ chạy tay khi muốn cấp lại quyền
@@ -129,7 +131,7 @@ ngay:
 
 `GET /ready` trả `503` kèm `detail` nếu không kết nối được DB (sai role/password,
 DB chưa lên). Các endpoint `/ingest/*` trả `503` kèm lý do thật thay vì `500`;
-backend lưu lý do vào `slide_documents.ingestion_error`.
+backend lưu lý do vào `slides.index_error`.
 
 Đây là lớp bảo vệ thứ hai: kể cả khi prompt injection yêu cầu lộ đáp án, chatbot
 cũng không đọc được bảng quiz.
@@ -204,7 +206,7 @@ app/
 - `CHATBOT_BACKEND_URL` phải trỏ trực tiếp tới backend (Compose:
   `http://backend:8001`). Các operation `/internal/chat/lms-query` xác định
   student/course từ session đã lưu và kiểm tra lại enrollment, teacher lock,
-  assignment version.
+  assignment/attempt context hiện hành.
 - Một embedding worker sở hữu model Qwen và phục vụ cả chat lẫn ingest. Chat
   được ưu tiên; batch tối đa 8 input với cửa sổ gom 10 ms. Chỉ cache query
   vector (1.024 entry / 15 phút).

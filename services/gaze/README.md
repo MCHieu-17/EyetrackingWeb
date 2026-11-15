@@ -1,541 +1,202 @@
-# Gaze API — Tài liệu tích hợp
+# Gaze service
 
-Tài liệu này mô tả đầy đủ từng API của dịch vụ ước lượng hướng nhìn (gaze estimation) để tích hợp đúng ngay từ request đầu tiên. Trong hệ thống EyeLearning, client (frontend) gọi trực tiếp qua nginx `/gaze/*`; backend chỉ lưu model `.ubj` và kiểm soát quyền.
+FastAPI service ước lượng hướng nhìn từ webcam. Đây là service **duy nhất cần
+GPU** trong stack mặc định; chatbot embedding chạy CPU.
 
-## 1. Tổng quan
+## Kiến trúc
 
-Pipeline xử lý mỗi frame camera:
-
-```
-frame (JPEG) → face detection (MediaPipe) → UniGaze → (pitch, yaw)
-             → mô hình calibration (hồi quy tuyến tính) → (x, y) chuẩn hóa
-```
-
-Nếu không detect được khuôn mặt hoặc ảnh hỏng, frame đó bị bỏ qua và trả về lỗi tương ứng (không crash).
-
-Dịch vụ **stateful**: server giữ session calibration trong RAM. Backend luôn đi theo 1 luồng 4 bước cố định:
-
-```
-1. POST /session                        → tạo session, khai báo N điểm calibration
-2. POST /session/{sid}/calibrate        → gửi ảnh + point_id, 1 lần cho mỗi điểm
-3. POST /session/{sid}/train            → train mô hình calibration riêng cho session
-4. WS   /session/{sid}/stream           → streaming gaze thời gian thực
+```text
+JPEG frame
+  → MediaPipe face detection
+  → UniGaze (pitch, yaw)
+  → calibration hồi quy tuyến tính
+  → (x, y) chuẩn hóa theo viewport
+  → One-Euro smoothing
 ```
 
-### 1.1 Hai khái niệm cốt lõi
+Session calibration nằm trong RAM và mất khi container restart. Backend lưu
+model `.ubj` trong `gaze_calibrations` để frontend import lại.
 
-**Session (trạng thái server-side)**
+## Chạy
 
-- Mỗi session độc lập, lưu trong RAM của dịch vụ này.
-- Vòng đời: `collecting` (đang thu mẫu) → `ready` (đã train/import, mới được stream).
-- TTL: 30 phút không có request nào → tự xóa. Tối đa **100 session** đồng thời (vượt quá → 503).
-- Dịch vụ **không có cơ chế xác thực**: backend phải tự kiểm soát ai được gọi và không để lộ `session_id`.
-
-**Tọa độ chuẩn hóa `[0, 1]`**
-
-- Mọi `x, y` — điểm calibration khai báo, target khi train, output khi stream — đều **chuẩn hóa `[0, 1]` theo màn hình hiển thị**. `0.5` = giữa màn hình.
-- Output stream **có thể âm hoặc > 1** (người dùng nhìn ra ngoài màn hình). Đây là hành vi bình thường, không phải lỗi. Đổi sang pixel ở phía client: `px = x * innerWidth`, `py = y * innerHeight`.
-
-### 1.2 Mô hình calibration
-
-- Input: `(pitch, yaw)` từ UniGaze — góc nhìn, **không** chuẩn hóa.
-- Target: `(x, y)` chuẩn hóa `[0, 1]`.
-- Mỗi session train một hồi quy tuyến tính riêng, dạng:
-
-```
-x = a1·pitch + a2·yaw + b1
-y = a3·pitch + a4·yaw + b2
-```
-
-**Định dạng file model `.ubj` (v2)** — chỉ chứa hệ số, không nhúng pickle:
-
-```json
-{"format": "gaze-lr-v2", "coef": [[a1, a3], [a2, a4]], "intercept": [b1, b2]}
-```
-
-> ⚠️ Các model `.ubj` cũ (định dạng pickle của bản trước) **không còn tương thích**.
-> `/import` sẽ trả `invalid_model`; client cần hiệu chỉnh lại một lần.
-
-### 1.3 Quy ước chung
-
-- Base URL: `http://<host>:8000` (dùng biến env khi triển khai).
-- Ảnh trao đổi luôn là **JPEG** (multipart field `image` hoặc binary frame qua WebSocket).
-- Nếu không ghi mã HTTP cụ thể trong mục nào, mặc định là `200`.
-- Body trả về luôn là JSON.
-
-### 1.4 Yêu cầu GPU
-
-Gaze là **service duy nhất cần GPU** trong stack:
-
-- Dockerfile multi-stage: stage `ai-base` cài torch/torchvision CUDA 12.4;
-  stage `runtime` cài deps gaze.
-- Compose đặt `gpus: all` và `DEVICE=cuda`.
-- Host cần NVIDIA driver + `nvidia-container-toolkit`.
-- Không có GPU: đặt `DEVICE=cpu` và bỏ `gpus: all` ở service `gaze` — service
-  vẫn chạy nhưng chậm hơn nhiều (không phù hợp để dùng thật).
-- Chatbot không dùng GPU; embedding của chatbot chạy CPU.
-
-## 2. Danh sách endpoint
-
-| Method | Path | Mục đích |
-|---|---|---|
-| GET | `/health` | Liveness — luôn 200 khi tiến trình còn sống |
-| GET | `/ready` | Readiness — 200 khi pipeline đã load, 503 khi chưa |
-| POST | `/session` | Tạo session calibration, khai báo điểm |
-| GET | `/session/{sid}` | Xem trạng thái session |
-| DELETE | `/session/{sid}` | Xóa session |
-| POST | `/session/{sid}/calibrate` | Gửi 1 frame JPEG + `point_id` để thu mẫu |
-| POST | `/session/{sid}/train` | Train mô hình calibration (cần ≥ 1 mẫu/điểm) |
-| GET | `/session/{sid}/model` | Tải mô hình (.ubj) để lưu và tái sử dụng |
-| POST | `/session/{sid}/import` | Nạp lại mô hình đã lưu, bỏ qua calibration |
-| WS | `/session/{sid}/stream` | Streaming gaze: gửi binary JPEG, nhận `{x, y}` chuẩn hóa |
-
-## 3. Chi tiết từng endpoint
-
-### 3.1 GET `/health` và GET `/ready`
-
-Tách **liveness** và **readiness**:
-
-- `GET /health` — liveness, luôn `200` khi tiến trình còn phản hồi (không phụ thuộc pipeline).
-- `GET /ready` — readiness, `200` khi pipeline (MediaPipe + UniGaze) đã load xong, `503` khi chưa.
+Trong stack:
 
 ```bash
-curl http://localhost:8000/health
-curl -i http://localhost:8000/ready
+docker compose up -d --build gaze
+docker compose logs -f gaze
 ```
 
-```json
-{
-  "status": "ok",
-  "gpu_available": true,
-  "pipeline_ready": true
-}
+Gaze không publish cổng host trong compose mặc định (2 replica dùng chung GPU).
+Browser truy cập qua nginx `/gaze/*`; debug trực tiếp bằng:
+
+```bash
+docker compose exec gaze python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/ready').read())"
 ```
 
-| Field | Kiểu | Ý nghĩa |
+Khi chạy riêng trên host:
+
+```bash
+cd services/gaze
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m uvicorn app.main:app --port 8000
+```
+
+`DEVICE=cpu` chạy được nhưng rất chậm và không phù hợp để dùng thật.
+
+## HTTP API
+
+| Method | Path | Ý nghĩa |
 |---|---|---|
-| `status` | string | `ok` khi pipeline sẵn sàng, `degraded` khi chưa |
-| `gpu_available` | bool | Có GPU (CUDA) hay chạy CPU |
-| `pipeline_ready` | bool | MediaPipe + UniGaze đã load xong chưa |
+| GET | `/health` | Liveness; 200 khi process còn sống |
+| GET | `/ready` | Readiness; 503 khi MediaPipe/UniGaze chưa load |
+| POST | `/session` | Tạo session và khai báo các điểm calibration |
+| GET | `/session/{sid}` | Trạng thái `collecting` hoặc `ready` |
+| DELETE | `/session/{sid}` | Giải phóng session |
+| POST | `/session/{sid}/calibrate` | Gửi một ảnh JPEG + `point_id` |
+| POST | `/session/{sid}/train` | Fit model từ các mẫu đã thu |
+| GET | `/session/{sid}/model` | Tải model `.ubj` v2 |
+| POST | `/session/{sid}/import` | Nạp model `.ubj` đã lưu |
+| WS | `/session/{sid}/stream` | Gửi frame, nhận tọa độ gaze |
 
-> Backend/healthcheck nên gọi `/ready` (503 = đang bảo trì) thay vì `/health`.
-> `/health` chỉ dùng cho liveness probe của orchestrator.
-
-### 3.2 POST `/session` — Tạo session
-
-Khai báo danh sách N điểm calibration. Server trả về `session_id` dùng cho mọi request sau. Toạ độ dùng thang chuẩn hóa `[0, 1]` nên không cần khai báo kích thước màn hình.
-
-**Body JSON:**
-
-| Field | Kiểu | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `points` | array | Có | Danh sách điểm calibration |
-| `points[].id` | string | Có | Định danh điểm (vd `"tl"`, `"c"`, ...) — dùng lại ở `/calibrate` |
-| `points[].x` | float | Có | Tọa độ chuẩn hóa `[0, 1]` |
-| `points[].y` | float | Có | Tọa độ chuẩn hóa `[0, 1]` |
+### Tạo session
 
 ```json
 {
   "points": [
-    {"id": "tl", "x": 0.125, "y": 0.167},
-    {"id": "tr", "x": 0.875, "y": 0.167},
-    {"id": "bl", "x": 0.125, "y": 0.833},
-    {"id": "br", "x": 0.875, "y": 0.833},
-    {"id": "c", "x": 0.5, "y": 0.5}
+    {"id": "c", "x": 0.5, "y": 0.5},
+    {"id": "tl", "x": 0.125, "y": 0.167}
   ]
 }
 ```
 
-```bash
-curl -X POST http://localhost:8000/session \
-  -H "Content-Type: application/json" \
-  -d '{"points":[{"id":"tl","x":0.125,"y":0.167},{"id":"c","x":0.5,"y":0.5}]}'
-```
+Tối đa 64 điểm/session, ID không trùng. `POST /session` trả
+`{"session_id": "..."}` và 503 khi vượt `MAX_SESSIONS`.
 
-**Thành công:**
+### Thu mẫu và train
+
+`POST /session/{sid}/calibrate` nhận multipart:
+
+- `image`: JPEG;
+- `point_id`: ID đã khai báo.
+
+HTTP 200 có thể mang `status`:
+
+- `accepted`: đã lưu mẫu;
+- `no_face`: không detect được mặt;
+- `invalid_image`: JPEG hỏng;
+- `unknown_point`: point ID sai.
+
+`POST /session/{sid}/train` trả `{"status":"ok","n_samples":N}`. Nếu thiếu mẫu,
+trả 422 với `detail` là map `point_id → số mẫu`.
+
+Model `.ubj` v2 chỉ chứa hệ số, không dùng pickle:
 
 ```json
-{"session_id": "6f1a2b3c-..."}
+{"format":"gaze-lr-v2","coef":[[a1,a3],[a2,a4]],"intercept":[b1,b2]}
 ```
 
-**Lỗi:**
+Model sai format/shape hoặc dùng format cũ trả `invalid_model` khi import.
 
-| HTTP | Body / ý nghĩa |
-|---|---|
-| 503 | `too many sessions` — đã đạt giới hạn 100 session, thử lại sau |
+### WebSocket protocol v2
 
-### 3.3 GET `/session/{sid}` — Trạng thái session
+Client gửi binary message:
 
-Dùng để biết session còn sống và đã sẵn sàng stream chưa.
-
-```bash
-curl http://localhost:8000/session/6f1a2b3c-...
+```text
+[4-byte big-endian header length][JSON header UTF-8][JPEG bytes]
 ```
+
+Header:
 
 ```json
 {
-  "state": "collecting",
-  "calibrated": false
+  "v": 2,
+  "frameId": "uuid",
+  "sequence": 12,
+  "captureMonotonicNs": 123456789,
+  "eventTime": "2026-11-13T10:00:00.000Z",
+  "presentationId": "content-view-id",
+  "layoutGeneration": 3,
+  "surface": "lesson",
+  "viewportWidth": 1280,
+  "viewportHeight": 720,
+  "dpr": 1
 }
 ```
 
-| Field | Kiểu | Ý nghĩa |
-|---|---|---|
-| `state` | string | `collecting` (đang thu mẫu) hoặc `ready` (đã train/import) |
-| `calibrated` | bool | `true` khi `state == "ready"` — lúc này mới stream được |
-
-**Lỗi:** `404` nếu session không tồn tại.
-
-### 3.4 DELETE `/session/{sid}` — Xóa session
-
-Gọi khi người dùng hủy calibration hoặc đóng trang để giải phóng slot (nhớ giới hạn 100 session).
-
-```bash
-curl -X DELETE http://localhost:8000/session/6f1a2b3c-...
-# {"status": "deleted"}
-```
-
-**Lỗi:** `404` nếu session không tồn tại.
-
-### 3.5 POST `/session/{sid}/calibrate` — Thu mẫu
-
-Gửi **multipart/form-data** gồm 1 frame JPEG + `point_id` của điểm đang hiển thị trên màn hình người dùng. Server tự detect khuôn mặt, tính `(pitch, yaw)` rồi lưu 1 mẫu cho điểm đó. **Mỗi điểm chỉ cần 1 mẫu** — lặp lại lần lượt cho từng điểm.
-
-| Form field | Kiểu | Mô tả |
-|---|---|---|
-| `image` | file | Frame JPEG từ webcam |
-| `point_id` | string | `id` của điểm đã khai báo ở `/session` |
-
-```bash
-curl -X POST http://localhost:8000/session/6f1a2b3c.../calibrate \
-  -F "image=@frame.jpg" \
-  -F "point_id=tl"
-```
-
-**Phản hồi (luôn HTTP 2xx nếu session tồn tại — phân biệt qua field `status`):**
+Server echo lại `frameId`, `sequence`, `captureMonotonicNs`,
+`presentationId`, `layoutGeneration` trong response. Response thành công:
 
 ```json
-{"status": "accepted", "count": 1}
+{"ok":true,"status":"ok","x":0.52,"y":0.34,"frameId":"uuid","sequence":12}
 ```
 
-| `status` | Ý nghĩa | Hành động backend |
-|---|---|---|
-| `accepted` | Thu mẫu thành công; `count` = tổng mẫu đã có của điểm đó | Tiếp tục điểm tiếp theo |
-| `unknown_point` | `point_id` không tồn tại trong session | Kiểm tra lại id |
-| `invalid_image` | File không phải JPEG hợp lệ | Gửi lại ảnh |
-| `no_face` | Không detect được khuôn mặt | Báo client chụp lại điểm này |
-
-**Lỗi:** `404` nếu session không tồn tại.
-
-### 3.6 POST `/session/{sid}/train` — Train mô hình
-
-Không cần body. Điều kiện: **mỗi điểm đã có ≥ 1 mẫu**. Server fit hồi quy tuyến tính mapping `(pitch, yaw) → (x, y)` chuẩn hóa.
-
-```bash
-curl -X POST http://localhost:8000/session/6f1a2b3c.../train
-```
-
-**Thành công:**
+Khi lỗi:
 
 ```json
-{"status": "ok", "n_samples": 16}
+{"ok":false,"status":"no_face","error":"no_face","frameId":"uuid","sequence":13}
 ```
 
-| Field | Kiểu | Ý nghĩa |
+Các giá trị `status`/`error`:
+
+- `no_face`: frame không có mặt;
+- `invalid_image`: frame hỏng;
+- `internal`: lỗi suy luận một frame, stream vẫn tiếp tục;
+- `overloaded`: queue suy luận đầy, client nên giảm FPS.
+
+JPEG legacy không có header vẫn được chấp nhận, nhưng không có metadata echo.
+Frame bị drop nếu session đang xử lý frame trước hoặc gửi dày hơn
+`MIN_FRAME_INTERVAL_MS` (mặc định 80 ms, khoảng 12.5 FPS).
+
+WebSocket close:
+
+- `1008 not_calibrated`: session chưa train/import;
+- `1013 pipeline_not_ready`: model chưa load xong.
+
+## Tọa độ và viewport
+
+- Gaze trả `[0,1]` theo **viewport lúc calibration**.
+- Giá trị có thể âm hoặc > 1 khi người dùng nhìn ra ngoài màn hình.
+- Frontend quy đổi từ viewport calibration sang viewport hiện tại bằng
+  `innerWidth/innerHeight`, `screenX/screenY`, DPR. Vì vậy zoom/resize/move cửa
+  sổ không cần calibration lại.
+- Backend lưu gaze thô theo viewport; worker mới quy đổi sang slide/AOI.
+
+## Cấu hình chính
+
+| Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `status` | string | `ok` |
-| `n_samples` | int | Tổng số mẫu dùng để train |
+| `DEVICE` | `cuda` trong compose | `cuda` hoặc `cpu` |
+| `WEIGHTS_DIR` | `/app/weights` | Volume weights runtime |
+| `MAX_SESSIONS` | `100` | Session đồng thời |
+| `SESSION_TTL_SECONDS` | `1800` | TTL session không hoạt động |
+| `MAX_POINTS` | `64` | Điểm calibration tối đa |
+| `MAX_SAMPLES_PER_POINT` | `50` | Mẫu giữ lại/point |
+| `GAZE_MAX_UPLOAD_BYTES` → `MAX_UPLOAD_BYTES` | `5242880` | Ảnh upload tối đa |
+| `MAX_INFERENCE_QUEUE` | `32` | Queue suy luận |
+| `MIN_FRAME_INTERVAL_MS` | `80` | Throttle FPS mỗi session |
+| `ONEEURO_*` | `0.5/0.5/1.0` | Bộ lọc làm mượt |
 
-**Lỗi:**
-
-| HTTP | Body | Ý nghĩa |
-|---|---|---|
-| 422 | `{"status": "insufficient_samples", "detail": {"tl": 3}}` | Chưa đủ mẫu; `detail` = map `point_id → số mẫu hiện có` để báo client thu thêm điểm nào |
-| 404 | — | Session không tồn tại |
-
-Sau khi train thành công, `state` chuyển sang `ready` — có thể stream.
-
-### 3.7 GET `/session/{sid}/model` — Tải mô hình
-
-Tải mô hình đã train về dạng file `.ubj` (ubjson **không chứa pickle** — chỉ hệ số) để **lưu vào DB của backend** và tái sử dụng ở lần sau, khỏi phải calibration lại.
+## Test
 
 ```bash
-curl -o calibration.ubj http://localhost:8000/session/6f1a2b3c.../model
+cd services/gaze
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check app tests
 ```
 
-- Response: `application/octet-stream`, tên file `calibration_{sid}.ubj`.
-- **Lỗi:** `409` nếu chưa train (`not calibrated`), `404` nếu session không tồn tại.
-
-### 3.8 POST `/session/{sid}/import` — Nạp lại mô hình
-
-Nạp file `.ubj` đã tải từ `/model` vào session mới, **bỏ qua toàn bộ bước thu mẫu + train**, session chuyển thẳng sang `ready`.
-
-| Form field | Kiểu | Mô tả |
-|---|---|---|
-| `model` | file | File `.ubj` tải từ `GET /session/{sid}/model` |
-
-```bash
-curl -X POST http://localhost:8000/session/6f1a2b3c.../import \
-  -F "model=@calibration.ubj"
-```
-
-```json
-{"status": "ready"}
-```
-
-| `status` | Ý nghĩa |
-|---|---|
-| `ready` | Import thành công, stream được ngay |
-| `invalid_model` | File không phải model hợp lệ |
-
-**Lỗi:** `404` nếu session không tồn tại.
-
-### 3.9 WS `/session/{sid}/stream` — Streaming gaze
-
-WebSocket gửi liên tục frame JPEG, nhận tọa độ gaze chuẩn hóa theo thời gian thực.
-
-**Bắt tay:**
-
-- URL: `ws://<host>:8000/session/{sid}/stream`
-- Session phải ở trạng thái `ready`. Nếu chưa train/import, server **đóng kết nối với close code `1008`** (reason `not_calibrated`).
-
-**Tin nhắn:**
-
-- Client → server: **binary JPEG** (mỗi message = 1 frame).
-- Server → client: **text JSON**:
-
-```json
-{"ok": true, "x": 0.512, "y": 0.347}
-```
-
-```json
-{"ok": false, "error": "no_face"}
-```
-
-| Field | Kiểu | Ý nghĩa |
-|---|---|---|
-| `ok` | bool | `false` khi frame bị bỏ qua |
-| `x`, `y` | float | Tọa độ chuẩn hóa theo màn hình hiển thị; **có thể âm hoặc > 1** |
-| `error` | string | `no_face` (không thấy khuôn mặt) hoặc `invalid_image` (frame hỏng) — chỉ có khi `ok = false` |
-
-**Cơ chế quan trọng khi tích hợp:**
-
-- **Drop-frame**: nếu server đang xử lý frame trước, frame mới gửi đến sẽ bị bỏ qua (không xếp hàng) để tránh trễ. Client gửi thoải mái, **không cần chờ phản hồi** của từng frame.
-- Output đã qua bộ lọc làm mượt One-Euro.
-- Đổi sang pixel ở phía client: `px = x * innerWidth`, `py = y * innerHeight`.
-- **Tinh chỉnh làm mượt** (biến môi trường, mặc định `beta=0.5`, `min_cutoff=0.5`,
-  `d_cutoff=1.0`): `ONEEURO_BETA` là nút chính giảm trễ khi lia mắt; tăng
-  `ONEEURO_MIN_CUTOFF` để bớt trễ cả khi đứng yên (đổi lại run hơn); tăng
-  `ONEEURO_D_CUTOFF` để ước lượng vận tốc bám nhanh hơn.
-
-**Ví dụ client Python:**
-
-```python
-import asyncio
-import json
-
-import cv2
-import websockets
-
-
-async def main():
-    sid = "6f1a2b3c-..."  # session đã train xong
-    cap = cv2.VideoCapture(0)
-
-    async with websockets.connect(f"ws://localhost:8000/session/{sid}/stream") as ws:
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            _, buf = cv2.imencode(".jpg", frame)
-            await ws.send(buf.tobytes())          # gửi binary JPEG, không chờ
-
-            resp = json.loads(await ws.recv())    # đọc response không chặn theo frame
-            if resp.get("ok"):
-                x, y = resp["x"], resp["y"]       # chuẩn hóa [0, 1]
-                # px = x * innerWidth; py = y * innerHeight
-
-
-asyncio.run(main())
-```
-
-**Ví dụ client JavaScript (browser):**
-
-```js
-const sid = "6f1a2b3c-...";
-const ws = new WebSocket(`ws://localhost:8000/session/${sid}/stream`);
-
-ws.onopen = () => ws.send(jpegBlob);        // mỗi frame webcam encode JPEG rồi gửi bytes
-
-ws.onmessage = (e) => {
-  const resp = JSON.parse(e.data);
-  if (resp.ok) drawGaze(resp.x * width, resp.y * height);  // nhân kích thước màn hình
-};
-```
-
-## 4. Quy trình tích hợp end-to-end
-
-Trong hệ thống EyeLearning, **frontend gọi trực tiếp** dịch vụ này qua nginx
-(`/gaze/*` → gaze) và qua WebSocket; backend chỉ giữ vai trò lưu model `.ubj`
-và kiểm soát quyền. Luồng chuẩn:
-
-```
-Bước 1 — Bắt đầu calibration
-  Client gọi POST /session với N điểm (lấy từ cấu hình UI) và lưu session_id.
-
-Bước 2 — Thu mẫu
-  Client hiển thị lần lượt từng điểm; mỗi điểm gửi 1 frame JPEG + point_id.
-  Nếu nhận status "no_face" / "invalid_image" → chụp lại điểm đó (tối đa vài lần).
-
-Bước 3 — Train
-  Client gọi POST /session/{sid}/train.
-  - 422 → đọc map detail, thu thêm mẫu cho các điểm còn thiếu.
-  - ok  → sang bước 4.
-
-Bước 4 — Lưu model để tái sử dụng
-  Client gọi GET /session/{sid}/model → gửi bytes (.ubj) cho backend
-  (backend lưu vào calibration_params.model_ubj của Postgres).
-
-Bước 5 — Streaming
-  Client mở WebSocket trực tiếp tới /session/{sid}/stream, gửi binary JPEG,
-  nhận JSON {ok, x, y}. Không proxy qua backend (giảm 1 hop, không nghẽn event loop).
-
-Dọn dẹp
-  Khi phiên kết thúc (đóng trang / đổi bài), gọi DELETE /session/{sid}
-  để trả slot về giới hạn 100 session.
-
-Tái sử dụng calibration (bỏ qua bước 2-3)
-  Phiên cũ hết TTL/restart → POST /session mới → POST /session/{sid}/import với
-  file .ubj đã lưu trong DB → stream ngay, người học không phải hiệu chỉnh lại.
-  Chỉ import khi màn hình không đổi (model gắn với kích thước màn hình lúc train).
-```
-
-Ví dụ gọi tuần tự bằng Python:
-
-```python
-import json
-import urllib.request
-
-BASE = "http://localhost:8000"
-
-# 1. Tạo session
-points = [
-    {"id": "tl", "x": 0.125, "y": 0.167},
-    {"id": "c", "x": 0.5, "y": 0.5},
-    {"id": "br", "x": 0.875, "y": 0.833},
-]
-req = urllib.request.Request(
-    f"{BASE}/session",
-    data=json.dumps({"points": points}).encode(),
-    headers={"Content-Type": "application/json"},
-)
-sid = json.load(urllib.request.urlopen(req))["session_id"]
-
-# 2. Thu mẫu: 1 lần cho mỗi điểm (multipart: image + point_id)
-
-# 3. Train
-resp = json.load(urllib.request.urlopen(f"{BASE}/session/{sid}/train", data=b""))
-print(resp)  # {"status": "ok", "n_samples": 16}
-
-# 4. Lưu model: GET /session/{sid}/model -> gửi bytes cho backend
-
-# 5. Streaming qua WebSocket — xem mục 3.9
-```
-
-## 5. Tổng hợp mã lỗi
-
-**HTTP:**
-
-| HTTP | Xảy ra ở | Ý nghĩa |
-|---|---|---|
-| 404 | mọi endpoint `/session/{sid}...` | Session không tồn tại (hết TTL, đã xóa hoặc sai id) |
-| 409 | `GET .../model` | Chưa train (`not calibrated`) |
-| 413 | `POST .../calibrate`, `.../import` | File upload vượt `MAX_UPLOAD_BYTES` |
-| 422 | `POST /session`, `POST .../train` | Điểm không hợp lệ / chưa đủ mẫu; `detail` = map `point_id → số mẫu` |
-| 503 | `POST /session` | Quá `MAX_SESSIONS` session đồng thời |
-| 503 | `POST .../calibrate`, WS stream | Pipeline chưa sẵn sàng (xem `/ready`) |
-
-**WebSocket:**
-
-| Mã / giá trị | Ý nghĩa |
-|---|---|
-| Close code `1008` | Session chưa `ready` (`not_calibrated`) |
-| Close code `1013` | Pipeline chưa sẵn sàng (`pipeline_not_ready`) |
-| `{"ok": false, "error": "no_face"}` | Frame không có khuôn mặt — bỏ qua |
-| `{"ok": false, "error": "invalid_image"}` | Frame không phải JPEG hợp lệ — bỏ qua |
-| `{"ok": false, "error": "internal"}` | Lỗi suy luận 1 frame — bỏ qua, phiên vẫn mở |
-
-## 6. Checklist khi triển khai
-
-- [ ] Gọi `GET /ready` khi khởi động; chặn tính năng nếu `pipeline_ready = false` (503).
-- [ ] Luôn khởi tạo qua `POST /session`, không gọi thẳng endpoint con.
-- [ ] Mỗi điểm chỉ cần 1 mẫu; retry khi `no_face` / `invalid_image`.
-- [ ] Xử lý `status` (không chỉ HTTP code) ở `/calibrate` và `/import`.
-- [ ] Nhân kích thước viewport ở client khi hiển thị; chấp nhận tọa độ âm / > 1.
-- [ ] Gọi `DELETE /session/{sid}` khi kết thúc để không chạm giới hạn 100 session.
-- [ ] Lưu file `.ubj` từ `/model` vào DB để tái sử dụng qua `/import` (tránh calibration lại mỗi phiên).
-- [ ] Chỉ `/import` khi màn hình không đổi so với lúc train.
-- [ ] Tự bảo vệ API này (không có auth), không để lộ `session_id` ra ngoài phạm vi kiểm soát.
-
-## 7. Cấu trúc mã nguồn
-
-```
-app/
-├── main.py             FastAPI app, lifespan (load pipeline), /health + /ready
-├── settings.py         biến môi trường: WEIGHTS_DIR, MIN_SAMPLES, TTL, MAX_SESSIONS, INFER_WORKERS, ONEEURO_*...
-├── schemas.py          pydantic body/response của API
-├── api/session.py      toàn bộ endpoint /session* + WebSocket stream
-└── services/
-    ├── inference.py    vòng đời suy luận: singleton Pipeline + executor 1 worker (drop-frame)
-    ├── pipeline.py     mediapipe face detect -> UniGaze -> (pitch, yaw)
-    ├── preprocessing.py chuẩn hoá khuôn mặt (alignment) — không còn làm mượt ở đây
-    ├── smoothing.py    One-Euro filter làm mượt POG
-    ├── calibration.py  hồi quy tuyến tính (pitch, yaw) -> (x, y) + serialize .ubj v2
-    └── sessions.py     Session / SessionManager (RAM, TTL, giới hạn, thread-safe)
-scripts/download_weights.py   tải weights lúc khởi động (entrypoint.sh)
-requirements.txt              runtime; requirements-dev.txt: ruff/httpx
-Dockerfile                    multi-stage: ai-base (torch cu124) + runtime (deps gaze)
-requirements-torch.txt        torch/torchvision CUDA 12.4 (stage ai-base)
-```
-
-Bố cục giống `backend/` (gói `app/`). Service không ghi gì
-xuống đĩa: session nằm trong RAM, weights nằm trong volume `gaze-weights`.
-
-## 8. Đổi model UniGaze (b16 / l16 / h14)
-
-Model được **hardcode** (không qua env). Có 3 kích thước trong
-`unigaze.loader.MODEL_INDEX`:
-
-| Tên (dùng đúng chuỗi này) | ViT | File weights |
-| --- | --- | --- |
-| `unigaze_b16_joint` | vit_b_16 | 346 MB |
-| `unigaze_l16_joint` | vit_l_16 | 1.2 GB |
-| `unigaze_h14_joint` | vit_h_14 | 2.5 GB |
-| `unigaze_h14_cross_X` | vit_h_14 | 2.5 GB |
-
-Đổi model = sửa **2 chỗ** rồi build lại:
-
-1. `app/services/pipeline.py` — `UNIGAZE_WEIGHTS = WEIGHTS_DIR / "<tên>.safetensors"`.
-   Tên file phải trùng key trong `MODEL_INDEX` vì code dùng `path.stem` làm builder key.
-2. `scripts/download_weights.py` — thêm/đổi entry trong `FILES` (URL HuggingFace
-   `https://huggingface.co/UniGaze/UniGaze-models/resolve/main/<tên>.safetensors`,
-   `min_size` sát kích thước thật để chặn file tải dở).
-
-```bash
-docker compose up -d --build gaze   # code nằm trong image -> phải build
-docker compose logs -f gaze         # theo dõi tải weights (lần đầu)
-curl -s localhost:8000/ready        # pipeline_ready=true khi sẵn sàng
-```
-
-Lưu ý:
-
-- Input luôn là 224×224 (`preprocessing.py`) nên **không** cần sửa tiền xử lý.
-- File cũ vẫn nằm trong volume `gaze-weights` (vô hại) — xoá volume là mất cả file mới.
-- **Phải calibration lại** sau khi đổi model: hệ số hồi quy `.ubj` đặc thù từng model.
-  Vì vậy khi đổi backbone cũng phải đổi **nhãn version** ở backend:
-  `backend/app/api/routes/calibration.py` → `MAPPING_MODEL_VERSION` (vd `ubj-linreg-v2-h14`).
-  Không đổi nhãn thì `.ubj` cũ (train bằng model cũ) vẫn được coi là hợp lệ, client nạp
-  lại và gaze sẽ **sai âm thầm**. Đổi nhãn giúp bản ghi cũ tự `calibrated=false` →
-  UI yêu cầu hiệu chỉnh lại (`/active/model` trả 409).
-- l16/h14 tốn VRAM (h14 ~2.5 GB weights, ~6 GB khi chạy) và chậm hơn b16 rõ rệt;
-  `DEVICE=cpu` chạy được nhưng rất chậm.
+Test hiện có bao phủ protocol v2/legacy, calibration `.ubj`, One-Euro filter,
+TTL/giới hạn session và giữ mẫu. Test inference đầy đủ cần image có
+MediaPipe/UniGaze/GPU.
+
+## Đổi backbone UniGaze
+
+Model hardcode trong `app/services/pipeline.py`; file weights tương ứng nằm
+trong `scripts/download_weights.py`. Khi đổi model:
+
+1. Đổi tên weights ở cả hai nơi.
+2. Build lại image và xoá/khôi phục weights nếu cần.
+3. Đổi `MAPPING_MODEL_VERSION` trong `backend/app/api/routes/calibration.py`.
+4. Buộc người dùng calibration lại; model cũ sẽ trả 409 ở
+   `/api/calibrations/active/model`.

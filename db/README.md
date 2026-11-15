@@ -4,17 +4,18 @@ Schema chuẩn là **một baseline sạch**:
 
 ```
 db/migrations/
-└── 001_baseline.sql                 # toàn bộ schema + reference seed (roles, ...)
+└── 001_baseline.sql                 # 24 bảng lõi + view + metadata generation 12
 ```
 
-`001_baseline.sql` là bản gộp cuối cùng của schema, constraint, index, trigger,
-view, partition, bảng `user_identities` (đăng nhập Microsoft 365) và dữ liệu
-tham chiếu tối thiểu. Các migration lịch sử và file delta cũ đã được gộp vào
-baseline; lịch sử vẫn còn trong Git. Không có chuỗi “drop legacy rồi dựng lại”,
-không tự baseline/replay.
+`001_baseline.sql` chứa toàn bộ schema generation 12: 24 bảng lõi, index, view
+outline và metadata. Baseline gộp luôn `course_visits`,
+`learning_sessions.course_visit_id`, `gaze_samples.original_viewport_x/y`,
+`view_layouts.coordinate_space/visible_rect`, `aois.label` và
+`gaze_samples.aoi_label`. Không còn versioning, partition gaze,
+`user_identities`, `roles` hay các bảng job riêng.
 
 Khi schema thay đổi, thêm file mới `002_...sql`; **không sửa file đã áp**.
-Schema generation hiện tại là `8` (giá trị trong `app_metadata`).
+Schema generation hiện tại là `12` (giá trị trong `app_metadata`).
 
 ## Runner
 
@@ -60,7 +61,7 @@ database đích, DSN backend, ownership và kết nối còn lại. Không dùng
 `docker compose down -v`, không xóa volume, không đụng database khác.
 
 Sau reset, `docker compose up -d` sẽ chạy lại service `migrate` (baseline +
-generation 8). Nếu muốn seed tài khoản dev:
+generation 12). Nếu muốn seed tài khoản dev:
 
 ```bash
 ./scripts/seed_dev.sh
@@ -75,19 +76,16 @@ generation 8). Nếu muốn seed tài khoản dev:
 Tạo 3 tài khoản dev nếu chưa có. **Không ghi đè mật khẩu** của tài khoản đã tồn
 tại. Mật khẩu mặc định: `Password123!`.
 
-## Partition
+## Retention gaze
 
-`gaze_samples` partition theo tháng `event_time`:
+`gaze_samples` không còn partition. Sample cũ hơn `GAZE_RETENTION_DAYS`
+(mặc định 180 ngày) được xoá bởi:
 
 ```bash
-./scripts/create_partitions.sh        # mặc định 3 tháng
-./scripts/create_partitions.sh 12
+./scripts/maintenance.sh
 ```
 
-Baseline tạo default partition + tháng trước/current/3 tháng tới. Không xóa
-partition cũ.
-
-## Quy tắc sau Phase 6
+## Quy tắc schema
 
 - Baseline đã khóa checksum; mọi thay đổi schema phải là migration mới
   (`002_...`).

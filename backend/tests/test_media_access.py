@@ -9,12 +9,12 @@ import uuid
 import pytest
 from fastapi import HTTPException
 
-from app.api.routes.media import _get_asset_for_user
 from app.core.config import settings
 from app.db.session import SessionLocal, engine
 from app.models.auth import User
 from app.models.media import MediaAsset
-from app.services.aoi.access import _slide_version_course
+from app.services.aoi.access import slide_with_course
+from app.services.media_access import get_asset_for_user
 from tests.conftest import create_user, login, seed_course, seed_slide
 from tests.query_counter import count_queries
 
@@ -28,7 +28,6 @@ async def _seed_media_course():
     slide_ids = await seed_slide(
         course_id=ids["course_id"],
         lesson_id=ids["lesson_id"],
-        lesson_version_id=ids["lesson_version_id"],
         teacher_id=teacher_id,
     )
     return teacher_id, student_id, ids, slide_ids
@@ -42,7 +41,7 @@ async def test_media_asset_access_queries_for_enrolled_student():
         user = await db.get(User, student_id)
         assert user is not None
         with count_queries(engine) as counter:
-            asset = await _get_asset_for_user(db, slide_ids["asset_id"], user)
+            asset = await get_asset_for_user(db, slide_ids["asset_id"], user)
 
     assert asset.id == slide_ids["asset_id"]
     # asset + course + enrollment + published check
@@ -57,7 +56,7 @@ async def test_media_asset_access_queries_for_course_owner():
         user = await db.get(User, teacher_id)
         assert user is not None
         with count_queries(engine) as counter:
-            asset = await _get_asset_for_user(db, slide_ids["asset_id"], user)
+            asset = await get_asset_for_user(db, slide_ids["asset_id"], user)
 
     assert asset.id == slide_ids["asset_id"]
     # asset + course; owner check không cần query thêm
@@ -72,7 +71,7 @@ async def test_media_asset_missing_is_404():
         user = await db.get(User, student_id)
         assert user is not None
         with pytest.raises(HTTPException) as exc_info:
-            await _get_asset_for_user(db, str(uuid.uuid4()), user)
+            await get_asset_for_user(db, str(uuid.uuid4()), user)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Không tìm thấy file"
@@ -88,27 +87,25 @@ async def test_media_asset_outsider_is_403():
         user = await db.get(User, outsider_id)
         assert user is not None
         with pytest.raises(HTTPException) as exc_info:
-            await _get_asset_for_user(db, slide_ids["asset_id"], user)
+            await get_asset_for_user(db, slide_ids["asset_id"], user)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Không có quyền"
 
 
 @pytest.mark.asyncio
-async def test_slide_version_course_query_count():
+async def test_slide_course_query_count():
     _, _, _, slide_ids = await _seed_media_course()
 
     async with SessionLocal() as db:
         with count_queries(engine) as counter:
-            slide_version, slide, lesson, course = await _slide_version_course(
-                db, slide_ids["slide_version_id"]
+            slide, lesson, course = await slide_with_course(
+                db, slide_ids["slide_id"]
             )
 
-    assert slide_version.id == slide_ids["slide_version_id"]
     assert slide.id == slide_ids["slide_id"]
     assert lesson.id
     assert course.id
-    # slide_version + slide + lesson + course, không selectin versions/slides
     assert counter.count == 4, counter.statements
 
 
@@ -123,7 +120,6 @@ async def test_local_media_uses_x_accel_redirect(client):
     slide_ids = await seed_slide(
         course_id=ids["course_id"],
         lesson_id=ids["lesson_id"],
-        lesson_version_id=ids["lesson_version_id"],
         teacher_id=teacher_id,
     )
 

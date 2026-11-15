@@ -4,7 +4,6 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
-    Query,
     UploadFile,
     status,
 )
@@ -130,11 +129,12 @@ async def get_slide_import_job(
 ):
     lesson, course = await get_managed_lesson(db, lesson_id, user)
     job = await content.get_slide_import_job(db, course, lesson.id, job_id)
+    payload = job.payload or {}
     return SlideImportJobOut(
         id=job.id,
         status=job.status,
-        filename=job.source_filename,
-        page_count=job.page_count,
+        filename=str(payload.get("source_filename") or ""),
+        page_count=payload.get("page_count"),
         error=job.error,
         created_at=job.created_at,
         finished_at=job.finished_at,
@@ -146,18 +146,11 @@ async def get_slide_import_job(
 )
 async def list_lesson_slides(
     lesson_id: str,
-    version: str = Query(default="draft", pattern="^(draft|published)$"),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await get_viewable_lesson(db, lesson_id, user)
-    slides = await content.list_lesson_slides_admin(
-        db, course, user, lesson.id, version=version
-    )
-    # Bản nháp có thể clone lesson version (copy-on-write); phải commit để
-    # các request sau (và worker index) thấy cùng một bản nháp.
-    await db.commit()
-    return slides
+    return await content.list_lesson_slides_admin(db, course, user, lesson.id)
 
 
 @router.post("/teacher/lessons/{lesson_id}/slides/reindex")
@@ -169,14 +162,10 @@ async def reindex_lesson_slides(
     """Index lại các slide chưa sẵn sàng của bài giảng đang soạn."""
     lesson, course = await get_managed_lesson(db, lesson_id, user)
     slides = await content.list_lesson_slides_admin(db, course, user, lesson.id)
-    await db.commit()
     if not slides:
         return {"ok": True, "queued": 0}
-    lesson_version_id = slides[0].lesson_version_id
-    queued = await embedding.mark_lesson_version_pending(lesson_version_id)
-    await embedding_jobs.enqueue_lesson_version(
-        db, lesson_version_id, include_draft=True, force=True
-    )
+    queued = await embedding.mark_lesson_pending(lesson.id)
+    await embedding_jobs.enqueue_index_lesson(db, lesson.id, force=True)
     await db.commit()
     return {"ok": True, "queued": queued}
 

@@ -1,7 +1,6 @@
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWTError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ratelimit import enforce_rate_limit
@@ -9,6 +8,10 @@ from app.core.security import decode_access_token
 from app.crud.user import get_user_for_auth_cached
 from app.db.session import get_db
 from app.models.auth import User
+from app.services.access import (  # noqa: F401 - re-export API cũ
+    can_access_course,
+    can_manage_course,
+)
 
 oauth2_scheme = HTTPBearer(auto_error=False)
 
@@ -92,26 +95,3 @@ def user_rate_limit(
         )
 
     return dependency
-
-
-async def can_manage_course(db: AsyncSession, course, user: User) -> bool:
-    """True nếu user là admin hoặc chủ khóa học (owner_id)."""
-    if "admin" in user.role_codes:
-        return True
-    return getattr(course, "owner_id", None) == user.id
-
-
-async def can_access_course(db: AsyncSession, course, user: User) -> bool:
-    """True nếu user là admin, chủ khóa, hoặc giáo viên được phân công."""
-    if await can_manage_course(db, course, user):
-        return True
-    if "teacher" not in user.role_codes:
-        return False
-
-    from app.models.course import CourseTeacher
-
-    stmt = select(CourseTeacher.course_id).where(
-        CourseTeacher.course_id == course.id,
-        CourseTeacher.teacher_id == user.id,
-    )
-    return (await db.execute(stmt)).scalar_one_or_none() is not None

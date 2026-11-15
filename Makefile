@@ -8,7 +8,7 @@
 #   make up / make down / make smoke
 #   make bundle-report / make loadtest / make e2e
 
-.PHONY: check check-full test-backend test-frontend build up down smoke bundle-report loadtest e2e
+.PHONY: check check-full test-backend test-frontend build up down smoke bundle-report loadtest e2e clean
 
 check:
 	./scripts/check.sh
@@ -42,3 +42,13 @@ loadtest:
 
 e2e:
 	./scripts/e2e.sh
+
+# Chỉ xoá artifact tái tạo được. Không xoá .env, media, backups, weights,
+# node_modules hoặc .venv.
+clean:
+	find backend services scripts -type d -name __pycache__ -prune -exec rm -rf {} +
+	rm -rf .ruff_cache backend/.pytest_cache services/chatbot/.pytest_cache
+	rm -rf frontend/.next frontend/test-results frontend/playwright-report
+	rm -f frontend/tsconfig.tsbuildinfo frontend/next-env.d.ts
+	rm -f frontend/public/pdf.worker.min.mjs
+	rm -rf frontend/public/pdfjs

@@ -2,29 +2,83 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    CHAR,
     REAL,
     BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
-    ForeignKeyConstraint,
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.aoi import AoiSet
-    from app.models.calibration import Calibration
-    from app.models.course import CourseVersionItem, Enrollment, LessonVersionSlide
+    from app.models.calibration import GazeCalibration
+    from app.models.course import Enrollment, Lesson, Slide
     from app.models.quiz import QuizAttempt
+
+
+class CourseVisit(Base):
+    """Một lần sinh viên vào trang khóa học (ca học cấp khóa)."""
+
+    __tablename__ = "course_visits"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'ended', 'expired')",
+            name="course_visits_status_check",
+        ),
+        Index("idx_course_visits_enrollment", "enrollment_id", "started_at"),
+        Index("idx_course_visits_status_seen", "status", "last_seen_at"),
+        Index(
+            "ux_course_visits_enrollment_key",
+            "enrollment_id",
+            "visit_key",
+            unique=True,
+            postgresql_where=text("visit_key IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    enrollment_id: Mapped[str] = mapped_column(
+        ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'active'")
+    )
+    visit_key: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+    enrollment: Mapped["Enrollment"] = relationship(
+        back_populates="course_visits", lazy="raise"
+    )
+    sessions: Mapped[list["LearningSession"]] = relationship(
+        back_populates="course_visit",
+        cascade="all, delete-orphan",
+        order_by="LearningSession.started_at",
+        lazy="raise",
+        passive_deletes=True,
+    )
 
 
 class LearningSession(Base):
@@ -34,12 +88,9 @@ class LearningSession(Base):
             "status IN ('in_progress', 'completed', 'aborted', 'expired')",
             name="learning_sessions_status_check",
         ),
-        Index(
-            "idx_learning_sessions_enrollment",
-            "enrollment_id",
-            "started_at",
-        ),
-        Index("idx_learning_sessions_item", "course_version_item_id"),
+        Index("idx_learning_sessions_enrollment", "enrollment_id", "started_at"),
+        Index("idx_learning_sessions_lesson", "lesson_id", "started_at"),
+        Index("idx_learning_sessions_visit", "course_visit_id", "started_at"),
         Index("idx_learning_sessions_status", "status"),
     )
 
@@ -49,19 +100,26 @@ class LearningSession(Base):
     enrollment_id: Mapped[str] = mapped_column(
         ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=False
     )
-    course_version_item_id: Mapped[str] = mapped_column(
-        ForeignKey("course_version_items.id", ondelete="RESTRICT"), nullable=False
+    lesson_id: Mapped[str] = mapped_column(
+        ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False
+    )
+    course_visit_id: Mapped[str | None] = mapped_column(
+        ForeignKey("course_visits.id", ondelete="CASCADE")
     )
     quiz_attempt_id: Mapped[str | None] = mapped_column(
-        ForeignKey("quiz_attempts.id", ondelete="SET NULL")
+        ForeignKey("quiz_attempts.id", ondelete="CASCADE")
     )
     calibration_id: Mapped[str | None] = mapped_column(
-        ForeignKey("calibrations.id", ondelete="RESTRICT")
+        ForeignKey("gaze_calibrations.id", ondelete="SET NULL")
     )
-    pipeline_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    config: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    pipeline_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'gaze-v1'")
     )
+    viewport_width_px: Mapped[int | None] = mapped_column(Integer)
+    viewport_height_px: Mapped[int | None] = mapped_column(Integer)
+    calibration_width_px: Mapped[int | None] = mapped_column(Integer)
+    calibration_height_px: Mapped[int | None] = mapped_column(Integer)
+    device_pixel_ratio: Mapped[float | None] = mapped_column(REAL)
     tracking_consent: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("true")
     )
@@ -74,33 +132,43 @@ class LearningSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    enrollment: Mapped["Enrollment"] = relationship()
-    course_version_item: Mapped["CourseVersionItem"] = relationship()
-    quiz_attempt: Mapped["QuizAttempt | None"] = relationship()
-    calibration: Mapped["Calibration | None"] = relationship()
-    presentations: Mapped[list["ContentPresentation"]] = relationship(
+    enrollment: Mapped["Enrollment"] = relationship(lazy="raise")
+    lesson: Mapped["Lesson"] = relationship(lazy="raise")
+    course_visit: Mapped["CourseVisit | None"] = relationship(
+        back_populates="sessions", lazy="raise"
+    )
+    quiz_attempt: Mapped["QuizAttempt | None"] = relationship(lazy="raise")
+    calibration: Mapped["GazeCalibration | None"] = relationship(lazy="raise")
+    views: Mapped[list["ContentView"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
-        order_by="ContentPresentation.sequence_no",
-        lazy="selectin",
+        order_by="ContentView.sequence_no",
+        lazy="raise",
+        passive_deletes=True,
     )
 
 
-class ContentPresentation(Base):
-    __tablename__ = "content_presentations"
+class ContentView(Base):
+    __tablename__ = "content_views"
     __table_args__ = (
         UniqueConstraint("session_id", "sequence_no"),
-        UniqueConstraint("id", "session_id"),
+        CheckConstraint("surface IN ('lesson', 'quiz')", name="content_views_surface_check"),
+        CheckConstraint("sequence_no >= 0", name="content_views_sequence_check"),
+        CheckConstraint("gaze_count >= 0", name="content_views_gaze_count_check"),
         CheckConstraint(
-            "surface IN ('lesson', 'quiz')",
-            name="content_presentations_surface_check",
+            "on_slide_gaze_count >= 0", name="content_views_on_slide_count_check"
+        ),
+        CheckConstraint("tracked_duration_ms >= 0", name="content_views_duration_check"),
+        CheckConstraint(
+            "fixation_count >= 0", name="content_views_fixation_count_check"
         ),
         CheckConstraint(
-            "sequence_no >= 0", name="content_presentations_sequence_check"
+            "analysis_status IN ('pending', 'running', 'ready', 'failed')",
+            name="content_views_analysis_status_check",
         ),
-        Index(
-            "idx_content_presentations_session", "session_id", "started_at"
-        ),
+        Index("idx_content_views_session", "session_id", "started_at"),
+        Index("idx_content_views_slide", "slide_id"),
+        Index("idx_content_views_analysis", "analysis_status"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -109,11 +177,8 @@ class ContentPresentation(Base):
     session_id: Mapped[str] = mapped_column(
         ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
     )
-    lesson_version_slide_id: Mapped[str | None] = mapped_column(
-        ForeignKey("lesson_version_slides.id", ondelete="RESTRICT")
-    )
-    slide_aoi_set_id: Mapped[str | None] = mapped_column(
-        ForeignKey("aoi_sets.id", ondelete="SET NULL")
+    slide_id: Mapped[str | None] = mapped_column(
+        ForeignKey("slides.id", ondelete="CASCADE")
     )
     surface: Mapped[str] = mapped_column(String(16), nullable=False)
     sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -121,91 +186,88 @@ class ContentPresentation(Base):
         DateTime(timezone=True), server_default=text("now()")
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    gaze_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    on_slide_gaze_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    tracked_duration_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    fixation_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    heatmap_grid: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    analysis_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'pending'")
+    )
+    analysis_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'gaze-metrics-v3'")
+    )
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    session: Mapped["LearningSession"] = relationship(back_populates="presentations")
-    lesson_version_slide: Mapped["LessonVersionSlide | None"] = relationship()
-    slide_aoi_set: Mapped["AoiSet | None"] = relationship()
+    session: Mapped["LearningSession"] = relationship(back_populates="views")
+    slide: Mapped["Slide | None"] = relationship(back_populates="content_views")
+    layouts: Mapped[list["ViewLayout"]] = relationship(
+        back_populates="content_view",
+        cascade="all, delete-orphan",
+        order_by="ViewLayout.captured_at",
+        lazy="raise",
+        passive_deletes=True,
+    )
+    samples: Mapped[list["GazeSample"]] = relationship(
+        back_populates="content_view", cascade="all, delete-orphan", lazy="raise",
+        passive_deletes=True,
+    )
 
 
-class GazeBatch(Base):
-    __tablename__ = "gaze_batches"
+class ViewLayout(Base):
+    __tablename__ = "view_layouts"
     __table_args__ = (
-        UniqueConstraint("session_id", "batch_id"),
-        UniqueConstraint("session_id", "batch_no"),
-        UniqueConstraint("id", "session_id"),
-        ForeignKeyConstraint(
-            ["presentation_id", "session_id"],
-            ["content_presentations.id", "content_presentations.session_id"],
-            ondelete="CASCADE",
-        ),
-        CheckConstraint("batch_no >= 0", name="gaze_batches_batch_no_check"),
+        UniqueConstraint("content_view_id", "layout_no"),
+        CheckConstraint("layout_no >= 0", name="view_layouts_layout_no_check"),
         CheckConstraint(
-            "sequence_start >= 0", name="gaze_batches_sequence_start_check"
+            "coordinate_space IN ('current-v1', 'original-v1')",
+            name="view_layouts_coordinate_space_check",
         ),
-        CheckConstraint(
-            "sequence_end >= sequence_start",
-            name="gaze_batches_sequence_range_check",
-        ),
-        CheckConstraint(
-            "payload_hash ~ '^[0-9a-f]{64}$'",
-            name="gaze_batches_payload_hash_check",
-        ),
-        CheckConstraint(
-            "received_count >= 0", name="gaze_batches_received_count_check"
-        ),
-        CheckConstraint(
-            "stored_count >= 0", name="gaze_batches_stored_count_check"
-        ),
-        CheckConstraint(
-            "duplicate_count >= 0", name="gaze_batches_duplicate_count_check"
-        ),
-        CheckConstraint(
-            "rejected_count >= 0", name="gaze_batches_rejected_count_check"
-        ),
-        Index("idx_gaze_batches_session", "session_id", "batch_no"),
-        Index("idx_gaze_batches_presentation", "presentation_id"),
+        Index("idx_view_layouts_view", "content_view_id", "captured_at"),
     )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    session_id: Mapped[str] = mapped_column(
-        ForeignKey("learning_sessions.id", ondelete="CASCADE"), nullable=False
+    content_view_id: Mapped[str] = mapped_column(
+        ForeignKey("content_views.id", ondelete="CASCADE"), nullable=False
     )
-    presentation_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
-    layout_snapshot_id: Mapped[str | None] = mapped_column(
-        ForeignKey("aoi_layout_snapshots.id", ondelete="SET NULL")
+    layout_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    coordinate_space: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'current-v1'")
     )
-    batch_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
-    batch_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    sequence_start: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    sequence_end: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    payload_hash: Mapped[str] = mapped_column(CHAR(64), nullable=False)
-    received_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
+    visible_rect: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    stored_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
+    slide_rect: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    duplicate_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
+    elements: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
-    rejected_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
     )
 
-    session: Mapped["LearningSession"] = relationship()
-    presentation: Mapped["ContentPresentation"] = relationship(overlaps="session")
+    content_view: Mapped["ContentView"] = relationship(back_populates="layouts")
+    samples: Mapped[list["GazeSample"]] = relationship(back_populates="layout")
 
 
 class GazeSample(Base):
     __tablename__ = "gaze_samples"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["batch_id", "session_id"],
-            ["gaze_batches.id", "gaze_batches.session_id"],
-            ondelete="CASCADE",
-        ),
+        UniqueConstraint("content_view_id", "client_batch_id", "sequence"),
+        CheckConstraint("sequence >= 0", name="gaze_samples_sequence_check"),
         CheckConstraint(
             "status IN ('ok', 'no_face', 'error', 'offscreen')",
             name="gaze_samples_status_check",
@@ -223,29 +285,40 @@ class GazeSample(Base):
             "viewport_y IS NULL OR (viewport_y > -100 AND viewport_y < 100)",
             name="gaze_samples_viewport_y_check",
         ),
-        CheckConstraint("sequence >= 0", name="gaze_samples_sequence_check"),
-        CheckConstraint(
-            "capture_monotonic_ns >= 0",
-            name="gaze_samples_capture_monotonic_check",
+        Index("idx_gaze_samples_view_time", "content_view_id", "event_time"),
+        Index("idx_gaze_samples_event_time", "event_time"),
+        Index(
+            "idx_gaze_samples_aoi_label",
+            "aoi_label",
+            postgresql_where=text("aoi_label IS NOT NULL"),
         ),
-        Index("idx_gaze_samples_session", "session_id", "event_time"),
-        Index("idx_gaze_samples_batch", "batch_id", "event_time"),
-        {"postgresql_partition_by": "RANGE (event_time)"},
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
-    batch_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
-    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    capture_monotonic_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    event_time: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), primary_key=True
+    content_view_id: Mapped[str] = mapped_column(
+        ForeignKey("content_views.id", ondelete="CASCADE"), nullable=False
     )
+    layout_id: Mapped[str | None] = mapped_column(
+        ForeignKey("view_layouts.id", ondelete="SET NULL")
+    )
+    client_batch_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     viewport_x: Mapped[float | None] = mapped_column(REAL)
     viewport_y: Mapped[float | None] = mapped_column(REAL)
+    original_viewport_x: Mapped[float | None] = mapped_column(REAL)
+    original_viewport_y: Mapped[float | None] = mapped_column(REAL)
+    slide_x: Mapped[float | None] = mapped_column(REAL)
+    slide_y: Mapped[float | None] = mapped_column(REAL)
+    aoi_label: Mapped[str | None] = mapped_column(Text)
+    # Legacy: giữ để tương thích API/export cũ; sau reanalyze chỉ có 0/1 phần tử.
+    aoi_codes: Mapped[list[str]] = mapped_column(
+        ARRAY(String(128)), nullable=False, server_default=text("'{}'::text[]")
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     quality_flags: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
-    batch: Mapped["GazeBatch"] = relationship()
+    content_view: Mapped["ContentView"] = relationship(back_populates="samples")
+    layout: Mapped["ViewLayout | None"] = relationship(back_populates="samples")

@@ -86,11 +86,6 @@ function getCsrfHeader(): Record<string, string> {
   return token ? { "X-CSRF-Token": token } : {};
 }
 
-/** Header auth cho các request không đi qua `apiFetch` (vd SSE bằng fetch). */
-export function getAuthHeaders(): Record<string, string> {
-  return { ...getAuthHeader(), ...getCsrfHeader() };
-}
-
 // One-time migration from versions that persisted credentials in browser storage.
 if (typeof window !== "undefined") {
   try {
@@ -235,6 +230,31 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     throw await parseApiError(res);
   }
   return res.json() as Promise<T>;
+}
+
+/**
+ * Fetch một response dạng stream (SSE) với auth/CSRF/refresh dùng chung.
+ * Caller tự đọc body và xử lý lỗi HTTP.
+ */
+export async function apiFetchStream(
+  path: string,
+  options: Pick<ApiRequestOptions, "method" | "body" | "signal" | "headers"> = {},
+): Promise<Response> {
+  const { method = "POST", body, signal, headers } = options;
+  const doFetch = (): Promise<Response> =>
+    fetch(buildUrl(path), {
+      method,
+      signal,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+        ...getCsrfHeader(),
+        ...headers,
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  return fetchWithAuthRetry(doFetch);
 }
 
 export async function apiFetchMultipart<T>(

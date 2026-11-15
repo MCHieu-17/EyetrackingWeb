@@ -1,130 +1,42 @@
-"""AOI set access checks and published/latest lookups."""
+"""AOI access helpers."""
 
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
-from app.api.deps import can_access_course, can_manage_course
-from app.models.aoi import AoiSet
 from app.models.auth import User
-from app.models.course import Course, Lesson, Slide, SlideVersion
+from app.models.course import Course, CourseModule, Lesson, Slide
+from app.services.access import can_manage_course
 
 from .common import _not_found
 
 
-async def _slide_version_course(
-    db: AsyncSession, slide_version_id: str
-) -> tuple[SlideVersion, Slide, Lesson, Course]:
-    slide_version = await db.get(SlideVersion, slide_version_id)
-    if slide_version is None:
-        raise _not_found("Không tìm thấy phiên bản slide")
-    slide = await db.get(
-        Slide,
-        slide_version.slide_id,
-        options=[raiseload(Slide.versions)],
-    )
-    lesson = (
-        await db.get(
-            Lesson,
-            slide.lesson_id,
-            options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
-        )
-        if slide
-        else None
-    )
-    course = (
-        await db.get(
-            Course,
-            lesson.course_id,
-            options=[
-                raiseload(Course.versions),
-                raiseload(Course.enrollments),
-                raiseload(Course.owner),
-                raiseload(Course.creator),
-            ],
-        )
-        if lesson
-        else None
-    )
-    if slide is None or lesson is None or course is None:
-        raise _not_found("Không tìm thấy khóa học của slide")
-    return slide_version, slide, lesson, course
+async def slide_with_course(
+    db: AsyncSession, slide_id: str
+) -> tuple[Slide, Lesson, Course]:
+    slide = await db.get(Slide, slide_id)
+    if slide is None:
+        raise _not_found("Không tìm thấy slide")
+    lesson = await db.get(Lesson, slide.lesson_id)
+    if lesson is None:
+        raise _not_found("Không tìm thấy bài học")
+    module = await db.get(CourseModule, lesson.module_id)
+    course = await db.get(Course, module.course_id) if module else None
+    if course is None:
+        raise _not_found("Không tìm thấy khóa học")
+    return slide, lesson, course
 
 
-async def _require_slide_access(
-    db: AsyncSession, user: User, slide_version_id: str
-) -> None:
-    _, _, _, course = await _slide_version_course(db, slide_version_id)
-    if not await can_access_course(db, course, user):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-
-
-async def _require_slide_manage(
-    db: AsyncSession, user: User, slide_version_id: str
-) -> None:
-    _, _, _, course = await _slide_version_course(db, slide_version_id)
+async def require_slide_manage(
+    db: AsyncSession, user: User, slide_id: str
+) -> tuple[Slide, Lesson, Course]:
+    slide, lesson, course = await slide_with_course(db, slide_id)
     if not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return slide, lesson, course
 
 
-async def published_aoi_set(
-    db: AsyncSession,
-    *,
-    slide_version_id: str | None = None,
-    ui_schema_version: str | None = None,
-) -> AoiSet | None:
-    stmt = select(AoiSet).where(AoiSet.state == "published")
-    if slide_version_id:
-        stmt = stmt.where(AoiSet.slide_version_id == slide_version_id)
-    elif ui_schema_version:
-        stmt = stmt.where(AoiSet.ui_schema_version == ui_schema_version)
-    else:
-        return None
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
-async def _latest_set_for_slide(
-    db: AsyncSession, slide_version_id: str
-) -> AoiSet | None:
-    rows = list(
-        (
-            await db.execute(
-                select(AoiSet)
-                .where(
-                    AoiSet.scope == "slide",
-                    AoiSet.slide_version_id == slide_version_id,
-                )
-                .order_by(AoiSet.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-    draft = next((row for row in rows if row.state == "draft"), None)
-    published = next((row for row in rows if row.state == "published"), None)
-    return draft or published
-
-
-async def _latest_set_for_ui(
-    db: AsyncSession, ui_schema_version: str
-) -> AoiSet | None:
-    rows = list(
-        (
-            await db.execute(
-                select(AoiSet)
-                .where(
-                    AoiSet.scope == "ui",
-                    AoiSet.ui_schema_version == ui_schema_version,
-                )
-                .order_by(AoiSet.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-    draft = next((row for row in rows if row.state == "draft"), None)
-    published = next((row for row in rows if row.state == "published"), None)
-    return draft or published
+async def require_ui_manage(db: AsyncSession, user: User) -> None:
+    if user.role not in {"teacher", "admin"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")

@@ -1,24 +1,22 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
+from app.api.access import course_of_lesson
 from app.api.deps import can_access_course, get_current_user, require_roles
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    Enrollment,
-    Lesson,
-    LessonVersion,
-)
-from app.models.quiz import QuizAttempt, QuizSpec
+from app.models.course import Course, Enrollment, Lesson
+from app.models.quiz import QuizAttempt
 from app.schemas.quiz import QuizAssignmentOut, QuizAttemptOut
-from app.services import content
+from app.services.quiz import (
+    assignment_out,
+    attempt_expiry,
+    attempt_out,
+    grade_answers,
+)
 
 router = APIRouter(tags=["quiz-attempts"])
 
@@ -27,79 +25,23 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _public_question(question: dict) -> dict:
-    clean = {key: value for key, value in question.items() if key != "correctOptionId"}
-    clean["correctOptionIds"] = []
-    clean["explanation"] = ""
-    return clean
-
-
-def _reveal_question(question: dict) -> dict:
-    clean = {key: value for key, value in question.items() if key != "correctOptionId"}
-    clean["correctOptionIds"] = [
-        str(item) for item in (question.get("correctOptionIds") or [])
-    ]
-    return clean
-
-
-async def _published_item(
+async def _published_quiz(
     db: AsyncSession, lesson_id: str
-) -> tuple[Lesson, Course, CourseVersion, CourseVersionItem, LessonVersion, QuizSpec]:
-    lesson = await db.get(
-        Lesson,
-        lesson_id,
-        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
-    )
-    if lesson is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    course = await db.get(
-        Course,
-        lesson.course_id,
-        options=[
-            raiseload(Course.versions),
-            raiseload(Course.enrollments),
-            raiseload(Course.owner),
-            raiseload(Course.creator),
-        ],
-    )
-    if course is None or course.published_version_id is None:
+) -> tuple[Lesson, Course, dict]:
+    lesson = await db.get(Lesson, lesson_id)
+    if lesson is None or lesson.kind != "quiz":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
+    course = await course_of_lesson(db, lesson)
+    if course is None or course.status not in {"published", "archived"}:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
         )
-    if course.archived_at is not None:
+    if course.status == "archived":
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={"code": "course_archived", "message": "Khóa học đã được lưu trữ"},
         )
-    published = await db.get(
-        CourseVersion,
-        course.published_version_id,
-        options=[
-            raiseload(CourseVersion.modules),
-            raiseload(CourseVersion.items),
-        ],
-    )
-    item = (
-        await db.execute(
-            select(CourseVersionItem).where(
-                CourseVersionItem.course_version_id == published.id,
-                CourseVersionItem.lesson_id == lesson.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if item is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Bài học chưa có trong bản xuất bản"
-        )
-    lesson_version = await db.get(
-        LessonVersion,
-        item.lesson_version_id,
-        options=[raiseload(LessonVersion.slides)],
-    )
-    quiz = await db.get(QuizSpec, item.lesson_version_id)
-    if lesson_version is None or quiz is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
-    return lesson, course, published, item, lesson_version, quiz
+    return lesson, course, dict(lesson.quiz_config or {})
 
 
 async def _enrollment(
@@ -123,99 +65,22 @@ async def _attempt_or_404(db: AsyncSession, attempt_id: str) -> QuizAttempt:
     return attempt
 
 
-def _attempt_out(attempt: QuizAttempt, assignment_id: str) -> QuizAttemptOut:
-    return QuizAttemptOut(
-        id=attempt.id,
-        assignment_id=assignment_id,
-        status=attempt.status,
-        answers=attempt.answers,
-        submitted_at=attempt.submitted_at or attempt.started_at,
-        score=int(attempt.score or 0),
-        max_score=int(attempt.max_score or 0),
-    )
-
-
-async def _assignment_out(
-    db: AsyncSession,
-    *,
-    course: Course,
-    published: CourseVersion,
-    lesson: Lesson,
-    lesson_version: LessonVersion,
-    quiz: QuizSpec,
-    user: User,
-    attempt: QuizAttempt | None,
-) -> QuizAssignmentOut:
-    reveal = bool({"teacher", "admin"} & set(user.role_codes)) or (
-        attempt is not None and attempt.status == "submitted"
-    )
-    questions = [
-        _reveal_question(question) if reveal else _public_question(question)
-        for question in quiz.questions
-    ]
-    published_quiz_lessons = await content.published_quiz_lesson_ids(db, course)
-    effective_status = (
-        "published" if lesson.id in published_quiz_lessons else "draft"
-    )
-    return QuizAssignmentOut(
-        id=lesson_version.id,
-        course_id=course.id,
-        course_title=published.title,
-        lesson_id=lesson.id,
-        lesson_title=lesson_version.title,
-        title=lesson_version.title,
-        instructions=quiz.instructions,
-        due_at=quiz.due_at,
-        duration_minutes=quiz.duration_minutes,
-        status=effective_status,
-        created_at=lesson_version.created_at,
-        expires_at=attempt.expires_at if attempt and attempt.status == "in_progress" else None,
-        allow_chatbot=quiz.allow_chatbot,
-        allow_retry=quiz.allow_retry,
-        questions=questions,
-    )
-
-
-@router.get("/api/quiz-specs/{lesson_version_id}", response_model=QuizAssignmentOut)
+@router.get("/api/lessons/{lesson_id}/quiz", response_model=QuizAssignmentOut)
 async def get_quiz_spec(
-    lesson_version_id: str,
+    lesson_id: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson_version = await db.get(
-        LessonVersion,
-        lesson_version_id,
-        options=[raiseload(LessonVersion.slides)],
-    )
-    if lesson_version is None:
+    lesson = await db.get(Lesson, lesson_id)
+    if lesson is None or lesson.kind != "quiz":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
-    lesson = await db.get(
-        Lesson,
-        lesson_version.lesson_id,
-        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
-    )
-    course = (
-        await db.get(
-            Course,
-            lesson.course_id,
-            options=[
-                raiseload(Course.versions),
-                raiseload(Course.enrollments),
-                raiseload(Course.owner),
-                raiseload(Course.creator),
-            ],
-        )
-        if lesson
-        else None
-    )
-    if lesson is None or course is None:
+    course = await course_of_lesson(db, lesson)
+    if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    quiz = await db.get(QuizSpec, lesson_version.id)
-    if quiz is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài tập")
+    config = dict(lesson.quiz_config or {})
 
     attempt = None
-    if "student" in user.role_codes:
+    if user.role == "student":
         enrollment = await _enrollment(db, course.id, user.id)
         if enrollment is None:
             raise HTTPException(
@@ -232,96 +97,24 @@ async def get_quiz_spec(
                 .limit(1)
             )
         ).scalar_one_or_none()
-        version = await db.get(
-            CourseVersion,
-            course.published_version_id,
-            options=[
-                raiseload(CourseVersion.modules),
-                raiseload(CourseVersion.items),
-            ],
-        )
-        if version is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Khóa học chưa được xuất bản"
-            )
-        item = (
-            await db.execute(
-                select(CourseVersionItem).where(
-                    CourseVersionItem.course_version_id == version.id,
-                    CourseVersionItem.lesson_version_id == lesson_version.id,
-                )
-            )
-        ).scalar_one_or_none()
-        if item is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Bài tập chưa có trong bản xuất bản"
-            )
-    else:
-        if not await can_access_course(db, course, user):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-        # Giáo viên/admin soạn bài tập trong bản nháp: tìm phiên bản nháp trước,
-        # chỉ fallback về bản xuất bản khi khóa chưa có nháp.
-        version = (
-            await db.execute(
-                select(CourseVersion)
-                .where(
-                    CourseVersion.course_id == course.id,
-                    CourseVersion.state == "draft",
-                )
-                .order_by(CourseVersion.version_no.desc())
-                .limit(1)
-                .options(
-                    raiseload(CourseVersion.modules),
-                    raiseload(CourseVersion.items),
-                )
-            )
-        ).scalar_one_or_none()
-        if version is None:
-            version = await db.get(
-                CourseVersion,
-                course.published_version_id,
-                options=[
-                    raiseload(CourseVersion.modules),
-                    raiseload(CourseVersion.items),
-                ],
-            )
-        if version is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Khóa học chưa có phiên bản soạn"
-            )
-        item = (
-            await db.execute(
-                select(CourseVersionItem).where(
-                    CourseVersionItem.course_version_id == version.id,
-                    CourseVersionItem.lesson_version_id == lesson_version.id,
-                )
-            )
-        ).scalar_one_or_none()
-        if item is None:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Bài tập chưa có trong khóa học"
-            )
-    return await _assignment_out(
-        db,
-        course=course,
-        published=version,
-        lesson=lesson,
-        lesson_version=lesson_version,
-        quiz=quiz,
-        user=user,
-        attempt=attempt,
+    elif not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return assignment_out(
+        course=course, lesson=lesson, config=config, user=user, attempt=attempt
     )
 
 
-@router.post("/api/lessons/{lesson_id}/attempts", response_model=QuizAttemptOut, status_code=201)
+@router.post(
+    "/api/lessons/{lesson_id}/attempts",
+    response_model=QuizAttemptOut,
+    status_code=201,
+)
 async def start_attempt(
     lesson_id: str,
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson, course, published, item, lesson_version, quiz = await _published_item(
-        db, lesson_id
-    )
+    lesson, course, config = await _published_quiz(db, lesson_id)
     enrollment = await _enrollment(db, course.id, user.id)
     if enrollment is None:
         raise HTTPException(
@@ -341,7 +134,7 @@ async def start_attempt(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        return _attempt_out(existing, item.lesson_version_id)
+        return attempt_out(existing)
 
     last = (
         await db.execute(
@@ -354,34 +147,35 @@ async def start_attempt(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if last is not None and last.status == "submitted" and not quiz.allow_retry:
+    if last is not None and last.status == "submitted" and not config.get("allowRetry"):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={"code": "attempt_submitted", "message": "Bạn đã nộp bài này"},
         )
 
     now = _now()
-    expires_at = now + timedelta(minutes=quiz.duration_minutes)
-    if quiz.due_at is not None:
-        expires_at = min(expires_at, quiz.due_at)
+    expires_at = attempt_expiry(config, now)
     attempt = QuizAttempt(
         enrollment_id=enrollment.id,
-        course_version_item_id=item.id,
         lesson_id=lesson.id,
         attempt_no=(last.attempt_no + 1) if last else 1,
         status="in_progress",
         started_at=now,
         expires_at=expires_at,
+        quiz_snapshot=config,
         answers={},
         grading={},
     )
     db.add(attempt)
     await db.commit()
     await db.refresh(attempt)
-    return _attempt_out(attempt, item.lesson_version_id)
+    return attempt_out(attempt)
 
 
-@router.get("/api/lessons/{lesson_id}/attempts", response_model=list[QuizAttemptOut])
+@router.get(
+    "/api/lessons/{lesson_id}/attempts",
+    response_model=list[QuizAttemptOut],
+)
 async def list_attempts(
     lesson_id: str,
     limit: int = Query(default=200, ge=1, le=500),
@@ -389,38 +183,15 @@ async def list_attempts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    lesson = await db.get(
-        Lesson,
-        lesson_id,
-        options=[
-            raiseload(Lesson.versions),
-            raiseload(Lesson.slides),
-        ],
-    )
+    lesson = await db.get(Lesson, lesson_id)
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
-    course = await db.get(
-        Course,
-        lesson.course_id,
-        options=[
-            raiseload(Course.versions),
-            raiseload(Course.enrollments),
-            raiseload(Course.owner),
-            raiseload(Course.creator),
-        ],
-    )
+    course = await course_of_lesson(db, lesson)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
 
-    stmt = (
-        select(QuizAttempt, CourseVersionItem.lesson_version_id)
-        .outerjoin(
-            CourseVersionItem,
-            CourseVersionItem.id == QuizAttempt.course_version_item_id,
-        )
-        .where(QuizAttempt.lesson_id == lesson.id)
-    )
-    if "student" in user.role_codes:
+    stmt = select(QuizAttempt).where(QuizAttempt.lesson_id == lesson.id)
+    if user.role == "student":
         enrollment = await _enrollment(db, course.id, user.id)
         if enrollment is None:
             raise HTTPException(
@@ -431,15 +202,10 @@ async def list_attempts(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     rows = (
         await db.execute(
-            stmt.order_by(QuizAttempt.attempt_no.desc())
-            .limit(limit)
-            .offset(offset)
+            stmt.order_by(QuizAttempt.attempt_no.desc()).limit(limit).offset(offset)
         )
-    ).all()
-    return [
-        _attempt_out(attempt, assignment_id or attempt.lesson_id)
-        for attempt, assignment_id in rows
-    ]
+    ).scalars().all()
+    return [attempt_out(attempt) for attempt in rows]
 
 
 @router.post("/api/attempts/{attempt_id}/submit", response_model=QuizAttemptOut)
@@ -462,55 +228,26 @@ async def submit_attempt(
             status.HTTP_409_CONFLICT,
             detail={"code": "attempt_expired", "message": "Lượt làm đã hết hạn"},
         )
-    lesson = await db.get(
-        Lesson,
-        attempt.lesson_id,
-        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
-    )
-    course = (
-        await db.get(
-            Course,
-            lesson.course_id,
-            options=[
-                raiseload(Course.versions),
-                raiseload(Course.enrollments),
-                raiseload(Course.owner),
-                raiseload(Course.creator),
-            ],
-        )
-        if lesson
-        else None
-    )
+    lesson = await db.get(Lesson, attempt.lesson_id)
+    course = await course_of_lesson(db, lesson) if lesson else None
     if lesson is None or course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     enrollment = await _enrollment(db, course.id, user.id)
     if enrollment is None or enrollment.id != attempt.enrollment_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
 
-    # quiz_specs PK là lesson_version_id; lấy đúng version của attempt.
-    item = await db.get(CourseVersionItem, attempt.course_version_item_id)
-    quiz = await db.get(QuizSpec, item.lesson_version_id) if item else None
-    if quiz is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy đề")
-
+    config = (
+        attempt.quiz_snapshot
+        if attempt.quiz_snapshot
+        else dict(lesson.quiz_config or {})
+    )
     answers = body.get("answers") or {}
     if not isinstance(answers, dict):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="answers không hợp lệ")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, detail="answers không hợp lệ"
+        )
 
-    grading: dict[str, dict] = {}
-    score = 0.0
-    max_score = 0.0
-    for question in quiz.questions:
-        qid = str(question.get("id"))
-        points = float(question.get("points") or 0)
-        max_score += points
-        selected = {str(item) for item in (answers.get(qid) or [])}
-        correct = {str(item) for item in (question.get("correctOptionIds") or [])}
-        is_correct = selected == correct and bool(correct)
-        if is_correct:
-            score += points
-        grading[qid] = {"correct": is_correct, "points": points if is_correct else 0}
-
+    grading, score, max_score = grade_answers(config, answers)
     attempt.answers = answers
     attempt.grading = grading
     attempt.score = score
@@ -519,10 +256,14 @@ async def submit_attempt(
     attempt.status = "submitted"
     await db.commit()
     await db.refresh(attempt)
-    return _attempt_out(attempt, item.lesson_version_id)
+    return attempt_out(attempt)
 
 
-@router.post("/api/attempts/{attempt_id}/retry", response_model=QuizAttemptOut, status_code=201)
+@router.post(
+    "/api/attempts/{attempt_id}/retry",
+    response_model=QuizAttemptOut,
+    status_code=201,
+)
 async def retry_attempt(
     attempt_id: str,
     user: User = Depends(require_roles("student")),
@@ -534,53 +275,45 @@ async def retry_attempt(
             status.HTTP_409_CONFLICT,
             detail={"code": "attempt_not_submitted", "message": "Lượt làm chưa nộp"},
         )
-    lesson = await db.get(
-        Lesson,
-        attempt.lesson_id,
-        options=[raiseload(Lesson.versions), raiseload(Lesson.slides)],
-    )
-    course = (
-        await db.get(
-            Course,
-            lesson.course_id,
-            options=[
-                raiseload(Course.versions),
-                raiseload(Course.enrollments),
-                raiseload(Course.owner),
-                raiseload(Course.creator),
-            ],
-        )
-        if lesson
-        else None
-    )
+    lesson = await db.get(Lesson, attempt.lesson_id)
+    course = await course_of_lesson(db, lesson) if lesson else None
     if lesson is None or course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     enrollment = await _enrollment(db, course.id, user.id)
     if enrollment is None or enrollment.id != attempt.enrollment_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    item = await db.get(CourseVersionItem, attempt.course_version_item_id)
-    quiz = await db.get(QuizSpec, item.lesson_version_id) if item else None
-    if quiz is None or not quiz.allow_retry:
+    config = dict(lesson.quiz_config or {})
+    if not config.get("allowRetry"):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="Giáo viên chưa cho phép làm lại bài này",
         )
+    existing = (
+        await db.execute(
+            select(QuizAttempt).where(
+                QuizAttempt.enrollment_id == attempt.enrollment_id,
+                QuizAttempt.lesson_id == attempt.lesson_id,
+                QuizAttempt.status == "in_progress",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return attempt_out(existing)
+
     now = _now()
-    expires_at = now + timedelta(minutes=quiz.duration_minutes)
-    if quiz.due_at is not None:
-        expires_at = min(expires_at, quiz.due_at)
+    expires_at = attempt_expiry(config, now)
     new_attempt = QuizAttempt(
         enrollment_id=attempt.enrollment_id,
-        course_version_item_id=attempt.course_version_item_id,
         lesson_id=attempt.lesson_id,
         attempt_no=attempt.attempt_no + 1,
         status="in_progress",
         started_at=now,
         expires_at=expires_at,
+        quiz_snapshot=config,
         answers={},
         grading={},
     )
     db.add(new_attempt)
     await db.commit()
     await db.refresh(new_attempt)
-    return _attempt_out(new_attempt, item.lesson_version_id)
+    return attempt_out(new_attempt)

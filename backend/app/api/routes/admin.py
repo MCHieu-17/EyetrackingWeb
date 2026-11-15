@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,8 +8,8 @@ from app.api.deps import require_roles
 from app.core.ratelimit import rate_limit
 from app.crud import user as user_crud
 from app.db.session import get_db
-from app.models.auth import Role, User, UserRole
-from app.models.profile import StudentProfile, TeacherProfile, UserProfile
+from app.models.auth import User
+from app.models.profile import StudentProfile, TeacherProfile
 from app.schemas.admin import PromoteStudentIn, PromoteStudentOut, StudentAdminOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -38,22 +38,21 @@ async def list_students(
 ):
     """Danh sách sinh viên đang hoạt động để admin nâng cấp lên giáo viên."""
     stmt = (
-        select(User, UserProfile, StudentProfile)
-        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        select(User, StudentProfile)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
         .where(
             User.deleted_at.is_(None),
             User.status == "active",
-            User.roles.any(code="student"),
+            User.role == "student",
         )
-        .order_by(UserProfile.full_name)
+        .order_by(User.full_name)
         .limit(200)
     )
     if q and q.strip():
         like = f"%{escape_like(q.strip())}%"
         stmt = stmt.where(
             or_(
-                UserProfile.full_name.ilike(like, escape="\\"),
+                User.full_name.ilike(like, escape="\\"),
                 User.email.ilike(like, escape="\\"),
                 StudentProfile.student_code.ilike(like, escape="\\"),
             )
@@ -62,14 +61,14 @@ async def list_students(
     return [
         StudentAdminOut(
             id=user.id,
-            name=profile.full_name if profile else user.email,
+            name=user.full_name or user.email,
             email=user.email,
             student_code=student.student_code if student else None,
             program=student.program if student else None,
-            avatar_url=profile.avatar_url if profile else None,
+            avatar_url=user.avatar_url,
             created_at=user.created_at,
         )
-        for user, profile, student in rows
+        for user, student in rows
     ]
 
 
@@ -96,12 +95,11 @@ async def promote_student(
             status.HTTP_400_BAD_REQUEST, detail="Tài khoản không hoạt động"
         )
 
-    role_codes = set(user.role_codes)
-    if "teacher" in role_codes:
+    if user.role == "teacher":
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="Tài khoản đã là giáo viên"
         )
-    if "student" not in role_codes:
+    if user.role != "student":
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Tài khoản không phải sinh viên"
         )
@@ -126,13 +124,6 @@ async def promote_student(
     else:
         teacher_code = await _next_teacher_code(db)
 
-    teacher_role_id = (
-        await db.execute(select(Role.id).where(Role.code == "teacher"))
-    ).scalar_one()
-    student_role_id = (
-        await db.execute(select(Role.id).where(Role.code == "student"))
-    ).scalar_one()
-
     department = (
         body.department.strip()
         if body.department and body.department.strip()
@@ -154,13 +145,7 @@ async def promote_student(
             if department is not None:
                 teacher_profile.department = department
 
-        db.add(UserRole(user_id=user.id, role_id=teacher_role_id))
-        await db.execute(
-            delete(UserRole).where(
-                UserRole.user_id == user.id,
-                UserRole.role_id == student_role_id,
-            )
-        )
+        user.role = "teacher"
         await db.commit()
     except IntegrityError:
         await db.rollback()

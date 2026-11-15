@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   findCitationSlideIndex,
   findNextLesson,
+  getNextSlideIndex,
+  getPreviousSlideIndex,
   getReaderLayoutKey,
   hashPayload,
   isGazeDotVisible,
@@ -102,26 +104,54 @@ describe("isGazeDotVisible", () => {
   });
 });
 
+describe("getNextSlideIndex", () => {
+  it("advances within the slide range", () => {
+    expect(getNextSlideIndex(0, 3)).toBe(1);
+    expect(getNextSlideIndex(1, 3)).toBe(2);
+  });
+
+  it("stops at the last slide", () => {
+    expect(getNextSlideIndex(2, 3)).toBe(2);
+    expect(getNextSlideIndex(9, 3)).toBe(2);
+  });
+
+  it("returns 0 when there are no slides", () => {
+    expect(getNextSlideIndex(0, 0)).toBe(0);
+    expect(getNextSlideIndex(4, 0)).toBe(0);
+  });
+});
+
+describe("getPreviousSlideIndex", () => {
+  it("moves back one slide", () => {
+    expect(getPreviousSlideIndex(2)).toBe(1);
+  });
+
+  it("stops at the first slide", () => {
+    expect(getPreviousSlideIndex(0)).toBe(0);
+    expect(getPreviousSlideIndex(-3)).toBe(0);
+  });
+});
+
 describe("findCitationSlideIndex", () => {
   const slides = [
-    { slideVersionId: "v1" },
-    { slideVersionId: "v2" },
-    { slideVersionId: "v3" },
+    { id: "v1" },
+    { id: "v2" },
+    { id: "v3" },
   ];
 
-  it("prefers the slide version", () => {
-    expect(findCitationSlideIndex({ slideVersionId: "v2" }, slides)).toBe(1);
+  it("prefers the slide id", () => {
+    expect(findCitationSlideIndex({ slideId: "v2" }, slides)).toBe(1);
   });
 
   it("falls back to the slide index", () => {
     expect(
-      findCitationSlideIndex({ slideVersionId: "missing", slideIndex: 2 }, slides),
+      findCitationSlideIndex({ slideId: "missing", slideIndex: 2 }, slides),
     ).toBe(2);
   });
 
   it("returns -1 when neither matches", () => {
     expect(
-      findCitationSlideIndex({ slideVersionId: "missing", slideIndex: 9 }, slides),
+      findCitationSlideIndex({ slideId: "missing", slideIndex: 9 }, slides),
     ).toBe(-1);
     expect(findCitationSlideIndex({}, slides)).toBe(-1);
   });

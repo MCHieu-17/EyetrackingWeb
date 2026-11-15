@@ -70,21 +70,18 @@ export function isGazeDotVisible(
 /**
  * Tìm slide mà citation trỏ tới trong danh sách slide của reader.
  *
- * Ưu tiên `slideVersionId` (ổn định qua các lần đổi bài), fallback
- * `slideIndex` (vị trí 0-based) khi slide version không còn trong bản
- * xuất bản hiện tại.
+ * Ưu tiên `slideId`, fallback `slideIndex` (vị trí 0-based) khi slide
+ * không còn trong nội dung hiện tại.
  */
 export function findCitationSlideIndex(
   citation: {
-    slideVersionId?: string | null;
+    slideId?: string | null;
     slideIndex?: number | null;
   },
-  slides: readonly { slideVersionId?: string | null }[],
+  slides: readonly { id: string }[],
 ): number {
-  if (citation.slideVersionId) {
-    const index = slides.findIndex(
-      (slide) => slide.slideVersionId === citation.slideVersionId,
-    );
+  if (citation.slideId) {
+    const index = slides.findIndex((slide) => slide.id === citation.slideId);
     if (index >= 0) return index;
   }
   if (
@@ -95,4 +92,20 @@ export function findCitationSlideIndex(
     return citation.slideIndex;
   }
   return -1;
+}
+
+/**
+ * Chỉ số slide kế tiếp, kẹp trong `[0, total - 1]`. Khi chưa có slide
+ * (`total = 0`) luôn trả 0 — giữ nguyên hành vi điều hướng cũ.
+ */
+export function getNextSlideIndex(
+  currentSlide: number,
+  total: number,
+): number {
+  return Math.min(Math.max(total - 1, 0), currentSlide + 1);
+}
+
+/** Chỉ số slide trước đó, không xuống dưới 0. */
+export function getPreviousSlideIndex(currentSlide: number): number {
+  return Math.max(0, currentSlide - 1);
 }

@@ -1,7 +1,7 @@
-"""Custom SQLAlchemy types cho schema mới.
+"""Custom SQLAlchemy types cho schema hiện hành.
 
-`Vector` chỉ cần cho DDL/catalog mapping ở Phase 1. Các query vector thật sẽ
-dùng raw SQL hoặc pgvector ở Phase 5.
+`Vector` ánh xạ cột pgvector trong model/metadata; query vector thật do service
+embedding/chatbot dùng raw SQL hoặc pgvector.
 """
 
 from sqlalchemy.types import UserDefinedType

@@ -536,11 +536,18 @@ SET value = EXCLUDED.value, updated_at = now();
         sql = """
 SELECT json_build_object(
   'migrations', (SELECT count(*) FROM schema_migrations),
-  'roles', (SELECT count(*) FROM roles),
   'core_tables', (
       SELECT count(*) FROM pg_tables
       WHERE schemaname = 'public'
-        AND tablename IN ('users', 'courses', 'course_versions', 'gaze_samples')
+        AND tablename <> 'schema_migrations'
+  ),
+  'required_tables', (
+      SELECT count(*) FROM pg_tables
+      WHERE schemaname = 'public'
+        AND tablename IN (
+          'users', 'courses', 'lessons', 'slides',
+          'learning_sessions', 'content_views', 'gaze_samples'
+        )
   ),
   'generation', (SELECT value FROM app_metadata WHERE key = 'schema_generation'),
   'instance_id', (SELECT value FROM app_metadata WHERE key = 'db_instance_id')
@@ -553,13 +560,17 @@ SELECT json_build_object(
             raise GuardError("Smoke test schema thất bại: output không hợp lệ.", exit_code=5) from exc
         if int(payload.get("migrations", 0)) < 1:
             raise GuardError("Smoke test: baseline chưa được áp.", exit_code=5)
-        if int(payload.get("roles", 0)) < 3:
-            raise GuardError("Smoke test: reference seed thiếu roles.", exit_code=5)
-        if int(payload.get("core_tables", 0)) != 4:
-            raise GuardError("Smoke test: thiếu bảng lõi của baseline.", exit_code=5)
-        if payload.get("generation") != "8":
+        if int(payload.get("core_tables", 0)) != 24:
             raise GuardError(
-                f"Smoke test: schema_generation phải là 8 (got {payload.get('generation')!r}).",
+                "Smoke test: schema phải có 24 bảng lõi "
+                f"(got {payload.get('core_tables')!r}).",
+                exit_code=5,
+            )
+        if int(payload.get("required_tables", 0)) != 7:
+            raise GuardError("Smoke test: thiếu bảng lõi của baseline.", exit_code=5)
+        if payload.get("generation") != "12":
+            raise GuardError(
+                f"Smoke test: schema_generation phải là 12 (got {payload.get('generation')!r}).",
                 exit_code=5,
             )
         if not payload.get("instance_id"):

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import HTTPException, status
 
 NO_LABEL_CODE = "no_label"
 NO_LABEL_NAME = "Chưa đánh dấu"
 
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
+# Nhãn gaze một sample. Slide dùng tiền tố SLIDE_; UI dùng trực tiếp tên AOI.
+SLIDE_LABEL_PREFIX = "SLIDE_"
+SLIDE_NO_LABEL = "SLIDE_NO_LABEL"
+UI_NO_LABEL = "UI_NO_LABEL"
 
 
 def _not_found(message: str) -> HTTPException:
@@ -20,10 +19,3 @@ def _not_found(message: str) -> HTTPException:
 
 def _bad_request(message: str) -> HTTPException:
     return HTTPException(status.HTTP_400_BAD_REQUEST, detail=message)
-
-
-def _conflict(message: str) -> HTTPException:
-    return HTTPException(
-        status.HTTP_409_CONFLICT,
-        detail={"code": "aoi_revision_conflict", "message": message},
-    )

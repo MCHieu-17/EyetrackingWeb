@@ -1,7 +1,6 @@
 // lib/types/domain.ts — Type domain dùng chung phía frontend.
-// Khớp với schema DB (db/migrations/*.sql): courses / modules / lessons /
-// lesson_contents / enrollments / learning_sessions / gaze_events.
-// Chỉ khai báo type đang được dùng; xóa type chết thay vì giữ lại.
+// Khớp schema generation 11: courses / course_modules / lessons / slides /
+// enrollments / learning_sessions / content_views / gaze_samples.
 
 export type CourseStatus = 'draft' | 'published' | 'archived';
 export type EnrollStatus = 'active' | 'completed' | 'dropped';
@@ -41,8 +40,6 @@ export interface LessonNode {
   questionCount?: number;
   durationMinutes?: number | null;
   dueAt?: string | null;
-  lessonVersionId?: string | null;
-  itemId?: string | null;
 }
 
 export interface ModuleNode {
@@ -61,10 +58,10 @@ interface StudentLesson {
 
 export interface StudentRow {
   id: string;
-  name: string;              // user_profiles.full_name
+  name: string;              // users.full_name
   code: string;              // student_profiles.student_code
   color: string;             // avatar giả
-  avatarUrl?: string | null;  // user_profiles.avatar_url
+  avatarUrl?: string | null;  // users.avatar_url
   attention: number | null;  // null ⇔ learning_sessions.tracking_consent = false
   lastActive: string;
   status: EnrollStatus;
@@ -98,8 +95,6 @@ export interface Slide {
   pageNumber: number;
   pageCount: number;
   sourceFormat?: string | null;
-  slideVersionId?: string | null;
-  lessonVersionId?: string | null;
 }
 
 // Slide + điểm hoàn thành theo độ bao phủ nội dung (teacher)
@@ -115,8 +110,6 @@ export interface SlideAdmin {
   /** Trạng thái ingest RAG: none | pending | ready | failed. */
   embeddingStatus?: "none" | "pending" | "ready" | "failed";
   embeddingError?: string | null;
-  slideVersionId?: string | null;
-  lessonVersionId?: string | null;
 }
 
 export interface LessonItem {
@@ -153,17 +146,17 @@ export interface CourseOutline {
   requireCalibration?: boolean;
 }
 
-// Profile (users / user_profiles / student_profiles / teacher_profiles)
+// Profile (users + student_profiles/teacher_profiles)
 
 export type GenderCode = 'male' | 'female' | 'other';
 
 interface ProfileBase {
   email: string;               // users.email — email đăng nhập, read-only
-  fullName: string;            // user_profiles.full_name
-  dateOfBirth: string | null;  // user_profiles.date_of_birth (yyyy-mm-dd)
-  gender: GenderCode | null;   // user_profiles.gender_id -> genders.code
-  phone: string | null;        // user_profiles.phone
-  avatarUrl: string | null;    // user_profiles.avatar_url
+  fullName: string;            // users.full_name
+  dateOfBirth: string | null;  // users.date_of_birth (yyyy-mm-dd)
+  gender: GenderCode | null;   // users.gender
+  phone: string | null;        // users.phone
+  avatarUrl: string | null;    // users.avatar_url
   createdAt: string;           // users.created_at
   hasPassword: boolean;        // false = chỉ đăng nhập bằng Microsoft 365
 }

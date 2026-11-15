@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCourseOutline } from "@/hooks/use-student";
 import { useCourseTree, useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import {
-  fetchAoiSets,
+  fetchAois,
   generateSlideAois,
   generateUiAois,
   rebuildAoiHits,
@@ -15,10 +14,13 @@ import {
   type AoiDefinitionInput,
 } from "@/lib/api/aoi";
 import {
+  collectAoiCodes,
   countCustom,
+  hasStoredAois,
   nextCustomCode,
+  nextSlideLabel,
   nextUiCustomCode,
-  pickLatest,
+  firstAoiCollection,
   toInputs,
 } from "@/lib/aoi/editor-helpers";
 import {
@@ -26,79 +28,33 @@ import {
   UI_SCHEMA_VERSION,
   friendlyUiName,
 } from "@/lib/aoi/ui-components";
-import type { LessonItem, ModuleItem, ModuleNode } from "@/lib/types/domain";
-import { useAoiAutosave } from "./use-aoi-autosave";
+import { queryKeys } from "@/lib/query-keys";
+import type { LessonItem, ModuleItem } from "@/lib/types/domain";
+import {
+  hasUnsavedAoiChanges,
+  useAoiAutosave,
+} from "./use-aoi-autosave";
 
 type AoiEditorMode = "edit" | "interact";
 type AoiEditorTab = "slide" | "ui";
-export type AoiEditorVersion = "draft" | "published";
 
 export function useAoiEditor({
   courseId,
-  courseStatus,
   canManage,
 }: {
   courseId: string;
-  courseStatus: "draft" | "published" | "archived";
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const hasPublished = courseStatus !== "draft";
-  const versionParam = searchParams.get("version");
-  const [version, setVersion] = useState<AoiEditorVersion>(() =>
-    versionParam === "draft" || versionParam === "published"
-      ? versionParam
-      : hasPublished
-        ? "published"
-        : "draft",
-  );
-  const effectiveVersion: AoiEditorVersion = hasPublished ? version : "draft";
-
   const {
-    data: draftTree = [],
-    isLoading: draftTreeLoading,
-    isError: draftTreeError,
-    refetch: refetchDraftTree,
+    data: tree = [],
+    isLoading: treeLoading,
+    isError: treeError,
+    refetch: refetchTree,
   } = useCourseTree(courseId);
-  const {
-    data: publishedOutline,
-    isLoading: publishedTreeLoading,
-    isError: publishedTreeError,
-    refetch: refetchPublishedTree,
-  } = useCourseOutline(courseId, effectiveVersion === "published");
-
-  const tree: ModuleNode[] = useMemo(
-    () =>
-      effectiveVersion === "published"
-        ? (publishedOutline?.modules ?? []).map((module) => ({
-            id: module.id,
-            title: module.title,
-            lessons: module.lessons.map((lesson) => ({
-              id: lesson.id,
-              title: lesson.title,
-              kind: lesson.kind,
-              slides: lesson.slideCount,
-              attention: null,
-              quizId: lesson.quizId,
-              quizStatus: lesson.quizStatus,
-              questionCount: lesson.questionCount,
-              durationMinutes: lesson.durationMinutes,
-              dueAt: lesson.dueAt,
-            })),
-          }))
-        : draftTree,
-    [draftTree, effectiveVersion, publishedOutline],
-  );
-
-  const treeLoading =
-    effectiveVersion === "published" ? publishedTreeLoading : draftTreeLoading;
-  const treeError =
-    effectiveVersion === "published" ? publishedTreeError : draftTreeError;
-  const refetchTree =
-    effectiveVersion === "published" ? refetchPublishedTree : refetchDraftTree;
 
   const lessons = useMemo(
     () => tree.flatMap((module) => module.lessons),
@@ -132,22 +88,14 @@ export function useAoiEditor({
     isLoading: slidesLoading,
     isError: slidesError,
     refetch: refetchSlides,
-  } = useLessonSlidesAdmin(
-    activeIsQuiz ? "" : resolvedLessonId,
-    effectiveVersion,
-  );
+  } = useLessonSlidesAdmin(activeIsQuiz ? "" : resolvedLessonId);
 
   const [activeSlideId, setActiveSlideId] = useState(
     () => searchParams.get("slide") ?? "",
   );
-  const slideVersionParam = searchParams.get("slideVersion") ?? "";
   const resolvedSlideId = slides.some((item) => item.id === activeSlideId)
     ? activeSlideId
-    : slideVersionParam
-      ? (slides.find((item) => item.slideVersionId === slideVersionParam)?.id ??
-        slides[0]?.id ??
-        "")
-      : (slides[0]?.id ?? "");
+    : (slides[0]?.id ?? "");
   if (resolvedSlideId !== activeSlideId) {
     setActiveSlideId(resolvedSlideId);
   }
@@ -158,7 +106,12 @@ export function useAoiEditor({
     0,
     slides.findIndex((item) => item.id === resolvedSlideId),
   );
-  const slideVersionId = activeSlide?.slideVersionId ?? null;
+  const slideId = activeSlide?.id ?? null;
+  // Dùng để bỏ qua phản hồi save cũ nếu người dùng đã chuyển slide.
+  const slideIdRef = useRef(slideId);
+  useEffect(() => {
+    slideIdRef.current = slideId;
+  }, [slideId]);
 
   const [mode, setModeState] = useState<AoiEditorMode>("edit");
   const [tab, setTabState] = useState<AoiEditorTab>("slide");
@@ -170,22 +123,20 @@ export function useAoiEditor({
   }
 
   const slideSetQuery = useQuery({
-    queryKey: ["aoi-sets", "slide", slideVersionId],
-    queryFn: () =>
-      fetchAoiSets({ scope: "slide", slideVersionId: slideVersionId! }),
-    enabled: Boolean(slideVersionId),
+    queryKey: queryKeys.aoi.slide(slideId),
+    queryFn: () => fetchAois({ slideId: slideId! }),
+    enabled: Boolean(slideId),
   });
   const uiSetQuery = useQuery({
-    queryKey: ["aoi-sets", "ui", UI_SCHEMA_VERSION],
-    queryFn: () =>
-      fetchAoiSets({ scope: "ui", uiSchemaVersion: UI_SCHEMA_VERSION }),
+    queryKey: queryKeys.aoi.ui(UI_SCHEMA_VERSION),
+    queryFn: () => fetchAois({ uiSchema: UI_SCHEMA_VERSION }),
   });
 
   const slideSet = useMemo(
-    () => pickLatest(slideSetQuery.data),
+    () => firstAoiCollection(slideSetQuery.data),
     [slideSetQuery.data],
   );
-  const uiSet = useMemo(() => pickLatest(uiSetQuery.data), [uiSetQuery.data]);
+  const uiSet = useMemo(() => firstAoiCollection(uiSetQuery.data), [uiSetQuery.data]);
 
   const [slideDefinitions, setSlideDefinitions] = useState<AoiDefinitionInput[]>(
     [],
@@ -195,10 +146,6 @@ export function useAoiEditor({
   const [uiReady, setUiReady] = useState(false);
   const [syncedSlideSetId, setSyncedSlideSetId] = useState<string | null>(null);
   const [syncedUiSetId, setSyncedUiSetId] = useState<string | null>(null);
-  const [slideRevision, setSlideRevision] = useState<number | undefined>(
-    undefined,
-  );
-  const [uiRevision, setUiRevision] = useState<number | undefined>(undefined);
 
   const generatedSlideRef = useRef<string | null>(null);
   const generatedUiRef = useRef<string | null>(null);
@@ -207,25 +154,21 @@ export function useAoiEditor({
   // Render-phase adjust: đồng bộ dữ liệu server vào state cục bộ khi đổi bộ
   // vùng. Không dùng effect để tránh setState trong effect.
   if (slideSet && syncedSlideSetId !== slideSet.id) {
-    setSlideRevision(slideSet.revision);
     setSyncedSlideSetId(slideSet.id);
     setSlideDefinitions(toInputs(slideSet.definitions));
     setSlideReady(true);
   } else if (!slideSet && syncedSlideSetId !== null) {
     setSyncedSlideSetId(null);
-    setSlideRevision(undefined);
     setSlideDefinitions([]);
     setSlideReady(false);
   }
 
   if (uiSet && syncedUiSetId !== uiSet.id) {
-    setUiRevision(uiSet.revision);
     setSyncedUiSetId(uiSet.id);
     setUiDefinitions(toInputs(uiSet.definitions));
     setUiReady(true);
   } else if (!uiSet && syncedUiSetId !== null) {
     setSyncedUiSetId(null);
-    setUiRevision(undefined);
     setUiDefinitions([]);
     setUiReady(false);
   }
@@ -240,12 +183,12 @@ export function useAoiEditor({
 
   const generateSlideMutation = useMutation({
     mutationFn: ({
-      slideVersionId: versionId,
+      slideId: versionId,
       slideNumber,
       replaceAuto,
       resetAll,
     }: {
-      slideVersionId: string;
+      slideId: string;
       slideNumber: number;
       replaceAuto?: boolean;
       resetAll?: boolean;
@@ -256,10 +199,15 @@ export function useAoiEditor({
         resetAll,
       }),
     onSuccess: (saved) => {
-      queryClient.setQueryData(
-        ["aoi-sets", "slide", saved.slideVersionId],
-        [saved],
-      );
+      queryClient.setQueryData(queryKeys.aoi.slide(saved.slideId), [saved]);
+      // Collection id trùng slide id sau generation 11, nên phải đổ definitions
+      // vào state cục bộ thay vì trông chờ render-phase sync theo id.
+      if (slideIdRef.current === saved.slideId) {
+        setSyncedSlideSetId(saved.id);
+        setSlideDefinitions(toInputs(saved.definitions));
+        setSlideReady(true);
+        setSelectedCode(null);
+      }
       scheduleRebuild();
     },
   });
@@ -272,27 +220,33 @@ export function useAoiEditor({
         true,
       ),
     onSuccess: (saved) => {
-      queryClient.setQueryData(
-        ["aoi-sets", "ui", UI_SCHEMA_VERSION],
-        [saved],
-      );
+      queryClient.setQueryData(queryKeys.aoi.ui(UI_SCHEMA_VERSION), [saved]);
+      setSyncedUiSetId(saved.id);
+      setUiDefinitions(toInputs(saved.definitions));
+      setUiReady(true);
+      setSelectedCode(null);
       scheduleRebuild();
     },
   });
 
   useEffect(() => {
-    if (!canManage || !slideVersionId || slideSet || slideSetQuery.isLoading) {
+    if (
+      !canManage ||
+      !slideId ||
+      hasStoredAois(slideSet) ||
+      slideSetQuery.isLoading
+    ) {
       return;
     }
-    if (generatedSlideRef.current === slideVersionId) return;
-    generatedSlideRef.current = slideVersionId;
+    if (generatedSlideRef.current === slideId) return;
+    generatedSlideRef.current = slideId;
     generateSlideMutation.mutate({
-      slideVersionId,
+      slideId,
       slideNumber: currentSlideIndex + 1,
     });
   }, [
     canManage,
-    slideVersionId,
+    slideId,
     slideSet,
     slideSetQuery.isLoading,
     currentSlideIndex,
@@ -300,7 +254,14 @@ export function useAoiEditor({
   ]);
 
   useEffect(() => {
-    if (!canManage || tab !== "ui" || uiSet || uiSetQuery.isLoading) return;
+    if (
+      !canManage ||
+      tab !== "ui" ||
+      hasStoredAois(uiSet) ||
+      uiSetQuery.isLoading
+    ) {
+      return;
+    }
     if (generatedUiRef.current === UI_SCHEMA_VERSION) return;
     generatedUiRef.current = UI_SCHEMA_VERSION;
     generateUiMutation.mutate();
@@ -315,38 +276,31 @@ export function useAoiEditor({
   const slideSave = useAoiAutosave({
     value: slideDefinitions,
     ready: slideReady,
-    enabled: canManage && Boolean(slideVersionId),
+    baselineKey: slideSet?.id ?? null,
+    enabled: canManage && Boolean(slideId),
     save: async (definitions) => {
-      if (!slideVersionId) return;
-      const saved = await saveSlideAois(slideVersionId, {
-        definitions,
-        expectedRevision: slideRevision,
-      });
-      setSlideRevision(saved.revision);
-      setSyncedSlideSetId(saved.id);
-      queryClient.setQueryData(
-        ["aoi-sets", "slide", slideVersionId],
-        [saved],
-      );
-      scheduleRebuild();
+      // Chụp context tại thời điểm job được xếp hàng. Nếu người dùng đổi slide
+      // trong lúc request đang chạy, phản hồi cũ không được ghi đè state mới.
+      const targetSlideId = slideId;
+      if (!targetSlideId) return;
+      const saved = await saveSlideAois(targetSlideId, { definitions });
+      queryClient.setQueryData(queryKeys.aoi.slide(targetSlideId), [saved]);
+      if (slideIdRef.current === targetSlideId) {
+        setSyncedSlideSetId(saved.id);
+        scheduleRebuild();
+      }
     },
   });
 
   const uiSave = useAoiAutosave({
     value: uiDefinitions,
     ready: uiReady,
+    baselineKey: uiSet?.id ?? null,
     enabled: canManage,
     save: async (definitions) => {
-      const saved = await saveUiAois(UI_SCHEMA_VERSION, {
-        definitions,
-        expectedRevision: uiRevision,
-      });
-      setUiRevision(saved.revision);
+      const saved = await saveUiAois(UI_SCHEMA_VERSION, { definitions });
       setSyncedUiSetId(saved.id);
-      queryClient.setQueryData(
-        ["aoi-sets", "ui", UI_SCHEMA_VERSION],
-        [saved],
-      );
+      queryClient.setQueryData(queryKeys.aoi.ui(UI_SCHEMA_VERSION), [saved]);
       scheduleRebuild();
     },
   });
@@ -364,14 +318,34 @@ export function useAoiEditor({
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (slideSave.status === "saving" || uiSave.status === "saving") {
+      if (
+        hasUnsavedAoiChanges(
+          {
+            status: slideSave.status,
+            dirty: slideSave.dirty,
+            pending: slideSave.pending,
+          },
+          {
+            status: uiSave.status,
+            dirty: uiSave.dirty,
+            pending: uiSave.pending,
+          },
+        )
+      ) {
         event.preventDefault();
         event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [slideSave.status, uiSave.status]);
+  }, [
+    slideSave.status,
+    slideSave.dirty,
+    slideSave.pending,
+    uiSave.status,
+    uiSave.dirty,
+    uiSave.pending,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -379,12 +353,8 @@ export function useAoiEditor({
     else params.delete("lesson");
     if (activeSlideId) params.set("slide", activeSlideId);
     else params.delete("slide");
-    if (activeSlide?.slideVersionId) {
-      params.set("slideVersion", activeSlide.slideVersionId);
-    } else {
-      params.delete("slideVersion");
-    }
-    params.set("version", effectiveVersion);
+    params.delete("slideId");
+    params.delete("version");
     const next = params.toString();
     if (next !== searchParams.toString()) {
       router.replace(`/teacher/courses/${courseId}?${next}`, {
@@ -393,10 +363,8 @@ export function useAoiEditor({
     }
   }, [
     activeLessonId,
-    activeSlide?.slideVersionId,
     activeSlideId,
     courseId,
-    effectiveVersion,
     router,
     searchParams,
   ]);
@@ -405,6 +373,8 @@ export function useAoiEditor({
     (lessonId: string) => {
       void slideSave.flush();
       void uiSave.flush();
+      // Slide cũ không còn là context hiện tại; phản hồi save đến muộn bị bỏ.
+      slideIdRef.current = "";
       setActiveLessonId(lessonId);
       setActiveSlideId("");
       setSelectedCode(null);
@@ -417,6 +387,8 @@ export function useAoiEditor({
   const selectSlide = useCallback(
     (slideId: string) => {
       void slideSave.flush();
+      // Cập nhật ngay target để request cũ đang bay không ghi đè state mới.
+      slideIdRef.current = slideId;
       setActiveSlideId(slideId);
       setSelectedCode(null);
     },
@@ -437,7 +409,7 @@ export function useAoiEditor({
 
   const createSlideAoi = useCallback(
     (rect: { xMin: number; yMin: number; xMax: number; yMax: number }) => {
-      if (!canManage) return;
+      if (!canManage || generateSlideMutation.isPending) return;
       const rootCode = `slide_${currentSlideIndex + 1}`;
       const hasRoot = slideDefinitions.some((item) => item.code === rootCode);
       const base = hasRoot
@@ -458,6 +430,7 @@ export function useAoiEditor({
       const next: AoiDefinitionInput = {
         code,
         name: `Vùng ${countCustom(base) + 1}`,
+        label: nextSlideLabel(base),
         parentId: rootCode,
         geometry: rect,
         isContainer: false,
@@ -468,12 +441,17 @@ export function useAoiEditor({
       setSelectedCode(code);
       setTabState("slide");
     },
-    [canManage, currentSlideIndex, slideDefinitions],
+    [
+      canManage,
+      currentSlideIndex,
+      generateSlideMutation.isPending,
+      slideDefinitions,
+    ],
   );
 
   const createUiComponentAoi = useCallback(
     (code: string) => {
-      if (!canManage) return;
+      if (!canManage || generateUiMutation.isPending) return;
       const existing = uiDefinitions.find((item) => item.code === code);
       if (existing) {
         setSelectedCode(code);
@@ -493,7 +471,7 @@ export function useAoiEditor({
       setSelectedCode(code);
       setTabState("ui");
     },
-    [canManage, uiDefinitions],
+    [canManage, generateUiMutation.isPending, uiDefinitions],
   );
 
   const createUiCustomAoi = useCallback(
@@ -501,7 +479,7 @@ export function useAoiEditor({
       anchor: string,
       rect: { xMin: number; yMin: number; xMax: number; yMax: number },
     ) => {
-      if (!canManage) return;
+      if (!canManage || generateUiMutation.isPending) return;
       const code = nextUiCustomCode(uiDefinitions);
       const next: AoiDefinitionInput = {
         code,
@@ -516,7 +494,7 @@ export function useAoiEditor({
       setSelectedCode(code);
       setTabState("ui");
     },
-    [canManage, uiDefinitions],
+    [canManage, generateUiMutation.isPending, uiDefinitions],
   );
 
   const renameAoi = useCallback(
@@ -568,14 +546,24 @@ export function useAoiEditor({
     [canManage],
   );
 
-  // Xóa hẳn chỉ dùng cho vùng giao diện; vùng slide luôn được bỏ đánh dấu.
+  // Xóa hẳn vùng khỏi collection. Vùng slide giữ root container và no_label.
   const deleteAoi = useCallback(
     (code: string) => {
       if (!canManage || code === "no_label") return;
-      setUiDefinitions((prev) => prev.filter((item) => item.code !== code));
-      if (selectedCode === code) setSelectedCode(null);
+      if (uiDefinitions.some((item) => item.code === code)) {
+        setUiDefinitions((prev) => prev.filter((item) => item.code !== code));
+        if (selectedCode === code) setSelectedCode(null);
+        return;
+      }
+      const target = slideDefinitions.find((item) => item.code === code);
+      if (!target || target.isContainer) return;
+      const removed = collectAoiCodes(slideDefinitions, code);
+      setSlideDefinitions((prev) =>
+        prev.filter((item) => !removed.has(item.code)),
+      );
+      if (selectedCode && removed.has(selectedCode)) setSelectedCode(null);
     },
-    [canManage, selectedCode],
+    [canManage, selectedCode, slideDefinitions, uiDefinitions],
   );
 
   const changeMode = useCallback(
@@ -594,40 +582,27 @@ export function useAoiEditor({
     setSelectedCode(null);
   }, []);
 
-  const changeVersion = useCallback(
-    (next: AoiEditorVersion) => {
-      if (next === "published" && !hasPublished) return;
-      if (next === effectiveVersion) return;
-      void slideSave.flush();
-      void uiSave.flush();
-      setVersion(next);
-      setActiveSlideId("");
-      setSelectedCode(null);
-    },
-    [effectiveVersion, hasPublished, slideSave, uiSave],
-  );
-
   const retryGenerateSlide = useCallback(() => {
-    if (!slideVersionId) return;
+    if (!slideId) return;
     generatedSlideRef.current = null;
     generateSlideMutation.mutate({
-      slideVersionId,
+      slideId,
       slideNumber: currentSlideIndex + 1,
     });
-  }, [currentSlideIndex, generateSlideMutation, slideVersionId]);
+  }, [currentSlideIndex, generateSlideMutation, slideId]);
 
   const regenerateSlide = useCallback(
     (mode: "auto" | "all") => {
-      if (!slideVersionId) return;
-      generatedSlideRef.current = slideVersionId;
+      if (!slideId) return;
+      generatedSlideRef.current = slideId;
       generateSlideMutation.mutate({
-        slideVersionId,
+        slideId,
         slideNumber: currentSlideIndex + 1,
         replaceAuto: mode === "auto",
         resetAll: mode === "all",
       });
     },
-    [currentSlideIndex, generateSlideMutation, slideVersionId],
+    [currentSlideIndex, generateSlideMutation, slideId],
   );
 
   const retryGenerateUi = useCallback(() => {
@@ -677,9 +652,6 @@ export function useAoiEditor({
     treeLoading,
     treeError,
     refetchTree,
-    version: effectiveVersion,
-    hasPublished,
-    changeVersion,
     lessons,
     activeLesson,
     activeModule,
@@ -692,7 +664,7 @@ export function useAoiEditor({
     activeSlide,
     activeSlideId,
     currentSlideIndex,
-    slideVersionId,
+    slideId,
     frameModules,
     frameActiveLesson,
     frameActiveModule,

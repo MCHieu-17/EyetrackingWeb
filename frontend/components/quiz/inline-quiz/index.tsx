@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useQuizAssignment,
   useQuizAttempt,
@@ -23,6 +23,7 @@ import { NextButton } from "./next-button";
 import { QuestionView } from "./question-view";
 import { ReviewView } from "./review-view";
 import {
+  clampQuestionIndex,
   countAnswered,
   getRemainingMinutes,
   getRetryError,
@@ -31,6 +32,26 @@ import {
 } from "./quiz-helpers";
 
 export function InlineQuiz({
+  quizId,
+  onNext,
+  hasNext,
+}: {
+  quizId: string;
+  onNext?: () => void;
+  hasNext?: boolean;
+}) {
+  // Đổi quiz phải dựng lại toàn bộ state cục bộ (câu hiện tại, đáp án, hạn...).
+  return (
+    <InlineQuizSession
+      key={quizId}
+      quizId={quizId}
+      onNext={onNext}
+      hasNext={hasNext}
+    />
+  );
+}
+
+function InlineQuizSession({
   quizId,
   onNext,
   hasNext,
@@ -53,18 +74,25 @@ export function InlineQuiz({
   const expiresAt = assignment?.expiresAt;
   const attempt = attemptQuery.data;
   const { setQuizContext } = useAssistant();
+  const autoStartedRef = useRef<string | null>(null);
 
   // Chat panel ở reader root đọc context này để chuyển sang mode quiz/review.
   useEffect(() => {
+    const lessonId = assignment?.lessonId;
     if (
-      assignment?.lessonId &&
-      assignment.status === "published" &&
-      attemptQuery.isSuccess &&
-      attemptQuery.data === null &&
-      !startAttempt.isPending
+      !lessonId ||
+      assignment.status !== "published" ||
+      !attemptQuery.isSuccess ||
+      attemptQuery.data !== null
     ) {
-      startAttempt.mutate({ lessonId: assignment.lessonId });
+      return;
     }
+    // Mỗi bài chỉ tự tạo lượt một lần. Nếu request lỗi, query vẫn trả null —
+    // không được gọi lại vô hạn mỗi lần render.
+    const key = `${assignment.id}:${lessonId}`;
+    if (autoStartedRef.current === key || startAttempt.isPending) return;
+    autoStartedRef.current = key;
+    startAttempt.mutate({ lessonId });
   }, [assignment, attemptQuery.isSuccess, attemptQuery.data, startAttempt]);
 
   useEffect(() => {
@@ -95,60 +123,83 @@ export function InlineQuiz({
   }, []);
 
   if (assignmentQuery.isLoading || attemptQuery.isLoading) {
-    return <Skeleton className="h-72 w-full rounded-2xl" />;
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center overflow-hidden">
+        <Skeleton className="h-full max-h-72 w-full rounded-2xl" />
+      </div>
+    );
   }
   if (assignmentQuery.isError || attemptQuery.isError || !assignment) {
     return (
-      <p className="p-8 text-center text-sm text-muted-foreground">Bài tập hiện không khả dụng.</p>
+      <div className="flex h-full min-h-0 items-center justify-center overflow-hidden p-8">
+        <p className="text-center text-sm text-muted-foreground">
+          Bài tập hiện không khả dụng.
+        </p>
+      </div>
     );
   }
 
   if (attempt && shouldShowReview(attempt)) {
+    // Review nhiều câu cần cuộn, nhưng khung `quiz` bên ngoài vẫn cố định
+    // nên rect AOI của bài tập không đổi.
     return (
-      <ReviewView
-        assignment={assignment}
-        attempt={attempt}
-        onNext={onNext}
-        hasNext={hasNext}
-        // Chỉ làm lại được khi giáo viên bật cờ và bài vẫn đang mở.
-        canRetry={Boolean(assignment.allowRetry) && assignment.status === "published" && !expired}
-        retrying={retryAttempt.isPending}
-        retryError={getRetryError(retryAttempt.isError, retryAttempt.error)}
-        onRetry={() =>
-          retryAttempt.mutate(
-            { attemptId: attempt.id, lessonId: assignment.lessonId ?? "" },
-            {
-              onSuccess: () => {
-                // Lượt làm cũ vẫn còn trong lịch sử; dựng lại UI từ đầu.
-                setCurrentIndex(0);
-                setAnswers({});
-                setExpired(false);
+      <div className="h-full min-h-0 overflow-y-auto overscroll-contain pb-2 pr-1">
+        <ReviewView
+          assignment={assignment}
+          attempt={attempt}
+          onNext={onNext}
+          hasNext={hasNext}
+          // Chỉ làm lại được khi giáo viên bật cờ và bài vẫn đang mở.
+          canRetry={Boolean(assignment.allowRetry) && assignment.status === "published" && !expired}
+          retrying={retryAttempt.isPending}
+          retryError={getRetryError(retryAttempt.isError, retryAttempt.error)}
+          onRetry={() =>
+            retryAttempt.mutate(
+              { attemptId: attempt.id, lessonId: assignment.lessonId ?? "" },
+              {
+                onSuccess: () => {
+                  // Lượt làm cũ vẫn còn trong lịch sử; dựng lại UI từ đầu.
+                  setCurrentIndex(0);
+                  setAnswers({});
+                  setExpired(false);
+                },
               },
-            },
-          )
-        }
-      />
+            )
+          }
+        />
+      </div>
     );
   }
 
   if (assignment.status === "closed" || expired || attempt?.status === "expired") {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-border/80 bg-white p-10 text-center shadow-xs">
-        <p className="text-sm font-semibold text-foreground">Bài tập đã đóng</p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          Hạn nộp hoặc thời gian làm bài đã kết thúc.
-        </p>
-        <NextButton onNext={onNext} hasNext={hasNext} />
+      <div className="flex h-full min-h-0 items-center justify-center overflow-hidden p-2">
+        <div className="flex max-h-full flex-col items-center gap-3 overflow-y-auto rounded-2xl border border-border/80 bg-white p-10 text-center shadow-xs">
+          <p className="text-sm font-semibold text-foreground">Bài tập đã đóng</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Hạn nộp hoặc thời gian làm bài đã kết thúc.
+          </p>
+          <NextButton onNext={onNext} hasNext={hasNext} />
+        </div>
       </div>
     );
   }
 
   if (!assignment.questions.length) {
-    return <p className="p-8 text-center text-sm text-muted-foreground">Bài tập chưa có câu hỏi.</p>;
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center overflow-hidden p-8">
+        <p className="text-center text-sm text-muted-foreground">
+          Bài tập chưa có câu hỏi.
+        </p>
+      </div>
+    );
   }
 
   const total = assignment.questions.length;
-  const question = assignment.questions[currentIndex];
+  // currentIndex có thể còn lớn hơn số câu sau khi đề được cập nhật ngắn lại.
+  // Luôn render theo chỉ số đã kẹp để không truy cập phần tử undefined.
+  const safeIndex = clampQuestionIndex(currentIndex, total);
+  const question = assignment.questions[safeIndex];
   const selected = answers[question.id] ?? [];
   const answeredCount = countAnswered(answers);
   const unanswered = total - answeredCount;
@@ -177,10 +228,10 @@ export function InlineQuiz({
   };
 
   return (
-    <div data-aoi="quiz" className="space-y-5">
+    <div className="flex h-full min-h-0 flex-col">
       <QuestionView
         question={question}
-        currentIndex={currentIndex}
+        currentIndex={safeIndex}
         total={total}
         selected={selected}
         answeredCount={answeredCount}
@@ -188,8 +239,8 @@ export function InlineQuiz({
         submitting={submitAttempt.isPending}
         submitError={getSubmitError(submitAttempt.isError, submitAttempt.error)}
         onToggleOption={toggle}
-        onPrev={() => setCurrentIndex((index) => index - 1)}
-        onNext={() => setCurrentIndex((index) => index + 1)}
+        onPrev={() => setCurrentIndex(Math.max(0, safeIndex - 1))}
+        onNext={() => setCurrentIndex(Math.min(total - 1, safeIndex + 1))}
         onSubmit={handleSubmit}
       />
 

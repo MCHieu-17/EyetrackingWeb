@@ -10,6 +10,7 @@ import { ALLOWED_SLIDE_EXTENSIONS, validateSlideFile } from "../editor-helpers";
 import { SlideCheckSection } from "./slide-check-section";
 import { UploadSection } from "./upload-section";
 import { waitForImportJob, type UploadState } from "./upload-helpers";
+import { queryKeys } from "@/lib/query-keys";
 
 export function LessonEditor({
   lesson,
@@ -50,8 +51,8 @@ export function LessonEditor({
     try {
       await reindexLessonSlides(lesson.id);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["teacher", "lesson-slides", lesson.id] }),
-        queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacher.lessonSlides(lesson.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacher.courseTree(courseId) }),
       ]);
     } catch (error) {
       setReindexError(
@@ -77,15 +78,15 @@ export function LessonEditor({
         );
       }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["teacher", "lesson-slides", lesson.id] }),
-        queryClient.invalidateQueries({ queryKey: ["teacher", "course-tree", courseId] }),
-        queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacher.lessonSlides(lesson.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacher.courseTree(courseId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot }),
       ]);
       // Worker index nền ngay sau khi job import xong; làm mới thêm một lần
       // để bắt trạng thái pending và bắt đầu poll.
       window.setTimeout(() => {
         void queryClient.invalidateQueries({
-          queryKey: ["teacher", "lesson-slides", lesson.id],
+          queryKey: queryKeys.teacher.lessonSlides(lesson.id),
         });
       }, 3000);
       setUpload({

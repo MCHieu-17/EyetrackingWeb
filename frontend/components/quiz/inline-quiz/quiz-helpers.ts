@@ -66,3 +66,9 @@ export function getSubmitError(
 export function getOptionLetter(index: number): string {
   return String.fromCharCode(65 + index);
 }
+
+/** Giữ chỉ số câu trong khoảng hợp lệ khi đề bài đổi/ngắn lại. */
+export function clampQuestionIndex(index: number, total: number): number {
+  if (total <= 0 || !Number.isFinite(index)) return 0;
+  return Math.min(Math.max(0, Math.floor(index)), total - 1);
+}

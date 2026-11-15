@@ -1,21 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
 from app.api.deps import get_current_user
 from app.core.helpers import gradient_for
 from app.core.rediscache import get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    CourseVersionModule,
-    Enrollment,
-)
-from app.models.profile import UserProfile
+from app.models.course import Course, CourseModule, Enrollment, Lesson
 from app.schemas.course import CourseSummaryOut, EnrolledCourseOut
 
 router = APIRouter(tags=["enrollments"])
@@ -33,18 +25,19 @@ async def my_enrollments(
 
     module_counts = (
         select(
-            CourseVersionModule.course_version_id,
-            func.count(CourseVersionModule.id).label("module_count"),
+            CourseModule.course_id,
+            func.count(CourseModule.id).label("module_count"),
         )
-        .group_by(CourseVersionModule.course_version_id)
+        .group_by(CourseModule.course_id)
         .subquery()
     )
     lesson_counts = (
         select(
-            CourseVersionItem.course_version_id,
-            func.count(CourseVersionItem.id).label("lesson_count"),
+            CourseModule.course_id,
+            func.count(Lesson.id).label("lesson_count"),
         )
-        .group_by(CourseVersionItem.course_version_id)
+        .join(Lesson, Lesson.module_id == CourseModule.id)
+        .group_by(CourseModule.course_id)
         .subquery()
     )
     rows = (
@@ -52,71 +45,39 @@ async def my_enrollments(
             select(
                 Enrollment,
                 Course,
-                CourseVersion,
-                UserProfile,
+                User.full_name,
                 func.coalesce(module_counts.c.module_count, 0),
                 func.coalesce(lesson_counts.c.lesson_count, 0),
             )
             .join(Course, Course.id == Enrollment.course_id)
-            .outerjoin(
-                CourseVersion,
-                CourseVersion.id == Course.published_version_id,
-            )
-            .outerjoin(UserProfile, UserProfile.user_id == Course.owner_id)
-            .outerjoin(
-                module_counts,
-                module_counts.c.course_version_id == CourseVersion.id,
-            )
-            .outerjoin(
-                lesson_counts,
-                lesson_counts.c.course_version_id == CourseVersion.id,
-            )
-            .where(Enrollment.student_id == user.id)
+            .outerjoin(User, User.id == Course.owner_id)
+            .outerjoin(module_counts, module_counts.c.course_id == Course.id)
+            .outerjoin(lesson_counts, lesson_counts.c.course_id == Course.id)
+            .where(Enrollment.student_id == user.id, Course.status == "published")
             .order_by(Enrollment.enrolled_at.desc())
-            .options(
-                raiseload(Enrollment.course),
-                raiseload(Course.versions),
-                raiseload(Course.enrollments),
-                raiseload(Course.owner),
-                raiseload(Course.creator),
-                raiseload(CourseVersion.modules),
-                raiseload(CourseVersion.items),
-            )
         )
     ).all()
     if not rows:
         return []
 
-    out: list[EnrolledCourseOut] = []
-    for (
-        enrollment,
-        course,
-        version,
-        teacher_profile,
-        module_count,
-        lesson_count,
-    ) in rows:
-        if version is None:
-            continue
-        out.append(
-            EnrolledCourseOut(
-                enrollment_id=enrollment.id,
-                enrolled_at=enrollment.enrolled_at,
-                status=enrollment.status,
-                course=CourseSummaryOut(
-                    id=course.id,
-                    title=version.title,
-                    thumbnail_url=None,
-                    teacher_name=(
-                        teacher_profile.full_name if teacher_profile else "—"
-                    ),
-                    module_count=int(module_count),
-                    lesson_count=int(lesson_count),
-                    gradient=gradient_for(course.id),
-                    require_calibration=course.require_calibration,
-                ),
-            )
+    out = [
+        EnrolledCourseOut(
+            enrollment_id=enrollment.id,
+            enrolled_at=enrollment.enrolled_at,
+            status=enrollment.status,
+            course=CourseSummaryOut(
+                id=course.id,
+                title=course.title,
+                thumbnail_url=course.thumbnail_url,
+                teacher_name=teacher_name or "—",
+                module_count=int(module_count),
+                lesson_count=int(lesson_count),
+                gradient=gradient_for(course.id),
+                require_calibration=course.require_calibration,
+            ),
         )
+        for enrollment, course, teacher_name, module_count, lesson_count in rows
+    ]
     await set_json(
         cache_key,
         [item.model_dump(mode="json") for item in out],

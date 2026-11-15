@@ -21,6 +21,7 @@ import { StudentDetailSheet } from "./student-detail-sheet";
 import { StudentsSummary } from "./students-summary";
 import { StudentsTable } from "./students-table";
 import { StudentsToolbar } from "./students-toolbar";
+import { queryKeys } from "@/lib/query-keys";
 
 export function StudentsTab({ courseId, canManage }: { courseId: string; canManage: boolean }) {
   const queryClient = useQueryClient();
@@ -61,8 +62,8 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
   const removeStudent = async (id: string) => {
     try {
       await removeCourseStudent(courseId, id);
-      queryClient.invalidateQueries({ queryKey: ["teacher", "course-students", courseId] });
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.courseStudents(courseId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
     } catch {
       setAddError("Không gỡ được học viên khỏi khóa học");
     }
@@ -161,14 +162,15 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
         courseId={courseId}
         enrolledIds={new Set(students.map((s) => s.id))}
         onAdded={() => {
-          queryClient.invalidateQueries({ queryKey: ["teacher", "course-students", courseId] });
-          queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.teacher.courseStudents(courseId) });
+          queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
         }}
         onError={setAddError}
       />
 
       <StudentDetailSheet
         student={openStudent}
+        courseId={courseId}
         lessons={openStudentLessons}
         lessonTitle={lessonTitle}
         onOpenChange={(open) => !open && setOpenId(null)}

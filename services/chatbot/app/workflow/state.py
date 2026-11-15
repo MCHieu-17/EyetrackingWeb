@@ -13,12 +13,10 @@ class ChatState:
     # Input từ backend
     question: str
     course_id: str
-    course_version_id: str | None
     thread_id: str
     context_key: str = ""
     history: list[dict] = field(default_factory=list)
     lesson_id: str | None = None
-    lesson_version_id: str | None = None
     lesson_title: str = ""
     module_title: str = ""
     attempt_id: str | None = None

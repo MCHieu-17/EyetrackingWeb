@@ -32,9 +32,8 @@ const HISTORY_KEY = "eyelearning.admin.db.history.v1";
 const LAST_SQL_KEY = "eyelearning.admin.db.last-sql.v1";
 const MAX_HISTORY = 20;
 
-const DEFAULT_SQL = `SELECT u.id, u.email, p.full_name, u.status, u.created_at
+const DEFAULT_SQL = `SELECT u.id, u.email, u.full_name, u.role, u.status, u.created_at
 FROM users u
-LEFT JOIN user_profiles p ON p.user_id = u.id
 ORDER BY u.created_at DESC
 LIMIT 100;`;
 

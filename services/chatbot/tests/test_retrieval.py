@@ -7,10 +7,7 @@ def _doc(doc_id: str, *, title: str = "Bài 1", slide: int = 1) -> dict:
     return {
         "id": doc_id,
         "course_id": "course-1",
-        "course_version_id": "version-1",
         "lesson_id": "lesson-1",
-        "lesson_version_id": "lesson-version-1",
-        "membership_id": "membership-1",
         "slide_id": "slide-1",
         "asset_id": "asset-1",
         "pdf_object_key": "pdf/key.pdf",

@@ -7,7 +7,9 @@ const InlineQuizDynamic = dynamic(
   () => import("@/components/quiz/inline-quiz").then((mod) => mod.InlineQuiz),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-72 w-full rounded-2xl" />,
+    loading: () => (
+      <Skeleton className="h-full max-h-72 w-full rounded-2xl" />
+    ),
   },
 );
 
@@ -21,6 +23,11 @@ export function LazyInlineQuiz({
   hasNext?: boolean;
 }) {
   return (
-    <InlineQuizDynamic quizId={quizId} onNext={onNext} hasNext={hasNext} />
+    <InlineQuizDynamic
+      key={quizId}
+      quizId={quizId}
+      onNext={onNext}
+      hasNext={hasNext}
+    />
   );
 }

@@ -16,7 +16,7 @@ import time
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.responses import JSONResponse, Response
 
-from app.protocol import parse_frame
+from app.protocol import apply_header_echo, parse_frame
 from app.schemas import (
     CalibrateResult,
     DeletedResult,
@@ -194,16 +194,13 @@ async def stream(ws: WebSocket, sid: str):
             error, point = await inference.run_inference(
                 inference.predict, session, jpeg
             )
-            response: dict = {
-                "ok": not error,
-                "status": "ok" if not error else error,
-            }
-            if header is not None:
-                response["frameId"] = header.get("frameId")
-                response["sequence"] = header.get("sequence")
-                response["captureMonotonicNs"] = header.get("captureMonotonicNs")
-                response["presentationId"] = header.get("presentationId")
-                response["layoutGeneration"] = header.get("layoutGeneration")
+            response: dict = apply_header_echo(
+                {
+                    "ok": not error,
+                    "status": "ok" if not error else error,
+                },
+                header,
+            )
             if error:
                 response["error"] = error
             else:

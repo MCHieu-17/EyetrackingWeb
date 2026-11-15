@@ -1,12 +1,4 @@
-"""Truy hồi hybrid: BM25-like (Postgres FTS) + dense (pgvector) + HyDE.
-
-Mỗi nhánh lọc `course_id` + `course_version_id` **trước LIMIT**. Các nhánh được
-fuse bằng Reciprocal Rank Fusion (RRF) trong Python để dễ test và tune trọng số.
-
-BM25 ở đây dùng Postgres FTS `ts_rank_cd` (không phải BM25 chuẩn) vì stack hiện
-tại không có extension BM25. Nếu sau này cần BM25 thật, chỉ cần thay
-`_search_bm25` mà không đổi pipeline.
-"""
+"""Truy hồi hybrid: Postgres FTS + pgvector + HyDE trong một khóa học."""
 
 import asyncio
 import threading
@@ -27,12 +19,9 @@ from app.settings import (
 from app.workflow.providers import get_embedding
 
 _DOC_COLUMNS = """
-    d.slide_version_id AS id,
+    d.slide_id AS id,
     d.course_id,
-    d.course_version_id,
     d.lesson_id,
-    d.lesson_version_id,
-    d.lesson_version_slide_id AS membership_id,
     d.slide_id,
     d.pdf_asset_id AS asset_id,
     d.pdf_object_key,
@@ -53,7 +42,6 @@ SELECT
 FROM v_chatbot_slide_documents d,
      plainto_tsquery('simple', immutable_unaccent(%s)) q
 WHERE d.course_id = %s
-  AND d.course_version_id = %s
   AND d.content_tsv @@ q
 ORDER BY rank_score DESC
 LIMIT %s
@@ -65,7 +53,6 @@ SELECT
     1 - (d.embedding <=> %s) AS cosine
 FROM v_chatbot_slide_documents d
 WHERE d.course_id = %s
-  AND d.course_version_id = %s
   AND 1 - (d.embedding <=> %s) >= %s
 ORDER BY d.embedding <=> %s
 LIMIT %s
@@ -75,10 +62,6 @@ LIMIT %s
 def rrf_fuse(
     branches: list[tuple[list[dict], float]], k: int, top_k: int
 ) -> list[dict]:
-    """Fuse nhiều ranked lists bằng RRF.
-
-    `branches` là danh sách (docs, weight). Mỗi docs đã được xếp hạng từ 1.
-    """
     scores: dict[str, float] = {}
     docs: dict[str, dict] = {}
     for branch, weight in branches:
@@ -107,61 +90,38 @@ class Retriever:
         self.rrf_k = rag_rrf_k()
         self.threshold = rag_score_threshold()
 
-    def _search_bm25(
-        self, query: str, course_id: str, course_version_id: str
-    ) -> list[dict]:
+    def _search_bm25(self, query: str, course_id: str) -> list[dict]:
         with get_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     BM25_SQL,
-                    (query, course_id, course_version_id, self.bm25_candidates),
+                    (query, course_id, self.bm25_candidates),
                 )
                 return [dict(row) for row in cur.fetchall()]
 
     def _search_dense(
-        self,
-        vector: Vector,
-        course_id: str,
-        course_version_id: str,
-        limit: int,
+        self, vector: Vector, course_id: str, limit: int
     ) -> list[dict]:
         with get_pool().connection() as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     DENSE_SQL,
-                    (
-                        vector,
-                        course_id,
-                        course_version_id,
-                        vector,
-                        self.threshold,
-                        vector,
-                        limit,
-                    ),
+                    (vector, course_id, vector, self.threshold, vector, limit),
                 )
                 return [dict(row) for row in cur.fetchall()]
 
-    async def asearch(
-        self,
-        query: str,
-        hyde: str,
-        course_id: str,
-        course_version_id: str,
-    ) -> list[dict]:
+    async def asearch(self, query: str, hyde: str, course_id: str) -> list[dict]:
         query_vector, hyde_vector = await asyncio.gather(
             self.embedding.aembed_query(query),
             self.embedding.aembed_query(hyde) if hyde else _none(),
         )
 
         tasks = [
-            asyncio.to_thread(
-                self._search_bm25, query, course_id, course_version_id
-            ),
+            asyncio.to_thread(self._search_bm25, query, course_id),
             asyncio.to_thread(
                 self._search_dense,
                 Vector(query_vector),
                 course_id,
-                course_version_id,
                 self.dense_candidates,
             ),
         ]
@@ -171,7 +131,6 @@ class Retriever:
                     self._search_dense,
                     Vector(hyde_vector),
                     course_id,
-                    course_version_id,
                     self.hyde_candidates,
                 )
             )
@@ -223,25 +182,17 @@ def build_citations(docs: list[dict]) -> list[dict]:
         location = doc.get("pdf_object_key") or ""
         if location and page_number:
             location = f"{location}#page={page_number}"
+        slide_id = str(doc["id"])
+        lesson_id = str(doc["lesson_id"]) if doc.get("lesson_id") else None
         citations.append(
             {
-                "document_id": str(doc["id"]),
-                "course_version_id": str(doc["course_version_id"])
-                if doc.get("course_version_id")
-                else None,
-                "lesson_version_id": str(doc["lesson_version_id"])
-                if doc.get("lesson_version_id")
-                else None,
-                "slide_version_id": str(doc["id"]),
-                "membership_id": str(doc["membership_id"])
-                if doc.get("membership_id")
-                else None,
+                "document_id": slide_id,
+                "lesson_id": lesson_id,
+                "slide_id": slide_id,
                 "asset_id": str(asset_id) if asset_id else None,
                 "title": f"{doc['module_title']} - {doc['lesson_title']}",
                 "location": location,
-                "lesson_id": str(doc["lesson_id"]) if doc.get("lesson_id") else None,
                 "lesson_title": doc.get("lesson_title") or "",
-                "slide_id": str(doc["slide_id"]) if doc.get("slide_id") else None,
                 "slide_index": doc.get("slide_index"),
                 "pdf_url": pdf_url,
                 "page_number": page_number,
@@ -258,7 +209,7 @@ def format_context(docs: list[dict]) -> str:
         header = (
             f"[{index}] {doc['module_title']} > "
             f"{doc['lesson_title']} "
-            f"(slide {doc.get('slide_index')})"
+            f"(slide {int(doc.get('slide_index') or 0)})"
         )
         blocks.append(f"{header}\n{doc.get('content') or ''}")
     return "\n\n".join(blocks)

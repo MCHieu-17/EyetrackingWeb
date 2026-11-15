@@ -1,13 +1,13 @@
 import { apiFetch } from "./client";
 
-export type AdminDbTableKind =
+type AdminDbTableKind =
   | "table"
   | "partitioned_table"
   | "view"
   | "materialized_view"
   | "foreign_table";
 
-export interface AdminDbColumn {
+interface AdminDbColumn {
   name: string;
   type: string;
   nullable: boolean;

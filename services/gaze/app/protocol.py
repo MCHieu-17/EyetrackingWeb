@@ -20,3 +20,22 @@ def parse_frame(data: bytes) -> tuple[dict | None, bytes]:
     if not isinstance(header, dict) or header.get("v") != 2:
         return None, data
     return header, data[4 + header_len :]
+
+
+_ECHO_FIELDS = (
+    "frameId",
+    "sequence",
+    "captureMonotonicNs",
+    "eventTime",
+    "presentationId",
+    "layoutGeneration",
+)
+
+
+def apply_header_echo(response: dict, header: dict | None) -> dict:
+    """Echo các metadata protocol v2 đã biết; bỏ field lạ từ client."""
+    if header is None:
+        return response
+    for field in _ECHO_FIELDS:
+        response[field] = header.get(field)
+    return response

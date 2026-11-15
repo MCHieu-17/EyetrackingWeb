@@ -11,10 +11,6 @@ from app.schemas.common import CamelModel
 
 class ChatCitation(CamelModel):
     document_id: str
-    course_version_id: str | None = None
-    lesson_version_id: str | None = None
-    slide_version_id: str | None = None
-    membership_id: str | None = None
     asset_id: str | None = None
     title: str
     location: str
@@ -32,7 +28,7 @@ class ChatSendIn(CamelModel):
     message: str = Field(min_length=1, max_length=8000)
     session_id: UUID | None = None
     lesson_id: UUID | None = None
-    # Tên giữ tương thích frontend: đây là lesson_version_id của quiz.
+    # Với quiz, assignment_id chính là lessons.id.
     assignment_id: UUID | None = None
     attempt_id: UUID | None = None
     draft_answers: dict[
@@ -45,9 +41,7 @@ class ChatSessionOut(CamelModel):
     can_continue: bool = True
     id: str
     course_id: str
-    course_version_id: str | None = None
     lesson_id: str | None = None
-    lesson_version_id: str | None = None
     assignment_id: str | None = None
     attempt_id: str | None = None
     title: str

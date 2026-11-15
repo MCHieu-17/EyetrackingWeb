@@ -38,7 +38,8 @@ docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 
 log "chạy pytest"
 cd backend
+PYTEST_BIN="${PYTEST_BIN:-.venv/bin/pytest}"
 TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT}/${TEST_DB}" \
-    .venv/bin/pytest -q
+    "$PYTEST_BIN" -q
 
 log "OK"

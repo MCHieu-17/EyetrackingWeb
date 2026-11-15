@@ -19,6 +19,7 @@ from app.api.routes import (
     calibration,
     chat,
     chat_internal,
+    course_visits,
     courses,
     enrollments,
     gaze_ingest,
@@ -30,7 +31,7 @@ from app.api.routes import (
     modules,
     proxy,
     quiz_attempts,
-    quiz_specs,
+    quiz_editor,
     users,
 )
 from app.core.config import settings
@@ -41,7 +42,7 @@ from app.models.metadata import AppMetadata
 from app.services.embedding import close_ingest_client
 from app.services.study_chat import close_chatbot_client
 
-EXPECTED_SCHEMA_GENERATION = "8"
+EXPECTED_SCHEMA_GENERATION = "12"
 
 configure_logging()
 
@@ -165,9 +166,10 @@ app.include_router(lessons.router)
 app.include_router(enrollments.router)
 app.include_router(proxy.router)
 app.include_router(media.router)
-app.include_router(quiz_specs.router)
+app.include_router(quiz_editor.router)
 app.include_router(quiz_attempts.router)
 app.include_router(calibration.router)
+app.include_router(course_visits.router)
 app.include_router(learning_sessions.router)
 app.include_router(gaze_ingest.router)
 app.include_router(aoi.router)

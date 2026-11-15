@@ -9,11 +9,11 @@ from app.api.access import (
     get_lesson_with_course,
     get_viewable_lesson,
 )
-from app.models.course import Course, Lesson
+from app.models.course import Lesson
 
 
 class _FakeDB:
-    """DB tối thiểu: trả lesson, không trả course."""
+    """DB tối thiểu: trả lesson, không trả module/course."""
 
     def __init__(self, lesson: Lesson):
         self.lesson = lesson
@@ -21,16 +21,16 @@ class _FakeDB:
     async def get(self, model, ident, options=None):
         if model is Lesson:
             return self.lesson
-        if model is Course:
-            return None
-        raise AssertionError(f"unexpected model: {model}")
+        return None
 
 
 def _lesson_without_course() -> Lesson:
     return Lesson(
         id=str(uuid.uuid4()),
-        course_id=str(uuid.uuid4()),
+        module_id=str(uuid.uuid4()),
+        title="Lesson",
         kind="lesson",
+        position=0,
     )
 
 
@@ -39,7 +39,7 @@ def _lesson_without_course() -> Lesson:
 async def test_viewable_lesson_missing_course_is_403(helper):
     lesson = _lesson_without_course()
     db = _FakeDB(lesson)
-    user = SimpleNamespace(role_codes=[])
+    user = SimpleNamespace(role_codes=[], role="student")
 
     with pytest.raises(HTTPException) as exc_info:
         await helper(db, lesson.id, user)

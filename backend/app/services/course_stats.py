@@ -1,13 +1,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.aoi import PresentationMetric
-from app.models.course import (
-    CourseVersion,
-    CourseVersionItem,
-    Enrollment,
-)
-from app.models.gaze import ContentPresentation, LearningSession
+from app.models.course import CourseModule, Enrollment, Lesson
+from app.models.gaze import ContentView, LearningSession
 
 
 async def enrollment_counts(db: AsyncSession, course_ids: list[str]) -> dict[str, int]:
@@ -28,31 +23,21 @@ async def attention_avg_by_course(
         return {}
     stmt = (
         select(
-            CourseVersion.course_id,
-            func.sum(PresentationMetric.on_slide_count),
-            func.sum(PresentationMetric.sample_count),
+            CourseModule.course_id,
+            func.sum(ContentView.on_slide_gaze_count),
+            func.sum(ContentView.gaze_count),
         )
-        .join(
-            CourseVersionItem,
-            CourseVersionItem.course_version_id == CourseVersion.id,
-        )
-        .join(
-            LearningSession,
-            LearningSession.course_version_item_id == CourseVersionItem.id,
-        )
-        .join(
-            ContentPresentation,
-            ContentPresentation.session_id == LearningSession.id,
-        )
-        .join(
-            PresentationMetric,
-            PresentationMetric.presentation_id == ContentPresentation.id,
-        )
+        .join(Lesson, Lesson.module_id == CourseModule.id)
+        .join(LearningSession, LearningSession.lesson_id == Lesson.id)
+        .join(ContentView, ContentView.session_id == LearningSession.id)
         .where(
-            CourseVersion.course_id.in_(course_ids),
-            PresentationMetric.algorithm_version == "gaze-metrics-v1",
+            CourseModule.course_id.in_(course_ids),
+            ContentView.analysis_version.in_(
+                ("gaze-metrics-v2", "gaze-metrics-v3")
+            ),
+            ContentView.surface == "lesson",
         )
-        .group_by(CourseVersion.course_id)
+        .group_by(CourseModule.course_id)
     )
     out: dict[str, float] = {}
     for course_id, on_slide, total in await db.execute(stmt):
@@ -67,16 +52,10 @@ async def session_counts_by_course(
     if not course_ids:
         return {}
     stmt = (
-        select(CourseVersion.course_id, func.count(LearningSession.id))
-        .join(
-            CourseVersionItem,
-            CourseVersionItem.course_version_id == CourseVersion.id,
-        )
-        .join(
-            LearningSession,
-            LearningSession.course_version_item_id == CourseVersionItem.id,
-        )
-        .where(CourseVersion.course_id.in_(course_ids))
-        .group_by(CourseVersion.course_id)
+        select(CourseModule.course_id, func.count(LearningSession.id))
+        .join(Lesson, Lesson.module_id == CourseModule.id)
+        .join(LearningSession, LearningSession.lesson_id == Lesson.id)
+        .where(CourseModule.course_id.in_(course_ids))
+        .group_by(CourseModule.course_id)
     )
     return {row[0]: row[1] for row in await db.execute(stmt)}

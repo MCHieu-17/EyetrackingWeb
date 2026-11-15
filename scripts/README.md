@@ -11,9 +11,9 @@ gốc repo.
 | `seed_dev.sh` | Seed tài khoản dev (`admin@`, `teacher@`, `student@`) |
 | `reset_db.sh` / `reset_db.py` | Reset DB development có guard |
 | `test_backend.sh` | Chạy test backend |
-| `test_migrations.sh` | Test migration runner |
+| `test_migrations.sh` | Test migration runner + checksum/idempotent |
+| `tests/test_reset_db.py` | Guard tests cho reset (stdlib unittest) |
 | `smoke.sh` | Smoke test sau khi stack lên |
-| `create_partitions.sh` | Tạo partition tháng mới cho `gaze_samples` |
 
 ## `create_chatbot_role.sh` — role DB hạn chế cho chatbot
 
@@ -30,20 +30,10 @@ Script đọc `POSTGRES_*`, `CHATBOT_DB_USER`, `CHATBOT_DB_PASSWORD` từ `.env`
 repo và chạy `psql` trong container `postgres`; idempotent nên chạy lại để đổi
 password/grant cũng được.
 
-## `maintain_partitions.sql` — bảo trì partition gaze_samples
+## Retention gaze
 
-Gọi `create_gaze_sample_partitions(3)` để tạo partition tháng mới:
-
-```bash
-docker compose exec -T postgres psql -U postgres -d eyetracking \
-  -f - < scripts/maintain_partitions.sql
-```
-
-Hoặc dùng script có sẵn (đọc `.env`):
-
-```bash
-./scripts/create_partitions.sh 3
-```
+Schema generation 12 dùng bảng `gaze_samples` thường, không partition. Chạy
+`./scripts/maintenance.sh` để xoá sample cũ hơn `GAZE_RETENTION_DAYS`.
 
 ## `docker_cleanup.sh` — dọn image/build cache
 
@@ -57,10 +47,14 @@ Chỉ `docker image prune` và `docker builder prune` cho tài nguyên cũ hơn 
 ./scripts/docker_cleanup.sh
 ```
 
+`check.sh --full` chạy reset guard tests, backend/chatbot/gaze tests và frontend
+unit tests. Có thể override interpreter bằng `BACKEND_PYTHON`,
+`CHATBOT_PYTHON`, `GAZE_PYTHON` và `PYTEST_BIN`.
+
 ## Migration (schema DB)
 
-Schema do các file trong `db/migrations/` quyết định. Hiện chỉ có **một
-baseline** `001_baseline.sql` (schema generation 8); migration tiếp theo là
+Schema do các file trong `db/migrations/` quyết định. Hiện có baseline duy nhất
+`001_baseline.sql` (generation 12, 24 bảng lõi); migration tiếp theo là
 `002_...sql`. Runner `db/migrate.sh` (nằm trong image
 `eyelearning-migrations:local`, build từ `db/Dockerfile`, service một-lần
 `migrate`) là thứ duy nhất nên chạy migration — **không** `psql -f` tay từng file.

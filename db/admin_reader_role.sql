@@ -3,7 +3,7 @@
 --
 -- Quyền:
 --   - SELECT trên các bảng/view public.
---   - KHÔNG đọc auth_sessions, user_identities.
+--   - KHÔNG đọc auth_sessions, oauth_accounts.
 --   - users: chỉ đọc các cột an toàn (không password_hash).
 --   - Không có quyền ghi/DDL.
 --
@@ -39,12 +39,14 @@ REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM :"admin_role";
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"admin_role";
 
 -- Không cho đọc bảng chứa token/identity.
-REVOKE ALL ON auth_sessions, user_identities FROM :"admin_role";
+REVOKE ALL ON auth_sessions, oauth_accounts FROM :"admin_role";
 
 -- users: chỉ grant các cột an toàn, không grant password_hash.
 REVOKE ALL ON users FROM :"admin_role";
-GRANT SELECT (id, email, status, last_login_at, created_at, deleted_at)
-    ON users TO :"admin_role";
+GRANT SELECT (
+    id, email, role, status, full_name, date_of_birth, gender, phone,
+    avatar_url, last_login_at, created_at, updated_at, deleted_at
+) ON users TO :"admin_role";
 
 -- Không cho đọc bảng migration nội bộ.
 REVOKE ALL ON schema_migrations FROM :"admin_role";

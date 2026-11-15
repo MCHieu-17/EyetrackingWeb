@@ -196,21 +196,14 @@ async def _run_chat(state: ChatState) -> AsyncIterator[dict]:
 
     # 4. Retrieval.
     yield _status("retrieving")
-    if not state.course_version_id:
-        raise ValueError("Missing course_version_id for retrieval")
     docs = await get_retriever().asearch(
         state.query,
         state.hyde,
         state.course_id,
-        state.course_version_id,
     )
     # Không tin metadata để mở rộng phạm vi truy cập.
-    if any(
-        str(doc.get("course_id")) != str(state.course_id)
-        or str(doc.get("course_version_id")) != str(state.course_version_id)
-        for doc in docs
-    ):
-        raise ValueError("Retrieval returned foreign course/version")
+    if any(str(doc.get("course_id")) != str(state.course_id) for doc in docs):
+        raise ValueError("Retrieval returned foreign course")
 
     state.retrieved_docs = docs
     state.citations = build_citations(docs)

@@ -18,6 +18,7 @@ from app.schemas import ChatRequest, ChatResponse, CitationOut
 from app.settings import internal_token
 from app.workflow.pipeline import collect_chat, run_chat
 from app.workflow.state import ChatState
+from app.workflow.workload import chat_finished, chat_started
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +55,9 @@ def _state_from_request(payload: ChatRequest) -> ChatState:
         question=payload.message,
         context_key=payload.context_key,
         course_id=payload.course_id,
-        course_version_id=payload.course_version_id,
         thread_id=payload.thread_id,
         history=[item.model_dump() for item in payload.history],
         lesson_id=payload.lesson_id,
-        lesson_version_id=payload.lesson_version_id,
         lesson_title=payload.lesson_title,
         module_title=payload.module_title,
         attempt_id=payload.attempt_id,
@@ -82,6 +81,7 @@ async def chat(payload: ChatRequest):
     """Nhận câu hỏi, chạy pipeline và trả câu trả lời kèm citations."""
     state = _state_from_request(payload)
     await _acquire_chat_slot()
+    chat_started()
     try:
         answer, citations, intent, verified = await collect_chat(state)
     except RuntimeError as exc:
@@ -89,6 +89,7 @@ async def chat(payload: ChatRequest):
             status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
     finally:
+        chat_finished()
         _chat_slots.release()
 
     return ChatResponse(
@@ -111,11 +112,13 @@ async def chat_stream(payload: ChatRequest):
     await _acquire_chat_slot()
 
     async def event_stream():
+        chat_started()
         try:
             async with aclosing(run_chat(state)) as stream:
                 async for event in stream:
                     yield _sse(event["event"], event["data"])
         finally:
+            chat_finished()
             _chat_slots.release()
 
     return StreamingResponse(

@@ -20,7 +20,7 @@ export interface ExampleQuery {
   sql: string;
 }
 
-export type CellKind = "null" | "boolean" | "number" | "json" | "date" | "text";
+type CellKind = "null" | "boolean" | "number" | "json" | "date" | "text";
 
 export interface FormattedCell {
   text: string;
@@ -269,10 +269,9 @@ export const EXAMPLE_QUERIES: ExampleQuery[] = [
   {
     id: "recent-users",
     title: "Người dùng mới nhất",
-    description: "Danh sách tài khoản mới tạo, kèm hồ sơ cá nhân.",
-    sql: `SELECT u.id, u.email, p.full_name, u.status, u.created_at
+    description: "Danh sách tài khoản mới tạo, kèm họ tên và vai trò.",
+    sql: `SELECT u.id, u.email, u.full_name, u.role, u.status, u.created_at
 FROM users u
-LEFT JOIN user_profiles p ON p.user_id = u.id
 ORDER BY u.created_at DESC
 LIMIT 20;`,
   },
@@ -280,11 +279,10 @@ LIMIT 20;`,
     id: "course-enrollment",
     title: "Khóa học & sĩ số",
     description: "Số sinh viên đang hoạt động trong từng khóa học.",
-    sql: `SELECT c.id, cv.title, COUNT(e.student_id) AS student_count
+    sql: `SELECT c.id, c.title, COUNT(e.student_id) AS student_count
 FROM courses c
-JOIN course_versions cv ON cv.id = c.published_version_id
 LEFT JOIN enrollments e ON e.course_id = c.id AND e.status = 'active'
-GROUP BY c.id, cv.title
+GROUP BY c.id, c.title
 ORDER BY student_count DESC
 LIMIT 20;`,
   },

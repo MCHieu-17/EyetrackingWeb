@@ -41,9 +41,9 @@ export function QuestionView({
   return (
     <div
       data-aoi="quiz-question"
-      className="rounded-2xl border border-border/80 bg-white p-5 shadow-xs sm:p-7"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-white p-5 shadow-xs sm:p-7"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <span className="rounded-full bg-[#e8f1e6] px-3 py-1 text-xs font-semibold text-[#36533a]">
           Câu {currentIndex + 1} / {total}
         </span>
@@ -57,16 +57,28 @@ export function QuestionView({
           <span>{question.points} điểm</span>
         </div>
       </div>
-      <Progress value={(answeredCount / total) * 100} className="mt-4 h-1 bg-muted" />
+      <Progress
+        value={(answeredCount / total) * 100}
+        className="mt-4 h-1 shrink-0 bg-muted"
+      />
 
-      <h2 className="mt-6 text-lg font-semibold leading-7 text-foreground sm:text-xl">
+      <h2
+        key={question.id}
+        className="mt-6 max-h-[35%] shrink-0 overflow-y-auto overscroll-contain pr-1 text-lg font-semibold leading-7 text-foreground sm:text-xl"
+      >
         {question.prompt}
       </h2>
       {question.allowMultiple && (
-        <p className="mt-1 text-xs text-muted-foreground">Chọn tất cả đáp án đúng.</p>
+        <p className="mt-1 shrink-0 text-xs text-muted-foreground">
+          Chọn tất cả đáp án đúng.
+        </p>
       )}
 
-      <fieldset data-aoi="quiz-options" className="mt-5 space-y-2.5">
+      <fieldset
+        key={question.id}
+        data-aoi="quiz-options"
+        className="mt-5 min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain pr-1"
+      >
         <legend className="sr-only">Chọn đáp án</legend>
         {question.options.map((option, index) => {
           const isSelected = selected.includes(option.id);
@@ -103,7 +115,7 @@ export function QuestionView({
         })}
       </fieldset>
 
-      <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="mt-6 flex shrink-0 items-center justify-between gap-3 border-t border-border pt-4">
         <Button
           variant="outline"
           size="sm"
@@ -128,7 +140,10 @@ export function QuestionView({
         )}
       </div>
       {submitError && (
-        <p role="alert" className="mt-3 text-center text-sm text-destructive">
+        <p
+          role="alert"
+          className="mt-3 shrink-0 text-center text-sm text-destructive"
+        >
           {submitError}
         </p>
       )}

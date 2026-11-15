@@ -17,6 +17,7 @@ import { deleteCourse, updateCourse } from "@/lib/api/teacher";
 import { STATUS_LABEL } from "@/lib/constants";
 import type { CourseStatus } from "@/lib/types/domain";
 import { PublishChecklistDialog, PublishIssueList, publishReport } from "./content-editor/publish-checklist";
+import { queryKeys } from "@/lib/query-keys";
 
 const STATUS_TONE: Record<CourseStatus, string> = {
   draft: "border-black/10 bg-black/5 text-black/70",
@@ -85,7 +86,7 @@ export function CourseInfoTab({
       setTitle(saved.title);
       setDescription(saved.description);
       setBaseline(JSON.stringify({ title: saved.title, description: saved.description }));
-      await queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
       flash("ok", `Đã lưu "${saved.title}".`);
       return true;
     } catch (e) {
@@ -312,9 +313,9 @@ export function CourseInfoTab({
             await deleteCourse(courseId);
             // Cache danh sách sống 2 phút (staleTime) → phải xoá hẳn entry, nếu
             // không khóa vừa xóa vẫn hiện trong danh sách khi quay về /teacher.
-            queryClient.removeQueries({ queryKey: ["teacher", "courses"] });
-            queryClient.removeQueries({ queryKey: ["teacher", "course-tree", courseId] });
-            queryClient.removeQueries({ queryKey: ["teacher", "course-students", courseId] });
+            queryClient.removeQueries({ queryKey: queryKeys.teacher.coursesRoot });
+            queryClient.removeQueries({ queryKey: queryKeys.teacher.courseTree(courseId) });
+            queryClient.removeQueries({ queryKey: queryKeys.teacher.courseStudents(courseId) });
             setConfirmDelete(false);
             router.replace("/teacher");
             router.refresh();

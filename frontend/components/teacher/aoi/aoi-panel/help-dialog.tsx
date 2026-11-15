@@ -43,8 +43,9 @@ export function HelpDialog({
           </li>
         </ol>
         <p className="px-6 pb-6 text-xs leading-5 text-muted-foreground">
-          Bỏ đánh dấu một vùng sẽ đưa vùng đó vào “Chưa đánh dấu” và có thể bật
-          lại bất kỳ lúc nào.
+          Bỏ đánh dấu đưa vùng vào “Chưa đánh dấu” và có thể bật lại. Nút thùng
+          rác xóa hẳn vùng khỏi slide/giao diện. Nhãn phân tích của vùng slide
+          là AOI_1, AOI_2, …; vùng giao diện dùng chính tên vùng.
         </p>
       </DialogContent>
     </Dialog>

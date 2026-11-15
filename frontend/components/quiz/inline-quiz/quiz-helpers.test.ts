@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import type { QuizQuestion } from "@/lib/types/domain";
 import {
+  clampQuestionIndex,
   countAnswered,
   countCorrectAnswers,
   getOptionLetter,
@@ -106,6 +107,23 @@ describe("getOptionLetter", () => {
   it("maps an index to a letter", () => {
     expect(getOptionLetter(0)).toBe("A");
     expect(getOptionLetter(25)).toBe("Z");
+  });
+});
+
+describe("clampQuestionIndex", () => {
+  it("keeps valid indexes unchanged", () => {
+    expect(clampQuestionIndex(0, 3)).toBe(0);
+    expect(clampQuestionIndex(2, 3)).toBe(2);
+  });
+
+  it("clamps negative and out-of-range indexes", () => {
+    expect(clampQuestionIndex(-1, 3)).toBe(0);
+    expect(clampQuestionIndex(9, 3)).toBe(2);
+  });
+
+  it("falls back to zero for empty or invalid input", () => {
+    expect(clampQuestionIndex(5, 0)).toBe(0);
+    expect(clampQuestionIndex(Number.NaN, 3)).toBe(0);
   });
 });
 

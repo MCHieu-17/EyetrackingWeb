@@ -13,7 +13,7 @@ import pytest
 
 from app.db.session import SessionLocal, engine
 from app.models.chat import ChatMessage, ChatSession
-from app.services import study_chat
+from app.services import chat_transport, study_chat
 from tests.conftest import create_user, seed_course
 from tests.query_counter import count_queries
 
@@ -55,9 +55,7 @@ async def _seed_session() -> tuple[str, study_chat.ChatSessionSnapshot]:
         session = ChatSession(
             student_id=student_id,
             course_id=ids["course_id"],
-            course_version_id=ids["version_id"],
             lesson_id=ids["lesson_id"],
-            lesson_version_id=ids["lesson_version_id"],
             title="Phiên test",
             context_key="ctx",
         )
@@ -78,8 +76,8 @@ async def _seed_session() -> tuple[str, study_chat.ChatSessionSnapshot]:
 async def test_stream_opens_db_only_for_final_persist(monkeypatch):
     session_id, snapshot = await _seed_session()
 
-    monkeypatch.setattr(study_chat, "_chatbot_ready", lambda: True)
-    monkeypatch.setattr(study_chat, "_client", lambda: _FakeClient())
+    monkeypatch.setattr(study_chat, "chatbot_ready", lambda: True)
+    monkeypatch.setattr(chat_transport, "_client", lambda: _FakeClient())
 
     payload = {"message": "Xin chào", "thread_id": session_id}
 

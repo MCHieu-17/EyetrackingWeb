@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.course import Course, CourseVersion, Lesson, LessonVersion
+    from app.models.course import Course, Lesson
     from app.models.quiz import QuizAttempt
 
 
@@ -32,14 +32,8 @@ class ChatSession(Base):
     course_id: Mapped[str] = mapped_column(
         ForeignKey("courses.id", ondelete="CASCADE"), nullable=False
     )
-    course_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("course_versions.id", ondelete="SET NULL")
-    )
     lesson_id: Mapped[str | None] = mapped_column(
-        ForeignKey("lessons.id", ondelete="SET NULL")
-    )
-    lesson_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("lesson_versions.id", ondelete="SET NULL")
+        ForeignKey("lessons.id", ondelete="CASCADE")
     )
     quiz_attempt_id: Mapped[str | None] = mapped_column(
         ForeignKey("quiz_attempts.id", ondelete="SET NULL")
@@ -58,16 +52,15 @@ class ChatSession(Base):
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    course: Mapped["Course"] = relationship()
-    course_version: Mapped["CourseVersion | None"] = relationship()
-    lesson: Mapped["Lesson | None"] = relationship()
-    lesson_version: Mapped["LessonVersion | None"] = relationship()
-    quiz_attempt: Mapped["QuizAttempt | None"] = relationship()
+    course: Mapped["Course"] = relationship(lazy="raise")
+    lesson: Mapped["Lesson | None"] = relationship(lazy="raise")
+    quiz_attempt: Mapped["QuizAttempt | None"] = relationship(lazy="raise")
     messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
         order_by="ChatMessage.created_at",
         lazy="selectin",
+        passive_deletes=True,
     )
 
 

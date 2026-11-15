@@ -1,35 +1,17 @@
-"""Helper truy cập dùng chung cho content/media/enrollment (Phase 2)."""
-
-import uuid
+"""Access helpers dùng chung."""
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
 from app.api.deps import can_access_course, can_manage_course
-from app.core.helpers import escape_like as escape_like  # re-export cho API cũ
+from app.core.helpers import escape_like as escape_like  # re-export
 from app.models.auth import User
-from app.models.course import Course, Lesson
-
-
-def validate_uuid(value: str, detail: str = "Không tìm thấy bài học") -> None:
-    try:
-        uuid.UUID(value)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=detail)
+from app.models.course import Course, CourseModule, Lesson
+from app.services.access import validate_uuid as validate_uuid  # re-export
 
 
 async def get_course_or_404(db: AsyncSession, course_id: str) -> Course:
-    course = await db.get(
-        Course,
-        course_id,
-        options=[
-            raiseload(Course.versions),
-            raiseload(Course.enrollments),
-            raiseload(Course.owner),
-            raiseload(Course.creator),
-        ],
-    )
+    course = await db.get(Course, course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     return course
@@ -51,46 +33,32 @@ async def get_viewable_course(db: AsyncSession, course_id: str, user: User) -> C
 
 async def get_lesson_or_404(db: AsyncSession, lesson_id: str) -> Lesson:
     validate_uuid(lesson_id)
-    lesson = await db.get(
-        Lesson,
-        lesson_id,
-        options=[
-            raiseload(Lesson.versions),
-            raiseload(Lesson.slides),
-        ],
-    )
+    lesson = await db.get(Lesson, lesson_id)
     if lesson is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
     return lesson
 
 
 async def course_of_lesson(db: AsyncSession, lesson: Lesson) -> Course | None:
-    """Load khóa học của bài học; trả None nếu không tìm thấy."""
-    return await db.get(
-        Course,
-        lesson.course_id,
-        options=[
-            raiseload(Course.versions),
-            raiseload(Course.enrollments),
-            raiseload(Course.owner),
-            raiseload(Course.creator),
-        ],
-    )
+    module = await db.get(CourseModule, lesson.module_id)
+    if module is None:
+        return None
+    return await db.get(Course, module.course_id)
 
 
 async def get_lesson_with_course(
     db: AsyncSession, lesson_id: str
 ) -> tuple[Lesson, Course]:
-    """Load bài học + khóa học, 404 nếu một trong hai không tồn tại."""
     lesson = await get_lesson_or_404(db, lesson_id)
-    course = await get_course_or_404(db, lesson.course_id)
+    course = await course_of_lesson(db, lesson)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
     return lesson, course
 
 
 async def get_managed_lesson(
     db: AsyncSession, lesson_id: str, user: User
 ) -> tuple[Lesson, Course]:
-    """Load bài học + khóa học và yêu cầu quyền quản lý khóa học."""
     lesson, course = await get_lesson_with_course(db, lesson_id)
     if not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
@@ -100,11 +68,6 @@ async def get_managed_lesson(
 async def get_viewable_lesson(
     db: AsyncSession, lesson_id: str, user: User
 ) -> tuple[Lesson, Course]:
-    """Load bài học + khóa học và yêu cầu quyền xem khóa học.
-
-    Khác với `get_lesson_with_course`, khóa học thiếu bị coi là không có
-    quyền (403) để giữ nguyên hành vi cũ của `get_lesson_viewable`.
-    """
     lesson = await get_lesson_or_404(db, lesson_id)
     course = await course_of_lesson(db, lesson)
     if course is None or not await can_access_course(db, course, user):

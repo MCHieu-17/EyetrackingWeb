@@ -1,9 +1,4 @@
-"""API nạp (ingest) slide version vào pgvector.
-
-`Ingestion` là tiến trình nặng: gọi VLM mô tả ảnh rồi embedding. Vì vậy ở đây
-dùng lazy singleton (chỉ khởi tạo khi có request đầu tiên) và một khóa để các
-job ingest không chạy chồng nhau, tránh quá tải VLM/DB.
-"""
+"""API index slide vào pgvector."""
 
 import asyncio
 import logging
@@ -15,12 +10,7 @@ from psycopg_pool import PoolTimeout
 
 from app.api.chat import require_internal_token
 from app.db import DatabaseUnavailableError
-from app.schemas import (
-    IngestCourseRequest,
-    IngestLessonRequest,
-    IngestResult,
-    IngestSlideRequest,
-)
+from app.schemas import IngestResult, IngestSlidesRequest
 from app.services.ingest import Ingestion, VLMUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -66,8 +56,6 @@ def _result(stats: tuple[int, int, list[str]]) -> IngestResult:
     return IngestResult(processed=processed, failed=failed, errors=errors)
 
 
-# Lỗi DB phải trả 503 kèm lý do thật (sai role/password, mất kết nối...) thay
-# vì 500 chung chung. Backend sẽ lưu detail này vào slide_documents để UI hiển thị.
 DB_ERRORS = (DatabaseUnavailableError, PoolTimeout, psycopg.Error)
 
 
@@ -83,65 +71,15 @@ def _ingest_failed(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=f"Ingest thất bại: {exc}")
 
 
-@router.post("/slide", response_model=IngestResult)
-async def embed_slide(payload: IngestSlideRequest):
+@router.post("/slides", response_model=IngestResult)
+async def embed_slides(payload: IngestSlidesRequest):
     try:
         stats = await _run_async(
-            get_ingestion().embed_slide,
-            payload.slide_version_id,
-            payload.include_draft,
+            get_ingestion().embed_slides,
+            payload.slide_ids,
         )
     except LookupError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Không tìm thấy slide version: {payload.slide_version_id}",
-        )
-    except VLMUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except DB_ERRORS as exc:
-        raise _db_unavailable(exc) from exc
-    except Exception as exc:  # noqa: BLE001
-        raise _ingest_failed(exc) from exc
-    return _result(stats)
-
-
-@router.post("/lesson-version", response_model=IngestResult)
-async def embed_lesson_version(payload: IngestLessonRequest):
-    try:
-        stats = await _run_async(
-            get_ingestion().embed_lesson_version,
-            payload.lesson_version_id,
-            payload.include_draft,
-            payload.slide_version_ids,
-        )
-    except LookupError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Không tìm thấy lesson version: {payload.lesson_version_id}",
-        )
-    except VLMUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except DB_ERRORS as exc:
-        raise _db_unavailable(exc) from exc
-    except Exception as exc:  # noqa: BLE001
-        raise _ingest_failed(exc) from exc
-    return _result(stats)
-
-
-@router.post("/course-version", response_model=IngestResult)
-async def embed_course_version(payload: IngestCourseRequest):
-    try:
-        stats = await _run_async(
-            get_ingestion().embed_course_version,
-            payload.course_version_id,
-            payload.include_draft,
-            payload.slide_version_ids,
-        )
-    except LookupError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Không tìm thấy course version: {payload.course_version_id}",
-        )
+        raise HTTPException(status_code=404, detail="Không tìm thấy slide")
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except DB_ERRORS as exc:

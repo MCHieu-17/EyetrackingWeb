@@ -16,12 +16,11 @@ tích tiếp hoặc so sánh giữa các lần chạy.
 1. Chatbot service đang chạy và bạn có `CHATBOT_INTERNAL_TOKEN` khớp với
    service.
 2. Thay các placeholder trong `questions.example.jsonl` bằng ID thật:
-   - `course_id`, `course_version_id`: khóa học và bản phiên bản cần đánh giá.
+   - `course_id`: khóa học cần đánh giá.
    - `thread_id`, `context_key`: phiên chat thật. Câu hỏi LMS gọi backend qua
      `/internal/chat/lms-query` bằng `thread_id` + `context_key`, nên hai giá trị
      này phải thuộc một phiên chat còn hiệu lực.
-   - `lesson_id`, `lesson_version_id`: bài giảng tương ứng (nếu muốn chatbot có
-     ngữ cảnh bài đang mở).
+   - `lesson_id`: bài giảng tương ứng (nếu muốn chatbot có ngữ cảnh bài đang mở).
    - `assignment_id`, `attempt_id`: bài tập và lượt làm bài thật. Nhóm review
      cần `attempt_id` của một lượt **đã nộp** để backend trả đáp án/lời giải.
    - `assignment_context`: đề bài và (với review) bài làm của sinh viên.
@@ -77,12 +76,10 @@ Mỗi dòng là một JSON object. Field `question` là bắt buộc và đượ
 | `id` | – | Nếu có, được copy nguyên vào output để đối chiếu |
 | `question` | – | **Bắt buộc**, map sang `message` |
 | `course_id` | `00000000-0000-0000-0000-000000000000` | |
-| `course_version_id` | `null` | |
 | `thread_id` | `eval-thread` | |
 | `context_key` | `""` | |
 | `history` | `[]` | List `{role, content}`, role là `student` hoặc `assistant` |
 | `lesson_id` | `null` | |
-| `lesson_version_id` | `null` | |
 | `lesson_title` | `""` | |
 | `module_title` | `""` | |
 | `attempt_id` | `null` | |
@@ -94,7 +91,7 @@ Mỗi dòng là một JSON object. Field `question` là bắt buộc và đượ
 Ví dụ:
 
 ```json
-{"id":"lecture-01","question":"Định nghĩa học máy là gì?","course_id":"...","course_version_id":"...","thread_id":"eval-lecture","lesson_title":"Bài 1: Giới thiệu học máy"}
+{"id":"lecture-01","question":"Định nghĩa học máy là gì?","course_id":"...","thread_id":"eval-lecture","lesson_title":"Bài 1: Giới thiệu học máy"}
 ```
 
 ## Format output

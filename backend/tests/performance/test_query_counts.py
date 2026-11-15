@@ -32,8 +32,8 @@ pytestmark = pytest.mark.performance
 # Baseline ghi nhận ngày 2026-11-09 trên cleanup/integration (bao gồm auth).
 TEACHER_COURSES_MAX_QUERIES = 6
 COURSE_STUDENTS_MAX_QUERIES = 9
-GAZE_BATCH_MAX_QUERIES = 14
-MEDIA_ASSET_MAX_QUERIES = 17
+GAZE_BATCH_MAX_QUERIES = 5
+MEDIA_ASSET_MAX_QUERIES = 4
 
 
 def _assert_budget(counter: QueryCounter, budget: int, label: str) -> None:
@@ -90,7 +90,6 @@ async def test_course_students_query_count(client):
     await seed_slide(
         course_id=ids["course_id"],
         lesson_id=ids["lesson_id"],
-        lesson_version_id=ids["lesson_version_id"],
         teacher_id=teacher_id,
     )
     token = await login(client, teacher_email)
@@ -185,7 +184,6 @@ async def test_media_asset_file_query_count(client):
     slide_ids = await seed_slide(
         course_id=ids["course_id"],
         lesson_id=ids["lesson_id"],
-        lesson_version_id=ids["lesson_version_id"],
         teacher_id=teacher_id,
     )
 

@@ -73,7 +73,7 @@ export function ReaderFrame({
   quizContent,
   chatPanel,
   overlay,
-  contentMaxWidth = "min(1120px, calc((100dvh - 10.5rem) * 16 / 9))",
+  contentMaxWidth = "1120px",
   className,
 }: ReaderFrameProps) {
   const [desktopOutlineOpen, setDesktopOutlineOpen] = useState(true);
@@ -199,9 +199,12 @@ export function ReaderFrame({
 
           {banners}
 
-          <div className="min-h-0 flex-1 overflow-auto bg-[#f9f9f5] px-3 pb-24 pt-3 sm:px-5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f9f9f5] px-3 pb-2 pt-3 sm:px-5">
             {activeIsQuiz ? (
-              <div data-aoi="quiz" className="mx-auto w-full max-w-4xl py-2">
+              <div
+                data-aoi="quiz"
+                className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden"
+              >
                 {quizContent ?? (
                   <p className="p-8 text-center text-sm text-muted-foreground">
                     Bài tập chưa sẵn sàng.
@@ -209,9 +212,9 @@ export function ReaderFrame({
                 )}
               </div>
             ) : (
-              <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col justify-center gap-8 py-2">
+              <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center [container-type:size]">
                 <div
-                  className="mx-auto w-full"
+                  className="aspect-video w-[min(100cqw,calc(100cqh*16/9))] max-h-full"
                   style={{ maxWidth: contentMaxWidth }}
                 >
                   {slideContent ?? (

@@ -108,12 +108,10 @@ def build_payload(item: dict[str, Any], question: str) -> dict[str, Any]:
     return {
         "message": question,
         "course_id": item.get("course_id") or DEFAULT_COURSE_ID,
-        "course_version_id": item.get("course_version_id"),
         "thread_id": item.get("thread_id") or DEFAULT_THREAD_ID,
         "context_key": item.get("context_key") or "",
         "history": item.get("history") or [],
         "lesson_id": item.get("lesson_id"),
-        "lesson_version_id": item.get("lesson_version_id"),
         "lesson_title": item.get("lesson_title") or "",
         "module_title": item.get("module_title") or "",
         "attempt_id": item.get("attempt_id"),

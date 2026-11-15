@@ -90,9 +90,14 @@ export interface ViewportRect {
 /**
  * Quy đổi một điểm gaze từ viewport lúc calibration sang viewport hiện tại.
  *
- * Model gaze trả toạ độ chuẩn hoá theo viewport calibration. Cùng một điểm
- * nhìn vật lý trên màn hình sẽ có toạ độ chuẩn hoá khác khi zoom/resize/move
- * cửa sổ. Hàm này dùng hình chữ nhật vật lý của hai viewport để quy đổi.
+ * `screenX/screenY` là toạ độ cửa sổ (CSS/DIP), KHÔNG nhân với DPR: khi
+ * browser page zoom, DPR tăng nhưng vị trí cửa sổ trên màn hình không đổi.
+ * Vùng đang thấy của cửa sổ hiện tại trong hệ viewport calibration là:
+ *
+ *   left  = (current.screenX - calibration.screenX) / calibration.width
+ *   width = current.width / calibration.width
+ *
+ * rồi quy đổi điểm gaze vào vùng đó.
  */
 export function transformGazePoint(
   x: number,
@@ -100,15 +105,21 @@ export function transformGazePoint(
   calibration: ViewportRect,
   current: ViewportRect,
 ): { x: number; y: number } {
-  const calDpr = calibration.dpr || 1;
-  const curDpr = current.dpr || 1;
-  if (current.width <= 0 || current.height <= 0) return { x, y };
-  const screenX =
-    calibration.screenX * calDpr + x * calibration.width * calDpr;
-  const screenY =
-    calibration.screenY * calDpr + y * calibration.height * calDpr;
+  if (
+    calibration.width <= 0 ||
+    calibration.height <= 0 ||
+    current.width <= 0 ||
+    current.height <= 0
+  ) {
+    return { x, y };
+  }
+  const left = (current.screenX - calibration.screenX) / calibration.width;
+  const top = (current.screenY - calibration.screenY) / calibration.height;
+  const width = current.width / calibration.width;
+  const height = current.height / calibration.height;
+  if (width <= 0 || height <= 0) return { x, y };
   return {
-    x: (screenX - current.screenX * curDpr) / (current.width * curDpr),
-    y: (screenY - current.screenY * curDpr) / (current.height * curDpr),
+    x: (x - left) / width,
+    y: (y - top) / height,
   };
 }

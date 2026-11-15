@@ -26,7 +26,7 @@ def _sample(sequence: int) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_gaze_batch_idempotency_and_order(client):
+async def test_gaze_batch_idempotency_without_batch_table(client):
     teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
     student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
     teacher_id = await create_user(email=teacher_email, role="teacher")
@@ -90,7 +90,9 @@ async def test_gaze_batch_idempotency_and_order(client):
     assert duplicate.json()["duplicate"] == 2
     assert duplicate.json()["stored"] == 0
 
-    out_of_order = await client.post(
+    # Không còn batch number/order toàn cục: batch mới chỉ cần idempotent theo
+    # (content_view_id, client_batch_id, sequence).
+    later_batch = await client.post(
         f"/api/learning-sessions/{session_id}/gaze-batches",
         headers=headers,
         json={
@@ -103,7 +105,8 @@ async def test_gaze_batch_idempotency_and_order(client):
             "samples": [_sample(2)],
         },
     )
-    assert out_of_order.status_code == 409
+    assert later_batch.status_code == 200
+    assert later_batch.json()["stored"] == 1
 
 
 @pytest.mark.asyncio
@@ -166,5 +169,5 @@ async def test_gaze_batch_query_count(client):
 
     assert response.status_code == 200, response.text
     assert response.json()["stored"] == 2
-    # session+enrollment, presentation, batch+max, insert batch, insert samples.
+    # session+enrollment, presentation, insert samples, update analysis status.
     assert counter.count <= 5, "\n\n".join(counter.statements)

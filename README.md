@@ -1,423 +1,647 @@
-# GazeEdu — EyeLearning
+# START — Khởi động GazeEdu / EyeLearning
 
-Nền tảng học tập theo dõi hành vi mắt (eye-tracking): học viên học bài giảng slide
-qua webcam, hệ thống ước lượng hướng nhìn và sinh phân tích mức độ tập trung cho
-giáo viên.
 
-> **Repo này chỉ chạy LOCAL.** Không có CI/CD, không GHCR, không Cloudflare Tunnel,
-> không Portainer. Toàn bộ image được build từ source trên máy bạn.
+## 1. Giới thiệu
 
-## Kiến trúc
+**GazeEdu / EyeLearning** là nền tảng học trực tuyến có theo dõi hướng nhìn.
+Giáo viên soạn khóa học, bài giảng và quiz; học viên học slide PDF qua trình
+duyệt, webcam gửi dữ liệu gaze về hệ thống. Backend lưu gaze thô, worker quy
+đổi sang tọa độ slide/AOI và tính metrics để giáo viên phân tích.
 
-```
-┌────────────┐   HTTP/WS    ┌────────────┐   SQL    ┌────────────┐
-│  frontend  │ ───────────► │  backend   │ ───────► │  postgres  │
-│  Next.js   │              │  FastAPI   │          │  (5435)    │
-│  (:3000)   │              │  (:8001)   │          └────────────┘
-└─────┬──────┘              └─────┬──────┘
-      │  WS /session/{sid}/stream  │ calibration (JSON base64: model .ubj)
-      ▼                            ▼
-┌────────────────────┐      lưu model .ubj active theo (user, device)
-│ services/gaze (ML) │
-│  (:8000, GPU)      │  mediapipe + UniGaze gaze estimation
-│                    │  calibration 25 điểm → train model → .ubj
-└────────────────────┘
+### Người dùng và chức năng chính
 
-      │  POST /api/courses/{id}/chat/stream (SSE)
-      ▼
-┌────────────────────┐
-│ services/chatbot   │  LangChain + pgvector hybrid search (BM25 + vector)
-│  (:8002, CPU)      │  Qwen 3.5 35B qua NEU API + Qwen3-Embedding-0.6B (CPU)
-└────────────────────┘
-```
-
-| Thư mục | Vai trò |
+| Vai trò | Chức năng |
 |---|---|
-| `frontend/` | Next.js (App Router, TypeScript, Tailwind) — khu vực học viên + giáo viên |
-| `backend/` | FastAPI — auth/JWT, khóa học, gaze ingestion, analytics, proxy chat |
-| `services/gaze/` | ML service — ước lượng gaze từ webcam, calibration, WebSocket (cần GPU) |
-| `services/chatbot/` | RAG service — ingest slide bằng VLM, hybrid retrieval, citation, SSE (embedding CPU) |
-| `db/` | Migrations PostgreSQL — một baseline `001_baseline.sql`, schema generation 8 |
-| `nginx/` | Reverse proxy local: web :3000 → frontend/backend/gaze |
-| `scripts/` | Seed/reset/test + tạo role chatbot, bảo trì partition, dọn Docker |
+| Giáo viên | Tạo khóa/chương/bài, upload PDF/PPTX/PPT/ODP, soạn quiz, chỉnh AOI, publish, xem thống kê gaze |
+| Học viên | Học slide PDF, làm quiz, chat với trợ lý RAG, calibration webcam và theo dõi hướng nhìn |
+| Admin | Quản lý người dùng, xem/truy vấn CSDL ở chế độ chỉ đọc |
+| Khách | Trải nghiệm nhanh tại `/try` |
 
-## Chạy nhanh (Full Docker)
+### Thành phần chính
 
-Yêu cầu: Docker + Docker Compose v2. Nếu dùng GPU: NVIDIA driver +
-`nvidia-container-toolkit`.
+```text
+Browser → nginx :3000
+  /api, /media → backend :8001
+  /gaze        → gaze :8000
+  /*           → frontend :3000
+
+backend          → PostgreSQL + Redis
+backend          → chatbot :8000 (internal token)
+worker           → background_jobs(analyze_lesson)
+content-worker   → background_jobs(import_slides)
+embedding-worker → background_jobs(index_slides)
+```
+
+| Thành phần | Vai trò |
+|---|---|
+| `frontend/` | Next.js App Router: giao diện học viên, giáo viên, admin |
+| `backend/` | FastAPI API, worker phân tích, content-worker, embedding-worker |
+| `services/gaze/` | MediaPipe + UniGaze + WebSocket calibration (mặc định cần GPU) |
+| `services/chatbot/` | RAG: ingest slide, hybrid retrieval, gọi LLM/VLM NEU |
+| `db/` | Baseline PostgreSQL generation 12, 24 bảng lõi |
+| `nginx/` | Reverse proxy local |
+| `scripts/` | Seed, reset, backup, smoke test, kiểm tra |
+
+Database dùng **schema generation 12**, không versioning nội dung. Sửa nội dung
+đã publish có hiệu lực ngay; quiz đã làm giữ đề trong `quiz_attempts.quiz_snapshot`.
+
+### Chạy nhanh
+
+Khi `.env` đã cấu hình đúng và máy có GPU:
 
 ```bash
-# 1) Tạo file env local
-cp .env.example .env
-#    Điền các secret bắt buộc: POSTGRES_PASSWORD, JWT_SECRET,
-#    CHATBOT_INTERNAL_TOKEN, CHATBOT_DB_PASSWORD, NEU_API_KEY...
-#    Nếu đổi POSTGRES_PASSWORD/CHATBOT_DB_PASSWORD, sửa cả DSN tương ứng.
-#    Khối R2 để trống nếu dùng volume local; các biến tuning còn lại đã có
-#    default trong compose.
-
-# 2) Build + chạy stack
 docker compose up -d --build
-
-# 3) Mở web
-#    http://localhost:3000
+# Đợi service migrate Exited (0), backend và chatbot healthy
+./scripts/seed_dev.sh
+./scripts/smoke.sh
 ```
 
-`docker compose up -d --build` build toàn bộ image từ Dockerfile của từng
-service. Build riêng một service:
+Mở <http://localhost:3000>. Nếu chưa có `.env`, máy không có GPU hoặc muốn hiểu
+từng bước, đọc tiếp các mục bên dưới.
+
+### Cổng truy cập mặc định
+
+Các cổng debug chỉ bind loopback (`127.0.0.1`), tức là chỉ truy cập từ máy đang chạy.
+
+| Cổng | Dịch vụ |
+|---|---|
+| `3000` | Website qua nginx, đồng thời `/api`, `/media`, `/gaze` |
+| `8001` | Backend API — Swagger tại `/docs` |
+| `8002` | Chatbot service |
+| `5435` | PostgreSQL |
+| `6379` | Redis |
+
+Gaze không publish cổng ra host vì chạy nhiều replica. Truy cập qua nginx tại
+`/gaze/...` hoặc debug bằng `docker compose exec gaze ...`.
+
+## 2. Chuẩn bị môi trường
+
+### 2.1 Phần mềm bắt buộc
+
+- Docker Engine (khuyến nghị 24+)
+- Docker Compose v2 (`docker compose`, không phải `docker-compose` cũ)
+- Git và Bash
+- `curl` (smoke test), `openssl` (tạo secret), `ss` (kiểm tra cổng)
+
+Kiểm tra:
 
 ```bash
-docker compose build backend
-docker compose up -d backend
+docker --version
+docker compose version
 ```
 
-Lần đầu gaze/chatbot sẽ tải weights vào volume (có thể vài phút). Theo dõi:
+### 2.2 Tài nguyên khuyến nghị
+
+- **RAM:** 16 GB trở lên. Stack có nhiều service; máy yếu nên giảm replica.
+- **CPU:** 4 lõi trở lên.
+- **Ổ đĩa:** khoảng 30 GB trống trở lên cho image, model weights, DB và media.
+- **Mạng:** cần Internet cho lần build đầu và tải model weights.
+
+Các image/model không nằm trong Git. Lần chạy đầu sẽ build image và tải weights
+vào Docker volume, nên có thể mất **10–30 phút** tùy máy và đường truyền.
+
+### 2.3 Cổng cần trống
+
+Đảm bảo các cổng `3000`, `8001`, `8002`, `5435`, `6379` chưa bị chiếm:
 
 ```bash
-docker compose logs -f gaze
+ss -ltnp | grep -E ':(3000|8001|8002|5435|6379)\b'
+```
+
+Nếu có dịch vụ khác đang dùng, dừng dịch vụ đó hoặc đổi port mapping trong
+`docker-compose.yml` (và cập nhật URL tương ứng trong `.env`).
+
+### 2.4 GPU (tùy chọn)
+
+Mặc định service `gaze` dùng `gpus: all`, cần:
+
+- NVIDIA driver
+- `nvidia-container-toolkit`
+
+Kiểm tra nhanh:
+
+```bash
+nvidia-smi
+```
+
+Nếu **không có GPU**, xem mục [7.1 Chạy không có GPU](#71-chạy-không-có-gpu)
+trước khi khởi động lần đầu. Gaze vẫn chạy bằng CPU nhưng rất chậm, không phù
+hợp để dùng thật.
+
+## 3. Cấu hình `.env`
+
+Toàn bộ stack đọc file `.env` ở thư mục gốc repo. `.env` chứa secret nên
+**không commit** và không chia sẻ công khai.
+
+### 3.1 Tạo file cấu hình
+
+Nếu chưa có `.env`:
+
+```bash
+[ -f .env ] || cp .env.example .env
+```
+
+Mở `.env` và điền các giá trị bắt buộc. Có thể sinh secret bằng:
+
+```bash
+openssl rand -hex 32
+```
+
+Chạy lệnh trên nhiều lần để lấy các secret khác nhau.
+
+### 3.2 Các biến quan trọng
+
+| Biến | Ghi chú |
+|---|---|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Tài khoản/tên DB PostgreSQL |
+| `DATABASE_URL_DOCKER` | DSN backend dùng trong Docker; **mật khẩu phải khớp `POSTGRES_PASSWORD`** |
+| `DATABASE_URL` | DSN khi chạy backend trực tiếp trên host; dùng `localhost:5435` |
+| `JWT_SECRET` | Secret ký JWT, chuỗi dài ngẫu nhiên |
+| `CORS_ORIGINS` | Với local: `http://localhost:3000` |
+| `COOKIE_SECURE` | Local chạy HTTP: **phải là `false`** |
+| `CHATBOT_INTERNAL_TOKEN` | Token backend ↔ chatbot, chuỗi dài ngẫu nhiên |
+| `CHATBOT_DB_PASSWORD` | Mật khẩu role `chatbot_reader` |
+| `CHATBOT_DATABASE_URL_DOCKER` | DSN chatbot; **mật khẩu phải khớp `CHATBOT_DB_PASSWORD`** |
+| `ADMIN_DB_PASSWORD` | Mật khẩu role `admin_reader` |
+| `ADMIN_DATABASE_URL_DOCKER` | DSN admin read-only; **mật khẩu phải khớp `ADMIN_DB_PASSWORD`** |
+| `NEU_BASE_URL`, `NEU_API_KEY` | Endpoint LLM/VLM cho chatbot |
+| `FRONTEND_REPLICAS`, `GAZE_REPLICAS`, `WORKER_REPLICAS` | Số replica; máy cá nhân nên đặt `1` |
+
+Ví dụ các dòng cần đồng bộ (thay `<secret-N>` bằng giá trị thật):
+
+```env
+POSTGRES_PASSWORD=<secret-1>
+DATABASE_URL_DOCKER=postgresql+asyncpg://postgres:<secret-1>@postgres:5432/eyetracking
+
+JWT_SECRET=<secret-2>
+CHATBOT_INTERNAL_TOKEN=<secret-3>
+
+CHATBOT_DB_PASSWORD=<secret-4>
+CHATBOT_DATABASE_URL_DOCKER=postgresql://chatbot_reader:<secret-4>@postgres:5432/eyetracking
+
+ADMIN_DB_PASSWORD=<secret-5>
+ADMIN_DATABASE_URL_DOCKER=postgresql+asyncpg://admin_reader:<secret-5>@postgres:5432/eyetracking
+```
+
+> Dùng secret dạng hex để tránh ký tự đặc biệt (`@`, `:`, `/`) làm hỏng DSN.
+
+Nếu chạy backend/frontend trực tiếp trên host, cập nhật thêm:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:<secret-1>@localhost:5435/eyetracking
+ADMIN_DB_URL=postgresql+asyncpg://admin_reader:<secret-5>@localhost:5435/eyetracking
+```
+
+Các biến còn lại có thể giữ mặc định trong `.env.example`.
+
+### 3.3 Cấu hình tùy chọn
+
+**Microsoft 365 / Outlook OAuth** — điền đủ 3 biến đầu để bật đăng nhập Outlook:
+
+```env
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=
+MICROSOFT_REDIRECT_URI=http://localhost:3000/api/auth/oauth/microsoft/callback
+FRONTEND_URL=http://localhost:3000
+```
+
+Redirect URI phải khớp chính xác với Azure App Registration. Nếu để trống 3 biến
+đầu, nút Outlook vẫn hiển thị nhưng báo chưa cấu hình.
+
+**Lưu trữ slide** — mặc định dùng volume local:
+
+```env
+STORAGE_PROVIDER=local
+```
+
+Nếu dùng Cloudflare R2, đặt `STORAGE_PROVIDER=r2` và điền **đủ cả 5** biến
+`R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_PUBLIC_URL`. Thiếu một biến, backend sẽ báo lỗi cấu hình R2.
+
+**Chatbot RAG** — cần `NEU_BASE_URL` và `NEU_API_KEY` (cùng các biến `NEU_*`
+liên quan). Nếu không có quyền gọi NEU, các chức năng khác vẫn chạy nhưng chat
+và ingest slide sẽ lỗi.
+
+## 4. Khởi động lần đầu
+
+> Nếu máy không có GPU, làm mục [7.1](#71-chạy-không-có-gpu) trước.
+
+### 4.1 Build và chạy stack
+
+Từ thư mục gốc repo:
+
+```bash
+docker compose up -d --build
+```
+
+Lần đầu, Compose sẽ:
+
+1. Build image frontend, backend, chatbot, gaze, nginx và migration.
+2. Khởi động PostgreSQL + Redis.
+3. Chạy service một lần `migrate` để áp baseline schema generation 12.
+4. Khởi động backend, các worker, chatbot, gaze, frontend và nginx.
+5. Gaze tải MediaPipe/UniGaze weights; chatbot tải Qwen3-Embedding weights vào
+   volume. Bước này có thể mất vài phút.
+
+### 4.2 Theo dõi trạng thái
+
+```bash
+docker compose ps -a
+docker compose logs -f migrate
+```
+
+- `eyetracking-migrate` **Exited (0)** là bình thường: đây là service chạy một lần.
+- `postgres`, `redis`, `backend`, `chatbot` cần chuyển sang `healthy`.
+- `frontend`, `gaze`, `worker`, `content-worker`, `embedding-worker`, `nginx`
+  cần ở trạng thái `running`.
+- `chatbot` và `gaze` có `start_period` dài vì phải tải model; đợi thêm vài
+  phút trước khi kết luận lỗi.
+
+Xem log khi có service chưa lên:
+
+```bash
+docker compose logs -f backend
 docker compose logs -f chatbot
+docker compose logs -f gaze
 ```
 
-### Tài khoản mẫu (chỉ dev — mật khẩu `Password123!`)
+### 4.3 Seed tài khoản development
+
+Sau khi migration hoàn tất và PostgreSQL đang chạy:
 
 ```bash
 ./scripts/seed_dev.sh
 ```
 
-| Email | Vai trò |
-|---|---|
-| `admin@school.edu.vn` | Quản trị viên |
-| `teacher@school.edu.vn` | Giáo viên |
-| `student@school.edu.vn` | Học sinh |
+Script tạo 3 tài khoản mẫu nếu chưa tồn tại, **không ghi đè mật khẩu** của tài
+khoản đã có. Chạy lại nhiều lần vẫn an toàn.
 
-Có thể tự đổi mật khẩu tại `/account/change-password` (không bắt buộc).
+| Email | Mật khẩu | Role |
+|---|---|---|
+| `admin@school.edu.vn` | `Password123!` | admin |
+| `teacher@school.edu.vn` | `Password123!` | teacher |
+| `student@school.edu.vn` | `Password123!` | student |
 
-### Đăng nhập bằng Microsoft 365 (Outlook)
+Đăng ký bằng email/password đã tắt. Tài khoản mới được tạo qua Microsoft 365
+(single tenant) và mặc định có role student.
 
-Hệ thống hỗ trợ đăng nhập/đăng ký bằng tài khoản Microsoft 365 của trường
-(single tenant). Tài khoản tạo mới mặc định là **sinh viên**.
+### 4.4 Mở website
 
-Đăng nhập bằng email/mật khẩu chỉ còn dành cho các **tài khoản seed** trong
-`db/seed_dev_users.sql`. Đăng ký bằng mật khẩu đã bị tắt hoàn toàn
-(`POST /api/auth/register` trả `403`).
+Truy cập:
 
-Cấu hình trong `.env`:
+- Website: <http://localhost:3000>
+- Swagger backend: <http://localhost:8001/docs>
+- Kiểm tra nginx: <http://localhost:3000/nginx-health>
 
-```env
-MICROSOFT_CLIENT_ID=<Application (client) ID>
-MICROSOFT_CLIENT_SECRET=<client secret>
-MICROSOFT_TENANT_ID=<Directory (tenant) ID>
-MICROSOFT_REDIRECT_URI=http://localhost:3000/api/auth/oauth/microsoft/callback
-FRONTEND_URL=http://localhost:3000
-```
+Nếu dùng webcam/calibration, hãy mở bằng `localhost` hoặc `127.0.0.1`. Trình
+duyệt chỉ cho phép webcam trên secure context (localhost hoặc HTTPS).
 
-Đăng ký app trên Azure:
+### 4.5 Smoke test
 
-1. Microsoft Entra ID → App registrations → New registration.
-2. Chọn **Accounts in this organizational directory only** (single tenant).
-3. Redirect URI (Web): `http://localhost:3000/api/auth/oauth/microsoft/callback`
-   (và URL production nếu có).
-4. Certificates & secrets → tạo client secret.
-5. API permissions: `openid`, `profile`, `email`, `User.Read`.
-6. Điền client ID, tenant ID, client secret vào `.env` rồi build lại backend.
-
-Nếu để trống `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` /
-`MICROSOFT_TENANT_ID`, nút Outlook vẫn hiển thị nhưng báo “chưa được cấu hình”.
-
-### Nâng cấp sinh viên lên giáo viên
-
-Trang `/admin` chỉ dành cho quản trị viên:
-
-- Tìm sinh viên theo tên, email hoặc mã sinh viên.
-- Bấm **Nâng cấp**, nhập mã giảng viên (để trống để tự sinh `GV0001`, `GV0002`…)
-  và khoa/bộ môn.
-- Sau khi nâng cấp, tài khoản nhận role `teacher`, mất role `student` và cần
-  đăng nhập lại để thấy khu vực giảng viên.
-
-### Truy vấn cơ sở dữ liệu (admin)
-
-Trang `/admin/database` cho phép quản trị viên chạy câu lệnh `SELECT`/`WITH`
-trên CSDL để tra cứu dữ liệu:
-
-- **Chỉ đọc**: transaction read-only + role DB hạn chế; không hỗ trợ
-  `INSERT/UPDATE/DELETE/DDL`.
-- Giới hạn: tối đa **500 dòng**, timeout **10 giây**, rate limit
-  **30 truy vấn/phút/admin**.
-- Schema explorer: tìm bảng/cột, click bảng để sinh `SELECT`, click cột để chèn
-  tên cột.
-- Kết quả: bảng có type badge, xem giá trị đầy đủ, copy, xuất **CSV/JSON**.
-- **Duyệt bảng**: chọn bảng/view, chọn cột, thêm bộ lọc, sắp xếp và phân trang
-  (50/100/200 dòng) mà không cần viết SQL.
-- Lịch sử 20 truy vấn gần nhất lưu trong `localStorage` của trình duyệt.
-- Không hiển thị `users.password_hash`, `auth_sessions`, `user_identities`.
-
-Cấu hình trong `.env`:
-
-```env
-ADMIN_DB_USER=admin_reader
-ADMIN_DB_PASSWORD=<random>
-ADMIN_DB_URL=postgresql+asyncpg://admin_reader:<random>@localhost:5435/eyetracking
-ADMIN_DATABASE_URL_DOCKER=postgresql+asyncpg://admin_reader:<random>@postgres:5432/eyetracking
-ADMIN_DB_STATEMENT_TIMEOUT_MS=10000
-ADMIN_DB_LOCK_TIMEOUT_MS=2000
-ADMIN_DB_MAX_ROWS=500
-ADMIN_DB_SCHEMA_CACHE_SECONDS=60
-```
-
-Role `admin_reader` được tạo/cập nhật tự động bởi `db/migrate.sh` khi có
-`ADMIN_DB_USER` + `ADMIN_DB_PASSWORD`. Có thể chạy tay:
+Chạy kiểm tra nhanh sau khi stack đã lên:
 
 ```bash
-./scripts/create_admin_reader_role.sh
+./scripts/smoke.sh
 ```
 
-Nếu production thiếu `ADMIN_DB_URL`, trang trả `503` với thông báo chưa cấu
-hình; backend vẫn chạy bình thường. Ở dev có thể để trống `ADMIN_DB_URL` để
-fallback `DATABASE_URL` + read-only transaction, nhưng không nên dùng ở
-production.
+Script kiểm tra lần lượt nginx, backend, gaze qua nginx và chatbot. Kết thúc bằng
+`[smoke] OK` là stack cơ bản đã sẵn sàng.
 
-Chế độ **Duyệt bảng** dùng endpoint `POST /admin/db/tables/{table}/rows` với
-tham số có cấu trúc (không nhận raw SQL). Backend validate table/column/order/
-filter với schema đã lọc quyền, quote identifier và bind value; giới hạn
-200 dòng/trang, tối đa 10 bộ lọc.
+Kiểm tra thủ công:
 
-## GPU
-
-- **Gaze là service duy nhất cần GPU.** Compose đặt `gpus: all` cho `gaze`,
-  `DEVICE=cuda`; stage `ai-base` trong `services/gaze/Dockerfile` cài
-  torch/torchvision CUDA 12.4. Host cần NVIDIA driver +
-  `nvidia-container-toolkit`.
-- **Chatbot chạy CPU.** `EMBEDDING_DEVICE=cpu`; stage `ai-base` trong
-  `services/chatbot/Dockerfile` cài torch CPU (nhẹ hơn nhiều); LLM/VLM gọi
-  River API. Chatbot **không** đặt `gpus: all` và không cần NVIDIA driver.
-- Không có GPU: đặt `DEVICE=cpu` trong `.env` và bỏ `gpus: all` ở service
-  `gaze` trong `docker-compose.yml`. Gaze vẫn chạy nhưng rất chậm; chatbot
-  không bị ảnh hưởng.
-
-## Cổng
-
-Các cổng debug (`8000`, `8001`, `8002`) chỉ bind `127.0.0.1`, không mở ra LAN.
-
-| Cổng | Dịch vụ |
+| URL | Ý nghĩa |
 |---|---|
-| `3000` | nginx → web (frontend + /api + /media + /gaze) |
-| `8000` | gaze (debug trực tiếp, chỉ loopback) |
-| `8001` | backend (Swagger: `/docs`, chỉ loopback) |
-| `8002` | chatbot (debug trực tiếp, chỉ loopback) |
-| `5435` | postgres (chỉ loopback) |
-| `6379` | redis (chỉ loopback) |
+| `http://localhost:8001/health` | Backend liveness |
+| `http://localhost:8002/health` | Chatbot liveness |
+| `http://localhost:8002/ready` | Chatbot readiness (DB + model) |
+| `http://localhost:3000/gaze/health` | Gaze liveness qua nginx |
+| `http://localhost:3000/gaze/ready` | Gaze readiness (model đã load) |
 
-## Lệnh thường dùng
+## 5. Sử dụng hằng ngày
+
+### 5.1 Khởi động và tắt
 
 ```bash
+# Khởi động lại stack đã build, không build lại
+docker compose up -d
+
 # Xem trạng thái
 docker compose ps
 
-# Log
-docker compose logs -f backend
-docker compose logs -f content-worker
-docker compose logs -f frontend
-docker compose logs -f nginx
-
-# Build lại toàn bộ hoặc một service
-docker compose build
-docker compose build backend
-
-# Sửa code backend/frontend → build lại service tương ứng
-docker compose up -d --build backend
-docker compose up -d --build content-worker
-docker compose up -d --build frontend
-
-# Sửa code gaze/chatbot → build lại
-docker compose up -d --build gaze
-docker compose up -d --build chatbot
-
-# Dừng (giữ dữ liệu)
+# Dừng container, giữ nguyên volume/dữ liệu
 docker compose stop
 
-# Dừng + xóa container (giữ volume)
+# Xóa container, giữ nguyên volume/dữ liệu
 docker compose down
-
-# XÓA CẢ VOLUME — mất DB + weights, chỉ dùng khi thật sự muốn reset sạch
-docker compose down -v
 ```
 
-> **Không có hot reload trong Docker.** Mỗi lần sửa code phải build lại service.
-> Nếu muốn hot reload, chạy backend/frontend trên host:
-> `cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8001`
-> và `cd frontend && npm run dev` (Docker chỉ chạy postgres/redis/gaze/chatbot).
+> `docker compose down -v` sẽ **xóa toàn bộ volume**: database, media, weights
+> gaze/chatbot và Redis. Chỉ dùng khi thật sự muốn reset sạch. Bình thường dùng
+> `down` hoặc `./scripts/reset_db.sh`.
 
-## Migrations
-
-Schema chuẩn là **một baseline sạch**:
-
-- `db/migrations/001_baseline.sql` — toàn bộ schema/constraint/index/trigger/view
-  + reference seed (roles, cấu hình hệ thống, `user_identities` cho Microsoft 365).
-
-Không còn migration delta. Khi schema thay đổi, thêm file mới `002_...sql`;
-không sửa file đã áp. Schema generation hiện tại là `8`.
-
-Service `migrate` tự chạy mỗi lần `docker compose up`. Runner `db/migrate.sh`:
-
-- Một kết nối giữ advisory lock suốt lượt chạy.
-- Ghi file đã áp + checksum vào `schema_migrations` trong cùng transaction.
-- Chỉ chạy file chưa áp; file đã áp bị sửa → fail.
-- DB có lịch sử migration cũ / schema cũ → fail, yêu cầu reset có guard.
-
-Chạy tay:
+### 5.2 Xem log
 
 ```bash
-docker compose run --rm migrate
+docker compose logs -f               # tất cả service
+docker compose logs -f backend
+docker compose logs -f worker
+docker compose logs -f content-worker
+docker compose logs -f embedding-worker
 ```
 
-Reset DB development (mặc định chỉ preview):
+### 5.3 Build lại sau khi sửa code
+
+```bash
+# Backend API + worker phân tích + embedding worker dùng chung image backend
+docker compose up -d --build backend worker embedding-worker
+
+# Content worker có image riêng (LibreOffice)
+docker compose up -d --build content-worker
+
+# Frontend
+docker compose up -d --build frontend
+
+# Toàn bộ stack
+docker compose up -d --build
+```
+
+Sau khi sửa `.env`, recreate các service bị ảnh hưởng:
+
+```bash
+docker compose up -d --force-recreate backend worker content-worker embedding-worker
+```
+
+`docker compose restart` chỉ khởi động lại process, **không** áp dụng biến môi
+trường mới và không build lại image.
+
+### 5.4 Dùng thử các khu vực chính
+
+| Đường dẫn | Khu vực |
+|---|---|
+| `/` | Landing page |
+| `/account/login` | Đăng nhập |
+| `/teacher` | Danh sách khóa của giáo viên |
+| `/teacher/courses/{id}` | Workspace giáo viên: nội dung, thông tin, cài đặt, học viên, AOI |
+| `/student` | Dashboard học viên |
+| `/student/courses/{id}` | Học slide/quiz |
+| `/student/courses/{id}/calibrate` | Calibration webcam |
+| `/admin` | Quản trị người dùng |
+| `/admin/database` | Truy vấn CSDL read-only |
+| `/try` | Trải nghiệm khách |
+
+Luồng thử nhanh với giáo viên:
+
+1. Đăng nhập `teacher@school.edu.vn`.
+2. Vào `/teacher`, tạo khóa học.
+3. Tạo chương, bài giảng; upload PDF/PPTX/PPT/ODP.
+4. Soạn quiz và chỉnh AOI nếu cần.
+5. Publish khóa học. Publish sẽ validate chương/bài, slide đã index xong và
+   quiz hợp lệ.
+
+> Slide chỉ publish được khi `embedding-worker` đã index xong, mà bước này cần
+> chatbot `/ready`. Nếu upload xong nhưng mãi ở trạng thái pending, xem log
+> `content-worker`, `embedding-worker` và chatbot.
+
+Học viên cần được giáo viên ghi danh vào khóa trước khi thấy khóa trong
+`/student`.
+
+## 6. Seed, reset và backup dữ liệu
+
+### 6.1 Seed lại tài khoản dev
+
+```bash
+./scripts/seed_dev.sh
+```
+
+Có thể chạy bất cứ lúc nào khi PostgreSQL đang chạy. Không ghi đè mật khẩu hiện
+có.
+
+### 6.2 Reset database development
+
+Reset có guard, mặc định chỉ **preview** và không thay đổi gì:
 
 ```bash
 ./scripts/reset_db.sh
-./scripts/reset_db.sh --apply --database eyetracking --confirm-reset eyetracking --seed-dev
 ```
 
-Quy tắc: **không sửa file migration đã áp** — thêm file mới (`002_...`).
-Schema hiện tại là `schema_generation = 8`; DB cũ sẽ fail-fast và cần chạy
-migration (hoặc reset có guard).
+Áp dụng thật (bắt buộc `--database` và `--confirm-reset` trùng nhau):
 
-## Slide storage
+```bash
+./scripts/backup.sh
 
-- Upload nhận **PDF, PPTX, PPT, ODP**; mọi định dạng được chuẩn hóa thành một
-  `source.pdf` duy nhất cho mỗi lần upload.
-- Không lưu JPG: frontend dùng **PDF.js** render đúng trang từ PDF; mỗi trang là
-  một `slide_version` với `source_page` tương ứng.
-- Chuyển đổi chạy bất đồng bộ qua `slide_import_jobs` + service `content-worker`
-  (LibreOffice headless trong image `content-worker`; API không cài LibreOffice).
-- PDF được phục vụ same-origin qua `GET /media/assets/{id}/file` để tránh CORS
-  và presigned URL hết hạn.
+./scripts/reset_db.sh --apply \
+  --database eyetracking \
+  --confirm-reset eyetracking \
+  --seed-dev
+```
 
-## Chatbot RAG
+- `--database` phải khớp `POSTGRES_DB` (mặc định `eyetracking`).
+- `--seed-dev` tùy chọn; nếu bỏ qua, chạy `./scripts/seed_dev.sh` sau reset.
+- Script sẽ dừng runtime, drop/recreate database, chạy baseline + grants, seed
+  (nếu có) rồi khởi động lại các service đang chạy trước đó.
+- Nếu stack đang tắt hoàn toàn, chạy `docker compose up -d` sau khi reset.
+- Reset **xóa dữ liệu** trong database đích. Backup trước nếu cần giữ dữ liệu.
 
-Service `migrate` tự tạo/cập nhật role DB hạn chế cho chatbot sau mỗi lần áp
-migrations (đọc `CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD` từ `.env`). Không cần
-chạy tay; nếu muốn cấp lại quyền ngay mà không chạy migration:
+### 6.3 Backup và phục hồi
+
+```bash
+# Tạo backup vào backups/
+./scripts/backup.sh
+
+# Phục hồi (hỏi xác nhận)
+./scripts/backup.sh --restore backups/eyelearning-YYYYmmdd-HHMMSS.dump
+```
+
+Nên dừng backend và worker trước khi restore để tránh connection đang giữ object:
+
+```bash
+docker compose stop backend worker content-worker
+```
+
+Chi tiết xem [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+
+## 7. Cấu hình thường gặp
+
+### 7.1 Chạy không có GPU
+
+Mặc định gaze yêu cầu NVIDIA GPU. Nếu máy không có GPU:
+
+1. Trong `.env`, đặt:
+
+   ```env
+   DEVICE=cpu
+   FRONTEND_REPLICAS=1
+   GAZE_REPLICAS=1
+   WORKER_REPLICAS=1
+   ```
+
+2. Mở `docker-compose.yml`, tìm service `gaze` và **xóa dòng**:
+
+   ```yaml
+   gpus: all
+   ```
+
+3. Khởi động lại:
+
+   ```bash
+   # Nếu stack chưa chạy lần nào
+   docker compose up -d --build
+
+   # Nếu chỉ muốn áp dụng thay đổi cho gaze/nginx
+   docker compose up -d --build gaze nginx
+   ```
+
+Gaze CPU vẫn chạy nhưng suy luận rất chậm, chỉ phù hợp để kiểm tra giao diện
+hoặc phát triển. Không nên dùng cho lớp học thật.
+
+### 7.2 Máy yếu, muốn tiết kiệm RAM
+
+Đặt trong `.env`:
+
+```env
+FRONTEND_REPLICAS=1
+GAZE_REPLICAS=1
+WORKER_REPLICAS=1
+```
+
+Sau đó:
+
+```bash
+docker compose up -d --force-recreate frontend gaze worker
+```
+
+Không đặt replica về `0` cho các service mà nginx/backend phụ thuộc.
+
+### 7.3 Đổi mật khẩu PostgreSQL
+
+Nếu database **chưa từng khởi tạo** (chưa có volume `pgdata`), chỉ cần sửa
+`.env` trước lần `up` đầu tiên:
+
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL_DOCKER`
+- `DATABASE_URL` (nếu chạy backend trên host)
+
+Nếu database **đã khởi tạo**, đổi `POSTGRES_PASSWORD` trong `.env` không tự đổi
+mật khẩu role trong volume. Cần đổi trong PostgreSQL trước:
+
+```bash
+docker compose exec postgres psql -U postgres -d postgres \
+  -c "ALTER USER postgres WITH PASSWORD '<new-password>';"
+```
+
+Sau đó cập nhật `POSTGRES_PASSWORD` và các DSN trong `.env`, rồi recreate các
+service liên quan:
+
+```bash
+docker compose up -d --force-recreate postgres migrate backend worker content-worker embedding-worker
+```
+
+Nếu chỉ đổi mật khẩu trong `POSTGRES_PASSWORD` mà quên DSN, backend sẽ báo lỗi
+kết nối database.
+
+### 7.4 Chatbot không dùng được
+
+Kiểm tra:
+
+```bash
+docker compose logs -f chatbot
+curl -fsS http://localhost:8002/ready
+```
+
+Các nguyên nhân thường gặp:
+
+- Chưa tải xong embedding weights trong lần chạy đầu.
+- `NEU_BASE_URL`/`NEU_API_KEY` sai hoặc không truy cập được mạng NEU.
+- `CHATBOT_DB_PASSWORD` không khớp `CHATBOT_DATABASE_URL_DOCKER`.
+- Role `chatbot_reader` chưa được tạo/cấp lại quyền.
+
+Cấp lại role chatbot:
 
 ```bash
 ./scripts/create_chatbot_role.sh
 ```
 
-- Ingest chia slide thành batch nhỏ (`CHATBOT_INGEST_BATCH_SIZE`, mặc định 8)
-  để bài dài không vượt timeout; slide đã `ready` không bị ingest lại.
-- Lỗi DB/role của chatbot trả `503` kèm lý do thật (thay vì `500`), backend lưu
-  lý do vào `slide_documents.ingestion_error` để UI hiển thị.
-- Pipeline tuyến tính, **không còn router/verifier LLM, NDJSON block hay
-  LangGraph**: query rewrite + HyDE thích nghi (0-1 LLM call nhỏ) → hybrid
-  retrieval BM25 (Postgres FTS `ts_rank_cd`) + dense pgvector + HyDE dense, fuse
-  bằng RRF → một LLM call streaming → kiểm tra citation bằng code (retry tối đa
-  1 lần nếu thiếu).
-- Một chatbot duy nhất cho cả bài giảng và bài tập; không tách
-  exercise/lecture. Bài tập chưa nộp được chặn lộ đáp án ở prompt (không có
-  verifier riêng).
-- LMS (deadline/điểm/cấu trúc khóa) nhận diện bằng regex rồi gọi backend
-  `/internal/chat/lms-query`; không dùng router LLM.
-- Retrieval lọc `course_id` + `course_version_id` **trước LIMIT**; BM25 dùng
-  Postgres FTS `ts_rank_cd`, dense dùng pgvector HNSW; RRF fuse 2-3 nhánh.
-- Model: Qwen 3.5 35B qua NEU API cho answer/query prep/VLM; embedding
-  local `Qwen3-Embedding-0.6B` chạy **CPU** (1024 chiều). Chatbot không dùng
-  GPU — GPU chỉ dành cho gaze.
-- Citation chứa `course_version_id`, `lesson_version_id`, `slide_version_id`,
-  `membership_id`, `asset_id`, `pdf_url`, `page_number`; citation sai bị lọc
-  bằng code. Nếu model không cite sau retry, chatbot thêm fallback
-  "Nguồn tham khảo".
-- Streaming SSE: `status → citations → token → done`.
-- Chat quiz dùng đúng `attemptId`; attempt đã nộp cũ không mở quyền attempt mới.
+### 7.5 Dùng R2 thay vì lưu local
 
-## Gaze
+Điền đủ 5 biến `R2_*` trong `.env`, đặt:
 
-- Calibration 25 điểm → train model `.ubj` → lưu bất biến vào `calibrations`;
-  `devices.current_calibration_id` trỏ bản mới nhất.
-- Model dùng được với mọi viewport: frontend quy đổi toạ độ gaze từ viewport
-  lúc calibration sang viewport hiện tại (zoom/resize/move cửa sổ), không cần
-  hiệu chỉnh lại.
-- WebSocket `/session/{sid}/stream` (qua nginx `/gaze/...`), protocol v2:
-  4-byte header length + JSON header + JPEG; echo `frameId`/`sequence`.
-- Frontend gửi batch idempotent vào `gaze_samples` (partition theo tháng);
-  IndexedDB queue giữ batch tới khi ACK.
-- Gaze cần GPU theo mặc định (`gpus: all`, `DEVICE=cuda`). Không có GPU: đặt
-  `DEVICE=cpu` và bỏ `gpus: all` ở service `gaze` — chạy được nhưng chậm.
-  Chatbot luôn chạy CPU (`EMBEDDING_DEVICE=cpu`), không dùng GPU.
-
-## Lint
-
-```bash
-# Frontend
-cd frontend && npm run lint && npm run typecheck
-
-# Ruff
-ruff check backend services/gaze services/chatbot
+```env
+STORAGE_PROVIDER=r2
 ```
 
-## Bảo trì partition
-
-Baseline tạo partition tháng trước/current/3 tháng tới + default partition.
-Khi cần tạo thêm:
+Sau đó recreate backend, content-worker và chatbot:
 
 ```bash
-./scripts/create_partitions.sh 3
+docker compose up -d --force-recreate backend content-worker chatbot
 ```
 
-Worker `worker` chạy `analysis_runs` pending; watermark/trạng thái nằm trong
-PostgreSQL nên restart không mất việc.
+Nếu không dùng R2, đặt `STORAGE_PROVIDER=local` và để trống toàn bộ `R2_*`.
 
-## Backup & bảo trì
+## 8. Kiểm tra và test
+
+### 8.1 Kiểm tra runtime
 
 ```bash
-./scripts/backup.sh                   # backup DB → backups/eyelearning-*.dump
-./scripts/backup.sh --restore <file>  # restore (hỏi xác nhận, trừ khi --yes)
-./scripts/maintenance.sh              # dọn session hết hạn (bảo trì định kỳ)
+./scripts/smoke.sh
 ```
 
-Xem chi tiết backup/restore, logging (`LOG_FORMAT=json`, `LOG_LEVEL`) và cảnh
-báo `docker compose down -v` tại
-[`docs/cleanup/OPERATIONS.md`](docs/cleanup/OPERATIONS.md).
+### 8.2 Kiểm tra chất lượng code (dành cho dev)
 
-## Dọn dung lượng Docker
+Các lệnh này cần cài dependency trên host (Python venv, `npm install`):
 
 ```bash
-./scripts/docker_cleanup.sh   # chỉ prune image/build cache, KHÔNG đụng volume
-
-# Xóa image GHCR cũ (nếu còn từ trước khi chuyển sang local)
-docker image rm ghcr.io/manh1504/eyelearning-{backend,frontend,nginx,migrations,gaze,chatbot}:latest
+make check          # Ruff, ESLint, TypeScript, compose config
+make check-full     # thêm unit test, backend/chatbot/gaze test, frontend build
+make test-backend
+make test-frontend
 ```
 
-## Xử lý sự cố
+Test migration và e2e:
 
-| Lỗi | Cách xử lý |
+```bash
+./scripts/test_migrations.sh
+./scripts/e2e.sh
+```
+
+Test riêng từng service:
+
+```bash
+cd services/chatbot && .venv/bin/python -m pytest -q
+cd services/gaze && .venv/bin/python -m pytest -q
+```
+
+## 9. Xử lý sự cố nhanh
+
+| Hiện tượng | Kiểm tra / cách xử lý |
 |---|---|
-| Build gaze/chatbot lỗi torch/CUDA | Xem log `docker compose build gaze` / `chatbot`; kiểm tra wheel trong `requirements-torch*.txt` |
-| Build lỗi do thiếu BuildKit | Kiểm tra `docker buildx version`; Docker Compose v2 dùng BuildKit mặc định |
-| `gpus: all` lỗi / không có GPU | Chỉ `gaze` dùng GPU: bỏ `gpus: all` ở `gaze`, đặt `DEVICE=cpu`. Chatbot luôn CPU |
-| Cổng 3000 đang dùng | `docker compose stop nginx` hoặc dừng process đang giữ cổng |
-| Cổng 8001/8000/8002 đang dùng | `ss -ltnp \| grep -E '8000\|8001\|8002'` rồi dừng process |
-| Login không giữ phiên | `.env` phải có `COOKIE_SECURE=false`, rebuild backend |
-| Backend `connection refused` tới DB | `docker compose ps` — postgres chưa healthy |
-| Migration lỗi | `docker logs eyetracking-migrate`; sửa file mới, không sửa file đã áp |
-| Content-worker không chuyển được slide | `docker compose logs -f content-worker`; kiểm tra LibreOffice trong image `content-worker` |
-| Chatbot chưa `/ready` | Chờ tải weights; `docker compose logs -f chatbot` |
-| Gaze chưa `/ready` | Chờ tải weights + load model; `docker compose logs -f gaze` |
-| Hết dung lượng Docker | `./scripts/docker_cleanup.sh` (không xóa volume) |
+| `port is already allocated` | Chạy `ss -ltnp` để xem cổng đang bị chiếm; dừng dịch vụ đó hoặc đổi port mapping |
+| `migrate` exit khác 0 | `docker compose logs migrate`; kiểm tra checksum migration, DB cũ hoặc sai mật khẩu |
+| Backend không healthy | `docker compose ps`, log backend; kiểm tra `POSTGRES_PASSWORD` khớp DSN, PostgreSQL đã healthy |
+| Đăng nhập không giữ phiên | Đặt `COOKIE_SECURE=false`, đảm bảo chỉ có **một dòng** cấu hình này; recreate backend; truy cập bằng `http://localhost:3000` |
+| Chatbot chưa ready | Chờ tải weights lần đầu; xem log chatbot; kiểm tra `NEU_*`, role `chatbot_reader` |
+| Gaze chưa ready | Chờ tải weights; kiểm tra NVIDIA driver/container toolkit; xem log gaze; thử `DEVICE=cpu` nếu không có GPU |
+| Upload slide bị treo | `docker compose logs -f content-worker`; kiểm tra LibreOffice trong image content-worker và job `import_slides` |
+| Slide không index được | `docker compose logs -f embedding-worker`; kiểm tra chatbot `/ready` và cấu hình NEU |
+| Hết dung lượng Docker | `docker system df`; chạy `./scripts/docker_cleanup.sh`; **không prune volume** |
+| Muốn reset sạch | Backup rồi dùng `./scripts/reset_db.sh --apply ...`; tránh `docker compose down -v` nếu chưa chắc |
 
-## Cấu trúc image local
+Khi cần xem toàn bộ log để báo lỗi:
 
-| Image | Build từ |
-|---|---|
-| `eyelearning-migrations:local` | `db/Dockerfile` (context `./db`) |
-| `eyelearning-backend:local` | `backend/` target `api` |
-| `eyelearning-backend-content-worker:local` | `backend/` target `content-worker` (LibreOffice) |
-| `eyelearning-frontend:local` | `frontend/` |
-| `eyelearning-nginx:local` | `nginx/` |
-| `eyelearning-gaze:local` | `services/gaze/` (multi-stage: `ai-base` + `runtime`) |
-| `eyelearning-chatbot:local` | `services/chatbot/` (multi-stage: `ai-base` + `runtime`) |
+```bash
+docker compose ps -a
+docker compose logs --tail=200
+```
 
-## Ghi chú
+## 10. Tài liệu liên quan
 
-- `.env` chứa secret và đã được gitignore — không commit.
-- Chỉ có **một file `.env` ở gốc repo** cho backend/frontend/chatbot/gaze.
-- Nếu login không giữ phiên trên `http://localhost`: đặt `COOKIE_SECURE=false`
-  trong `.env` rồi `docker compose up -d --build backend`.
-- Nếu `npm run dev` báo cổng 3000 đang dùng: `docker compose stop nginx`.
+- [`README.md`](README.md) — tổng quan dự án, kiến trúc, lệnh thường dùng
+- [`AGENTS.md`](AGENTS.md) — quy tắc phát triển và mô hình dữ liệu hiện tại
+- [`DB.md`](DB.md) — từ điển cột, ERD, quan hệ dữ liệu
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — backup, restore, bảo trì, logging
+- [`backend/README.md`](backend/README.md) — API, worker, luồng backend
+- [`frontend/README.md`](frontend/README.md) — cấu trúc frontend, route, gaze flow
+- [`services/gaze/README.md`](services/gaze/README.md) — calibration, WebSocket, model
+- [`services/chatbot/README.md`](services/chatbot/README.md) — RAG, ingest, cấu hình chatbot
+- [`db/README.md`](db/README.md) — migration, seed, reset database
+- [`scripts/README.md`](scripts/README.md) — toàn bộ script vận hành

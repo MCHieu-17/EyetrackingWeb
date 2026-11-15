@@ -1,7 +1,8 @@
-"""Đồng bộ trạng thái ingest slide version sang chatbot/pgvector.
+"""Đồng bộ index RAG của slide sang chatbot/pgvector.
 
-`slide_documents` là nguồn trạng thái duy nhất cho RAG. Backend gọi chatbot
-`/ingest/*`; chatbot đọc nội dung published qua view và ghi transcript/vector.
+`slides` là nguồn trạng thái duy nhất: transcript/embedding/index_status nằm
+cùng một row. Backend gọi chatbot `/ingest/slides`; chatbot đọc PDF qua view
+outline và cập nhật trực tiếp các slide đó.
 """
 
 from __future__ import annotations
@@ -13,45 +14,39 @@ from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import func, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.course import (
-    CourseVersionItem,
-    LessonVersionSlide,
-)
-from app.models.media import SlideDocument
+from app.models.course import CourseModule, Lesson, Slide
 
 logger = logging.getLogger(__name__)
 
 PENDING = "pending"
 READY = "ready"
 FAILED = "failed"
+NONE = "none"
 PIPELINE_VERSION = "rag-v2"
 MODEL_VERSION = "qwen3-embedding-0.6b"
 
 _ingest_client: httpx.AsyncClient | None = None
-
-# Chatbot serialize mọi job ingest bằng một lock, nên backend cũng chỉ nên
-# chạy một job tại một thời điểm. Publish + reindex + content-worker có thể
-# cùng schedule ingest cho cùng slide; job thứ hai sẽ thấy slide đã ready và
-# trả về ngay thay vì mark pending rồi ingest lại.
-_ingest_lock = asyncio.Lock()
+_ingest_locks: dict[str, asyncio.Lock] = {}
 
 
 @asynccontextmanager
 async def _single_flight(key: str):
-    """Chỉ cho một job ingest chạy trong process này; job trùng bị bỏ qua."""
-    if _ingest_lock.locked():
+    """Cho một job ingest chạy cho mỗi key; key khác vẫn chạy độc lập."""
+    lock = _ingest_locks.setdefault(key, asyncio.Lock())
+    if lock.locked():
         logger.info("Ingest %s đang chạy — bỏ qua lần gọi trùng", key)
         yield False
         return
-    await _ingest_lock.acquire()
+    await lock.acquire()
     try:
         yield True
     finally:
-        _ingest_lock.release()
+        lock.release()
+        if _ingest_locks.get(key) is lock:
+            _ingest_locks.pop(key, None)
 
 
 def _client() -> httpx.AsyncClient:
@@ -72,72 +67,81 @@ async def close_ingest_client() -> None:
 
 
 async def _mark_many(
-    session, slide_version_ids: list[str], status: str, error: str | None = None
+    session, slide_ids: list[str], status: str, error: str | None = None
 ) -> None:
-    # Giữ thứ tự nhưng loại trùng: một slide version có thể xuất hiện ở nhiều
-    # item, và ON CONFLICT không cho update cùng một row hai lần trong một câu.
-    unique_ids = list(dict.fromkeys(slide_version_ids))
-    if not unique_ids:
-        return
-    now = datetime.now(timezone.utc)
-    stmt = pg_insert(SlideDocument).values(
-        [
-            {
-                "slide_version_id": slide_version_id,
-                "pipeline_version": PIPELINE_VERSION,
-                "model_version": MODEL_VERSION,
-                "transcript": "",
-                "embedding": None,
-                "ingestion_state": status,
-                "ingestion_error": error,
-                "updated_at": now,
-            }
-            for slide_version_id in unique_ids
-        ]
-    )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["slide_version_id"],
-        set_={
-            "ingestion_state": stmt.excluded.ingestion_state,
-            "ingestion_error": stmt.excluded.ingestion_error,
-            "updated_at": stmt.excluded.updated_at,
-        },
-        # Không kéo slide đã ready về pending: một job khác có thể vừa ingest
-        # xong trong lúc job này tính danh sách target.
-        where=SlideDocument.ingestion_state != READY,
-    )
-    await session.execute(stmt)
-    await session.commit()
-
-
-async def _mark_failed_unready(
-    session, slide_version_ids: list[str], error: str
-) -> None:
-    """Đánh dấu failed các slide còn PENDING sau khi batch lỗi.
-
-    Chatbot có thể đã ingest thành công một phần rồi mới lỗi (VLM/DB). Không
-    được ghi đè slide đã ready (mất kết quả tốt) hoặc slide chatbot đã đánh
-    dấu failed với lỗi cụ thể hơn.
-    """
-    unique_ids = list(dict.fromkeys(slide_version_ids))
+    unique_ids = list(dict.fromkeys(slide_ids))
     if not unique_ids:
         return
     await session.execute(
-        update(SlideDocument)
-        .where(
-            SlideDocument.slide_version_id.in_(unique_ids),
-            SlideDocument.ingestion_state == PENDING,
-        )
+        update(Slide)
+        .where(Slide.id.in_(unique_ids))
         .values(
-            ingestion_state=FAILED,
-            ingestion_error=error,
+            index_status=status,
+            index_error=error,
+            pipeline_version=PIPELINE_VERSION,
+            model_version=MODEL_VERSION,
             updated_at=datetime.now(timezone.utc),
         )
     )
     await session.commit()
 
 
-async def _call(path: str, payload: dict) -> dict:
+async def _mark_failed_unready(
+    session, slide_ids: list[str], error: str
+) -> None:
+    """Đánh dấu failed các slide còn pending sau khi batch lỗi.
+
+    Chatbot có thể đã ingest xong một phần rồi mới lỗi transport. Không ghi
+    đè slide đã ready hoặc lỗi cụ thể chatbot đã ghi cho slide failed.
+    """
+    unique_ids = list(dict.fromkeys(slide_ids))
+    if not unique_ids:
+        return
+    await session.execute(
+        update(Slide)
+        .where(
+            Slide.id.in_(unique_ids),
+            Slide.index_status == PENDING,
+        )
+        .values(
+            index_status=FAILED,
+            index_error=error,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
+
+
+async def _status_counts(session, lesson_id: str) -> dict[str, int]:
+    rows = (
+        await session.execute(
+            select(Slide.index_status, func.count())
+            .where(Slide.lesson_id == lesson_id)
+            .group_by(Slide.index_status)
+        )
+    ).all()
+    counts = {status: int(count) for status, count in rows}
+    return {
+        "ready": counts.get(READY, 0),
+        "failed": counts.get(FAILED, 0),
+        "pending": counts.get(PENDING, 0) + counts.get(NONE, 0),
+        "total": sum(counts.values()),
+    }
+
+
+async def _slide_ids(session, lesson_id: str) -> list[str]:
+    return list(
+        (
+            await session.execute(
+                select(Slide.id)
+                .where(Slide.lesson_id == lesson_id)
+                .order_by(Slide.position)
+            )
+        ).scalars()
+    )
+
+
+async def _call(payload: dict) -> dict:
     if not settings.chatbot_ready:
         raise RuntimeError("Chatbot chưa được cấu hình")
 
@@ -146,15 +150,12 @@ async def _call(path: str, payload: dict) -> dict:
     for attempt in range(1, attempts + 1):
         try:
             response = await _client().post(
-                f"{settings.chatbot_url_resolved.rstrip('/')}{path}",
+                f"{settings.chatbot_url_resolved.rstrip('/')}/ingest/slides",
                 json=payload,
             )
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
-            # Giữ nguyên body lỗi của chatbot (vd "password authentication
-            # failed", "Không truy cập được PostgreSQL...") để UI hiển thị
-            # đúng nguyên nhân thay vì chỉ "500 Internal Server Error".
             detail = exc.response.text.strip()
             last_error = RuntimeError(
                 f"HTTP {exc.response.status_code}: {detail[:500]}"
@@ -171,72 +172,6 @@ async def _call(path: str, payload: dict) -> dict:
     raise RuntimeError(f"Chatbot ingest thất bại: {last_error}")
 
 
-async def _slide_ids_for_course_version(
-    session, course_version_id: str
-) -> list[str]:
-    rows = (
-        await session.execute(
-            select(LessonVersionSlide.slide_version_id)
-            .join(
-                CourseVersionItem,
-                CourseVersionItem.lesson_version_id
-                == LessonVersionSlide.lesson_version_id,
-            )
-            .where(CourseVersionItem.course_version_id == course_version_id)
-            .order_by(
-                CourseVersionItem.position, LessonVersionSlide.position
-            )
-        )
-    ).scalars()
-    return [str(row) for row in rows]
-
-
-async def _slide_ids_for_lesson_version(
-    session, lesson_version_id: str
-) -> list[str]:
-    rows = (
-        await session.execute(
-            select(LessonVersionSlide.slide_version_id)
-            .where(LessonVersionSlide.lesson_version_id == lesson_version_id)
-            .order_by(LessonVersionSlide.position)
-        )
-    ).scalars()
-    return [str(row) for row in rows]
-
-
-async def _ready_slide_ids(session, slide_ids: list[str]) -> set[str]:
-    if not slide_ids:
-        return set()
-    rows = (
-        await session.execute(
-            select(SlideDocument.slide_version_id).where(
-                SlideDocument.slide_version_id.in_(slide_ids),
-                SlideDocument.ingestion_state == READY,
-            )
-        )
-    ).scalars()
-    return {str(row) for row in rows}
-
-
-async def _status_counts(session, slide_ids: list[str]) -> dict[str, int]:
-    if not slide_ids:
-        return {"ready": 0, "failed": 0, "pending": 0, "total": 0}
-    rows = (
-        await session.execute(
-            select(SlideDocument.ingestion_state, func.count())
-            .where(SlideDocument.slide_version_id.in_(slide_ids))
-            .group_by(SlideDocument.ingestion_state)
-        )
-    ).all()
-    counts = {status: int(count) for status, count in rows}
-    return {
-        "ready": counts.get(READY, 0),
-        "failed": counts.get(FAILED, 0),
-        "pending": counts.get(PENDING, 0),
-        "total": len(slide_ids),
-    }
-
-
 def _chunks(items: list[str], size: int):
     for start in range(0, len(items), size):
         yield items[start : start + size]
@@ -245,155 +180,102 @@ def _chunks(items: list[str], size: int):
 async def _sync(
     session,
     *,
+    lesson_id: str,
     all_slide_ids: list[str],
-    path: str,
-    payload: dict,
     only_pending: bool,
 ) -> dict[str, int]:
-    """Index các slide chưa ready rồi trả về trạng thái của toàn bộ slide.
+    if not all_slide_ids:
+        return await _status_counts(session, lesson_id)
 
-    Chia thành batch nhỏ: VLM + embedding chạy tuần tự nên một bài 70+ trang có
-    thể vượt timeout HTTP nếu gửi một request. Batch còn giúp slide đã xong
-    được giữ nguyên khi batch sau lỗi.
-    """
-    target_ids = all_slide_ids
     if only_pending:
-        ready_ids = await _ready_slide_ids(session, all_slide_ids)
-        target_ids = [
-            slide_id for slide_id in all_slide_ids if slide_id not in ready_ids
-        ]
+        ready_ids = set(
+            (
+                await session.execute(
+                    select(Slide.id).where(
+                        Slide.id.in_(all_slide_ids),
+                        Slide.index_status == READY,
+                    )
+                )
+            ).scalars()
+        )
+        target_ids = [sid for sid in all_slide_ids if sid not in ready_ids]
+    else:
+        target_ids = all_slide_ids
+
     if not target_ids:
-        return await _status_counts(session, all_slide_ids)
+        return await _status_counts(session, lesson_id)
 
     await _mark_many(session, target_ids, PENDING)
     batch_size = max(1, settings.chatbot_ingest_batch_size)
-    batches = list(_chunks(target_ids, batch_size))
-    for index, batch in enumerate(batches, start=1):
+    for batch in _chunks(target_ids, batch_size):
         try:
-            await _call(path, {**payload, "slide_version_ids": batch})
+            await _call({"slide_ids": batch})
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "Ingest %s batch %s/%s thất bại: %s",
-                path,
-                index,
-                len(batches),
-                exc,
+                "Ingest lesson %s batch thất bại: %s", lesson_id, exc
             )
             await _mark_failed_unready(session, batch, str(exc)[:500])
-    return await _status_counts(session, all_slide_ids)
+    return await _status_counts(session, lesson_id)
 
 
-async def course_version_ingest_status_in_session(
-    session, course_version_id: str
-) -> dict[str, int]:
-    slide_ids = await _slide_ids_for_course_version(session, course_version_id)
-    return await _status_counts(session, slide_ids)
-
-
-async def course_version_ingest_status(course_version_id: str) -> dict[str, int]:
-    """Chỉ đọc trạng thái index, không gọi chatbot."""
+async def lesson_ingest_status(lesson_id: str) -> dict[str, int]:
     async with SessionLocal() as session:
-        return await course_version_ingest_status_in_session(
-            session, course_version_id
-        )
+        return await _status_counts(session, lesson_id)
 
 
-async def mark_course_version_pending_in_session(
-    session, course_version_id: str
-) -> int:
-    slide_ids = await _slide_ids_for_course_version(session, course_version_id)
-    ready_ids = await _ready_slide_ids(session, slide_ids)
-    target_ids = [
-        slide_id for slide_id in slide_ids if slide_id not in ready_ids
-    ]
-    await _mark_many(session, target_ids, PENDING)
-    return len(target_ids)
-
-
-async def mark_lesson_version_pending(lesson_version_id: str) -> int:
-    async with SessionLocal() as session:
-        slide_ids = await _slide_ids_for_lesson_version(
-            session, lesson_version_id
-        )
-        ready_ids = await _ready_slide_ids(session, slide_ids)
-        target_ids = [
-            slide_id for slide_id in slide_ids if slide_id not in ready_ids
-        ]
-        await _mark_many(session, target_ids, PENDING)
-        return len(target_ids)
-
-
-async def sync_course_version(
-    course_version_id: str,
-    include_draft: bool = False,
-    only_pending: bool = False,
+async def course_ingest_status_in_session(
+    session, course_id: str
 ) -> dict[str, int]:
+    rows = (
+        await session.execute(
+            select(Slide.index_status, func.count(Slide.id))
+            .join(Lesson, Lesson.id == Slide.lesson_id)
+            .join(CourseModule, CourseModule.id == Lesson.module_id)
+            .where(CourseModule.course_id == course_id)
+            .group_by(Slide.index_status)
+        )
+    ).all()
+    counts = {status: int(count) for status, count in rows}
+    return {
+        "ready": counts.get(READY, 0),
+        "failed": counts.get(FAILED, 0),
+        "pending": counts.get(PENDING, 0) + counts.get(NONE, 0),
+        "total": sum(counts.values()),
+    }
+
+
+async def mark_lesson_pending(lesson_id: str) -> int:
+    async with SessionLocal() as session:
+        ids = await _slide_ids(session, lesson_id)
+        await _mark_many(session, ids, PENDING)
+        return len(ids)
+
+
+async def mark_course_pending_in_session(session, course_id: str) -> int:
+    rows = (
+        await session.execute(
+            select(Slide.id)
+            .join(Lesson, Lesson.id == Slide.lesson_id)
+            .join(CourseModule, CourseModule.id == Lesson.module_id)
+            .where(CourseModule.course_id == course_id)
+        )
+    ).scalars().all()
+    await _mark_many(session, list(rows), PENDING)
+    return len(rows)
+
+
+async def sync_lesson(lesson_id: str, only_pending: bool = True) -> dict[str, int]:
     if not settings.chatbot_ready:
-        logger.warning(
-            "Chatbot chưa cấu hình — bỏ qua ingest course version %s",
-            course_version_id,
-        )
-        return await course_version_ingest_status(course_version_id)
-    async with _single_flight(f"course:{course_version_id}") as acquired:
+        logger.warning("Chatbot chưa cấu hình — bỏ qua ingest lesson %s", lesson_id)
+        return await lesson_ingest_status(lesson_id)
+    async with _single_flight(f"lesson:{lesson_id}") as acquired:
         if not acquired:
-            logger.info(
-                "Ingest course version %s đang chạy — bỏ qua lần gọi trùng",
-                course_version_id,
-            )
-            return await course_version_ingest_status(course_version_id)
+            return await lesson_ingest_status(lesson_id)
         async with SessionLocal() as session:
-            slide_ids = await _slide_ids_for_course_version(
-                session, course_version_id
-            )
+            slide_ids = await _slide_ids(session, lesson_id)
             return await _sync(
                 session,
+                lesson_id=lesson_id,
                 all_slide_ids=slide_ids,
-                path="/ingest/course-version",
-                payload={
-                    "course_version_id": course_version_id,
-                    "include_draft": include_draft,
-                },
-                only_pending=only_pending,
-            )
-
-
-async def sync_lesson_version(
-    lesson_version_id: str,
-    include_draft: bool = False,
-    only_pending: bool = False,
-) -> dict[str, int]:
-    if not settings.chatbot_ready:
-        logger.warning(
-            "Chatbot chưa cấu hình — bỏ qua ingest lesson version %s",
-            lesson_version_id,
-        )
-        async with SessionLocal() as session:
-            slide_ids = await _slide_ids_for_lesson_version(
-                session, lesson_version_id
-            )
-            return await _status_counts(session, slide_ids)
-    async with _single_flight(f"lesson:{lesson_version_id}") as acquired:
-        if not acquired:
-            logger.info(
-                "Ingest lesson version %s đang chạy — bỏ qua lần gọi trùng",
-                lesson_version_id,
-            )
-            async with SessionLocal() as session:
-                slide_ids = await _slide_ids_for_lesson_version(
-                    session, lesson_version_id
-                )
-                return await _status_counts(session, slide_ids)
-        async with SessionLocal() as session:
-            slide_ids = await _slide_ids_for_lesson_version(
-                session, lesson_version_id
-            )
-            return await _sync(
-                session,
-                all_slide_ids=slide_ids,
-                path="/ingest/lesson-version",
-                payload={
-                    "lesson_version_id": lesson_version_id,
-                    "include_draft": include_draft,
-                },
                 only_pending=only_pending,
             )

@@ -78,3 +78,9 @@ frontend/next-env.d.ts
 
 # Misc
 *.pem
+
+
+AGENTS.md
+DB.md
+cv/
+docs/

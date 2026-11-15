@@ -5,8 +5,8 @@
 # Chatbot chỉ được:
 #   - đọc view công khai `v_chatbot_slide_documents`;
 #   - đọc outline draft `v_course_outline` để index trước khi xuất bản;
-#   - ghi `slide_documents` (ingest transcript/embedding).
-# KHÔNG được đọc quiz_specs/quiz_attempts/users/chat_*.
+#   - UPDATE các cột index trên `slides` (transcript/embedding/status).
+# KHÔNG được đọc quiz_attempts/users/chat_*.
 #
 # Bình thường KHÔNG cần chạy tay: `db/migrate.sh` (service `migrate`) tự gọi
 # `db/chatbot_role.sql` sau mỗi lần áp migrations. Script này giữ lại cho
@@ -42,4 +42,4 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$DB_NAME" \
   -v dbname="$DB_NAME" \
   -f - < "$ROOT_DIR/db/chatbot_role.sql"
 
-echo "OK: role ${CHATBOT_DB_USER} đã sẵn sàng trên ${DB_NAME} (chỉ view published + slide_documents)."
+echo "OK: role ${CHATBOT_DB_USER} đã sẵn sàng trên ${DB_NAME} (chỉ outline view + cập nhật index cột của slides)."

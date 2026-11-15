@@ -6,7 +6,7 @@
 # Role chỉ được:
 #   - SELECT trên bảng/view public;
 #   - đọc các cột an toàn của users (không password_hash);
-#   - KHÔNG đọc auth_sessions/user_identities;
+#   - KHÔNG đọc auth_sessions/oauth_accounts;
 #   - KHÔNG có quyền ghi/DDL.
 #
 # Bình thường KHÔNG cần chạy tay: `db/migrate.sh` (service `migrate`) tự gọi

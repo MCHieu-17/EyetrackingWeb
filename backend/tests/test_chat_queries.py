@@ -27,9 +27,7 @@ async def _seed_chat_session(
         session = ChatSession(
             student_id=student_id,
             course_id=ids["course_id"],
-            course_version_id=ids["version_id"],
             lesson_id=ids["lesson_id"],
-            lesson_version_id=ids["lesson_version_id"],
             title="Phiên test",
             context_key="",
         )

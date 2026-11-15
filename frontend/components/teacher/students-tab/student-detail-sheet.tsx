@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useStudentVisits } from "@/hooks/use-teacher";
 import {
   Sheet,
   SheetBody,
@@ -16,15 +17,24 @@ import type { StudentRow } from "@/lib/types/domain";
 /** Sheet chi tiết học viên: thông tin nhanh và mức quan sát theo từng bài. */
 export function StudentDetailSheet({
   student,
+  courseId,
   lessons,
   lessonTitle,
   onOpenChange,
 }: {
   student: StudentRow | null;
+  courseId: string;
   lessons: { lessonId: string; attention: number | null }[];
   lessonTitle: (lessonId: string) => string;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { data: visits = [], isLoading: visitsLoading } = useStudentVisits(
+    courseId,
+    student?.id ?? "",
+  );
+  const dateLabel = (value: string | null) =>
+    value ? new Date(value).toLocaleString("vi-VN") : "—";
+
   return (
     <Sheet open={student !== null} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="overflow-hidden">
@@ -69,6 +79,53 @@ export function StudentDetailSheet({
                       </li>
                     );
                   })}
+                </ul>
+              )}
+
+              <div className="mt-8 mb-4 flex items-end justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-black">Ca học</h3>
+                  <p className="mt-1 text-xs text-black/40">
+                    Mỗi lần vào khóa là một ca, gồm nhiều bài học.
+                  </p>
+                </div>
+                <span className="text-xs text-black/40">{visits.length} ca</span>
+              </div>
+              {visitsLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-16 animate-pulse rounded-[18px] bg-black/5" />
+                  ))}
+                </div>
+              ) : visits.length === 0 ? (
+                <div className="rounded-[18px] border border-dashed border-[#eeeee9] px-4 py-8 text-center text-sm text-black/40">
+                  Chưa có ca học nào.
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {visits.map((visit) => (
+                    <li
+                      key={visit.id}
+                      className="rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-black">
+                            {dateLabel(visit.startedAt)}
+                          </p>
+                          <p className="mt-1 text-xs text-black/45">
+                            {visit.endedAt
+                              ? `Kết thúc ${dateLabel(visit.endedAt)}`
+                              : "Đang diễn ra"}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-black/45">
+                          <p>{visit.lessonSessionCount} bài</p>
+                          <p>{visit.gazeCount} gaze</p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </SheetBody>

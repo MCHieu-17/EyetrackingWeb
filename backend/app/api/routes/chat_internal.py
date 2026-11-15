@@ -1,9 +1,4 @@
-"""Internal, fixed read operations for the chatbot.
-
-Student and course come only from the persisted chat session. Every query is
-scoped to the session's published course version and, for quiz operations, to a
-specific attempt.
-"""
+"""Internal, fixed read operations for the chatbot."""
 
 import secrets
 from datetime import datetime, timezone
@@ -14,21 +9,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.chat import ChatSession
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    CourseVersionModule,
-    Enrollment,
-    Lesson,
-    LessonVersion,
-)
-from app.models.quiz import QuizAttempt, QuizSpec
+from app.models.course import Course, CourseModule, Enrollment, Lesson
+from app.models.quiz import QuizAttempt
 from app.services.study_chat import ensure_access_in_db
 
 router = APIRouter(tags=["internal-chat"])
@@ -67,11 +53,7 @@ def _attempt_state(attempt: QuizAttempt | None, now: datetime) -> str:
 
 @router.post("/internal/chat/lms-query", dependencies=[Depends(internal_auth)])
 async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
-    session = await db.get(
-        ChatSession,
-        str(body.session_id),
-        options=[raiseload(ChatSession.messages)],
-    )
+    session = await db.get(ChatSession, str(body.session_id))
     if session is None or session.archived_at is not None:
         raise HTTPException(404, detail="Phiên chat không còn khả dụng")
     if session.context_key != body.context_key:
@@ -83,120 +65,88 @@ async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
     if body.operation == "access":
         return {**base, "allowed": True}
 
-    course = await db.get(
-        Course,
-        session.course_id,
-        options=[
-            raiseload(Course.versions),
-            raiseload(Course.enrollments),
-            raiseload(Course.owner),
-            raiseload(Course.creator),
-        ],
-    )
-    version = (
-        await db.get(
-            CourseVersion,
-            session.course_version_id,
-            options=[
-                raiseload(CourseVersion.modules),
-                raiseload(CourseVersion.items),
-            ],
-        )
-        if session.course_version_id
-        else None
-    )
-    if course is None or version is None:
+    course = await db.get(Course, session.course_id)
+    if course is None or course.status != "published":
         raise HTTPException(404, detail="Khóa học không còn khả dụng")
 
     if body.operation == "course":
         return {
             **base,
             "course": {
-                "title": version.title,
-                "description": version.description or "",
+                "title": course.title,
+                "description": course.description or "",
                 "url": f"/student/courses/{session.course_id}",
             },
         }
 
+    modules = (
+        await db.execute(
+            select(CourseModule)
+            .where(CourseModule.course_id == course.id)
+            .order_by(CourseModule.position)
+        )
+    ).scalars().all()
+    lessons = (
+        await db.execute(
+            select(Lesson)
+            .where(Lesson.module_id.in_([module.id for module in modules]))
+            .order_by(Lesson.position)
+        )
+    ).scalars().all()
+    module_titles = {module.id: module.title for module in modules}
+
     if body.operation == "structure":
-        rows = (
-            await db.execute(
-                select(
-                    CourseVersionModule.title,
-                    Lesson.id,
-                    LessonVersion.title,
-                )
-                .join(
-                    CourseVersionItem,
-                    CourseVersionItem.module_id == CourseVersionModule.id,
-                )
-                .join(Lesson, Lesson.id == CourseVersionItem.lesson_id)
-                .join(
-                    LessonVersion,
-                    LessonVersion.id == CourseVersionItem.lesson_version_id,
-                )
-                .where(CourseVersionModule.course_version_id == version.id)
-                .order_by(
-                    CourseVersionModule.position, CourseVersionItem.position
-                )
-            )
-        ).all()
         return {
             **base,
             "lessons": [
                 {
-                    "module": module_title,
-                    "title": lesson_title,
+                    "module": module_titles.get(lesson.module_id, ""),
+                    "title": lesson.title,
                     "url": (
-                        f"/student/courses/{session.course_id}?lesson={lesson_id}"
-                        if lesson_id
-                        else None
+                        f"/student/courses/{session.course_id}?lesson={lesson.id}"
                     ),
                 }
-                for module_title, lesson_id, lesson_title in rows
+                for lesson in lessons
             ],
         }
 
-    quiz_rows = (
-        await db.execute(
-            select(
-                CourseVersionItem,
-                Lesson,
-                LessonVersion,
-                QuizSpec,
-            )
-            .join(Lesson, Lesson.id == CourseVersionItem.lesson_id)
-            .join(
-                LessonVersion,
-                LessonVersion.id == CourseVersionItem.lesson_version_id,
-            )
-            .join(QuizSpec, QuizSpec.lesson_version_id == LessonVersion.id)
-            .where(
-                CourseVersionItem.course_version_id == version.id,
-                Lesson.kind == "quiz",
-            )
-            .order_by(CourseVersionItem.position)
-            .options(
-                raiseload(Lesson.versions),
-                raiseload(Lesson.slides),
-                raiseload(LessonVersion.slides),
-            )
-        )
-    ).all()
+    quiz_lessons = [lesson for lesson in lessons if lesson.kind == "quiz"]
+    if body.operation in {"assignment", "results"}:
+        target = body.target.strip().casefold()
+        if target:
+            quiz_lessons = [
+                lesson
+                for lesson in quiz_lessons
+                if lesson.id == target or lesson.title.casefold() == target
+            ]
+        elif session.lesson_id:
+            quiz_lessons = [
+                lesson for lesson in quiz_lessons if lesson.id == session.lesson_id
+            ]
+        if len(quiz_lessons) != 1:
+            return {
+                **base,
+                "clarification": "Hãy chọn đúng bài tập (tên hoặc mã bài).",
+                "choices": [
+                    {"id": lesson.id, "title": lesson.title}
+                    for lesson in quiz_lessons
+                ],
+            }
 
+    enrollment_ids = list(
+        (
+            await db.execute(
+                select(Enrollment.id).where(
+                    Enrollment.course_id == course.id,
+                    Enrollment.student_id == session.student_id,
+                )
+            )
+        ).scalars()
+    )
     attempts = (
         await db.execute(
             select(QuizAttempt)
-            .join(
-                CourseVersionItem,
-                CourseVersionItem.id == QuizAttempt.course_version_item_id,
-            )
-            .join(Enrollment, Enrollment.id == QuizAttempt.enrollment_id)
-            .where(
-                CourseVersionItem.course_version_id == version.id,
-                Enrollment.course_id == session.course_id,
-                Enrollment.student_id == session.student_id,
-            )
+            .where(QuizAttempt.enrollment_id.in_(enrollment_ids))
             .order_by(QuizAttempt.attempt_no.desc())
         )
     ).scalars().all()
@@ -204,56 +154,43 @@ async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
     for attempt in attempts:
         latest.setdefault(attempt.lesson_id, attempt)
 
-    if body.operation in {"assignment", "results"}:
-        target = body.target.strip().casefold()
-        if target:
-            quiz_rows = [
-                row
-                for row in quiz_rows
-                if str(row[2].id) == target
-                or row[2].title.casefold() == target
-                or str(row[0].lesson_id) == target
-            ]
-        elif session.lesson_version_id:
-            quiz_rows = [
-                row for row in quiz_rows if row[2].id == session.lesson_version_id
-            ]
-        if len(quiz_rows) != 1:
-            return {
-                **base,
-                "clarification": "Hãy chọn đúng bài tập (tên hoặc mã bài).",
-                "choices": [
-                    {"id": row[2].id, "title": row[2].title}
-                    for row in quiz_rows
-                ],
-            }
-
     result = []
-    for item, lesson, lesson_version, quiz in quiz_rows:
+    for lesson in quiz_lessons:
+        config = lesson.quiz_config or {}
         attempt = latest.get(lesson.id)
         if body.operation == "results" and session.quiz_attempt_id:
             session_attempt = await db.get(QuizAttempt, session.quiz_attempt_id)
             if session_attempt is not None and session_attempt.lesson_id == lesson.id:
                 attempt = session_attempt
         state = _attempt_state(attempt, now)
-        deadline = attempt.expires_at if attempt else quiz.due_at
+        due_at = config.get("dueAt")
+        deadline_raw = attempt.expires_at if attempt else due_at
+        if isinstance(deadline_raw, str):
+            try:
+                deadline = datetime.fromisoformat(
+                    deadline_raw.replace("Z", "+00:00")
+                )
+            except ValueError:
+                deadline = None
+        else:
+            deadline = deadline_raw
         entry = {
-            "id": lesson_version.id,
+            "id": lesson.id,
             "lesson_id": lesson.id,
-            "title": lesson_version.title,
+            "title": lesson.title,
             "status": state,
-            "due_at": iso(quiz.due_at),
+            "due_at": iso(deadline) if due_at else None,
             "attempt_deadline": iso(deadline),
             "remaining_seconds": (
                 max(0, int((deadline - now).total_seconds()))
                 if deadline and attempt and attempt.status == "in_progress"
                 else None
             ),
-            "duration_minutes": quiz.duration_minutes,
+            "duration_minutes": config.get("durationMinutes", 15),
             "url": f"/student/courses/{session.course_id}?lesson={lesson.id}",
         }
         if body.operation == "assignment":
-            entry["instructions"] = quiz.instructions
+            entry["instructions"] = config.get("instructions", "")
         if body.operation == "results":
             entry["attempt_id"] = attempt.id if attempt else None
             entry["score"] = attempt.score if attempt else None

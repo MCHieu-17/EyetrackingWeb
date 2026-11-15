@@ -71,7 +71,7 @@ class LessonNodeOut(CamelModel):
     title: str
     kind: str = "lesson"  # 'lesson' | 'quiz'
     slides: int
-    # Trạng thái index RAG của các slide trong lesson version đang soạn.
+    # Trạng thái index RAG của các slide trong lesson hiện hành.
     slides_ready: int = 0
     slides_failed: int = 0
     slides_pending: int = 0
@@ -82,8 +82,6 @@ class LessonNodeOut(CamelModel):
     question_count: int = 0
     duration_minutes: int | None = None
     due_at: datetime | None = None
-    lesson_version_id: str | None = None
-    item_id: str | None = None
 
 
 class ModuleNodeOut(CamelModel):
@@ -92,10 +90,6 @@ class ModuleNodeOut(CamelModel):
     lessons: list[LessonNodeOut]
     module_key: str | None = None
     generation: int | None = None
-
-
-class PublishIn(CamelModel):
-    expected_generation: int | None = None
 
 
 class TeacherCourseOut(CamelModel):
@@ -168,8 +162,6 @@ class SlideOut(CamelModel):
     page_number: int = 1
     page_count: int = 1
     source_format: str | None = None
-    slide_version_id: str | None = None
-    lesson_version_id: str | None = None
 
 
 class SlideAdminOut(CamelModel):
@@ -182,8 +174,6 @@ class SlideAdminOut(CamelModel):
     source_format: str | None = None
     embedding_status: str = "none"
     embedding_error: str | None = None
-    slide_version_id: str | None = None
-    lesson_version_id: str | None = None
 
 
 class SlideImportJobOut(CamelModel):

@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,16 +17,18 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useAdminDbTableRows } from "@/hooks/use-admin-db";
-import type {
-  AdminDbFilter,
-  AdminDbFilterOperator,
-  AdminDbTable,
-  AdminDbTableRowsParams,
-} from "@/lib/api/admin-db";
+import type { AdminDbFilterOperator, AdminDbTable } from "@/lib/api/admin-db";
 import { ApiError } from "@/lib/api/client";
 import { formatDuration, shortTypeLabel } from "@/lib/admin-db";
 import { DataTable } from "./data-table";
 import { QueryErrorPanel } from "./query-error-panel";
+import {
+  FILTER_OPERATORS,
+  NULL_OPERATORS,
+  PAGE_SIZES,
+  tableKey,
+} from "./table-browser-state";
+import { useTableBrowser } from "./use-table-browser";
 
 interface TableBrowserProps {
   tables: AdminDbTable[];
@@ -37,47 +38,6 @@ interface TableBrowserProps {
   onRetry: () => void;
 }
 
-interface FilterRow {
-  id: string;
-  column: string;
-  operator: AdminDbFilterOperator;
-  value: string;
-}
-
-const FILTER_OPERATORS: { value: AdminDbFilterOperator; label: string }[] = [
-  { value: "eq", label: "Bằng" },
-  { value: "neq", label: "Khác" },
-  { value: "gt", label: "Lớn hơn" },
-  { value: "gte", label: "Lớn hơn hoặc bằng" },
-  { value: "lt", label: "Nhỏ hơn" },
-  { value: "lte", label: "Nhỏ hơn hoặc bằng" },
-  { value: "contains", label: "Chứa" },
-  { value: "starts_with", label: "Bắt đầu bằng" },
-  { value: "ends_with", label: "Kết thúc bằng" },
-  { value: "is_null", label: "Là NULL" },
-  { value: "is_not_null", label: "Không phải NULL" },
-];
-
-const NULL_OPERATORS = new Set<AdminDbFilterOperator>([
-  "is_null",
-  "is_not_null",
-]);
-
-const PAGE_SIZES = [50, 100, 200];
-
-function tableKey(table: AdminDbTable): string {
-  return `${table.schema}.${table.name}`;
-}
-
-function newFilter(table: AdminDbTable): FilterRow {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    column: table.columns[0]?.name ?? "",
-    operator: "eq",
-    value: "",
-  };
-}
-
 export function TableBrowser({
   tables,
   isLoading,
@@ -85,64 +45,34 @@ export function TableBrowser({
   error,
   onRetry,
 }: TableBrowserProps) {
-  const [selectedKey, setSelectedKey] = React.useState("");
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
-  const [filters, setFilters] = React.useState<FilterRow[]>([]);
-  const [debouncedFilters, setDebouncedFilters] = React.useState<FilterRow[]>(
-    [],
-  );
-  const [orderBy, setOrderBy] = React.useState<string | null>(null);
-  const [orderDir, setOrderDir] = React.useState<"asc" | "desc">("asc");
-  const [limit, setLimit] = React.useState(50);
-  const [offset, setOffset] = React.useState(0);
-  const [columnsOpen, setColumnsOpen] = React.useState(false);
-
-  const selectedTable = React.useMemo(
-    () => tables.find((table) => tableKey(table) === selectedKey) ?? null,
-    [tables, selectedKey],
-  );
-
-  React.useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedFilters(filters), 400);
-    return () => window.clearTimeout(timeout);
-  }, [filters]);
-
-  const activeFilters = React.useMemo<AdminDbFilter[]>(
-    () =>
-      debouncedFilters
-        .filter(
-          (filter) =>
-            NULL_OPERATORS.has(filter.operator) || filter.value !== "",
-        )
-        .map((filter) => ({
-          column: filter.column,
-          operator: filter.operator,
-          value: NULL_OPERATORS.has(filter.operator) ? null : filter.value,
-        })),
-    [debouncedFilters],
-  );
-
-  const params = React.useMemo<AdminDbTableRowsParams | null>(() => {
-    if (!selectedTable || selectedColumns.length === 0) return null;
-    return {
-      schema: selectedTable.schema,
-      table: selectedTable.name,
-      columns: selectedColumns,
-      limit,
-      offset,
-      orderBy,
-      orderDir,
-      filters: activeFilters,
-    };
-  }, [
-    selectedTable,
+  const {
+    selectedKey,
     selectedColumns,
-    limit,
-    offset,
+    filters,
     orderBy,
     orderDir,
-    activeFilters,
-  ]);
+    limit,
+    offset,
+    columnsOpen,
+    selectedTable,
+    params,
+    page,
+    tableItems,
+    viewItems,
+    selectTable,
+    toggleColumn,
+    selectAllColumns,
+    clearColumns,
+    addFilter,
+    updateFilter,
+    removeFilter,
+    setOrderBy,
+    setOrderDir,
+    setLimit,
+    goToPreviousPage,
+    goToNextPage,
+    setColumnsOpen,
+  } = useTableBrowser(tables);
 
   const browseQuery = useAdminDbTableRows(params);
   const result = browseQuery.data;
@@ -152,76 +82,6 @@ export function TableBrowser({
       : browseQuery.error instanceof Error
         ? new ApiError(0, browseQuery.error.message)
         : null;
-  const page = Math.floor(offset / limit) + 1;
-
-  const handleSelectTable = (key: string) => {
-    setSelectedKey(key);
-    const table = tables.find((item) => tableKey(item) === key) ?? null;
-    setSelectedColumns(
-      table ? table.columns.map((column) => column.name) : [],
-    );
-    setFilters([]);
-    setDebouncedFilters([]);
-    const primaryKey = table?.columns.find((column) => column.primaryKey);
-    setOrderBy(primaryKey?.name ?? null);
-    setOrderDir("asc");
-    setOffset(0);
-  };
-
-  const handleToggleColumn = (name: string) => {
-    setSelectedColumns((prev) =>
-      prev.includes(name)
-        ? prev.filter((item) => item !== name)
-        : [...prev, name],
-    );
-    setOffset(0);
-  };
-
-  const handleSelectAllColumns = () => {
-    if (!selectedTable) return;
-    setSelectedColumns(selectedTable.columns.map((column) => column.name));
-    setOffset(0);
-  };
-
-  const handleClearColumns = () => {
-    setSelectedColumns([]);
-    setOffset(0);
-  };
-
-  const handleAddFilter = () => {
-    if (!selectedTable || filters.length >= 10) return;
-    setFilters((prev) => [...prev, newFilter(selectedTable)]);
-    setOffset(0);
-  };
-
-  const handleUpdateFilter = (id: string, patch: Partial<FilterRow>) => {
-    setFilters((prev) =>
-      prev.map((filter) =>
-        filter.id === id ? { ...filter, ...patch } : filter,
-      ),
-    );
-    setOffset(0);
-  };
-
-  const handleRemoveFilter = (id: string) => {
-    setFilters((prev) => prev.filter((filter) => filter.id !== id));
-    setOffset(0);
-  };
-
-  const handleOrderByChange = (value: string) => {
-    setOrderBy(value || null);
-    setOffset(0);
-  };
-
-  const handleOrderDirChange = (value: string) => {
-    setOrderDir(value === "desc" ? "desc" : "asc");
-    setOffset(0);
-  };
-
-  const handleLimitChange = (value: number) => {
-    setLimit(value);
-    setOffset(0);
-  };
 
   if (isLoading) {
     return (
@@ -255,13 +115,6 @@ export function TableBrowser({
     );
   }
 
-  const tableItems = tables.filter(
-    (table) => table.kind !== "view" && table.kind !== "materialized_view",
-  );
-  const viewItems = tables.filter(
-    (table) => table.kind === "view" || table.kind === "materialized_view",
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -276,7 +129,7 @@ export function TableBrowser({
             id="admin-db-browse-table"
             aria-label="Chọn bảng"
             value={selectedKey}
-            onChange={(event) => handleSelectTable(event.target.value)}
+            onChange={(event) => selectTable(event.target.value)}
             className="h-10 w-full rounded-full border border-border bg-surface px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <option value="">Chọn bảng...</option>
@@ -321,7 +174,7 @@ export function TableBrowser({
             id="admin-db-browse-order"
             aria-label="Sắp xếp theo"
             value={orderBy ?? ""}
-            onChange={(event) => handleOrderByChange(event.target.value)}
+            onChange={(event) => setOrderBy(event.target.value)}
             disabled={!selectedTable}
             className="h-10 rounded-full border border-border bg-surface px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-55"
           >
@@ -345,7 +198,7 @@ export function TableBrowser({
             id="admin-db-browse-dir"
             aria-label="Chiều sắp xếp"
             value={orderDir}
-            onChange={(event) => handleOrderDirChange(event.target.value)}
+            onChange={(event) => setOrderDir(event.target.value)}
             disabled={!selectedTable}
             className="h-10 rounded-full border border-border bg-surface px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-55"
           >
@@ -365,7 +218,7 @@ export function TableBrowser({
             id="admin-db-browse-limit"
             aria-label="Số dòng mỗi trang"
             value={limit}
-            onChange={(event) => handleLimitChange(Number(event.target.value))}
+            onChange={(event) => setLimit(Number(event.target.value))}
             disabled={!selectedTable}
             className="h-10 rounded-full border border-border bg-surface px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-55"
           >
@@ -385,7 +238,7 @@ export function TableBrowser({
             <Button
               variant="outline"
               size="xs"
-              onClick={handleAddFilter}
+              onClick={addFilter}
               disabled={filters.length >= 10}
             >
               <Icon name="ri-add-line" />
@@ -407,7 +260,7 @@ export function TableBrowser({
                     aria-label="Cột lọc"
                     value={filter.column}
                     onChange={(event) =>
-                      handleUpdateFilter(filter.id, {
+                      updateFilter(filter.id, {
                         column: event.target.value,
                         operator: "eq",
                         value: "",
@@ -427,7 +280,7 @@ export function TableBrowser({
                     onChange={(event) => {
                       const operator = event.target
                         .value as AdminDbFilterOperator;
-                      handleUpdateFilter(filter.id, {
+                      updateFilter(filter.id, {
                         operator,
                         value: NULL_OPERATORS.has(operator)
                           ? ""
@@ -447,7 +300,7 @@ export function TableBrowser({
                       aria-label="Giá trị lọc"
                       value={filter.value}
                       onChange={(event) =>
-                        handleUpdateFilter(filter.id, {
+                        updateFilter(filter.id, {
                           value: event.target.value,
                         })
                       }
@@ -458,7 +311,7 @@ export function TableBrowser({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    onClick={() => handleRemoveFilter(filter.id)}
+                    onClick={() => removeFilter(filter.id)}
                     aria-label="Xóa bộ lọc"
                   >
                     <Icon name="ri-close-line" />
@@ -509,7 +362,7 @@ export function TableBrowser({
               <Button
                 variant="outline"
                 size="xs"
-                onClick={() => setOffset((prev) => Math.max(0, prev - limit))}
+                onClick={goToPreviousPage}
                 disabled={offset === 0 || browseQuery.isFetching}
               >
                 <Icon name="ri-arrow-left-s-line" />
@@ -518,7 +371,7 @@ export function TableBrowser({
               <Button
                 variant="outline"
                 size="xs"
-                onClick={() => setOffset((prev) => prev + limit)}
+                onClick={goToNextPage}
                 disabled={!result.hasMore || browseQuery.isFetching}
               >
                 Sau
@@ -556,11 +409,11 @@ export function TableBrowser({
               <Button
                 variant="outline"
                 size="xs"
-                onClick={handleSelectAllColumns}
+                onClick={selectAllColumns}
               >
                 Chọn tất cả
               </Button>
-              <Button variant="ghost" size="xs" onClick={handleClearColumns}>
+              <Button variant="ghost" size="xs" onClick={clearColumns}>
                 Bỏ chọn tất cả
               </Button>
             </div>
@@ -573,7 +426,7 @@ export function TableBrowser({
                   <input
                     type="checkbox"
                     checked={selectedColumns.includes(column.name)}
-                    onChange={() => handleToggleColumn(column.name)}
+                    onChange={() => toggleColumn(column.name)}
                     className="size-4 rounded border-border"
                   />
                   <span className="font-mono text-xs">{column.name}</span>

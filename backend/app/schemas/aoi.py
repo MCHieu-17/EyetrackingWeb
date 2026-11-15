@@ -10,6 +10,8 @@ AOI_CODE_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 class AoiDefinitionIn(CamelModel):
     code: str = Field(min_length=1, max_length=64, pattern=AOI_CODE_PATTERN)
     name: str = Field(min_length=1, max_length=100)
+    # Nhãn phân tích cho leaf slide (AOI_1, AOI_2, ...). UI/container bỏ trống.
+    label: str | None = Field(default=None, max_length=64)
     parent_id: str | None = None
     geometry: dict = Field(default_factory=dict)
     is_container: bool = False
@@ -21,6 +23,7 @@ class AoiDefinitionOut(CamelModel):
     id: str
     code: str
     name: str
+    label: str | None = None
     parent_id: str | None = None
     geometry: dict = Field(default_factory=dict)
     is_container: bool = False
@@ -28,12 +31,11 @@ class AoiDefinitionOut(CamelModel):
     is_active: bool = True
 
 
-class AoiSetSaveIn(CamelModel):
+class AoiSaveIn(CamelModel):
     definitions: list[AoiDefinitionIn] = Field(default_factory=list, max_length=500)
-    expected_revision: int | None = Field(default=None, ge=1)
 
 
-class AoiSetGenerateIn(CamelModel):
+class AoiGenerateIn(CamelModel):
     slide_number: int | None = Field(default=None, ge=1)
     merge: bool = False
     # Thay các vùng gợi ý tự động (TEXT/IMAGE/TABLE) nhưng giữ vùng tự vẽ.
@@ -52,49 +54,18 @@ class AoiUiGenerateIn(CamelModel):
     merge: bool = True
 
 
-class AoiSetOut(CamelModel):
+class AoiCollectionOut(CamelModel):
+    """AOI hiện hành của một slide hoặc một UI schema.
+
+    Schema generation 12 lưu trực tiếp trong `aois`, không có revision hay
+    trạng thái draft/published.
+    """
+
     id: str
     scope: str
-    slide_version_id: str | None = None
-    ui_schema_version: str | None = None
-    revision: int
-    state: str
-    created_by: str
-    created_at: datetime
-    published_at: datetime | None = None
+    slide_id: str | None = None
+    ui_schema: str | None = None
     definitions: list[AoiDefinitionOut] = Field(default_factory=list)
-
-
-class AnalysisRunOut(CamelModel):
-    id: str
-    session_id: str
-    presentation_id: str | None = None
-    aoi_set_id: str
-    from_time: datetime
-    to_time: datetime
-    batch_watermark: str | None = None
-    algorithm_version: str
-    status: str
-    created_at: datetime
-    completed_at: datetime | None = None
-
-
-class PresentationMetricOut(CamelModel):
-    presentation_id: str
-    algorithm_version: str
-    batch_watermark: str | None = None
-    sample_count: int
-    on_slide_count: int
-    dwell_ms: int
-    fixation_count: int
-    heatmap_grid: list
-    computed_at: datetime
-
-
-class AnalysisRunResultOut(CamelModel):
-    run: AnalysisRunOut
-    hit_count: int = 0
-    metrics: list[PresentationMetricOut] = Field(default_factory=list)
 
 
 class AoiRebuildIn(CamelModel):

@@ -1,4 +1,4 @@
-"""Worker đồng bộ embedding/RAG ingest từ hàng đợi `embedding_jobs`.
+"""Worker đồng bộ index RAG từ `background_jobs(kind=index_slides)`.
 
 Job nằm trong PostgreSQL nên restart không mất việc; nhiều replica backend
 dùng chung hàng đợi và worker claim bằng `FOR UPDATE SKIP LOCKED`.

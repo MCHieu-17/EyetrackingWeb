@@ -1,86 +1,53 @@
-"""Import toàn bộ model để SQLAlchemy resolve được các relationship dạng chuỗi.
+"""Import toàn bộ model để SQLAlchemy resolve các relationship dạng chuỗi."""
 
-Module này được `app.db.session` import sớm, trước khi mapper được cấu hình.
-Không import nó trong route; route import trực tiếp model cần dùng.
-"""
-
-from app.models.aoi import (
-    AnalysisRun,
-    AoiDefinition,
-    AoiHit,
-    AoiLayoutRect,
-    AoiLayoutSnapshot,
-    AoiSet,
-    PresentationMetric,
-)
-from app.models.auth import AuthSession, Role, User, UserIdentity, UserRole
-from app.models.calibration import Calibration, Device
+from app.models.aoi import Aoi
+from app.models.auth import AuthSession, OAuthAccount, User
+from app.models.background_job import BackgroundJob
+from app.models.calibration import GazeCalibration
 from app.models.chat import ChatMessage, ChatSession
 from app.models.course import (
     Course,
+    CourseModule,
     CourseTeacher,
-    CourseVersion,
-    CourseVersionItem,
-    CourseVersionModule,
     Enrollment,
     Lesson,
-    LessonVersion,
-    LessonVersionSlide,
     Slide,
-    SlideVersion,
 )
-from app.models.embedding_job import EmbeddingJob
 from app.models.gaze import (
-    ContentPresentation,
-    GazeBatch,
+    ContentView,
+    CourseVisit,
     GazeSample,
     LearningSession,
+    ViewLayout,
 )
-from app.models.media import MediaAsset, SlideDocument, SlideImportJob
+from app.models.media import MediaAsset
 from app.models.metadata import AppMetadata
-from app.models.profile import StudentProfile, TeacherProfile, UserProfile
-from app.models.quiz import QuizAttempt, QuizSpec
+from app.models.profile import StudentProfile, TeacherProfile
+from app.models.quiz import QuizAttempt
 
 __all__ = [
-    "AnalysisRun",
-    "AoiDefinition",
-    "AoiHit",
-    "AoiLayoutRect",
-    "AoiLayoutSnapshot",
-    "AoiSet",
+    "Aoi",
     "AppMetadata",
     "AuthSession",
-    "Calibration",
+    "BackgroundJob",
     "ChatMessage",
     "ChatSession",
-    "ContentPresentation",
+    "ContentView",
     "Course",
+    "CourseModule",
+    "CourseVisit",
     "CourseTeacher",
-    "CourseVersion",
-    "CourseVersionItem",
-    "CourseVersionModule",
-    "Device",
-    "EmbeddingJob",
     "Enrollment",
-    "GazeBatch",
+    "GazeCalibration",
     "GazeSample",
     "LearningSession",
     "Lesson",
-    "LessonVersion",
-    "LessonVersionSlide",
     "MediaAsset",
-    "PresentationMetric",
+    "OAuthAccount",
     "QuizAttempt",
-    "QuizSpec",
-    "Role",
     "Slide",
-    "SlideDocument",
-    "SlideImportJob",
-    "SlideVersion",
     "StudentProfile",
     "TeacherProfile",
     "User",
-    "UserIdentity",
-    "UserProfile",
-    "UserRole",
+    "ViewLayout",
 ]

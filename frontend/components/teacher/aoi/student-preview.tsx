@@ -19,13 +19,11 @@ export function StudentPreview({
   courseTitle,
   controller,
   hoveredCode,
-  hiddenCodes,
   onHover,
 }: {
   courseTitle: string;
   controller: AoiEditorController;
   hoveredCode: string | null;
-  hiddenCodes: Set<string>;
   onHover: (code: string | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -216,7 +214,6 @@ export function StudentPreview({
           mode={controller.mode}
           selectedCode={controller.selectedCode}
           hoveredCode={hoveredCode}
-          hiddenCodes={hiddenCodes}
           showOverlays={controller.showOverlays}
           canManage={controller.canManage}
           layoutKey={`${controller.activeSlideId}:${chatOpen}:${controller.mode}:${controller.tab}`}

@@ -9,7 +9,6 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
     UniqueConstraint,
     text,
 )
@@ -19,43 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.course import CourseVersionItem, Enrollment, Lesson, LessonVersion
-
-
-class QuizSpec(Base):
-    __tablename__ = "quiz_specs"
-    __table_args__ = (
-        CheckConstraint(
-            "duration_minutes > 0", name="quiz_specs_duration_minutes_check"
-        ),
-        CheckConstraint(
-            "jsonb_typeof(questions) = 'array'",
-            name="quiz_specs_questions_array_check",
-        ),
-    )
-
-    lesson_version_id: Mapped[str] = mapped_column(
-        ForeignKey("lesson_versions.id", ondelete="CASCADE"), primary_key=True
-    )
-    instructions: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("''")
-    )
-    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    allow_retry: Mapped[bool] = mapped_column(
-        nullable=False, server_default=text("false")
-    )
-    allow_chatbot: Mapped[bool] = mapped_column(
-        nullable=False, server_default=text("false")
-    )
-    questions: Mapped[list[dict]] = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
-
-    lesson_version: Mapped["LessonVersion"] = relationship()
+    from app.models.course import Enrollment, Lesson
 
 
 class QuizAttempt(Base):
@@ -74,6 +37,10 @@ class QuizAttempt(Base):
         CheckConstraint(
             "jsonb_typeof(grading) = 'object'",
             name="quiz_attempts_grading_object_check",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(quiz_snapshot) = 'object'",
+            name="quiz_attempts_snapshot_object_check",
         ),
         CheckConstraint(
             "score IS NULL OR score >= 0", name="quiz_attempts_score_check"
@@ -95,7 +62,6 @@ class QuizAttempt(Base):
             "lesson_id",
             "attempt_no",
         ),
-        Index("idx_quiz_attempts_item", "course_version_item_id"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -104,11 +70,8 @@ class QuizAttempt(Base):
     enrollment_id: Mapped[str] = mapped_column(
         ForeignKey("enrollments.id", ondelete="CASCADE"), nullable=False
     )
-    course_version_item_id: Mapped[str] = mapped_column(
-        ForeignKey("course_version_items.id", ondelete="RESTRICT"), nullable=False
-    )
     lesson_id: Mapped[str] = mapped_column(
-        ForeignKey("lessons.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False
     )
     attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -119,6 +82,9 @@ class QuizAttempt(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quiz_snapshot: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     answers: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -128,6 +94,5 @@ class QuizAttempt(Base):
     score: Mapped[float | None] = mapped_column(REAL)
     max_score: Mapped[float | None] = mapped_column(REAL)
 
-    enrollment: Mapped["Enrollment"] = relationship()
-    course_version_item: Mapped["CourseVersionItem"] = relationship()
-    lesson: Mapped["Lesson"] = relationship()
+    enrollment: Mapped["Enrollment"] = relationship(lazy="raise")
+    lesson: Mapped["Lesson"] = relationship(back_populates="attempts")

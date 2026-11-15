@@ -5,6 +5,7 @@ interface LearningSession {
   id: string;
   enrollmentId: string;
   lessonId: string;
+  courseVisitId?: string | null;
   deviceId: string;
   calibrated: boolean;
   status: string;
@@ -16,7 +17,6 @@ interface LearningSession {
   calibrationWidthPx?: number | null;
   calibrationHeightPx?: number | null;
   devicePixelRatio?: number | null;
-  courseVersionItemId?: string | null;
   calibrationId?: string | null;
   quizAttemptId?: string | null;
   expiresAt?: string | null;
@@ -26,6 +26,7 @@ interface LearningSession {
 interface CreateLearningSessionInput {
   enrollmentId: string;
   lessonId: string;
+  courseVisitId?: string | null;
   deviceFingerprint: string;
   // Viewport lúc tạo phiên và viewport lúc calibration phải bằng nhau.
   viewportWidthPx: number;
@@ -57,6 +58,8 @@ export interface GazeSample {
   eventTime: string;
   viewportX: number | null;
   viewportY: number | null;
+  originalViewportX?: number | null;
+  originalViewportY?: number | null;
   status: "ok" | "no_face" | "error" | "offscreen";
   qualityFlags?: Record<string, unknown>;
 }
@@ -65,7 +68,7 @@ export interface GazeBatchInput {
   batchId: string;
   batchNo: number;
   presentationId: string;
-  layoutSnapshotId?: string | null;
+  layoutId?: string | null;
   sequenceStart: number;
   sequenceEnd: number;
   payloadHash: string;

@@ -88,7 +88,7 @@ export function StudyAssistantChat({
         mode === "reader" &&
         onCitationNavigate &&
         citation.lessonId &&
-        citation.slideVersionId &&
+        citation.slideId &&
         onCitationNavigate(citation)
       ) {
         return;

@@ -22,11 +22,11 @@ export function ReaderSlideControls({
   onSelectLesson: (lessonId: string) => void;
 }) {
   return (
-    <footer
-      data-aoi="lesson-nav"
-      className="absolute inset-x-0 bottom-3 z-20 px-3 sm:bottom-4 sm:px-5"
-    >
-      <div className="mx-auto flex max-w-xl items-center gap-2 rounded-full border border-border/80 bg-white/95 p-1.5 shadow-md backdrop-blur-md">
+    <footer className="shrink-0 px-3 pb-2 pt-1 sm:px-5 sm:pb-3">
+      <div
+        data-aoi="lesson-nav"
+        className="mx-auto flex max-w-xl items-center gap-2 rounded-full border border-border/80 bg-white/95 p-1.5 shadow-md backdrop-blur-md"
+      >
         <Button
           variant="outline"
           size="sm"

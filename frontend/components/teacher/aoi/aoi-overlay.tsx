@@ -100,7 +100,6 @@ export function AoiOverlay({
   mode,
   selectedCode,
   hoveredCode,
-  hiddenCodes,
   showOverlays,
   canManage,
   layoutKey,
@@ -118,7 +117,6 @@ export function AoiOverlay({
   mode: "edit" | "interact";
   selectedCode: string | null;
   hoveredCode: string | null;
-  hiddenCodes: Set<string>;
   showOverlays: boolean;
   canManage: boolean;
   layoutKey: string;
@@ -380,7 +378,6 @@ export function AoiOverlay({
     if (!slideRect) return null;
     const rect = slideRect;
     const renderLeaf = (item: AoiDefinitionInput, dimmed: boolean) => {
-      if (hiddenCodes.has(item.code)) return null;
       const geometry = item.geometry;
       const box: Box = {
         left: rect.left + numberValue(geometry, "xMin") * rect.width,
@@ -438,7 +435,6 @@ export function AoiOverlay({
     return (
       <>
         {uiDefinitions.map((item) => {
-          if (hiddenCodes.has(item.code)) return null;
           const geometry = item.geometry;
           const anchorCode =
             typeof geometry.anchor === "string" ? geometry.anchor : null;

@@ -10,7 +10,6 @@ export function AoiRow({
   definition,
   selected,
   hovered,
-  hidden,
   inactive,
   canManage,
   subtitle,
@@ -21,12 +20,10 @@ export function AoiRow({
   onDeactivate,
   onRestore,
   onDelete,
-  onToggleHidden,
 }: {
   definition: AoiDefinitionInput;
   selected: boolean;
   hovered: boolean;
-  hidden: boolean;
   inactive?: boolean;
   canManage: boolean;
   subtitle?: string;
@@ -37,7 +34,6 @@ export function AoiRow({
   onDeactivate?: () => void;
   onRestore?: () => void;
   onDelete?: () => void;
-  onToggleHidden: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const color = inactive ? "#9ca3af" : colorFor(definition.code);
@@ -62,7 +58,7 @@ export function AoiRow({
           : hovered
             ? "border-black/10 bg-[#f7f7f4]"
             : "border-transparent hover:border-black/10 hover:bg-[#f7f7f4]",
-        (hidden || inactive) && "opacity-55",
+        inactive && "opacity-55",
       )}
     >
       <div className="flex items-center gap-2">
@@ -89,29 +85,12 @@ export function AoiRow({
           />
           {inactive ? (
             <p className="truncate px-1 text-[10px] text-black/45">
-              Chưa đánh dấu
+              Chưa đánh dấu{subtitle ? ` · ${subtitle}` : ""}
             </p>
           ) : subtitle ? (
             <p className="truncate px-1 text-[10px] text-black/45">{subtitle}</p>
           ) : null}
         </div>
-        {!inactive && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleHidden();
-            }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-white hover:text-black/70"
-            aria-label={hidden ? "Hiện vùng" : "Ẩn vùng"}
-            title={hidden ? "Hiện vùng" : "Ẩn vùng"}
-          >
-            <Icon
-              name={hidden ? "ri-eye-off-line" : "ri-eye-line"}
-              className="size-3.5"
-            />
-          </button>
-        )}
         {inactive && onRestore && canManage && (
           <button
             type="button"
@@ -126,6 +105,20 @@ export function AoiRow({
             <Icon name="ri-arrow-go-back-line" className="size-3.5" />
           </button>
         )}
+        {onDelete && canManage && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setConfirming(true);
+            }}
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Xóa vùng"
+            title="Xóa vùng"
+          >
+            <Icon name="ri-delete-bin-line" className="size-3.5" />
+          </button>
+        )}
         {!inactive && onDeactivate && canManage && (
           <button
             type="button"
@@ -138,20 +131,6 @@ export function AoiRow({
             title="Bỏ đánh dấu vùng"
           >
             <Icon name="ri-subtract-line" className="size-3.5" />
-          </button>
-        )}
-        {!inactive && onDelete && canManage && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setConfirming(true);
-            }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Xóa vùng"
-            title="Xóa vùng"
-          >
-            <Icon name="ri-delete-bin-line" className="size-3.5" />
           </button>
         )}
       </div>

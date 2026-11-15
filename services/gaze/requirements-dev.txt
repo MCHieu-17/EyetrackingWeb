@@ -1,4 +1,5 @@
 # Dependencies CHỈ dùng khi phát triển service gaze (không cài trong image
-# Docker). Cài: pip install -r requirements-dev.txt
+# Docker). Cài kèm runtime: pip install -r requirements.txt -r requirements-dev.txt
 httpx==0.28.1
+pytest==9.1.1
 ruff==0.17.1

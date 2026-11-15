@@ -4,68 +4,49 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
-from app.models.aoi import PresentationMetric
 from app.models.auth import User
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    Enrollment,
-    Lesson,
-    LessonVersionSlide,
-)
-from app.models.gaze import ContentPresentation, LearningSession
-from app.models.profile import StudentProfile, UserProfile
+from app.models.course import Course, CourseModule, Enrollment, Lesson, Slide
+from app.models.gaze import ContentView, LearningSession
+from app.models.profile import StudentProfile
 from app.schemas.course import StudentLessonOut, StudentRowOut
 
-DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v1"
+DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v3"
 
 
 async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOut]:
     from app.core.helpers import color_for, relative_time_vn
 
-    if course.published_version_id is None:
-        return []
-    version_id = (
+    modules = (
         await db.execute(
-            select(CourseVersion.id).where(
-                CourseVersion.id == course.published_version_id
-            )
+            select(CourseModule.id)
+            .where(CourseModule.course_id == course.id)
+            .order_by(CourseModule.position)
         )
-    ).scalar_one_or_none()
-    if version_id is None:
+    ).scalars().all()
+    if not modules:
         return []
-    items = (
+    lessons = (
         await db.execute(
-            select(CourseVersionItem, Lesson)
-            .join(Lesson, Lesson.id == CourseVersionItem.lesson_id)
-            .where(CourseVersionItem.course_version_id == version_id)
-            .order_by(CourseVersionItem.position)
-            .options(raiseload(Lesson.versions), raiseload(Lesson.slides))
+            select(Lesson)
+            .where(Lesson.module_id.in_(modules))
+            .order_by(Lesson.position)
         )
-    ).all()
+    ).scalars().all()
 
     rows = (
         await db.execute(
-            select(Enrollment, User, UserProfile, StudentProfile)
+            select(Enrollment, User, StudentProfile)
             .join(User, User.id == Enrollment.student_id)
-            .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
             .where(Enrollment.course_id == course.id)
             .order_by(Enrollment.enrolled_at)
-            .options(
-                raiseload(Enrollment.course),
-                raiseload(User.profile),
-                raiseload(User.roles),
-            )
         )
     ).all()
     if not rows:
         return []
 
-    enrollment_ids = [enrollment.id for enrollment, _, _, _ in rows]
+    enrollment_ids = [enrollment.id for enrollment, _, _ in rows]
     last_active = dict(
         (
             await db.execute(
@@ -79,83 +60,51 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
         ).all()
     )
 
-    lesson_version_ids = list(
-        dict.fromkeys(item.lesson_version_id for item, _ in items)
-    )
-    slides_by_version: dict[str, list[str]] = {}
-    if lesson_version_ids:
-        slide_rows = (
-            await db.execute(
-                select(
-                    LessonVersionSlide.lesson_version_id,
-                    LessonVersionSlide.id,
-                )
-                .where(
-                    LessonVersionSlide.lesson_version_id.in_(
-                        lesson_version_ids
-                    )
-                )
-                .order_by(
-                    LessonVersionSlide.lesson_version_id,
-                    LessonVersionSlide.position,
-                )
-            )
-        ).all()
-        for lesson_version_id, slide_id in slide_rows:
-            slides_by_version.setdefault(lesson_version_id, []).append(slide_id)
+    slides_by_lesson: dict[str, list[str]] = {}
+    slide_rows = (
+        await db.execute(
+            select(Slide.lesson_id, Slide.id)
+            .where(Slide.lesson_id.in_([lesson.id for lesson in lessons]))
+            .order_by(Slide.lesson_id, Slide.position)
+        )
+    ).all()
+    for lesson_id, slide_id in slide_rows:
+        slides_by_lesson.setdefault(lesson_id, []).append(slide_id)
 
-    slide_ids = [
-        slide_id for ids in slides_by_version.values() for slide_id in ids
-    ]
     metrics_by_enrollment_slide: dict[tuple[str, str], tuple[int, int, int]] = {}
-    if slide_ids:
-        metric_rows = (
-            await db.execute(
-                select(
-                    ContentPresentation.lesson_version_slide_id,
-                    LearningSession.enrollment_id,
-                    func.coalesce(func.sum(PresentationMetric.sample_count), 0),
-                    func.coalesce(
-                        func.sum(PresentationMetric.on_slide_count), 0
-                    ),
-                    func.coalesce(func.sum(PresentationMetric.dwell_ms), 0),
-                )
-                .join(
-                    ContentPresentation,
-                    ContentPresentation.id == PresentationMetric.presentation_id,
-                )
-                .join(
-                    LearningSession,
-                    LearningSession.id == ContentPresentation.session_id,
-                )
-                .where(
-                    LearningSession.enrollment_id.in_(enrollment_ids),
-                    ContentPresentation.lesson_version_slide_id.in_(slide_ids),
-                    PresentationMetric.algorithm_version
-                    == DEFAULT_ALGORITHM_VERSION,
-                )
-                .group_by(
-                    ContentPresentation.lesson_version_slide_id,
-                    LearningSession.enrollment_id,
-                )
+    metric_rows = (
+        await db.execute(
+            select(
+                ContentView.slide_id,
+                LearningSession.enrollment_id,
+                func.coalesce(func.sum(ContentView.gaze_count), 0),
+                func.coalesce(func.sum(ContentView.on_slide_gaze_count), 0),
+                func.coalesce(func.sum(ContentView.tracked_duration_ms), 0),
             )
-        ).all()
-        metrics_by_enrollment_slide = {
-            (enrollment_id, slide_id): (
-                int(sample_count),
-                int(on_slide_count),
-                int(dwell_ms),
+            .join(LearningSession, LearningSession.id == ContentView.session_id)
+            .where(
+                LearningSession.enrollment_id.in_(enrollment_ids),
+                ContentView.analysis_version.in_(
+                    ("gaze-metrics-v2", DEFAULT_ALGORITHM_VERSION)
+                ),
+                ContentView.slide_id.is_not(None),
             )
-            for slide_id, enrollment_id, sample_count, on_slide_count, dwell_ms
-            in metric_rows
-        }
+            .group_by(ContentView.slide_id, LearningSession.enrollment_id)
+        )
+    ).all()
+    for slide_id, enrollment_id, gaze_count, on_slide_count, dwell_ms in metric_rows:
+        metrics_by_enrollment_slide[(enrollment_id, slide_id)] = (
+            int(gaze_count),
+            int(on_slide_count),
+            int(dwell_ms),
+        )
 
     out: list[StudentRowOut] = []
-    for enrollment, student, profile, student_profile in rows:
-        lessons: list[StudentLessonOut] = []
-        for item, lesson in items:
+    for enrollment, student, student_profile in rows:
+        lesson_stats: list[StudentLessonOut] = []
+        for lesson in lessons:
             if lesson.kind == "quiz":
-                lessons.append(
+                lesson_stats.append(
                     StudentLessonOut(
                         lesson_id=lesson.id,
                         attention=None,
@@ -164,30 +113,26 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
                 )
                 continue
 
-            slides = slides_by_version.get(item.lesson_version_id, [])
-            total_samples = 0
-            on_slide_samples = 0
-            viewed_total = 0
+            slides = slides_by_lesson.get(lesson.id, [])
+            total_gaze = on_slide_gaze = viewed_total = 0
             for slide_id in slides:
-                sample_count, on_slide_count, dwell_ms = (
+                gaze_count, on_slide_count, dwell_ms = (
                     metrics_by_enrollment_slide.get(
                         (enrollment.id, slide_id), (0, 0, 0)
                     )
                 )
-                total_samples += sample_count
-                on_slide_samples += on_slide_count
+                total_gaze += gaze_count
+                on_slide_gaze += on_slide_count
                 if dwell_ms > 0:
                     viewed_total += 1
 
             attention = (
-                round(on_slide_samples / total_samples * 100, 1)
-                if total_samples
-                else None
+                round(on_slide_gaze / total_gaze * 100, 1) if total_gaze else None
             )
             mastery = (
                 round(100 * viewed_total / len(slides), 1) if slides else None
             )
-            lessons.append(
+            lesson_stats.append(
                 StudentLessonOut(
                     lesson_id=lesson.id,
                     attention=attention,
@@ -195,15 +140,15 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
                 )
             )
         attentions = [
-            item.attention for item in lessons if item.attention is not None
+            item.attention for item in lesson_stats if item.attention is not None
         ]
         out.append(
             StudentRowOut(
                 id=student.id,
-                name=profile.full_name if profile else student.email,
+                name=student.full_name or student.email,
                 code=student_profile.student_code if student_profile else "",
                 color=color_for(student.id),
-                avatar_url=profile.avatar_url if profile else None,
+                avatar_url=student.avatar_url,
                 attention=(
                     round(sum(attentions) / len(attentions), 1)
                     if attentions
@@ -211,7 +156,7 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
                 ),
                 last_active=relative_time_vn(last_active.get(enrollment.id)),
                 status=enrollment.status,
-                lessons=lessons,
+                lessons=lesson_stats,
             )
         )
     return out

@@ -1,15 +1,14 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
-    SmallInteger,
     String,
     Text,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import INET, UUID
@@ -18,17 +17,24 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.profile import StudentProfile, TeacherProfile, UserProfile
+    from app.models.profile import StudentProfile, TeacherProfile
 
 
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
+            "role IN ('admin', 'teacher', 'student')", name="users_role_check"
+        ),
+        CheckConstraint(
             "status IN ('active', 'suspended', 'banned')",
             name="users_status_check",
         ),
+        CheckConstraint(
+            "gender IN ('male', 'female', 'other')", name="users_gender_check"
+        ),
         Index("ux_users_email_lower", text("lower(email)"), unique=True),
+        Index("idx_users_role", "role"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -36,79 +42,38 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'student'")
+    )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'active'")
     )
+    full_name: Mapped[str] = mapped_column(
+        String(150), nullable=False, server_default=text("''")
+    )
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    gender: Mapped[str | None] = mapped_column(String(20))
+    phone: Mapped[str | None] = mapped_column(String(20))
+    avatar_url: Mapped[str | None] = mapped_column(Text)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    roles: Mapped[list["Role"]] = relationship(
-        secondary="user_roles", lazy="selectin", viewonly=True
-    )
-    profile: Mapped["UserProfile | None"] = relationship(  # noqa: F821
-        back_populates="user", uselist=False, lazy="joined"
-    )
-    # Không route nào đọc trực tiếp hai quan hệ này; hồ sơ được truy vấn qua
-    # crud.profile. `raise` tránh 2 query selectin trên mọi lần load User và
-    # báo lỗi sớm nếu sau này có code vô tình truy cập.
-    student_profile: Mapped["StudentProfile | None"] = relationship(  # noqa: F821
+    student_profile: Mapped["StudentProfile | None"] = relationship(
         back_populates="user", uselist=False, lazy="raise"
     )
-    teacher_profile: Mapped["TeacherProfile | None"] = relationship(  # noqa: F821
+    teacher_profile: Mapped["TeacherProfile | None"] = relationship(
         back_populates="user", uselist=False, lazy="raise"
     )
 
     @property
     def role_codes(self) -> list[str]:
-        return [r.code for r in self.roles]
-
-
-class Role(Base):
-    __tablename__ = "roles"
-
-    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
-
-
-class UserRole(Base):
-    __tablename__ = "user_roles"
-    __table_args__ = (Index("idx_user_roles_role", "role_id"),)
-
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    role_id: Mapped[int] = mapped_column(
-        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
-    )
-
-
-class UserIdentity(Base):
-    __tablename__ = "user_identities"
-    __table_args__ = (
-        UniqueConstraint(
-            "provider",
-            "provider_user_id",
-            name="user_identities_provider_user_unique",
-        ),
-        Index("idx_user_identities_user", "user_id"),
-    )
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
-    )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    provider: Mapped[str] = mapped_column(String(30), nullable=False)
-    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+        return [self.role]
 
 
 class AuthSession(Base):
@@ -125,7 +90,9 @@ class AuthSession(Base):
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     refresh_token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     user_agent: Mapped[str | None] = mapped_column(Text)
     ip_address: Mapped[str | None] = mapped_column(INET)
@@ -134,3 +101,30 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+
+
+class OAuthAccount(Base):
+    __tablename__ = "oauth_accounts"
+    __table_args__ = (
+        Index(
+            "oauth_accounts_provider_user_unique",
+            "provider",
+            "provider_user_id",
+            unique=True,
+        ),
+        Index("idx_oauth_accounts_user", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

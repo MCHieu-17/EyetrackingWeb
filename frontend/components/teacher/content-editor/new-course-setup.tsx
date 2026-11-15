@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/icon";
 import { Input, Textarea } from "@/components/ui/input";
 import { useUnsavedGuard } from "@/components/teacher/unsaved-guard";
 import { createCourse } from "@/lib/api/teacher";
+import { queryKeys } from "@/lib/query-keys";
 
 /**
  * Bước đầu tiên của luồng soạn khóa học: chỉ tạo bản nháp.
@@ -56,7 +57,7 @@ export function NewCourseSetup({
         description: description.trim() || undefined,
         status: "draft",
       });
-      queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
       onCreated(created.id);
     } catch (e) {
       setError(

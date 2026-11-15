@@ -17,7 +17,7 @@ async def test_quiz_flow(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     spec = await client.get(
-        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=headers
+        f"/api/lessons/{ids['lesson_id']}/quiz", headers=headers
     )
     assert spec.status_code == 200, spec.text
     assert spec.json()["questions"][0]["correctOptionIds"] == []
@@ -50,6 +50,29 @@ async def test_quiz_flow(client):
 
 
 @pytest.mark.asyncio
+async def test_archived_course_quiz_returns_course_archived(client):
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_quiz(teacher_id=teacher_id, student_id=student_id)
+
+    async with SessionLocal() as db:
+        course = await db.get(Course, ids["course_id"])
+        assert course is not None
+        course.status = "archived"
+        await db.commit()
+
+    token = await login(client, student_email)
+    response = await client.post(
+        f"/api/lessons/{ids['lesson_id']}/attempts",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "course_archived"
+
+
+@pytest.mark.asyncio
 async def test_teacher_toggle_allow_retry_applies_to_published_quiz(client):
     """Bật/tắt làm lại phải có hiệu lực với sinh viên ngay, không cần publish lại."""
     teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
@@ -65,7 +88,7 @@ async def test_teacher_toggle_allow_retry_applies_to_published_quiz(client):
 
     # Tắt làm lại: sinh viên thấy cờ mới dù chưa publish lại.
     saved = await client.patch(
-        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        f"/teacher/lessons/{ids['lesson_id']}/quiz",
         headers=teacher_headers,
         json={"allowRetry": False},
     )
@@ -73,14 +96,14 @@ async def test_teacher_toggle_allow_retry_applies_to_published_quiz(client):
     assert saved.json()["allowRetry"] is False
 
     spec = await client.get(
-        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+        f"/api/lessons/{ids['lesson_id']}/quiz", headers=student_headers
     )
     assert spec.status_code == 200, spec.text
     assert spec.json()["allowRetry"] is False
 
     # Bật lại: sinh viên thấy cờ mới.
     saved = await client.patch(
-        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        f"/teacher/lessons/{ids['lesson_id']}/quiz",
         headers=teacher_headers,
         json={"allowRetry": True},
     )
@@ -88,7 +111,7 @@ async def test_teacher_toggle_allow_retry_applies_to_published_quiz(client):
     assert saved.json()["allowRetry"] is True
 
     spec = await client.get(
-        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+        f"/api/lessons/{ids['lesson_id']}/quiz", headers=student_headers
     )
     assert spec.status_code == 200, spec.text
     assert spec.json()["allowRetry"] is True
@@ -109,7 +132,7 @@ async def test_teacher_toggle_allow_chatbot_applies_to_published_quiz(client):
     student_headers = {"Authorization": f"Bearer {student_token}"}
 
     saved = await client.patch(
-        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        f"/teacher/lessons/{ids['lesson_id']}/quiz",
         headers=teacher_headers,
         json={"allowChatbot": False},
     )
@@ -117,7 +140,7 @@ async def test_teacher_toggle_allow_chatbot_applies_to_published_quiz(client):
     assert saved.json()["allowChatbot"] is False
 
     spec = await client.get(
-        f"/api/quiz-specs/{ids['lesson_version_id']}", headers=student_headers
+        f"/api/lessons/{ids['lesson_id']}/quiz", headers=student_headers
     )
     assert spec.status_code == 200, spec.text
     assert spec.json()["allowChatbot"] is False
@@ -149,8 +172,8 @@ async def test_teacher_tree_marks_published_quiz_as_published(client):
 
 
 @pytest.mark.asyncio
-async def test_quiz_visible_in_published_version_stays_published_while_drafting(client):
-    """Sửa quiz tạo lesson version nháp nhưng sinh viên vẫn thấy bản đã publish."""
+async def test_quiz_edit_applies_immediately_without_new_version(client):
+    """Bỏ versioning: sửa quiz áp dụng ngay, khóa vẫn ở trạng thái published."""
     teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
     student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
     teacher_id = await create_user(email=teacher_email, role="teacher")
@@ -160,44 +183,21 @@ async def test_quiz_visible_in_published_version_stays_published_while_drafting(
     token = await login(client, teacher_email)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Mở cây nội dung để tạo course version nháp (clone bản publish).
     tree = await client.get(
         f"/teacher/courses/{ids['course_id']}", headers=headers
     )
     assert tree.status_code == 200, tree.text
 
-    # Sửa quiz không kèm status: backend clone lesson version sang nháp.
     saved = await client.patch(
-        f"/teacher/quiz-specs/{ids['lesson_version_id']}",
+        f"/teacher/lessons/{ids['lesson_id']}/quiz",
         headers=headers,
         json={"instructions": "Hướng dẫn mới"},
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["status"] == "published"
-
-    tree = await client.get(
-        f"/teacher/courses/{ids['course_id']}", headers=headers
-    )
-    assert tree.status_code == 200, tree.text
-    quiz = next(
-        lesson
-        for module in tree.json()
-        for lesson in module["lessons"]
-        if lesson["kind"] == "quiz"
-    )
-    assert quiz["quizStatus"] == "published"
-
-    # "Giao bài cho học viên" xuất bản course version nháp hiện tại.
-    published = await client.patch(
-        f"/teacher/quiz-specs/{quiz['quizId']}",
-        headers=headers,
-        json={"status": "published"},
-    )
-    assert published.status_code == 200, published.text
-    assert published.json()["status"] == "published"
+    assert saved.json()["instructions"] == "Hướng dẫn mới"
 
     async with SessionLocal() as db:
         course = await db.get(Course, ids["course_id"])
         assert course is not None
-        assert course.published_version_id is not None
-        assert course.published_version_id != ids["version_id"]
+        assert course.status == "published"

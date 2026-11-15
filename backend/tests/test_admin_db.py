@@ -169,7 +169,7 @@ async def test_admin_db_query_blocks_sequence_write(client):
     response = await client.post(
         "/admin/db/query",
         headers=headers,
-        json={"sql": "SELECT nextval('roles_id_seq')", "maxRows": 10},
+        json={"sql": "SELECT nextval('gaze_samples_id_seq')", "maxRows": 10},
     )
     assert response.status_code == 400, response.text
     detail = response.json()["detail"]
@@ -185,7 +185,7 @@ async def test_admin_db_query_rejects_data_modifying_cte(client):
         "/admin/db/query",
         headers=headers,
         json={
-            "sql": ("WITH deleted AS (DELETE FROM roles RETURNING *) SELECT * FROM deleted"),
+            "sql": ("WITH deleted AS (DELETE FROM users RETURNING *) SELECT * FROM deleted"),
             "maxRows": 10,
         },
     )

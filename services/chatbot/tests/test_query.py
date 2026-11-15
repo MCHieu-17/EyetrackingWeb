@@ -16,7 +16,6 @@ def _state(question: str, history: list[dict] | None = None) -> ChatState:
     return ChatState(
         question=question,
         course_id="course-1",
-        course_version_id="version-1",
         thread_id="thread-1",
         history=history or [],
     )

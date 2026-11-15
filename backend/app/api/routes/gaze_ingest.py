@@ -1,22 +1,16 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, func, insert, select
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload
 
 from app.api.deps import require_roles
 from app.core.rediscache import expire, increment
 from app.db.session import get_db
-from app.models.aoi import AoiLayoutRect, AoiLayoutSnapshot
 from app.models.auth import User
-from app.models.course import CourseVersionItem, Enrollment, LessonVersionSlide
-from app.models.gaze import (
-    ContentPresentation,
-    GazeBatch,
-    GazeSample,
-    LearningSession,
-)
+from app.models.course import Enrollment, Slide
+from app.models.gaze import ContentView, GazeSample, LearningSession, ViewLayout
 from app.schemas.gaze import (
     GazeBatchAckOut,
     GazeBatchCreateIn,
@@ -25,7 +19,6 @@ from app.schemas.gaze import (
     PresentationCreateIn,
     PresentationOut,
 )
-from app.services import aoi as aoi_service
 
 router = APIRouter(tags=["gaze-ingest"])
 
@@ -55,7 +48,6 @@ async def _session_for_user(
         await db.execute(
             select(LearningSession, Enrollment.student_id)
             .join(Enrollment, Enrollment.id == LearningSession.enrollment_id)
-            .options(raiseload(LearningSession.presentations))
             .where(LearningSession.id == session_id)
         )
     ).first()
@@ -96,7 +88,7 @@ async def _rate_limit(user: User, session_id: str) -> None:
     response_model=PresentationOut,
     status_code=201,
 )
-async def create_presentation(
+async def create_content_view(
     session_id: str,
     body: PresentationCreateIn,
     user: User = Depends(require_roles("student")),
@@ -105,70 +97,78 @@ async def create_presentation(
     session = await _session_for_user(db, session_id, user)
     _ensure_open(session)
 
-    slide_aoi_set_id: str | None = None
-    if body.lesson_version_slide_id is not None:
-        item = await db.get(CourseVersionItem, session.course_version_item_id)
-        slide = await db.get(LessonVersionSlide, body.lesson_version_slide_id)
-        if item is None or slide is None or slide.lesson_version_id != item.lesson_version_id:
+    if body.slide_id is not None:
+        slide = await db.get(Slide, body.slide_id)
+        if slide is None or slide.lesson_id != session.lesson_id:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="Slide không thuộc phiên học",
             )
-        slide_set = await aoi_service.published_aoi_set(
-            db, slide_version_id=slide.slide_version_id
-        )
-        slide_aoi_set_id = slide_set.id if slide_set else None
 
     existing = (
         await db.execute(
-            select(ContentPresentation).where(
-                ContentPresentation.session_id == session.id,
-                ContentPresentation.sequence_no == body.sequence_no,
+            select(ContentView).where(
+                ContentView.session_id == session.id,
+                ContentView.sequence_no == body.sequence_no,
             )
         )
     ).scalar_one_or_none()
     if existing is not None:
-        return PresentationOut(
-            id=existing.id,
-            session_id=existing.session_id,
-            lesson_version_slide_id=existing.lesson_version_slide_id,
-            surface=existing.surface,
-            sequence_no=existing.sequence_no,
-            started_at=existing.started_at.isoformat(),
-        )
+        if (
+            existing.slide_id == body.slide_id
+            and existing.surface == body.surface
+        ):
+            return PresentationOut(
+                id=existing.id,
+                session_id=existing.session_id,
+                slide_id=existing.slide_id,
+                surface=existing.surface,
+                sequence_no=existing.sequence_no,
+                started_at=existing.started_at.isoformat(),
+            )
+        # Sau reload, sequenceNo của client có thể trùng với presentation cũ
+        # của slide khác. Không được trả row cũ vì gaze sẽ gắn nhầm slide.
+        # Cấp sequence kế tiếp cho presentation mới.
+        max_sequence = (
+            await db.execute(
+                select(func.max(ContentView.sequence_no)).where(
+                    ContentView.session_id == session.id
+                )
+            )
+        ).scalar_one()
+        body.sequence_no = (max_sequence or 0) + 1
 
     previous = (
         await db.execute(
-            select(ContentPresentation)
+            select(ContentView)
             .where(
-                ContentPresentation.session_id == session.id,
-                ContentPresentation.ended_at.is_(None),
+                ContentView.session_id == session.id,
+                ContentView.ended_at.is_(None),
             )
-            .order_by(ContentPresentation.sequence_no.desc())
+            .order_by(ContentView.sequence_no.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
     if previous is not None:
         previous.ended_at = _now()
 
-    presentation = ContentPresentation(
+    view = ContentView(
         session_id=session.id,
-        lesson_version_slide_id=body.lesson_version_slide_id,
-        slide_aoi_set_id=slide_aoi_set_id,
+        slide_id=body.slide_id,
         surface=body.surface,
         sequence_no=body.sequence_no,
         started_at=_now(),
     )
-    db.add(presentation)
+    db.add(view)
     await db.commit()
-    await db.refresh(presentation)
+    await db.refresh(view)
     return PresentationOut(
-        id=presentation.id,
-        session_id=presentation.session_id,
-        lesson_version_slide_id=presentation.lesson_version_slide_id,
-        surface=presentation.surface,
-        sequence_no=presentation.sequence_no,
-        started_at=presentation.started_at.isoformat(),
+        id=view.id,
+        session_id=view.session_id,
+        slide_id=view.slide_id,
+        surface=view.surface,
+        sequence_no=view.sequence_no,
+        started_at=view.started_at.isoformat(),
     )
 
 
@@ -183,62 +183,64 @@ async def create_layout(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    presentation = await db.get(ContentPresentation, presentation_id)
-    if presentation is None:
+    view = await db.get(ContentView, presentation_id)
+    if view is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy presentation"
         )
-    session = await _session_for_user(db, presentation.session_id, user)
+    session = await _session_for_user(db, view.session_id, user)
     _ensure_open(session)
+
+    if body.coordinate_space == "original-v1":
+        visible = body.visible_rect or {}
+        try:
+            visible_width = float(visible.get("width", 0))
+            visible_height = float(visible.get("height", 0))
+        except (TypeError, ValueError):
+            visible_width = visible_height = 0
+        if visible_width <= 0 or visible_height <= 0:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Layout original-v1 cần visibleRect.width/height > 0",
+            )
 
     existing = (
         await db.execute(
-            select(AoiLayoutSnapshot).where(
-                AoiLayoutSnapshot.presentation_id == presentation.id,
-                AoiLayoutSnapshot.layout_generation == body.layout_generation,
+            select(ViewLayout).where(
+                ViewLayout.content_view_id == view.id,
+                ViewLayout.layout_no == body.layout_generation,
             )
         )
     ).scalar_one_or_none()
     if existing is not None:
         return LayoutOut(
             id=existing.id,
-            presentation_id=existing.presentation_id,
-            layout_generation=existing.layout_generation,
+            presentation_id=existing.content_view_id,
+            layout_generation=existing.layout_no,
+            coordinate_space=existing.coordinate_space,
+            visible_rect=existing.visible_rect or {},
             captured_at=existing.captured_at.isoformat(),
         )
 
-    ui_set = await aoi_service.published_aoi_set(
-        db, ui_schema_version="reader-v1"
-    )
-    snapshot = AoiLayoutSnapshot(
-        presentation_id=presentation.id,
-        ui_aoi_set_id=ui_set.id if ui_set else None,
+    layout = ViewLayout(
+        content_view_id=view.id,
+        layout_no=body.layout_generation,
+        coordinate_space=body.coordinate_space,
+        visible_rect=body.visible_rect or {},
+        slide_rect=body.image_transform or {},
+        elements=[rect.model_dump(by_alias=True) for rect in body.rects],
         captured_at=_now(),
-        sequence_no=body.sequence_no,
-        layout_generation=body.layout_generation,
-        image_transform=body.image_transform,
     )
-    db.add(snapshot)
-    await db.flush()
-    for rect in body.rects:
-        db.add(
-            AoiLayoutRect(
-                snapshot_id=snapshot.id,
-                semantic_code=rect.semantic_code,
-                element_key=rect.element_key,
-                x_min=rect.x_min,
-                y_min=rect.y_min,
-                x_max=rect.x_max,
-                y_max=rect.y_max,
-            )
-        )
+    db.add(layout)
     await db.commit()
-    await db.refresh(snapshot)
+    await db.refresh(layout)
     return LayoutOut(
-        id=snapshot.id,
-        presentation_id=snapshot.presentation_id,
-        layout_generation=snapshot.layout_generation,
-        captured_at=snapshot.captured_at.isoformat(),
+        id=layout.id,
+        presentation_id=layout.content_view_id,
+        layout_generation=layout.layout_no,
+        coordinate_space=layout.coordinate_space,
+        visible_rect=layout.visible_rect or {},
+        captured_at=layout.captured_at.isoformat(),
     )
 
 
@@ -256,75 +258,22 @@ async def ingest_gaze_batch(
     _ensure_open(session)
     await _rate_limit(user, session.id)
 
-    presentation = await db.get(ContentPresentation, body.presentation_id)
-    if presentation is None or presentation.session_id != session.id:
+    view = await db.get(ContentView, body.presentation_id)
+    if view is None or view.session_id != session.id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "batch_conflict", "message": "Presentation không thuộc phiên"},
         )
-    if body.layout_snapshot_id is not None:
-        snapshot = await db.get(AoiLayoutSnapshot, body.layout_snapshot_id)
-        if snapshot is None or snapshot.presentation_id != presentation.id:
+    if body.layout_id is not None:
+        layout = await db.get(ViewLayout, body.layout_id)
+        if layout is None or layout.content_view_id != view.id:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={"code": "batch_conflict", "message": "Layout không thuộc presentation"},
             )
 
-    # Một query lấy cả batch trùng (nếu có) và batch_no lớn nhất. Dùng base
-    # một dòng + LEFT JOIN để vẫn có max_no khi chưa có batch trùng.
-    max_no_sq = (
-        select(func.coalesce(func.max(GazeBatch.batch_no), -1))
-        .where(GazeBatch.session_id == session.id)
-        .scalar_subquery()
-    )
-    base = select(max_no_sq.label("max_no")).subquery()
-    row = (
-        await db.execute(
-            select(base.c.max_no, GazeBatch)
-            .select_from(base)
-            .outerjoin(
-                GazeBatch,
-                and_(
-                    GazeBatch.session_id == session.id,
-                    GazeBatch.batch_id == body.batch_id,
-                ),
-            )
-        )
-    ).first()
-    max_no = int(row[0]) if row is not None else -1
-    existing = row[1] if row is not None else None
-    if existing is not None:
-        if existing.payload_hash != body.payload_hash:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "batch_conflict",
-                    "message": "Batch ID đã dùng với payload khác",
-                },
-            )
-        return GazeBatchAckOut(
-            batch_id=body.batch_id,
-            received=existing.received_count,
-            stored=0,
-            duplicate=existing.received_count,
-            rejected=0,
-        )
-
-    if body.batch_no != max_no + 1:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={
-                "code": "batch_out_of_order",
-                "message": f"Batch number phải là {max_no + 1}",
-            },
-        )
-
-    if body.sequence_end < body.sequence_start:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="sequenceEnd phải >= sequenceStart",
-        )
     last_sequence = -1
+    rows: list[dict] = []
     for sample in body.samples:
         if sample.sequence < body.sequence_start or sample.sequence > body.sequence_end:
             raise HTTPException(
@@ -351,46 +300,51 @@ async def ingest_gaze_batch(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="status khác ok phải có viewportX/Y = null",
             )
-
-    batch = GazeBatch(
-        session_id=session.id,
-        presentation_id=presentation.id,
-        layout_snapshot_id=body.layout_snapshot_id,
-        batch_id=body.batch_id,
-        batch_no=body.batch_no,
-        sequence_start=body.sequence_start,
-        sequence_end=body.sequence_end,
-        payload_hash=body.payload_hash,
-        received_count=len(body.samples),
-        stored_count=len(body.samples),
-        duplicate_count=0,
-        rejected_count=0,
-    )
-    db.add(batch)
-    await db.flush()
-    await db.execute(
-        insert(GazeSample).values(
-            [
-                {
-                    "session_id": session.id,
-                    "batch_id": batch.id,
-                    "sequence": sample.sequence,
-                    "capture_monotonic_ns": sample.capture_monotonic_ns,
-                    "event_time": _parse_time(sample.event_time),
-                    "viewport_x": sample.viewport_x,
-                    "viewport_y": sample.viewport_y,
-                    "status": sample.status,
-                    "quality_flags": sample.quality_flags,
-                }
-                for sample in body.samples
-            ]
+        rows.append(
+            {
+                "content_view_id": view.id,
+                "layout_id": body.layout_id,
+                "client_batch_id": body.batch_id,
+                "sequence": sample.sequence,
+                "event_time": _parse_time(sample.event_time),
+                "viewport_x": sample.viewport_x,
+                "viewport_y": sample.viewport_y,
+                # Client cũ không gửi original -> dùng raw calibration làm
+                # original để không mất dữ liệu lịch sử.
+                "original_viewport_x": (
+                    sample.original_viewport_x
+                    if sample.original_viewport_x is not None
+                    else sample.viewport_x
+                ),
+                "original_viewport_y": (
+                    sample.original_viewport_y
+                    if sample.original_viewport_y is not None
+                    else sample.viewport_y
+                ),
+                "status": sample.status,
+                "quality_flags": sample.quality_flags,
+            }
         )
+
+    if not rows:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Batch không có sample"
+        )
+    stmt = (
+        pg_insert(GazeSample)
+        .values(rows)
+        .on_conflict_do_nothing(
+            index_elements=["content_view_id", "client_batch_id", "sequence"]
+        )
+        .returning(GazeSample.id)
     )
+    stored = len((await db.execute(stmt)).scalars().all())
+    view.analysis_status = "pending"
     await db.commit()
     return GazeBatchAckOut(
         batch_id=body.batch_id,
-        received=len(body.samples),
-        stored=len(body.samples),
-        duplicate=0,
+        received=len(rows),
+        stored=stored,
+        duplicate=len(rows) - stored,
         rejected=0,
     )

@@ -1,21 +1,42 @@
-"""AOI definition serialization, validation, and persistence."""
+"""AOI serialization, validation and persistence."""
 
 from __future__ import annotations
+
+import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.aoi import AoiDefinition, AoiSet
-from app.schemas.aoi import AoiDefinitionIn, AoiDefinitionOut, AoiSetOut
+from app.models.aoi import Aoi
+from app.schemas.aoi import AoiCollectionOut, AoiDefinitionIn, AoiDefinitionOut
 
 from .common import NO_LABEL_CODE, NO_LABEL_NAME, _bad_request
 
+_SLIDE_LABEL_RE = re.compile(r"^AOI_[1-9]\d*$")
 
-def _definition_out(row: AoiDefinition) -> AoiDefinitionOut:
+
+def _next_slide_label(used: set[str]) -> str:
+    numbers = [
+        int(label.split("_", 1)[1])
+        for label in used
+        if _SLIDE_LABEL_RE.match(label)
+    ]
+    return f"AOI_{max(numbers, default=0) + 1}"
+
+
+def _normalize_slide_label(label: str | None) -> str | None:
+    clean = (label or "").strip().upper()
+    return clean or None
+
+SCOPE = "slide"
+
+
+def _definition_out(row: Aoi) -> AoiDefinitionOut:
     return AoiDefinitionOut(
         id=row.id,
         code=row.code,
         name=row.name,
+        label=row.label,
         parent_id=row.parent_id,
         geometry=row.geometry or {},
         is_container=row.is_container,
@@ -24,25 +45,27 @@ def _definition_out(row: AoiDefinition) -> AoiDefinitionOut:
     )
 
 
-def _set_out(row: AoiSet, definitions: list[AoiDefinition]) -> AoiSetOut:
-    return AoiSetOut(
-        id=row.id,
-        scope=row.scope,
-        slide_version_id=row.slide_version_id,
-        ui_schema_version=row.ui_schema_version,
-        revision=row.revision,
-        state=row.state,
-        created_by=row.created_by,
-        created_at=row.created_at,
-        published_at=row.published_at,
+def aoi_collection_out(
+    *,
+    scope: str,
+    slide_id: str | None,
+    ui_schema: str | None,
+    definitions: list[Aoi],
+) -> AoiCollectionOut:
+    return AoiCollectionOut(
+        id=slide_id or (f"ui:{ui_schema}" if ui_schema else ""),
+        scope=scope,
+        slide_id=slide_id,
+        ui_schema=ui_schema,
         definitions=[_definition_out(item) for item in definitions],
     )
 
 
-def _definition_to_input(row: AoiDefinition) -> AoiDefinitionIn:
+def definition_to_input(row: Aoi) -> AoiDefinitionIn:
     return AoiDefinitionIn(
         code=row.code,
         name=row.name,
+        label=row.label,
         parent_id=row.parent_id,
         geometry=row.geometry or {},
         is_container=row.is_container,
@@ -51,49 +74,24 @@ def _definition_to_input(row: AoiDefinition) -> AoiDefinitionIn:
     )
 
 
-def _definition_to_input_with_codes(
-    row: AoiDefinition, code_by_id: dict[str, str]
-) -> AoiDefinitionIn:
-    """Chuyển definition sang input, đổi parent_id (UUID) thành code.
-
-    `_replace_definitions` xoá rồi tạo lại toàn bộ definition nên ID cha cũ
-    không còn tồn tại; `_insert_definitions` chỉ tìm được cha theo code.
-    """
-    return AoiDefinitionIn(
-        code=row.code,
-        name=row.name,
-        parent_id=code_by_id.get(row.parent_id) if row.parent_id else None,
-        geometry=row.geometry or {},
-        is_container=row.is_container,
-        kind=row.kind,
-        is_active=row.is_active,
-    )
-
-
-def _validate_rect(geometry: dict) -> None:
-    keys = ("xMin", "yMin", "xMax", "yMax")
-    if not all(key in geometry for key in keys):
-        raise _bad_request("Vùng cần xMin/yMin/xMax/yMax")
-    try:
-        x_min = float(geometry["xMin"])
-        y_min = float(geometry["yMin"])
-        x_max = float(geometry["xMax"])
-        y_max = float(geometry["yMax"])
-    except (TypeError, ValueError) as exc:
-        raise _bad_request("Toạ độ vùng phải là số") from exc
-    if not (0.0 <= x_min < x_max <= 1.0 and 0.0 <= y_min < y_max <= 1.0):
-        raise _bad_request("Toạ độ vùng phải trong [0,1] và min < max")
-
-
-def _validate_geometry(
-    scope: str, code: str, geometry: dict, is_container: bool
-) -> None:
+def _validate_geometry(scope: str, code: str, geometry: dict, is_container: bool) -> None:
     if not isinstance(geometry, dict):
         raise _bad_request("geometry phải là object")
     if code == NO_LABEL_CODE:
         return
     if scope == "slide":
-        _validate_rect(geometry)
+        keys = ("xMin", "yMin", "xMax", "yMax")
+        if not all(key in geometry for key in keys):
+            raise _bad_request("Vùng cần xMin/yMin/xMax/yMax")
+        try:
+            x_min = float(geometry["xMin"])
+            y_min = float(geometry["yMin"])
+            x_max = float(geometry["xMax"])
+            y_max = float(geometry["yMax"])
+        except (TypeError, ValueError) as exc:
+            raise _bad_request("Toạ độ vùng phải là số") from exc
+        if not (0.0 <= x_min < x_max <= 1.0 and 0.0 <= y_min < y_max <= 1.0):
+            raise _bad_request("Toạ độ vùng phải trong [0,1] và min < max")
         return
 
     anchor = geometry.get("anchor")
@@ -101,7 +99,6 @@ def _validate_geometry(
     if anchor is not None:
         if not isinstance(anchor, str) or not anchor.strip():
             raise _bad_request("anchor phải là chuỗi")
-        _validate_rect(geometry)
         return
     if selector is not None:
         if not isinstance(selector, str):
@@ -112,61 +109,95 @@ def _validate_geometry(
     raise _bad_request("Vùng giao diện cần selector hoặc anchor + rect")
 
 
-async def _definitions(db: AsyncSession, set_id: str) -> list[AoiDefinition]:
-    return list(
-        (
-            await db.execute(
-                select(AoiDefinition)
-                .where(AoiDefinition.aoi_set_id == set_id)
-                .order_by(AoiDefinition.code)
-            )
-        )
-        .scalars()
-        .all()
-    )
+async def load_aois(
+    db: AsyncSession, *, slide_id: str | None = None, ui_schema: str | None = None
+) -> list[Aoi]:
+    stmt = select(Aoi).order_by(Aoi.code)
+    if slide_id is not None:
+        stmt = stmt.where(Aoi.slide_id == slide_id)
+    if ui_schema is not None:
+        stmt = stmt.where(Aoi.ui_schema == ui_schema)
+    return list((await db.execute(stmt)).scalars().all())
 
 
-async def ensure_no_label_definition(db: AsyncSession, set_id: str) -> None:
-    existing = (
-        await db.execute(
-            select(AoiDefinition).where(
-                AoiDefinition.aoi_set_id == set_id,
-                AoiDefinition.code == NO_LABEL_CODE,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        return
-    db.add(
-        AoiDefinition(
-            aoi_set_id=set_id,
-            code=NO_LABEL_CODE,
-            name=NO_LABEL_NAME,
-            parent_id=None,
-            geometry={},
-            is_container=False,
-            kind="system",
-            is_active=True,
-        )
-    )
-    await db.flush()
+async def replace_aois(
+    db: AsyncSession,
+    *,
+    scope: str,
+    slide_id: str | None,
+    ui_schema: str | None,
+    definitions: list[AoiDefinitionIn],
+) -> list[Aoi]:
+    existing = await load_aois(db, slide_id=slide_id, ui_schema=ui_schema)
+    old_code_by_id = {item.id: item.code for item in existing}
+    old_label_by_code = {item.code: item.label for item in existing}
 
-
-async def _insert_definitions(
-    db: AsyncSession, set_id: str, definitions: list[AoiDefinitionIn], scope: str
-) -> None:
-    by_code: dict[str, AoiDefinition] = {}
+    seen_codes: set[str] = set()
+    seen_ui_names: set[str] = set()
     for item in definitions:
         if item.code == NO_LABEL_CODE:
             continue
-        _validate_geometry(scope, item.code, item.geometry, item.is_container)
-        if item.code in by_code:
+        if item.code in seen_codes:
             raise _bad_request(f"Mã vùng bị trùng: {item.code}")
-        row = AoiDefinition(
-            aoi_set_id=set_id,
+        seen_codes.add(item.code)
+        _validate_geometry(scope, item.code, item.geometry, item.is_container)
+        if scope == "ui" and not item.is_container:
+            normalized = item.name.strip().casefold()
+            if not normalized:
+                raise _bad_request("Tên vùng giao diện không được để trống")
+            if normalized.startswith("slide_") or normalized == "ui_no_label":
+                raise _bad_request(
+                    "Tên vùng giao diện không được trùng tiền tố SLIDE_/UI_NO_LABEL"
+                )
+            if normalized in seen_ui_names:
+                raise _bad_request(
+                    f"Tên vùng giao diện bị trùng: {item.name.strip()}"
+                )
+            seen_ui_names.add(normalized)
+
+    used_labels: set[str] = set()
+    labels_by_code: dict[str, str | None] = {}
+    for item in definitions:
+        if (
+            scope != "slide"
+            or item.code == NO_LABEL_CODE
+            or item.is_container
+        ):
+            labels_by_code[item.code] = None
+            continue
+        label = _normalize_slide_label(item.label)
+        if label is not None and not _SLIDE_LABEL_RE.match(label):
+            raise _bad_request(f"Nhãn vùng slide không hợp lệ: {item.label}")
+        if label is not None and label in used_labels:
+            raise _bad_request(f"Nhãn vùng slide bị trùng: {label}")
+        if label is None:
+            old = old_label_by_code.get(item.code)
+            label = (
+                old
+                if old
+                and _SLIDE_LABEL_RE.match(old)
+                and old not in used_labels
+                else None
+            )
+        if label is None:
+            label = _next_slide_label(used_labels)
+        used_labels.add(label)
+        labels_by_code[item.code] = label
+
+    for item in existing:
+        await db.delete(item)
+    await db.flush()
+
+    by_code: dict[str, Aoi] = {}
+    for item in definitions:
+        if item.code == NO_LABEL_CODE:
+            continue
+        row = Aoi(
+            slide_id=slide_id,
+            ui_schema=ui_schema,
             code=item.code,
             name=item.name,
-            parent_id=None,
+            label=labels_by_code.get(item.code),
             geometry=item.geometry,
             is_container=item.is_container,
             kind=item.kind,
@@ -177,37 +208,30 @@ async def _insert_definitions(
         by_code[item.code] = row
 
     for item in definitions:
-        if item.code == NO_LABEL_CODE:
+        if item.code == NO_LABEL_CODE or not item.parent_id:
             continue
-        if not item.parent_id:
-            continue
-        parent = by_code.get(item.parent_id)
+        parent_code = old_code_by_id.get(item.parent_id, item.parent_id)
+        parent = by_code.get(parent_code)
         if parent is None:
-            parent = await db.get(AoiDefinition, item.parent_id)
-            if parent is not None and parent.aoi_set_id != set_id:
-                # Client gửi ID của bản cũ (trước khi clone revision): tìm lại
-                # theo code trong bộ vùng hiện tại.
-                parent = by_code.get(parent.code)
-            if parent is None or parent.aoi_set_id != set_id:
-                raise _bad_request("Vùng cha phải thuộc cùng bộ vùng")
+            continue
         by_code[item.code].parent_id = parent.id
 
-    # Vùng có con luôn là container, kể cả khi client quên đánh dấu.
     for row in by_code.values():
         if any(child.parent_id == row.id for child in by_code.values()):
             row.is_container = True
 
-    await ensure_no_label_definition(db, set_id)
-
-
-async def _replace_definitions(
-    db: AsyncSession,
-    set_id: str,
-    definitions: list[AoiDefinitionIn],
-    scope: str,
-) -> None:
-    existing = await _definitions(db, set_id)
-    for item in existing:
-        await db.delete(item)
+    if NO_LABEL_CODE not in by_code:
+        db.add(
+            Aoi(
+                slide_id=slide_id,
+                ui_schema=ui_schema,
+                code=NO_LABEL_CODE,
+                name=NO_LABEL_NAME,
+                geometry={},
+                is_container=False,
+                kind="system",
+                is_active=True,
+            )
+        )
     await db.flush()
-    await _insert_definitions(db, set_id, definitions, scope)
+    return await load_aois(db, slide_id=slide_id, ui_schema=ui_schema)

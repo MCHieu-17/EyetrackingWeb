@@ -16,18 +16,23 @@ export const queryKeys = {
     dbTableRows: (params: AdminDbTableRowsParams | null) =>
       ["admin", "db", "table-rows", params] as const,
   },
+  aoi: {
+    root: ["aois"] as const,
+    slide: (slideId: string | null) => ["aois", "slide", slideId] as const,
+    ui: (uiSchema: string) => ["aois", "ui", uiSchema] as const,
+  },
   teacher: {
     coursesRoot: ["teacher", "courses"] as const,
     courses: (query: CourseListQuery = {}) => ["teacher", "courses", query] as const,
     courseTree: (courseId: string) => ["teacher", "course-tree", courseId] as const,
     courseStudents: (courseId: string) =>
       ["teacher", "course-students", courseId] as const,
-    lessonSlides: (
-      lessonId: string,
-      version: "draft" | "published" = "draft",
-    ) => ["teacher", "lesson-slides", lessonId, version] as const,
+    lessonSlides: (lessonId: string) =>
+      ["teacher", "lesson-slides", lessonId] as const,
     studentDirectory: (query: string) =>
       ["teacher", "student-directory", query] as const,
+    studentVisits: (courseId: string, studentId: string) =>
+      ["teacher", "student-visits", courseId, studentId] as const,
   },
   student: {
     enrollments: ["student", "enrollments"] as const,

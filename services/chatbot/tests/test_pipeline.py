@@ -18,7 +18,6 @@ def _state(**overrides) -> ChatState:
     values = {
         "question": "Câu hỏi",
         "course_id": "course-1",
-        "course_version_id": "version-1",
         "thread_id": "thread-1",
     }
     values.update(overrides)
@@ -29,10 +28,7 @@ def _doc(doc_id: str = "doc-1") -> dict:
     return {
         "id": doc_id,
         "course_id": "course-1",
-        "course_version_id": "version-1",
         "lesson_id": "lesson-1",
-        "lesson_version_id": "lesson-version-1",
-        "membership_id": "membership-1",
         "slide_id": "slide-1",
         "asset_id": "asset-1",
         "pdf_object_key": "pdf/key.pdf",
@@ -187,7 +183,7 @@ def test_run_chat_no_docs_returns_insufficient_evidence(monkeypatch):
         return None
 
     class FakeRetriever:
-        async def asearch(self, query, hyde, course_id, course_version_id):
+        async def asearch(self, query, hyde, course_id):
             return []
 
     async def fake_prepare(state):
@@ -215,7 +211,7 @@ def test_run_chat_knowledge_path_emits_citations_and_done(monkeypatch):
         return None
 
     class FakeRetriever:
-        async def asearch(self, query, hyde, course_id, course_version_id):
+        async def asearch(self, query, hyde, course_id):
             return [_doc()]
 
     async def fake_prepare(state):

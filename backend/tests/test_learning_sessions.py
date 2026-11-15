@@ -2,7 +2,8 @@ import uuid
 
 import pytest
 
-from tests.conftest import create_user, login, seed_course
+from app.models.course import Course
+from tests.conftest import SessionLocal, create_user, login, seed_course
 
 
 async def _create_session(client, headers: dict, ids: dict) -> str:
@@ -58,6 +59,40 @@ async def test_end_session_and_get_contents(client):
     )
     assert again.status_code == 409
     assert again.json()["detail"]["code"] == "session_closed"
+
+
+@pytest.mark.asyncio
+async def test_archived_course_cannot_start_new_learning_session(client):
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+
+    async with SessionLocal() as db:
+        course = await db.get(Course, ids["course_id"])
+        assert course is not None
+        course.status = "archived"
+        await db.commit()
+
+    token = await login(client, student_email)
+    response = await client.post(
+        "/api/learning-sessions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "enrollmentId": ids["enrollment_id"],
+            "lessonId": ids["lesson_id"],
+            "deviceFingerprint": "test-device",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1.0,
+            "trackingConsent": True,
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "course_archived"
 
 
 @pytest.mark.asyncio

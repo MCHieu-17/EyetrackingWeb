@@ -1,8 +1,4 @@
-"""Metrics/analysis worker.
-
-Chạy các `analysis_runs` pending trong PostgreSQL. Watermark và trạng thái nằm
-trong DB nên restart không mất việc; Redis chỉ là cache/throttle.
-"""
+"""Analysis worker: claim background_jobs(kind=analyze_lesson)."""
 
 import asyncio
 import logging
@@ -24,7 +20,7 @@ async def main() -> None:
         POLL_SECONDS,
         execute_pending_runs,
         limit=10,
-        unit="analysis runs",
+        unit="analysis jobs",
     )
 
 

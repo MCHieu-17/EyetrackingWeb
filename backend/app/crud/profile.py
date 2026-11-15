@@ -3,12 +3,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.profile import StudentProfile, TeacherProfile, UserProfile
-
-
-async def get_user_profile(db: AsyncSession, user_id: str) -> UserProfile | None:
-    stmt = select(UserProfile).where(UserProfile.user_id == user_id)
-    return (await db.execute(stmt)).scalar_one_or_none()
+from app.models.auth import User
+from app.models.profile import StudentProfile, TeacherProfile
 
 
 async def upsert_user_profile(
@@ -20,17 +16,16 @@ async def upsert_user_profile(
     gender: str | None,
     phone: str | None,
     avatar_url: str | None,
-) -> UserProfile:
-    profile = await get_user_profile(db, user_id)
-    if profile is None:
-        profile = UserProfile(user_id=user_id)
-        db.add(profile)
-    profile.full_name = full_name
-    profile.date_of_birth = date_of_birth
-    profile.gender = gender
-    profile.phone = phone
-    profile.avatar_url = avatar_url
-    return profile
+) -> User:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise LookupError("user not found")
+    user.full_name = full_name
+    user.date_of_birth = date_of_birth
+    user.gender = gender
+    user.phone = phone
+    user.avatar_url = avatar_url
+    return user
 
 
 async def get_student_profile(db: AsyncSession, user_id: str) -> StudentProfile | None:

@@ -4,12 +4,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import raiseload, selectinload
 
 from app.core.rediscache import delete as cache_delete
 from app.core.rediscache import get_json as cache_get_json
 from app.core.rediscache import set_json as cache_set_json
-from app.models.auth import AuthSession, Role, User, UserRole
+from app.models.auth import AuthSession, User
 
 AUTH_CACHE_TTL_SECONDS = 30
 
@@ -23,9 +22,11 @@ class AuthUser:
     deleted_at: str | None
     role_codes: list[str]
 
+    @property
+    def role(self) -> str:
+        return self.role_codes[0] if self.role_codes else "student"
 
-# Fallback in-process khi Redis không có (dev/test) hoặc Redis lỗi. Mỗi worker
-# có cache riêng; TTL ngắn nên sai lệch tối đa 30s.
+
 _AUTH_MEMORY: dict[str, tuple[float, dict]] = {}
 _AUTH_MEMORY_MAX = 10_000
 
@@ -61,50 +62,21 @@ def _auth_user_from_dict(value: dict) -> AuthUser:
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    stmt = (
-        select(User)
-        .options(selectinload(User.roles))
-        .where(func.lower(User.email) == email.lower())
-    )
+    stmt = select(User).where(func.lower(User.email) == email.lower())
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
-    stmt = (
-        select(User)
-        .options(selectinload(User.roles))
-        .where(User.id == user_id)
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
+    return await db.get(User, user_id)
 
 
 async def get_user_for_auth(db: AsyncSession, user_id: str) -> User | None:
-    """Chỉ tải User + roles cho mỗi request đã xác thực.
-
-    Profile/student_profile/teacher_profile không cần cho auth; route nào cần
-    hồ sơ thì dùng `get_user_by_id` hoặc truy vấn profile riêng.
-    """
-    stmt = (
-        select(User)
-        .options(
-            selectinload(User.roles),
-            raiseload(User.profile),
-            raiseload(User.student_profile),
-            raiseload(User.teacher_profile),
-        )
-        .where(User.id == user_id)
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
+    return await db.get(User, user_id)
 
 
 async def get_user_for_auth_cached(
     db: AsyncSession, user_id: str
 ) -> User | AuthUser | None:
-    """Auth lookup có cache Redis ngắn hạn.
-
-    Cache chỉ chứa id/status/deleted_at/roles — đủ cho phân quyền. Các route
-    cần email/password_hash/created_at phải tự load user đầy đủ từ DB.
-    """
     cache_key = f"auth:user:{user_id}"
     cached = await cache_get_json(cache_key)
     if isinstance(cached, dict) and cached.get("id") == user_id:
@@ -159,7 +131,9 @@ async def create_session(
     return session
 
 
-async def get_valid_session(db: AsyncSession, refresh_token_hash: str) -> AuthSession | None:
+async def get_valid_session(
+    db: AsyncSession, refresh_token_hash: str
+) -> AuthSession | None:
     stmt = select(AuthSession).where(
         AuthSession.refresh_token_hash == refresh_token_hash,
         AuthSession.revoked_at.is_(None),
@@ -175,12 +149,6 @@ async def revoke_session(db: AsyncSession, session: AuthSession) -> None:
 async def revoke_all_sessions(
     db: AsyncSession, user_id: str, except_token_hash: str | None = None
 ) -> None:
-    """Thu hồi toàn bộ refresh session còn hiệu lực của user.
-
-    Dùng khi đổi mật khẩu để các phiên đăng nhập khác (thiết bị khác) phải
-    đăng nhập lại bằng mật khẩu mới. `except_token_hash` giữ lại phiên hiện tại
-    (tránh đăng xuất chính người vừa đổi mật khẩu).
-    """
     now = datetime.now(timezone.utc)
     stmt = select(AuthSession).where(
         AuthSession.user_id == user_id,
@@ -200,30 +168,14 @@ async def create_student(
     password_hash: str | None,
     full_name: str,
 ) -> User:
-    """Tạo user mới với role `student` và status `active`.
-
-    `password_hash=None` dành cho tài khoản đăng nhập bằng Microsoft 365.
-    Không tạo student_profile/student_code (do admin cấp sau) — hồ sơ cơ bản
-    nằm ở user_profiles.
-    """
-    role_id = (
-        await db.execute(select(Role.id).where(Role.code == "student"))
-    ).scalar_one()
-
     user = User(
         email=email.lower(),
         password_hash=password_hash,
+        role="student",
         status="active",
+        full_name=full_name,
     )
     db.add(user)
-    await db.flush()
-
-    db.add(UserRole(user_id=user.id, role_id=role_id))
-
-    from app.models.profile import UserProfile
-
-    db.add(UserProfile(user_id=user.id, full_name=full_name))
-
     await db.flush()
     await db.refresh(user)
     return user

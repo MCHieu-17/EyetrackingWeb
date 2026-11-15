@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     app_name: str = "GazeEdu API"
     debug: bool = False
-    # Namespace cho media/Redis; Phase 6 sẽ đọc từ app_metadata.db_instance_id.
+    # Namespace media/Redis; fallback khi chưa có app_metadata.db_instance_id.
     app_instance_id: str = "dev"
 
     # Bắt buộc — phải có trong .env (không nhúng mẫu trong code).
@@ -127,19 +127,21 @@ class Settings(BaseSettings):
 
     # Worker phân tích metrics/analysis.
     worker_poll_seconds: float = 5.0
+    # Job analysis processing quá lâu (worker chết) được đưa lại hàng đợi.
+    worker_stale_seconds: int = 600
 
-    # Worker đồng bộ embedding/RAG ingest từ bảng embedding_jobs.
+    # Worker đồng bộ index RAG từ background_jobs(kind=index_slides).
     embedding_worker_poll_seconds: float = 5.0
     # Job running quá lâu (worker chết) được đưa lại pending/failed.
     embedding_worker_stale_seconds: int = 600
 
-    # Worker xử lý slide_import_jobs.
+    # Worker xử lý background_jobs(kind=import_slides).
     content_worker_poll_seconds: float = 3.0
     # Job processing quá lâu (worker chết) sẽ được đưa lại hàng đợi.
     content_worker_stale_seconds: int = 600
 
-    # Retention gaze samples: partition cũ hơn số ngày này bị drop bởi
-    # maintenance. Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
+    # Retention gaze samples: row cũ hơn số ngày này bị xoá bởi maintenance.
+    # Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
     gaze_retention_days: int = 180
 
     # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống ở dev → fallback

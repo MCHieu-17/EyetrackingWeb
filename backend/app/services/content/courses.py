@@ -5,36 +5,18 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, delete, func, select, text, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.core.config import settings
 from app.core.helpers import escape_like
 from app.models.auth import User
-from app.models.chat import ChatSession
-from app.models.course import (
-    Course,
-    CourseVersion,
-    CourseVersionItem,
-    Enrollment,
-    Lesson,
-    LessonVersion,
-    LessonVersionSlide,
-    Slide,
-    SlideVersion,
-)
-from app.models.media import MediaAsset, SlideImportJob
+from app.models.course import Course, CourseTeacher, Lesson
+from app.models.media import MediaAsset
 from app.models.profile import TeacherProfile
 from app.schemas.course import TeacherCourseOut
 from app.services import media_storage
-from app.services.content.common import (
-    _now,
-    bump_generation,
-    get_draft_version,
-    logger,
-)
+from app.services.content.common import _now, logger
 
 
 async def list_teacher_courses(
@@ -46,69 +28,39 @@ async def list_teacher_courses(
     limit: int = 200,
     offset: int = 0,
 ) -> list[TeacherCourseOut]:
-    from app.models.course import CourseTeacher
+    # Đếm bài theo course qua module.
+    from app.models.course import CourseModule
 
-    published = aliased(CourseVersion)
-    draft = aliased(CourseVersion)
-    item_counts = (
+    course_lesson_counts = (
         select(
-            CourseVersionItem.course_version_id,
-            func.count(CourseVersionItem.id).label("item_count"),
+            CourseModule.course_id,
+            func.count(Lesson.id).label("lesson_count"),
         )
-        .group_by(CourseVersionItem.course_version_id)
+        .join(Lesson, Lesson.module_id == CourseModule.id)
+        .group_by(CourseModule.course_id)
         .subquery()
     )
-    version_id = func.coalesce(published.id, draft.id)
     stmt = (
         select(
-            Course.id,
-            Course.owner_id,
-            Course.updated_at,
-            Course.archived_at,
-            Course.show_gaze_dot,
-            Course.require_calibration,
-            published.id.label("published_id"),
-            published.title.label("published_title"),
-            published.description.label("published_description"),
-            draft.id.label("draft_id"),
-            draft.title.label("draft_title"),
-            draft.description.label("draft_description"),
-            func.coalesce(item_counts.c.item_count, 0).label("item_count"),
+            Course,
+            func.coalesce(course_lesson_counts.c.lesson_count, 0).label(
+                "lesson_count"
+            ),
         )
-        .outerjoin(published, published.id == Course.published_version_id)
         .outerjoin(
-            draft,
-            and_(draft.course_id == Course.id, draft.state == "draft"),
+            course_lesson_counts,
+            course_lesson_counts.c.course_id == Course.id,
         )
-        .outerjoin(item_counts, item_counts.c.course_version_id == version_id)
     )
-    if "admin" not in user.role_codes:
+    if user.role != "admin":
         assigned = select(CourseTeacher.course_id).where(
             CourseTeacher.teacher_id == user.id
         )
-        stmt = stmt.where(
-            (Course.owner_id == user.id) | Course.id.in_(assigned)
-        )
+        stmt = stmt.where((Course.owner_id == user.id) | Course.id.in_(assigned))
     if q:
-        stmt = stmt.where(
-            Course.id.in_(
-                select(CourseVersion.course_id).where(
-                    CourseVersion.title.ilike(
-                        f"%{escape_like(q)}%", escape="\\"
-                    )
-                )
-            )
-        )
-    if status_filter == "archived":
-        stmt = stmt.where(Course.archived_at.is_not(None))
-    elif status_filter == "published":
-        stmt = stmt.where(
-            Course.archived_at.is_(None), published.id.is_not(None)
-        )
-    elif status_filter == "draft":
-        stmt = stmt.where(
-            Course.archived_at.is_(None), published.id.is_(None)
-        )
+        stmt = stmt.where(Course.title.ilike(f"%{escape_like(q)}%", escape="\\"))
+    if status_filter in {"archived", "published", "draft"}:
+        stmt = stmt.where(Course.status == status_filter)
     elif status_filter:
         return []
     rows = (
@@ -121,43 +73,29 @@ async def list_teacher_courses(
 
     from app.services import course_stats
 
-    course_ids = [row.id for row in rows]
+    course_ids = [row[0].id for row in rows]
     enroll_counts = await course_stats.enrollment_counts(db, course_ids)
     attention = await course_stats.attention_avg_by_course(db, course_ids)
     sessions = await course_stats.session_counts_by_course(db, course_ids)
 
-    out: list[TeacherCourseOut] = []
-    for row in rows:
-        if row.published_id is not None:
-            title = row.published_title
-            description = row.published_description
-            status_value = (
-                "archived" if row.archived_at is not None else "published"
-            )
-        elif row.draft_id is not None:
-            title = row.draft_title
-            description = row.draft_description
-            status_value = "archived" if row.archived_at is not None else "draft"
-        else:
-            continue
-        out.append(
-            TeacherCourseOut(
-                id=row.id,
-                title=title,
-                description=description or "",
-                gradient="",
-                status=status_value,
-                students=enroll_counts.get(row.id, 0),
-                attention=attention.get(row.id),
-                sessions=sessions.get(row.id, 0),
-                updated_at=row.updated_at,
-                is_owner="admin" in user.role_codes or row.owner_id == user.id,
-                lesson_count=int(row.item_count),
-                show_gaze_dot=row.show_gaze_dot,
-                require_calibration=row.require_calibration,
-            )
+    return [
+        TeacherCourseOut(
+            id=course.id,
+            title=course.title,
+            description=course.description or "",
+            gradient="",
+            status=course.status,
+            students=enroll_counts.get(course.id, 0),
+            attention=attention.get(course.id),
+            sessions=sessions.get(course.id, 0),
+            updated_at=course.updated_at,
+            is_owner=user.role == "admin" or course.owner_id == user.id,
+            lesson_count=int(lesson_count),
+            show_gaze_dot=course.show_gaze_dot,
+            require_calibration=course.require_calibration,
         )
-    return out
+        for course, lesson_count in rows
+    ]
 
 
 async def create_course(
@@ -171,9 +109,10 @@ async def create_course(
 ) -> Course:
     teacher = await db.get(TeacherProfile, user.id)
     if teacher is None:
-        if "admin" not in user.role_codes:
+        if user.role != "admin":
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail="Tài khoản không phải giáo viên"
+                status.HTTP_400_BAD_REQUEST,
+                detail="Tài khoản không phải giáo viên",
             )
         teacher = TeacherProfile(
             user_id=user.id,
@@ -186,22 +125,13 @@ async def create_course(
     course = Course(
         owner_id=user.id,
         created_by=user.id,
+        title=title,
+        description=description,
+        status="draft",
         show_gaze_dot=show_gaze_dot,
         require_calibration=require_calibration,
     )
     db.add(course)
-    await db.flush()
-    db.add(
-        CourseVersion(
-            course_id=course.id,
-            version_no=1,
-            state="draft",
-            generation=1,
-            title=title,
-            description=description,
-            created_by=user.id,
-        )
-    )
     await db.flush()
     return course
 
@@ -215,41 +145,32 @@ async def update_course_metadata(
     description: str | None = None,
     show_gaze_dot: bool | None = None,
     require_calibration: bool | None = None,
-    archived: bool | None = None,
-) -> CourseVersion:
-    draft = await get_draft_version(db, course, user)
-    assert draft is not None
+    status: str | None = None,
+) -> Course:
     if title is not None:
-        draft.title = title
+        course.title = title
     if description is not None:
-        draft.description = description
+        course.description = description
     if show_gaze_dot is not None:
         course.show_gaze_dot = show_gaze_dot
     if require_calibration is not None:
         course.require_calibration = require_calibration
-    if archived is not None:
-        course.archived_at = _now() if archived else None
-    # Cache outline dùng `course.updated_at` trong key; bump để metadata mới
-    # (đặc biệt require_calibration/show_gaze_dot) không bị cache cũ 60s.
+    if status in {"draft", "published", "archived"}:
+        course.status = status
+        if status == "published" and course.published_at is None:
+            course.published_at = _now()
     course.updated_at = _now()
-    bump_generation(draft)
     await db.flush()
-    return draft
+    return course
 
 
 async def delete_course(db: AsyncSession, course: Course) -> None:
-    """Xóa vĩnh viễn khóa học cùng toàn bộ nội dung, dữ liệu học tập và tệp.
+    """Xóa khóa học và cascade toàn bộ nội dung/dữ liệu học tập.
 
-    Thứ tự xóa được chọn để không vi phạm các FK RESTRICT:
-    - enrollments kéo theo learning_sessions/quiz_attempts và toàn bộ gaze/AOI runtime;
-    - course_versions kéo theo modules/items;
-    - lesson_version_slides/slide_versions/slides/lesson_versions trước lessons;
-    - media_assets sau cùng trước courses.
+    PostgreSQL cascade xử lý DB. File vật lý được lấy key trước rồi dọn sau
+    khi transaction commit thành công.
     """
     await db.execute(select(Course.id).where(Course.id == course.id).with_for_update())
-    # Cho phép các trigger bất biến bỏ qua DELETE trong đúng transaction này.
-    await db.execute(text("SET LOCAL app.allow_course_delete = 'on'"))
-
     asset_rows = (
         await db.execute(
             select(MediaAsset.object_key, MediaAsset.storage_backend).where(
@@ -257,92 +178,11 @@ async def delete_course(db: AsyncSession, course: Course) -> None:
             )
         )
     ).all()
-    job_keys = list(
-        (
-            await db.execute(
-                select(SlideImportJob.source_object_key).where(
-                    SlideImportJob.course_id == course.id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    lesson_ids = select(Lesson.id).where(Lesson.course_id == course.id)
-    lesson_version_ids = select(LessonVersion.id).where(
-        LessonVersion.lesson_id.in_(lesson_ids)
-    )
-    slide_ids = select(Slide.id).where(Slide.lesson_id.in_(lesson_ids))
-    slide_version_ids = select(SlideVersion.id).where(
-        SlideVersion.slide_id.in_(slide_ids)
-    )
 
     try:
-        await db.execute(
-            delete(Enrollment)
-            .where(Enrollment.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(ChatSession)
-            .where(ChatSession.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(CourseVersion)
-            .where(CourseVersion.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(LessonVersionSlide)
-            .where(LessonVersionSlide.lesson_version_id.in_(lesson_version_ids))
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(SlideVersion)
-            .where(SlideVersion.id.in_(slide_version_ids))
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(Slide)
-            .where(Slide.id.in_(slide_ids))
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(LessonVersion)
-            .where(LessonVersion.id.in_(lesson_version_ids))
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(SlideImportJob)
-            .where(SlideImportJob.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(Lesson)
-            .where(Lesson.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        # Trigger yêu cầu asset phải ở trạng thái deleted trước khi xóa.
-        await db.execute(
-            update(MediaAsset)
-            .where(MediaAsset.course_id == course.id)
-            .values(state="deleted")
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(MediaAsset)
-            .where(MediaAsset.course_id == course.id)
-            .execution_options(synchronize_session=False)
-        )
-        await db.execute(
-            delete(Course)
-            .where(Course.id == course.id)
-            .execution_options(synchronize_session=False)
-        )
+        await db.delete(course)
         await db.flush()
-    except DBAPIError as exc:
+    except Exception as exc:  # noqa: BLE001
         await db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -351,22 +191,13 @@ async def delete_course(db: AsyncSession, course: Course) -> None:
 
     r2_keys = [key for key, backend in asset_rows if backend == "r2"]
     local_keys = [key for key, backend in asset_rows if backend == "local"]
-    if settings.r2_enabled:
-        r2_keys.extend(job_keys)
-    else:
-        local_keys.extend(job_keys)
-
     try:
         if r2_keys:
             await asyncio.to_thread(media_storage.delete_keys, r2_keys, "r2")
         if local_keys:
             await asyncio.to_thread(media_storage.delete_keys, local_keys, "local")
     except media_storage.StorageError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            detail=f"Không xóa được tệp của khóa học: {exc}",
-        ) from exc
+        logger.warning("Không xóa được một số tệp của khóa %s: %s", course.id, exc)
 
     prefix = f"instances/{settings.app_instance_id}/courses/{course.id}/"
     try:

@@ -90,13 +90,9 @@ export function deleteCourse(courseId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/teacher/courses/${courseId}`, { method: "DELETE" });
 }
 
-export function publishCourse(
-  courseId: string,
-  expectedGeneration?: number,
-): Promise<{ ok: boolean; courseVersionId: string }> {
+export function publishCourse(courseId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/teacher/courses/${courseId}/publish`, {
     method: "POST",
-    body: { expectedGeneration },
   });
 }
 
@@ -216,11 +212,8 @@ export function fetchSlideImportJob(
 
 export function fetchLessonSlidesAdmin(
   lessonId: string,
-  version: "draft" | "published" = "draft",
 ): Promise<SlideAdmin[]> {
-  return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`, {
-    params: { version },
-  });
+  return apiFetch<SlideAdmin[]>(`/api/teacher/lessons/${lessonId}/slides`);
 }
 
 export function reindexLessonSlides(
