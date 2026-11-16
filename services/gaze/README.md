@@ -167,7 +167,8 @@ WebSocket close:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `DEVICE` | `cuda` trong compose | `cuda` hoặc `cpu` |
+| `DEVICE` | **bắt buộc** | `cuda` hoặc `cpu`; thiếu/sai → fail-fast |
+| `UNIGAZE_MODEL` | **bắt buộc** | `unigaze_b16_joint` \| `unigaze_l16_joint` \| `unigaze_h14_joint` \| `unigaze_h14_cross_X` |
 | `WEIGHTS_DIR` | `/app/weights` | Volume weights runtime |
 | `MAX_SESSIONS` | `100` | Session đồng thời |
 | `SESSION_TTL_SECONDS` | `1800` | TTL session không hoạt động |
@@ -192,11 +193,14 @@ MediaPipe/UniGaze/GPU.
 
 ## Đổi backbone UniGaze
 
-Model hardcode trong `app/services/pipeline.py`; file weights tương ứng nằm
-trong `scripts/download_weights.py`. Khi đổi model:
+Model được chọn tường minh bằng `UNIGAZE_MODEL` trong `.env` (local) hoặc
+`stack.env` (production); không hardcode trong code. Khi đổi model:
 
-1. Đổi tên weights ở cả hai nơi.
-2. Build lại image và xoá/khôi phục weights nếu cần.
+1. Đổi `UNIGAZE_MODEL` sang một trong các tên hỗ trợ.
+2. Recreate service gaze để entrypoint tải weights mới vào volume.
 3. Đổi `MAPPING_MODEL_VERSION` trong `backend/app/api/routes/calibration.py`.
 4. Buộc người dùng calibration lại; model cũ sẽ trả 409 ở
    `/api/calibrations/active/model`.
+
+`DEVICE` cũng bắt buộc đặt tường minh (`cpu`/`cuda`); service không tự dò GPU.
+MediaPipe face detector là ngoại lệ: luôn chạy CPU và dùng model cố định.

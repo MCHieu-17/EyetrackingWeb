@@ -72,7 +72,7 @@ COPY --chown=appuser:appuser scripts ./scripts
 COPY --chown=appuser:appuser entrypoint.sh ./
 RUN chmod +x entrypoint.sh \
     && python -c "from app.main import app; paths={r.path for r in app.routes}; assert {'/health','/ready','/session','/session/{sid}'} <= paths, paths" \
-    && python -c "from app.services.pipeline import UNIGAZE_WEIGHTS; import unigaze.loader as l; assert UNIGAZE_WEIGHTS.stem in l.MODEL_INDEX, (UNIGAZE_WEIGHTS.name, sorted(l.MODEL_INDEX))"
+    && python -c "import app.services.pipeline; import unigaze.loader as l; assert l.MODEL_INDEX, sorted(l.MODEL_INDEX)"
 
 USER appuser
 

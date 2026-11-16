@@ -70,12 +70,12 @@ POST /chat/stream
 | `CHATBOT_DB_POOL_TIMEOUT` | `10` | Chờ connection tối đa (giây) |
 | `CHATBOT_DB_POOL_RECONNECT_TIMEOUT` | `10` | Chu kỳ reconnect (giây) |
 | `CHATBOT_INTERNAL_TOKEN` | – | Token nội bộ (bắt buộc) |
-| `EMBEDDING_NAME` | `local` | Embedding local Qwen3-Embedding-0.6B |
-| `EMBEDDING_DIM` | `1024` | Phải khớp `vector(1024)` trong `001_baseline.sql` |
-| `EMBEDDING_MODEL_PATH` | `/app/weights/Qwen3-Embedding-0.6B` | Đường dẫn weights |
-| `EMBEDDING_DEVICE` | `cpu` | `cpu` (mặc định) \| `cuda` (chỉ khi tự build image GPU) |
-| `EMBEDDING_LOCAL_FILES_ONLY` | `true` | Chỉ đọc weights đã tải |
-| `EMBEDDING_HF_REPO` | `Qwen/Qwen3-Embedding-0.6B` | Repo HuggingFace |
+| `EMBEDDING_NAME` | **bắt buộc** | `local` (hiện là backend duy nhất) |
+| `EMBEDDING_DIM` | **bắt buộc** | Phải khớp `vector(1024)` trong `001_baseline.sql` |
+| `EMBEDDING_MODEL_PATH` | **bắt buộc** | Đường dẫn weights, ví dụ `/app/weights/Qwen3-Embedding-0.6B` |
+| `EMBEDDING_DEVICE` | **bắt buộc** | `cpu` \| `cuda` (cuda chỉ khi tự build image GPU) |
+| `EMBEDDING_LOCAL_FILES_ONLY` | **bắt buộc** | `true` \| `false` |
+| `EMBEDDING_HF_REPO` | **bắt buộc** | Repo HuggingFace, ví dụ `Qwen/Qwen3-Embedding-0.6B` |
 | `NEU_BASE_URL` | – | Endpoint OpenAI-compatible của NEU server (bắt buộc) |
 | `NEU_API_KEY` | – | API key/seckey NEU (bắt buộc nếu dùng auth header) |
 | `NEU_AUTH_HEADER` | `x-ollama-seckey` | Tên header auth |
@@ -159,7 +159,8 @@ EMBEDDING_MODEL_PATH="$PWD/weights/Qwen3-Embedding-0.6B" \
 
 - `services/chatbot/Dockerfile` là multi-stage: stage `ai-base` cài
   torch/torchvision CPU, stage `runtime` cài deps chatbot.
-- Compose **không** đặt `gpus: all` cho chatbot; `EMBEDDING_DEVICE=cpu`.
+- Compose **không** đặt `gpus: all` cho chatbot; đặt `EMBEDDING_DEVICE=cpu`
+  tường minh trong `.env`/`stack.env` (không có default trong code).
 - Build: `docker compose build chatbot` hoặc `docker compose up -d --build`.
 - Không khuyến nghị đẩy embedding lên GPU: sửa stage `ai-base` trong
   `services/chatbot/Dockerfile` sang wheel CUDA, đặt `EMBEDDING_DEVICE=cuda`

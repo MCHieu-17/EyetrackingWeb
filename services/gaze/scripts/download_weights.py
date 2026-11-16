@@ -15,30 +15,50 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.settings import WEIGHTS_DIR as _WEIGHTS_DIR  # noqa: E402
+from app.settings import get_device, get_unigaze_model  # noqa: E402
 
 WEIGHTS_DIR = str(_WEIGHTS_DIR)
 
-FILES = [
-    {
-        "name": "mediapipe.tflite",
-        "sources": [
-            ("drive", "1SOIwZEVFdZdLA4d_4hgEqhPaz1gp1jjV"),
-            ("url", "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"),
-        ],
-        "min_size": 50_000,
-    },
-    {
-        # Đổi model: tên file phải trùng key trong unigaze.loader.MODEL_INDEX
-        # (xem app/services/pipeline.py). `min_size` chặn file tải dở.
+MEDIAPIPE_FILE = {
+    "name": "mediapipe.tflite",
+    "sources": [
+        ("drive", "1SOIwZEVFdZdLA4d_4hgEqhPaz1gp1jjV"),
+        ("url", "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"),
+    ],
+    "min_size": 50_000,
+}
+
+# Chỉ tải đúng model được chọn trong UNIGAZE_MODEL. Kích thước lấy từ
+# Content-Length của HuggingFace; `min_size` chặn file tải dở.
+_UNIGAZE_BASE_URL = (
+    "https://huggingface.co/UniGaze/UniGaze-models/resolve/main"
+)
+KNOWN_UNIGAZE = {
+    "unigaze_b16_joint": {
         "name": "unigaze_b16_joint.safetensors",
-        "sources": [
-            ("url", "https://huggingface.co/UniGaze/UniGaze-models/resolve/main/unigaze_b16_joint.safetensors"),
-        ],
-        "min_size": 340_000_000,
-        # Pin SHA256 để build/khởi động reproducible (file HF cố định theo revision).
+        "sources": [("url", f"{_UNIGAZE_BASE_URL}/unigaze_b16_joint.safetensors")],
+        "min_size": 346_291_616,
+        # Pin SHA256 để khởi động reproducible (file HF cố định theo revision).
         "sha256": "2580d707b1395840ecabe7906e2cb35705f38c4ddb0be9c3c38ebb2d5546ffb8",
     },
-]
+    "unigaze_l16_joint": {
+        "name": "unigaze_l16_joint.safetensors",
+        "sources": [("url", f"{_UNIGAZE_BASE_URL}/unigaze_l16_joint.safetensors")],
+        "min_size": 1_217_344_208,
+    },
+    "unigaze_h14_joint": {
+        "name": "unigaze_h14_joint.safetensors",
+        "sources": [("url", f"{_UNIGAZE_BASE_URL}/unigaze_h14_joint.safetensors")],
+        "min_size": 2_528_232_848,
+    },
+    "unigaze_h14_cross_X": {
+        "name": "unigaze_h14_cross_X.safetensors",
+        "sources": [
+            ("url", f"{_UNIGAZE_BASE_URL}/unigaze_h14_cross_X.safetensors")
+        ],
+        "min_size": 2_528_232_848,
+    },
+}
 
 UA = "Mozilla/5.0 (compatible; GazeAPI/1.0)"
 
@@ -123,16 +143,49 @@ def ensure(name, sources, min_size, sha256=None):
     return False
 
 
-def main():
+def _selected_model_file():
+    """Entry cần tải cho UNIGAZE_MODEL; None nếu file đã có sẵn."""
+    model = get_unigaze_model()
+    known = KNOWN_UNIGAZE.get(model)
+    if known is not None:
+        return known
+
+    path = os.path.join(WEIGHTS_DIR, f"{model}.safetensors")
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+        print(f"[weights] {model}: co san (khong co checksum)")
+        return None
+    raise RuntimeError(
+        f"UNIGAZE_MODEL={model!r} chưa có cấu hình tải. "
+        "Thêm entry vào KNOWN_UNIGAZE hoặc đặt file "
+        f"{model}.safetensors vào volume gaze-weights."
+    )
+
+
+def main() -> int:
+    try:
+        get_device()  # fail-fast nếu thiếu DEVICE
+        selected = _selected_model_file()
+    except RuntimeError as exc:
+        print(f"LOI: {exc}", file=sys.stderr)
+        return 1
+
     os.makedirs(WEIGHTS_DIR, exist_ok=True)
+    files = [MEDIAPIPE_FILE]
+    if selected is not None:
+        files.append(selected)
+
     ok = True
-    for f in FILES:
+    for f in files:
         ok = ensure(**f) and ok
     if not ok:
-        print("LOI: khong tai du weights. Kiem tra mang va link Google Drive.", file=sys.stderr)
-        sys.exit(1)
+        print(
+            "LOI: khong tai du weights. Kiem tra mang va link Google Drive.",
+            file=sys.stderr,
+        )
+        return 1
     print("[weights] Tat ca weights da san sang.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

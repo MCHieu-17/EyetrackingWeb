@@ -43,8 +43,48 @@ MAX_INFERENCE_QUEUE = int(os.getenv("MAX_INFERENCE_QUEUE", "32"))
 # hơn; server drop bớt để bảo vệ GPU khi đông người.
 MIN_FRAME_INTERVAL_MS = int(os.getenv("MIN_FRAME_INTERVAL_MS", "80"))
 
-# Thiết bị suy luận: "cpu", "cuda", hoặc rỗng để tự dò GPU.
+# Quyết định model chạy local phải đặt tường minh trong .env/stack.env.
+# Không tự dò GPU và không hardcode tên weights trong code.
 DEVICE = os.getenv("DEVICE", "").strip().lower()
+UNIGAZE_MODEL = os.getenv("UNIGAZE_MODEL", "").strip()
+
+VALID_DEVICES = ("cpu", "cuda")
+
+
+def get_device() -> str:
+    """Trả về DEVICE đã đặt tường minh; thiếu/sai -> fail-fast."""
+    if DEVICE not in VALID_DEVICES:
+        raise RuntimeError(
+            "Thiếu hoặc sai DEVICE. Đặt DEVICE=cpu hoặc DEVICE=cuda "
+            "trong .env (local) hoặc stack.env (production)."
+        )
+    return DEVICE
+
+
+def get_unigaze_model() -> str:
+    """Tên weights UniGaze, ví dụ unigaze_b16_joint."""
+    if not UNIGAZE_MODEL:
+        raise RuntimeError(
+            "Thiếu UNIGAZE_MODEL. Đặt tên weights trong .env/stack.env, "
+            "ví dụ UNIGAZE_MODEL=unigaze_b16_joint."
+        )
+    if (
+        "/" in UNIGAZE_MODEL
+        or "\\" in UNIGAZE_MODEL
+        or UNIGAZE_MODEL in {".", ".."}
+        or UNIGAZE_MODEL.startswith(".")
+    ):
+        raise RuntimeError(
+            f"UNIGAZE_MODEL={UNIGAZE_MODEL!r} không hợp lệ; chỉ dùng tên file "
+            "không có đường dẫn, ví dụ unigaze_b16_joint."
+        )
+    return UNIGAZE_MODEL
+
+
+def unigaze_weights_path() -> Path:
+    """Đường dẫn weights theo UNIGAZE_MODEL (không hardcode trong pipeline)."""
+    return WEIGHTS_DIR / f"{get_unigaze_model()}.safetensors"
+
 
 # One-Euro smoothing (làm mượt POG, xem app/services/smoothing.py)
 # Tọa độ là [0, 1] theo viewport nên các ngưỡng tính theo "bề rộng viewport/giây".

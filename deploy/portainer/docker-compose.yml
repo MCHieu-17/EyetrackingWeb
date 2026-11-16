@@ -42,7 +42,7 @@ x-backend-env: &backend-env
   TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
   FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
   DEBUG: "false"
-  COOKIE_SECURE: "true"
+  COOKIE_SECURE: ${COOKIE_SECURE:?Đặt COOKIE_SECURE=true trong stack.env}
   COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
   COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
   SMTP_HOST: ${SMTP_HOST:-}
@@ -317,12 +317,13 @@ services:
       DB_POOL_MAX: ${CHATBOT_DB_POOL_MAX:-10}
       DB_POOL_TIMEOUT: ${CHATBOT_DB_POOL_TIMEOUT:-10}
       DB_POOL_RECONNECT_TIMEOUT: ${CHATBOT_DB_POOL_RECONNECT_TIMEOUT:-10}
-      EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
-      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
-      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
-      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
-      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
+      # Quyết định model local: bắt buộc đặt trong stack.env, không dùng default.
+      EMBEDDING_NAME: ${EMBEDDING_NAME:?Đặt EMBEDDING_NAME=local trong stack.env}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:?Đặt EMBEDDING_DIM=1024 trong stack.env}
+      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:?Đặt EMBEDDING_MODEL_PATH trong stack.env}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:?Đặt EMBEDDING_DEVICE=cpu|cuda trong stack.env}
+      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:?Đặt EMBEDDING_LOCAL_FILES_ONLY=true|false trong stack.env}
+      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:?Đặt EMBEDDING_HF_REPO trong stack.env}
       HF_TOKEN: ${HF_TOKEN:-}
       NEU_BASE_URL: ${NEU_BASE_URL:-http://101.96.66.232:8037/vllm/v1}
       NEU_API_KEY: ${NEU_API_KEY}
@@ -391,7 +392,9 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment:
-      DEVICE: ${DEVICE:-cuda}
+      # Quyết định model local: bắt buộc đặt trong stack.env, không dùng default.
+      DEVICE: ${DEVICE:?Đặt DEVICE=cpu|cuda trong stack.env}
+      UNIGAZE_MODEL: ${UNIGAZE_MODEL:?Đặt UNIGAZE_MODEL=unigaze_b16_joint trong stack.env}
       ONEEURO_BETA: ${ONEEURO_BETA:-0.5}
       ONEEURO_MIN_CUTOFF: ${ONEEURO_MIN_CUTOFF:-0.5}
       ONEEURO_D_CUTOFF: ${ONEEURO_D_CUTOFF:-1.0}

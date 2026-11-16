@@ -165,6 +165,8 @@ Chạy lệnh trên nhiều lần để lấy các secret khác nhau.
 | `ADMIN_DB_PASSWORD` | Mật khẩu role `admin_reader` |
 | `ADMIN_DATABASE_URL_DOCKER` | DSN admin read-only; **mật khẩu phải khớp `ADMIN_DB_PASSWORD`** |
 | `NEU_BASE_URL`, `NEU_API_KEY` | Endpoint LLM/VLM cho chatbot |
+| `DEVICE`, `UNIGAZE_MODEL` | Model gaze chạy local; **bắt buộc**, không có default trong code/compose |
+| `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`, `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO` | Model embedding chatbot; **bắt buộc**, không có default |
 | `FRONTEND_REPLICAS`, `GAZE_REPLICAS`, `WORKER_REPLICAS` | Số replica; máy cá nhân nên đặt `1` |
 | `CONTENT_VIEW_MIN_DWELL_MS` | Ngưỡng phân loại lượt xem đủ ngưỡng; mặc định `1000`, không ẩn lượt ngắn |
 
@@ -193,7 +195,9 @@ DATABASE_URL=postgresql+asyncpg://postgres:<secret-1>@localhost:5435/eyetracking
 ADMIN_DB_URL=postgresql+asyncpg://admin_reader:<secret-5>@localhost:5435/eyetracking
 ```
 
-Các biến còn lại có thể giữ mặc định trong `.env.example`.
+Các biến model local (`DEVICE`, `UNIGAZE_MODEL`, `EMBEDDING_*`) **phải** đặt
+tường minh trong `.env`; không có default trong code/compose. Các biến còn lại
+có thể giữ mặc định trong `.env.example`.
 
 ### 3.3 Cấu hình tùy chọn
 

@@ -73,7 +73,7 @@ def normalize_image(img, landmarks, focal_norm, distance_norm, roi_size, center,
 class Preprocessor:
     def __init__(
         self,
-        device="cuda",
+        device: str,
         focal_norm=960,
         distance_norm=600,
         roi_size=(224, 224),

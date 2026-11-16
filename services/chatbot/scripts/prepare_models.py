@@ -15,10 +15,12 @@ from pathlib import Path
 # Cho phép chạy trực tiếp file script (khi đó sys.path[0] là scripts/).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.settings import embedding_name  # noqa: E402
+from app.settings import embedding_name, validate  # noqa: E402
 
 
 def main() -> int:
+    # Fail-fast toàn bộ cấu hình, gồm EMBEDDING_* bắt buộc, trước khi tải weights.
+    validate()
     if embedding_name() == "local":
         from scripts.download_embedding import ensure_embedding
 

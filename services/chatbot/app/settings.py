@@ -9,17 +9,26 @@ chỉ cấu hình biến dùng chung với backend; nếu gặp +asyncpg thì t�
 """
 
 import os
-from pathlib import Path
 
 ALLOWED_EMBEDDING = {"local"}
 
-# Đường dẫn weights embedding local mặc định khi không đặt EMBEDDING_MODEL_PATH
-# (trong Docker, .env trỏ tới volume /app/weights).
-_DEFAULT_LOCAL_EMBED_PATH = Path("/app/weights/Qwen3-Embedding-0.6B")
+_BOOL_TRUE = {"1", "true", "yes", "on"}
+_BOOL_FALSE = {"0", "false", "no", "off"}
 
 
 def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
+
+
+def _required(name: str) -> str:
+    """Biến quyết định model local: không có default trong code."""
+    value = _env(name)
+    if not value:
+        raise RuntimeError(
+            f"Thiếu {name}. Đặt tường minh trong .env (local) hoặc "
+            "stack.env (production)."
+        )
+    return value
 
 
 def database_url() -> str:
@@ -55,36 +64,48 @@ def db_pool_reconnect_timeout() -> float:
 
 
 def embedding_name() -> str:
-    return _env("EMBEDDING_NAME", "local")
+    """Tên backend embedding; hiện chỉ hỗ trợ local."""
+    return _required("EMBEDDING_NAME")
 
 
 def embedding_dim() -> int:
-    return int(_env("EMBEDDING_DIM", "1024"))
+    return int(_required("EMBEDDING_DIM"))
 
 
 def embedding_model_path() -> str:
     """Đường dẫn weights embedding local (EMBEDDING_NAME=local)."""
-    return _env("EMBEDDING_MODEL_PATH", str(_DEFAULT_LOCAL_EMBED_PATH))
+    return _required("EMBEDDING_MODEL_PATH")
 
 
 def embedding_device() -> str:
-    """Thiết bị suy luận embedding local: cuda | cpu (mặc định CPU).
+    """Thiết bị suy luận embedding local: cuda | cpu.
 
     GPU chỉ dành cho services/gaze. Chatbot dùng NEU API cho LLM/VLM và
     embedding local chạy CPU; đặt EMBEDDING_DEVICE=cuda chỉ khi chủ động muốn
-    dùng GPU cho chatbot.
+    dùng GPU cho chatbot (image phải build torch CUDA).
     """
-    return _env("EMBEDDING_DEVICE", "cpu")
+    device = _required("EMBEDDING_DEVICE").lower()
+    if device not in {"cpu", "cuda"}:
+        raise RuntimeError(
+            f"EMBEDDING_DEVICE={device!r} không hợp lệ; chọn cpu hoặc cuda."
+        )
+    return device
 
 
 def embedding_local_files_only() -> bool:
     """True -> chỉ đọc weights đã tải, không tự gọi mạng."""
-    value = _env("EMBEDDING_LOCAL_FILES_ONLY", "true").lower()
-    return value not in {"0", "false", "no"}
+    value = _required("EMBEDDING_LOCAL_FILES_ONLY").lower()
+    if value in _BOOL_TRUE:
+        return True
+    if value in _BOOL_FALSE:
+        return False
+    raise RuntimeError(
+        f"EMBEDDING_LOCAL_FILES_ONLY={value!r} không hợp lệ; chọn true/false."
+    )
 
 
 def embedding_hf_repo() -> str:
-    return _env("EMBEDDING_HF_REPO", "Qwen/Qwen3-Embedding-0.6B")
+    return _required("EMBEDDING_HF_REPO")
 
 
 def neu_base_url() -> str:
@@ -288,20 +309,45 @@ def validate() -> None:
     if not internal_token():
         problems.append("thiếu CHATBOT_INTERNAL_TOKEN")
 
-    if embedding_name() not in ALLOWED_EMBEDDING:
+    embedding_name_value = _env("EMBEDDING_NAME")
+    if not embedding_name_value:
+        problems.append("thiếu EMBEDDING_NAME")
+    elif embedding_name_value not in ALLOWED_EMBEDDING:
         problems.append(
-            f"EMBEDDING_NAME={embedding_name()!r} không hợp lệ "
+            f"EMBEDDING_NAME={embedding_name_value!r} không hợp lệ "
             f"(chọn: {sorted(ALLOWED_EMBEDDING)})"
         )
+    if not _env("EMBEDDING_MODEL_PATH"):
+        problems.append("thiếu EMBEDDING_MODEL_PATH")
+    embedding_device_value = _env("EMBEDDING_DEVICE").lower()
+    if not embedding_device_value:
+        problems.append("thiếu EMBEDDING_DEVICE")
+    elif embedding_device_value not in {"cpu", "cuda"}:
+        problems.append(
+            f"EMBEDDING_DEVICE={embedding_device_value!r} không hợp lệ "
+            "(chọn: cpu, cuda)"
+        )
+    local_files_only = _env("EMBEDDING_LOCAL_FILES_ONLY").lower()
+    if not local_files_only:
+        problems.append("thiếu EMBEDDING_LOCAL_FILES_ONLY")
+    elif local_files_only not in _BOOL_TRUE | _BOOL_FALSE:
+        problems.append(
+            f"EMBEDDING_LOCAL_FILES_ONLY={local_files_only!r} không hợp lệ "
+            "(chọn: true, false)"
+        )
+    if not _env("EMBEDDING_HF_REPO"):
+        problems.append("thiếu EMBEDDING_HF_REPO")
+    embedding_dim_value = _env("EMBEDDING_DIM")
+    if not embedding_dim_value:
+        problems.append("thiếu EMBEDDING_DIM")
+    elif not embedding_dim_value.isdigit() or int(embedding_dim_value) <= 0:
+        problems.append("EMBEDDING_DIM phải là số nguyên > 0")
     if not neu_base_url():
         problems.append("thiếu NEU_BASE_URL")
     if not neu_llm_model():
         problems.append("thiếu NEU_LLM_MODEL")
     if neu_auth_header() and not neu_api_key():
         problems.append("thiếu NEU_API_KEY khi NEU_AUTH_HEADER được đặt")
-
-    if embedding_dim() <= 0:
-        problems.append("EMBEDDING_DIM phải > 0")
     if rag_top_k() <= 0:
         problems.append("RAG_TOP_K phải > 0")
     if rag_bm25_candidates() <= 0:

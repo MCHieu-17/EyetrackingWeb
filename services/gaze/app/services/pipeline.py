@@ -11,22 +11,14 @@ import torch
 import unigaze.loader as loader
 
 from app.services.preprocessing import Preprocessor
-from app.settings import DEVICE, WEIGHTS_DIR
+from app.settings import WEIGHTS_DIR, get_device, unigaze_weights_path
 
-# Model UniGaze đang dùng. Tên file (bỏ `.safetensors`) PHẢI trùng key trong
-# `unigaze.loader.MODEL_INDEX` vì ta dùng `path.stem` làm builder key:
+# Model UniGaze lấy từ UNIGAZE_MODEL trong .env/stack.env. Tên file (bỏ
+# `.safetensors`) PHẢI trùng key trong `unigaze.loader.MODEL_INDEX` vì ta dùng
+# `path.stem` làm builder key. Các model hỗ trợ:
 #   unigaze_b16_joint (vit_b_16, 346 MB) | unigaze_l16_joint (vit_l_16, 1.2 GB)
 #   unigaze_h14_joint (vit_h_14, 2.5 GB) | unigaze_h14_cross_X (vit_h_14, 2.5 GB)
-# Đổi model thì sửa ở đây + thêm entry tương ứng trong scripts/download_weights.py.
-UNIGAZE_WEIGHTS = WEIGHTS_DIR / "unigaze_b16_joint.safetensors"
 MEDIAPIPE_WEIGHTS = WEIGHTS_DIR / "mediapipe.tflite"
-
-
-def get_device() -> str:
-    """cuda/cpu: đọc DEVICE nếu hợp lệ, ngược lại tự dò GPU."""
-    if DEVICE in ("cpu", "cuda"):
-        return DEVICE
-    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class FaceDetectorModel:
@@ -73,8 +65,19 @@ class FaceDetectorModel:
 class GazeModel:
     def __init__(self, device=None):
         device = device or get_device()
-        self.model = loader.build_unigaze_model(UNIGAZE_WEIGHTS.stem)
-        self.model.load_unigaze_weights(str(UNIGAZE_WEIGHTS))
+        weights = unigaze_weights_path()
+        if not weights.is_file():
+            raise RuntimeError(
+                f"Không thấy weights UniGaze tại {weights}. "
+                "Kiểm tra UNIGAZE_MODEL và volume gaze-weights."
+            )
+        if weights.stem not in loader.MODEL_INDEX:
+            raise RuntimeError(
+                f"UNIGAZE_MODEL={weights.stem!r} không có trong "
+                f"unigaze.loader.MODEL_INDEX: {sorted(loader.MODEL_INDEX)}"
+            )
+        self.model = loader.build_unigaze_model(weights.stem)
+        self.model.load_unigaze_weights(str(weights))
         self.model.to(device)
         self.model.eval()
 

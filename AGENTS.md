@@ -326,5 +326,10 @@ phải lỗi cấu hình.
   vẫn trả và hiển thị mọi lượt xem, kể cả lượt 0 sample hoặc thiếu layout.
 - `scripts/reset_gaze_data.sh` chỉ xoá lịch sử gaze (`course_visits` cascade)
   và job analyze đang chờ; không xoá nội dung khóa học/AOI/người dùng.
+- Quyết định model chạy local phải đặt tường minh trong `.env`/`stack.env`,
+  không có default trong code/compose: `DEVICE`, `UNIGAZE_MODEL`,
+  `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`,
+  `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO`.
+  MediaPipe face detector là ngoại lệ (luôn CPU, model cố định).
 - Sửa cascade/FK phải chạy test `test_simplified_schema.py`.
 - Document DB mới trong `DB.md`, không dựa vào thiết kế generation 9 cũ.

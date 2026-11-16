@@ -113,6 +113,10 @@ SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.0 ./scripts/publish_im
      tunnel token; file này **đã gitignore**, chỉ dùng để dán vào Portainer.
    - Nên dùng **Load variables from .env file** để Compose xử lý đúng dấu cách.
      Nếu nhập tay từng biến, không thêm dấu ngoặc kép vào giá trị.
+   - Các biến model local **bắt buộc**: `DEVICE`, `UNIGAZE_MODEL`,
+     `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`,
+     `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO`.
+     Thiếu một biến → Compose báo lỗi ngay, không dùng default.
 8. Deploy the stack.
 
 Nếu Portainer không cho Git repository, dùng **Web editor** và dán nội dung

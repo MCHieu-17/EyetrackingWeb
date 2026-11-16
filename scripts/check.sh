@@ -97,8 +97,14 @@ fi
 log "docker compose config"
 docker compose config >/dev/null
 
-log "docker compose config (portainer production)"
-docker compose --env-file .env.example \
+log "docker compose config (portainer production, example env)"
+docker compose --env-file deploy/portainer/stack.env.example \
     -f deploy/portainer/docker-compose.yml config >/dev/null
+
+if [ -f deploy/portainer/stack.env ]; then
+    log "docker compose config (portainer production, stack.env)"
+    docker compose --env-file deploy/portainer/stack.env \
+        -f deploy/portainer/docker-compose.yml config >/dev/null
+fi
 
 log "OK"

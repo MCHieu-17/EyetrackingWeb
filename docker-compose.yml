@@ -367,12 +367,13 @@ services:
       DB_POOL_MAX: ${CHATBOT_DB_POOL_MAX:-10}
       DB_POOL_TIMEOUT: ${CHATBOT_DB_POOL_TIMEOUT:-10}
       DB_POOL_RECONNECT_TIMEOUT: ${CHATBOT_DB_POOL_RECONNECT_TIMEOUT:-10}
-      EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
-      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
-      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
-      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
-      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
+      # Quyết định model local: bắt buộc đặt trong .env, không dùng default.
+      EMBEDDING_NAME: ${EMBEDDING_NAME:?Đặt EMBEDDING_NAME=local trong .env}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:?Đặt EMBEDDING_DIM=1024 trong .env}
+      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:?Đặt EMBEDDING_MODEL_PATH trong .env}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:?Đặt EMBEDDING_DEVICE=cpu|cuda trong .env}
+      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:?Đặt EMBEDDING_LOCAL_FILES_ONLY=true|false trong .env}
+      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:?Đặt EMBEDDING_HF_REPO trong .env}
       HF_TOKEN: ${HF_TOKEN:-}
       # NEU LLM/VLM server (OpenAI-compatible, auth bằng custom header).
       NEU_BASE_URL: ${NEU_BASE_URL:-http://101.96.66.232:8037/vllm/v1}
@@ -454,7 +455,9 @@ services:
     deploy:
       replicas: ${GAZE_REPLICAS:-2}
     environment:
-      - DEVICE=${DEVICE:-cuda}
+      # Quyết định model local: bắt buộc đặt trong .env, không dùng default.
+      - DEVICE=${DEVICE:?Đặt DEVICE=cpu|cuda trong .env}
+      - UNIGAZE_MODEL=${UNIGAZE_MODEL:?Đặt UNIGAZE_MODEL=unigaze_b16_joint trong .env}
       # Làm mượt One-Euro cho POG (xem services/gaze/app/services/smoothing.py).
       # `beta` cao hơn -> bám nhanh khi lia mắt, bớt trễ.
       - ONEEURO_BETA=${ONEEURO_BETA:-0.5}
