@@ -116,7 +116,7 @@ class Ingestion:
                 row = cur.fetchone()
         if row is None:
             raise RuntimeError(
-                "Không tìm thấy cột slides.embedding — hãy chạy baseline generation 12."
+                "Không tìm thấy cột slides.embedding — hãy chạy baseline generation 13."
             )
         column_dim = int(row["atttypmod"])
         if column_dim != embedding_dim():

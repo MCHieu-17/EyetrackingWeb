@@ -34,6 +34,18 @@ export const queryKeys = {
     studentVisits: (courseId: string, studentId: string) =>
       ["teacher", "student-visits", courseId, studentId] as const,
   },
+  visualization: {
+    courseVisits: (courseId: string, query: unknown = {}) =>
+      ["visualization", "course-visits", courseId, query] as const,
+    visitReplay: (visitId: string) =>
+      ["visualization", "visit-replay", visitId] as const,
+    replaySamples: (visitId: string, contentViewId: string) =>
+      ["visualization", "replay-samples", visitId, contentViewId] as const,
+    aoiSummary: (courseId: string, query: unknown) =>
+      ["visualization", "aoi-summary", courseId, query] as const,
+    aoiHeatmap: (courseId: string, query: unknown) =>
+      ["visualization", "aoi-heatmap", courseId, query] as const,
+  },
   student: {
     enrollments: ["student", "enrollments"] as const,
     courseOutline: (courseId: string) =>

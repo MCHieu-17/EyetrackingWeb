@@ -1,75 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { EmailOtpDialog } from "@/components/account/email-otp-dialog";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MicrosoftLogo } from "@/components/ui/microsoft-logo";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  login,
-  primaryRole,
-  ROLE_HOME,
-  startMicrosoftLogin,
-  type AuthUser,
-  type Role,
-} from "@/lib/api/auth";
+import { login } from "@/lib/api/auth";
+import { resolveRedirect } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
 import { AUTH_USER_QUERY_KEY } from "@/hooks/use-stored-user";
-
-const PROTECTED = ["/student", "/teacher", "/admin"] as const;
-
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  not_configured:
-    "Đăng nhập Outlook chưa được cấu hình. Vui lòng liên hệ quản trị viên.",
-  access_denied: "Bạn đã hủy đăng nhập Outlook.",
-  state_invalid: "Phiên đăng nhập đã hết hạn. Vui lòng thử lại.",
-  token_exchange_failed: "Không thể xác thực với Microsoft. Vui lòng thử lại.",
-  token_invalid: "Microsoft trả về thông tin không hợp lệ. Vui lòng thử lại.",
-  profile_invalid: "Không đọc được thông tin tài khoản Microsoft.",
-  email_missing: "Tài khoản Microsoft không có email hợp lệ.",
-  domain_not_allowed: "Email này không thuộc tổ chức được phép.",
-  account_disabled: "Tài khoản đã bị khóa hoặc không hoạt động.",
-  identity_conflict: "Email này đã liên kết với một tài khoản Microsoft khác.",
-  oauth_failed: "Đăng nhập Outlook thất bại. Vui lòng thử lại.",
-  server_error: "Có lỗi xảy ra khi đăng nhập Outlook. Vui lòng thử lại.",
-};
-
-function isProtected(path: string | null): path is string {
-  if (!path) return false;
-  return PROTECTED.some((p) => path === p || path.startsWith(`${p}/`));
-}
-
-function resolveRedirect(user: AuthUser, next: string | null): string {
-  const roles = user.roles ?? [];
-  // Ưu tiên role khớp với ?next để tránh redirect chéo role
-  if (isProtected(next)) {
-    const zone = next.split("/")[1] as Role;
-    if (roles.includes(zone)) return next;
-  }
-  return ROLE_HOME[primaryRole(roles)];
-}
-
-function OAuthErrorBanner() {
-  const searchParams = useSearchParams();
-  const oauthError = searchParams.get("oauthError");
-  if (!oauthError) return null;
-  const message =
-    OAUTH_ERROR_MESSAGES[oauthError] ??
-    "Đăng nhập Outlook thất bại. Vui lòng thử lại.";
-  return (
-    <div
-      role="alert"
-      className="mb-5 flex items-start gap-2.5 rounded-xl border border-[#eadbd8] bg-[#fbf4f2] px-3.5 py-3 text-sm leading-5 text-[#8b2c25]"
-    >
-      <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
-      <p>{message}</p>
-    </div>
-  );
-}
 
 export function LoginForm({ className }: { className?: string }) {
   const router = useRouter();
@@ -77,10 +21,12 @@ export function LoginForm({ className }: { className?: string }) {
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
+  const [otpOpen, setOtpOpen] = React.useState(false);
+  const [next, setNext] = React.useState<string | null>(null);
 
-  const handleMicrosoftLogin = () => {
-    const next = new URLSearchParams(window.location.search).get("next");
-    startMicrosoftLogin(next);
+  const handleOpenOtp = () => {
+    setNext(new URLSearchParams(window.location.search).get("next"));
+    setOtpOpen(true);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -97,8 +43,8 @@ export function LoginForm({ className }: { className?: string }) {
     try {
       const result = await login(email, password);
       queryClient.setQueryData(AUTH_USER_QUERY_KEY, result.user);
-      const next = new URLSearchParams(window.location.search).get("next");
-      const destination = resolveRedirect(result.user, next);
+      const nextPath = new URLSearchParams(window.location.search).get("next");
+      const destination = resolveRedirect(result.user, nextPath);
       router.prefetch(destination);
       router.replace(destination);
     } catch (caught) {
@@ -111,10 +57,6 @@ export function LoginForm({ className }: { className?: string }) {
 
   return (
     <div className={cn("w-full", className)}>
-      <React.Suspense fallback={null}>
-        <OAuthErrorBanner />
-      </React.Suspense>
-
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="login-email" className="text-[13px] font-semibold text-[#2a2a2a]">
@@ -194,11 +136,21 @@ export function LoginForm({ className }: { className?: string }) {
         variant="outline"
         size="lg"
         className="h-12 w-full rounded-full border-[#e8e8e3] bg-white text-[15px] font-semibold text-[#2a2a2a] shadow-none hover:bg-[#f5f6f2]"
-        onClick={handleMicrosoftLogin}
+        onClick={handleOpenOtp}
       >
         <MicrosoftLogo className="size-4" />
         Đăng nhập với Outlook
       </Button>
+      <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
+        Dành cho sinh viên NEU — mã OTP sẽ được gửi tới hộp thư Outlook.
+      </p>
+
+      <EmailOtpDialog
+        open={otpOpen}
+        onOpenChange={setOtpOpen}
+        mode="login"
+        next={next}
+      />
     </div>
   );
 }

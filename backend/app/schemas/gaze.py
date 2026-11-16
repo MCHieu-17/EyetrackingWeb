@@ -1,3 +1,6 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import AliasChoices, Field
 
 from app.schemas.common import CamelModel
@@ -8,9 +11,9 @@ class LearningSessionCreateIn(CamelModel):
     lesson_id: str
     course_visit_id: str | None = None
     device_fingerprint: str = Field(min_length=1, max_length=255)
-    # Viewport lúc tạo phiên và viewport lúc calibration. Không cần bằng nhau:
-    # frontend quy đổi toạ độ gaze từ viewport calibration sang viewport hiện
-    # tại, nên zoom/resize/move cửa sổ không phải hiệu chỉnh lại.
+    # Viewport lúc tạo phiên và viewport lúc calibration. Frontend quy đổi toạ
+    # độ gaze từ viewport calibration sang viewport hiện tại khi cửa sổ
+    # resize/move; zoom/fullscreen do display guard tạm dừng ghi gaze.
     viewport_width_px: int = Field(gt=0)
     viewport_height_px: int = Field(gt=0)
     calibration_width_px: int = Field(gt=0)
@@ -49,9 +52,15 @@ class LearningSessionEndIn(CamelModel):
 
 
 class PresentationCreateIn(CamelModel):
+    # UUID do client sinh cho mỗi lần vào slide. Retry cùng UUID là idempotent;
+    # UUID mới luôn tạo content_view mới kể cả khi quay lại slide cũ.
+    client_presentation_id: UUID | None = None
+    # Thời điểm thực tế client vào slide; server kẹp về [now - 5 phút, now].
+    entered_at: datetime | None = None
     slide_id: str | None = None
     surface: str = Field(pattern="^(lesson|quiz)$")
-    sequence_no: int = Field(ge=0)
+    # Legacy: client cũ vẫn gửi sequenceNo. Bỏ trống thì server cấp max + 1.
+    sequence_no: int | None = Field(default=None, ge=0)
 
 
 class PresentationOut(CamelModel):
@@ -80,12 +89,10 @@ class LayoutRectIn(CamelModel):
 class LayoutCreateIn(CamelModel):
     sequence_no: int = Field(ge=0)
     layout_generation: int = Field(ge=0)
-    # current-v1: layout cũ theo viewport hiện tại.
-    # original-v1: layout đã quy đổi về viewport gốc lúc calibration.
-    coordinate_space: str = Field(
-        default="current-v1", pattern="^(current-v1|original-v1)$"
+    # Chỉ còn để phát hiện tab frontend cũ; payload mới không gửi field này.
+    coordinate_space: str | None = Field(
+        default=None, pattern="^(current-v1|original-v1)$"
     )
-    visible_rect: dict = Field(default_factory=dict)
     image_transform: dict = Field(default_factory=dict)
     rects: list[LayoutRectIn] = Field(default_factory=list)
 
@@ -94,8 +101,6 @@ class LayoutOut(CamelModel):
     id: str
     presentation_id: str
     layout_generation: int
-    coordinate_space: str = "current-v1"
-    visible_rect: dict = Field(default_factory=dict)
     captured_at: str
 
 
@@ -105,8 +110,6 @@ class GazeSampleBatchIn(CamelModel):
     event_time: str
     viewport_x: float | None = None
     viewport_y: float | None = None
-    original_viewport_x: float | None = None
-    original_viewport_y: float | None = None
     status: str = Field(pattern="^(ok|no_face|error|offscreen)$")
     quality_flags: dict = Field(default_factory=dict)
 

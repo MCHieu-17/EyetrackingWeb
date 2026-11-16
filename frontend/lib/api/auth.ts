@@ -10,10 +10,19 @@ export interface AuthUser {
   avatarUrl?: string | null;
 }
 
-interface LoginResult {
+export interface LoginResult {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
+}
+
+/** Phản hồi khi backend đã gửi mã OTP tới email sinh viên. */
+export interface OtpChallenge {
+  challengeId: string;
+  email: string;
+  expiresAt: string;
+  resendAfterSeconds: number;
+  delivery: string;
 }
 
 export const ROLE_HOME: Record<Role, string> = {
@@ -74,14 +83,31 @@ export function subscribeAuthChange(callback: (reason: AuthChangeReason) => void
   };
 }
 
-/** Chuyển trình duyệt sang endpoint bắt đầu OAuth Microsoft 365. */
-export function startMicrosoftLogin(next?: string | null): void {
-  const params = new URLSearchParams();
-  if (next) params.set("next", next);
-  const query = params.toString();
-  globalThis.window?.location.assign(
-    `/api/auth/oauth/microsoft/start${query ? `?${query}` : ""}`,
-  );
+/** Yêu cầu backend gửi mã OTP 6 số tới email sinh viên NEU. */
+export async function requestEmailOtp(email: string): Promise<OtpChallenge> {
+  return apiFetch<OtpChallenge>("/api/auth/otp/request", {
+    method: "POST",
+    body: { email },
+    skipAuthRefresh: true,
+  });
+}
+
+/** Xác nhận OTP; backend tạo tài khoản sinh viên nếu email chưa tồn tại. */
+export async function verifyEmailOtp(
+  challengeId: string,
+  code: string,
+): Promise<LoginResult> {
+  const data = await apiFetch<LoginResult>("/api/auth/otp/verify", {
+    method: "POST",
+    body: { challengeId, code },
+    skipAuthRefresh: true,
+  });
+  if (data?.accessToken) setMemoryAccessToken(data.accessToken);
+  else if ((data as unknown as { access_token?: string })?.access_token) {
+    setMemoryAccessToken((data as unknown as { access_token: string }).access_token);
+  }
+  notifyAuthChange("login");
+  return data;
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {

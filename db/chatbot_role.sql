@@ -1,5 +1,5 @@
 -- =============================================================================
--- chatbot_role.sql — role DB hạn chế cho chatbot RAG (schema generation 12).
+-- chatbot_role.sql — role DB hạn chế cho chatbot RAG (schema generation 13).
 --
 -- Quyền:
 --   - SELECT outline (index cả nháp) + view published;
@@ -30,6 +30,6 @@ GRANT UPDATE (
     pipeline_version, model_version, updated_at
 ) ON slides TO :"role";
 
-REVOKE ALL ON users, auth_sessions, oauth_accounts, enrollments,
+REVOKE ALL ON users, auth_sessions, email_otps, enrollments,
     quiz_attempts, learning_sessions, chat_sessions, chat_messages
     FROM :"role";

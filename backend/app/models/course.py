@@ -232,9 +232,6 @@ class Slide(Base):
     title: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default=text("''")
     )
-    aoi_suggestions: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
-    )
     transcript: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("''")
     )

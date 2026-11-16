@@ -21,6 +21,7 @@ from app.schemas.visit import (
     CourseVisitHeartbeatOut,
     CourseVisitOut,
 )
+from app.services.gaze_views import close_open_views_for_visit
 
 router = APIRouter(tags=["course-visits"])
 
@@ -159,6 +160,8 @@ async def end_course_visit(
         visit.ended_at = now
         visit.last_seen_at = now
         visit.updated_at = now
+        # Đóng mọi lượt xem còn mở của các phiên học thuộc ca này.
+        await close_open_views_for_visit(db, visit.id, now)
         await db.commit()
         await db.refresh(visit)
     return _visit_out(visit)

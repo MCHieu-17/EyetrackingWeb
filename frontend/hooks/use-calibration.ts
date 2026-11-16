@@ -86,9 +86,19 @@ interface UseCalibrationOptions {
   onComplete: () => void;
   /** Lưu lên Postgres theo device (chỉ học viên). Mặc định true. */
   persistToBackend?: boolean;
+  /**
+   * Tạm dừng hiệu chỉnh (ví dụ display guard phát hiện zoom/fullscreen).
+   * Khi pause: không tạo phiên mới, xoá phiên hiện tại và đưa về idle.
+   * Khi unpause: tạo lại phiên từ đầu để không trộn mẫu của phiên cũ.
+   */
+  paused?: boolean;
 }
 
-export function useCalibration({ onComplete, persistToBackend = true }: UseCalibrationOptions): CalibrationEngine {
+export function useCalibration({
+  onComplete,
+  persistToBackend = true,
+  paused = false,
+}: UseCalibrationOptions): CalibrationEngine {
   // null khi còn render phía server / trước hydration → dùng margin mặc định.
   const viewport = useSyncExternalStore(subscribeViewport, getViewportSnapshot, () => null);
   const points = useMemo<CalPoint[]>(
@@ -103,8 +113,25 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<CalibrationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [session, setSession] = useState<{
+    id: string;
+    epoch: number;
+  } | null>(null);
   const [sessionNonce, setSessionNonce] = useState(0);
+  // Mỗi lần pause tăng epoch: mọi phiên cũ lập tức không còn hợp lệ. Cách này
+  // cho phép UI suy ra idle ngay trong render mà không setState trong effect.
+  const [epoch, setEpoch] = useState(0);
+  const [prevPaused, setPrevPaused] = useState(paused);
+
+  if (paused !== prevPaused) {
+    setPrevPaused(paused);
+    if (paused) setEpoch((value) => value + 1);
+  }
+
+  const epochRef = useRef(epoch);
+  useEffect(() => {
+    epochRef.current = epoch;
+  }, [epoch]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -124,9 +151,22 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
     onCompleteRef.current = onComplete;
   });
 
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
+  // Pause: xoá phiên đang có trên server. Chỉ side effect, không setState;
+  // epoch đã tăng trong render nên phiên cũ không còn được coi là hợp lệ.
+  useEffect(() => {
+    if (!paused || !session) return;
+    deleteGazeSession(session.id);
+  }, [paused, session]);
+
   useEffect(() => {
     // Chỉ tạo phiên khi đã biết kích thước màn hình (tránh tạo phiên với điểm mặc định).
-    if (!viewport) return;
+    // Pause (display guard) thì tuyệt đối không tạo phiên mới.
+    if (!viewport || paused) return;
     let cancelled = false;
     createGazeSession(points)
       .then((res) => {
@@ -135,7 +175,9 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
           return;
         }
         if (res.ok && res.sessionId) {
-          setSessionId(res.sessionId);
+          setSession({ id: res.sessionId, epoch });
+          setIdx(0);
+          setError(null);
           setPhase("calibrating");
         }
       })
@@ -143,7 +185,7 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
     return () => {
       cancelled = true;
     };
-  }, [points, viewport, sessionNonce]);
+  }, [points, viewport, sessionNonce, paused, epoch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,16 +212,14 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
   }, []);
 
   const reset = useCallback(() => {
-    setSessionId((prev) => {
-      if (prev) deleteGazeSession(prev);
-      return null;
-    });
+    if (session) deleteGazeSession(session.id);
+    setSession(null);
     clearStoredGazeSession();
     setError(null);
     setIdx(0);
     setPhase("idle");
     setSessionNonce((v) => v + 1);
-  }, []);
+  }, [session]);
 
   const captureFrame = useCallback(async (): Promise<Blob | null> => {
     const video = videoRef.current;
@@ -207,9 +247,23 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
   }, []);
 
   const finish = useCallback(async () => {
-    if (!sessionId) return;
+    const activeSession = session;
+    if (
+      !activeSession ||
+      pausedRef.current ||
+      activeSession.epoch !== epoch
+    ) {
+      return;
+    }
     setPhase("training");
-    const trained = await trainGazeSession(sessionId);
+    const trained = await trainGazeSession(activeSession.id);
+    // Guard có thể bật trong lúc train: không lưu model, không chuyển trang.
+    if (
+      pausedRef.current ||
+      epochRef.current !== activeSession.epoch
+    ) {
+      return;
+    }
     if (!trained.ok) {
       const message =
         trained.error === "insufficient_samples"
@@ -222,7 +276,7 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
       return;
     }
     storeGazeSession(
-      sessionId,
+      activeSession.id,
       window.innerWidth,
       window.innerHeight,
       window.screenX,
@@ -231,7 +285,7 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
     );
     if (persistToBackend) {
       // Lưu model .ubj để lần sau khôi phục không cần hiệu chỉnh lại
-      const model = await downloadGazeModel(sessionId);
+      const model = await downloadGazeModel(activeSession.id);
       if (model) {
         await saveCalibrationToBackend({
           deviceFingerprint: getDeviceFingerprint(),
@@ -245,14 +299,18 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
       }
     }
     onCompleteRef.current();
-  }, [sessionId, reset, persistToBackend, points]);
+  }, [session, epoch, reset, persistToBackend, points]);
 
   const handleDotClick = useCallback(async () => {
-    if (phase !== "calibrating") return;
-    if (!sessionId) {
-      setError("Dịch vụ AI chưa sẵn sàng — hãy thử lại sau một nhịp.");
+    if (
+      paused ||
+      phase !== "calibrating" ||
+      !session ||
+      session.epoch !== epoch
+    ) {
       return;
     }
+    const activeSessionId = session.id;
     setPhase("sending");
     setError(null);
 
@@ -272,11 +330,13 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
       attempt++
     ) {
       const frame = await captureFrame();
+      if (pausedRef.current || epochRef.current !== session.epoch) return;
       if (frame === null) {
         failed = "no_camera";
         break;
       }
-      const result = await submitCalibrationSample(sessionId, frame, point.id);
+      const result = await submitCalibrationSample(activeSessionId, frame, point.id);
+      if (pausedRef.current || epochRef.current !== session.epoch) return;
       if (result.status === "accepted") {
         accepted += 1;
       } else if (result.status === "no_face" || result.status === "invalid_image") {
@@ -303,21 +363,38 @@ export function useCalibration({ onComplete, persistToBackend = true }: UseCalib
     }
     setIdx(idx + 1);
     setPhase("calibrating");
-  }, [phase, sessionId, camOn, points, idx, total, captureFrame, finish]);
+  }, [
+    phase,
+    camOn,
+    points,
+    idx,
+    total,
+    captureFrame,
+    finish,
+    paused,
+    session,
+    epoch,
+  ]);
 
-  const progress = ((idx + (phase === "training" ? 1 : 0)) / total) * 100;
+  // UI chỉ coi phiên là sẵn sàng khi phiên đó thuộc epoch hiện tại. Khi pause
+  // (hoặc ngay sau unpause, trước khi phiên mới về) mọi thứ hiển thị như idle.
+  const hasValidSession = !paused && session !== null && session.epoch === epoch;
+  const displayPhase: CalibrationPhase = hasValidSession ? phase : "idle";
+  const displayStep = hasValidSession ? idx : 0;
+  const progress =
+    ((displayStep + (displayPhase === "training" ? 1 : 0)) / total) * 100;
 
   return {
     points,
-    current: points[idx],
-    step: idx,
+    current: points[displayStep],
+    step: displayStep,
     total,
     progress,
-    phase,
-    busy: phase === "sending" || phase === "training",
-    error,
+    phase: displayPhase,
+    busy: displayPhase === "sending" || displayPhase === "training",
+    error: paused ? null : error,
     camOn,
-    sessionReady: Boolean(sessionId),
+    sessionReady: hasValidSession,
     videoRef,
     attachVideo,
     handleDotClick,

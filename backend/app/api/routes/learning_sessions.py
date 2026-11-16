@@ -22,6 +22,7 @@ from app.schemas.gaze import (
 from app.services import content
 from app.services.access import current_calibration
 from app.services.embedding_jobs import enqueue_analysis_lesson
+from app.services.gaze_views import close_open_views
 
 router = APIRouter(tags=["learning-sessions"])
 
@@ -178,8 +179,10 @@ async def create_learning_session(
             await db.commit()
             await db.refresh(existing)
             return _session_out(existing, mode="continue")
+        aborted_at = _now()
         existing.status = "aborted"
-        existing.ended_at = _now()
+        existing.ended_at = aborted_at
+        await close_open_views(db, [existing.id], aborted_at)
 
     now = _now()
     session = LearningSession(
@@ -220,6 +223,7 @@ async def end_learning_session(
         )
     session.status = body.status
     session.ended_at = _now()
+    await close_open_views(db, [session.id], session.ended_at)
     if session.course_visit_id:
         visit = await db.get(CourseVisit, session.course_visit_id)
         if visit is not None:

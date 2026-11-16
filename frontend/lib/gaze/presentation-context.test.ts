@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPresentationRequestTracker,
   presentationContextKey,
+  presentationEntryFor,
 } from "./presentation-context";
 
 const BASE = {
@@ -42,6 +43,33 @@ describe("presentationContextKey", () => {
     expect(presentationContextKey({ ...quiz, slideIndex: 0 })).toBe(
       presentationContextKey({ ...quiz, slideIndex: 9 }),
     );
+  });
+});
+
+describe("presentationEntryFor", () => {
+  it("keeps the UUID and enteredAt when the same entry is retried", () => {
+    const first = presentationEntryFor(null, "slide-a");
+    const retry = presentationEntryFor(first, "slide-a");
+
+    expect(retry).toBe(first);
+    expect(retry.clientPresentationId).toBe(first.clientPresentationId);
+    expect(retry.enteredAt).toBe(first.enteredAt);
+    expect(first.clientPresentationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(first.enteredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("creates a new UUID when returning to a previous slide", () => {
+    const slideA = presentationEntryFor(null, "slide-a");
+    const slideB = presentationEntryFor(slideA, "slide-b");
+    const slideAAgain = presentationEntryFor(slideB, "slide-a");
+
+    expect(slideB.clientPresentationId).not.toBe(slideA.clientPresentationId);
+    expect(slideAAgain.clientPresentationId).not.toBe(
+      slideA.clientPresentationId,
+    );
+    expect(slideAAgain.key).toBe("slide-a");
   });
 });
 

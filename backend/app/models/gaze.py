@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -201,6 +201,11 @@ class ContentView(Base):
     heatmap_grid: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
+    # Thống kê dẫn xuất theo từng nhãn AOI trong lượt xem:
+    # {"SLIDE_AOI_X": {"ms": 1234, "samples": 45}}.
+    aoi_stats: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     analysis_status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'pending'")
     )
@@ -229,10 +234,6 @@ class ViewLayout(Base):
     __table_args__ = (
         UniqueConstraint("content_view_id", "layout_no"),
         CheckConstraint("layout_no >= 0", name="view_layouts_layout_no_check"),
-        CheckConstraint(
-            "coordinate_space IN ('current-v1', 'original-v1')",
-            name="view_layouts_coordinate_space_check",
-        ),
         Index("idx_view_layouts_view", "content_view_id", "captured_at"),
     )
 
@@ -243,12 +244,6 @@ class ViewLayout(Base):
         ForeignKey("content_views.id", ondelete="CASCADE"), nullable=False
     )
     layout_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    coordinate_space: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default=text("'current-v1'")
-    )
-    visible_rect: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default=text("'{}'::jsonb")
-    )
     slide_rect: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -306,15 +301,9 @@ class GazeSample(Base):
     event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     viewport_x: Mapped[float | None] = mapped_column(REAL)
     viewport_y: Mapped[float | None] = mapped_column(REAL)
-    original_viewport_x: Mapped[float | None] = mapped_column(REAL)
-    original_viewport_y: Mapped[float | None] = mapped_column(REAL)
     slide_x: Mapped[float | None] = mapped_column(REAL)
     slide_y: Mapped[float | None] = mapped_column(REAL)
     aoi_label: Mapped[str | None] = mapped_column(Text)
-    # Legacy: giữ để tương thích API/export cũ; sau reanalyze chỉ có 0/1 phần tử.
-    aoi_codes: Mapped[list[str]] = mapped_column(
-        ARRAY(String(128)), nullable=False, server_default=text("'{}'::text[]")
-    )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     quality_flags: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")

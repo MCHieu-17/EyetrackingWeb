@@ -10,10 +10,31 @@ gốc repo.
 | `check.sh` | Kiểm tra nhanh trạng thái stack |
 | `seed_dev.sh` | Seed tài khoản dev (`admin@`, `teacher@`, `student@`) |
 | `reset_db.sh` / `reset_db.py` | Reset DB development có guard |
+| `reset_gaze_data.sh` | Xoá lịch sử gaze/visualization có guard, giữ nội dung khóa học |
 | `test_backend.sh` | Chạy test backend |
 | `test_migrations.sh` | Test migration runner + checksum/idempotent |
 | `tests/test_reset_db.py` | Guard tests cho reset (stdlib unittest) |
 | `smoke.sh` | Smoke test sau khi stack lên |
+| `publish_images.sh` | Build/push image production lên GHCR (fallback nếu không dùng GitHub Actions) |
+| `smoke_remote.sh` | Smoke test qua domain public, không cần SSH/Portainer |
+
+## Production qua Portainer
+
+Hướng dẫn đầy đủ ở [`deploy/portainer/README.md`](../deploy/portainer/README.md).
+Tóm tắt:
+
+```bash
+# Build/push thủ công nếu GitHub Actions không dùng được
+docker login ghcr.io
+IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.0 ./scripts/publish_images.sh
+
+# Smoke test qua domain public
+BASE_URL=https://eyetracking.nmhieu17.space ./scripts/smoke_remote.sh
+```
+
+Stack production dùng `deploy/portainer/docker-compose.yml`; chỉ pull image,
+không build trên server, không publish port host. `cloudflared` nằm trong stack
+và nhận traffic Cloudflare Tunnel.
 
 ## `create_chatbot_role.sh` — role DB hạn chế cho chatbot
 
@@ -32,8 +53,19 @@ password/grant cũng được.
 
 ## Retention gaze
 
-Schema generation 12 dùng bảng `gaze_samples` thường, không partition. Chạy
+Schema generation 13 dùng bảng `gaze_samples` thường, không partition. Chạy
 `./scripts/maintenance.sh` để xoá sample cũ hơn `GAZE_RETENTION_DAYS`.
+
+Khi cần xoá sạch lịch sử gaze/visualization để test lại:
+
+```bash
+./scripts/reset_gaze_data.sh --all                  # preview
+./scripts/reset_gaze_data.sh --all --apply --confirm-reset-gaze
+./scripts/reset_gaze_data.sh --course-id <uuid>     # chỉ một khóa
+```
+
+Script tự backup trước khi xoá (trừ khi `--skip-backup`) và không xoá users,
+courses, slides, AOIs hay calibration.
 
 ## `docker_cleanup.sh` — dọn image/build cache
 
@@ -53,18 +85,19 @@ unit tests. Có thể override interpreter bằng `BACKEND_PYTHON`,
 
 ## Migration (schema DB)
 
-Schema do các file trong `db/migrations/` quyết định. Hiện có baseline duy nhất
-`001_baseline.sql` (generation 12, 24 bảng lõi); migration tiếp theo là
-`002_...sql`. Runner `db/migrate.sh` (nằm trong image
-`eyelearning-migrations:local`, build từ `db/Dockerfile`, service một-lần
-`migrate`) là thứ duy nhất nên chạy migration — **không** `psql -f` tay từng file.
+Schema do các file trong `db/migrations/` quyết định. Hiện có
+`001_baseline.sql` (generation 12, 24 bảng lõi), `002_email_otp.sql` và
+`003_aoi_single_label.sql` (generation 13); migration tiếp theo là `004_...sql`.
+Runner `db/migrate.sh` (nằm trong image `eyelearning-migrations:local`, build từ
+`db/Dockerfile`, service một-lần `migrate`) là thứ duy nhất nên chạy migration —
+**không** `psql -f` tay từng file.
 
 Cơ chế:
 
 - Bảng `schema_migrations` lưu `filename` + `checksum` sha256 của mọi file đã áp;
   lần chạy sau **chỉ chạy file chưa áp**.
 - File đã áp mà bị **sửa nội dung** → runner dừng ngay, in rõ checksum cũ/mới.
-  Muốn đổi schema thì **thêm file mới** (`002_…`) — không sửa file cũ.
+  Muốn đổi schema thì **thêm file mới** (`004_…`) — không sửa file cũ.
 - DB cũ có bảng public nhưng chưa có `schema_migrations` → runner **fail** và yêu
   cầu reset có guard (`./scripts/reset_db.sh`). Không tự đoán schema cũ.
 - Service `migrate` exit 1 ⇒ compose huỷ lần chạy đó. Xem log:

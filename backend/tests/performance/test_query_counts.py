@@ -26,6 +26,8 @@ from app.db.session import SessionLocal, engine
 from app.models.media import MediaAsset
 from tests.conftest import create_user, login, seed_course, seed_slide
 from tests.query_counter import QueryCounter, count_queries
+from tests.test_visualization_replay import _seed_visit
+from tests.test_visualization_summary import _seed_summary_data
 
 pytestmark = pytest.mark.performance
 
@@ -34,6 +36,8 @@ TEACHER_COURSES_MAX_QUERIES = 6
 COURSE_STUDENTS_MAX_QUERIES = 9
 GAZE_BATCH_MAX_QUERIES = 5
 MEDIA_ASSET_MAX_QUERIES = 4
+REPLAY_OVERVIEW_MAX_QUERIES = 14
+AOI_SUMMARY_MAX_QUERIES = 9
 
 
 def _assert_budget(counter: QueryCounter, budget: int, label: str) -> None:
@@ -208,3 +212,38 @@ async def test_media_asset_file_query_count(client):
 
     assert response.status_code == 200, response.text
     _assert_budget(counter, MEDIA_ASSET_MAX_QUERIES, f"GET {path}")
+
+
+@pytest.mark.asyncio
+async def test_visit_replay_query_count(client):
+    data = await _seed_visit()
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+    path = f"/teacher/visits/{data['visit_id']}/replay"
+
+    warmup = await client.get(path, headers=headers)
+    assert warmup.status_code == 200, warmup.text
+
+    with count_queries(engine) as counter:
+        response = await client.get(path, headers=headers)
+
+    assert response.status_code == 200, response.text
+    _assert_budget(counter, REPLAY_OVERVIEW_MAX_QUERIES, f"GET {path}")
+
+
+@pytest.mark.asyncio
+async def test_aoi_summary_query_count(client):
+    data = await _seed_summary_data()
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+    path = f"/teacher/courses/{data['course_id']}/analytics/aoi-summary"
+    body = {"includeDropped": True}
+
+    warmup = await client.post(path, headers=headers, json=body)
+    assert warmup.status_code == 200, warmup.text
+
+    with count_queries(engine) as counter:
+        response = await client.post(path, headers=headers, json=body)
+
+    assert response.status_code == 200, response.text
+    _assert_budget(counter, AOI_SUMMARY_MAX_QUERIES, f"POST {path}")

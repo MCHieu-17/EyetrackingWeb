@@ -6,10 +6,12 @@ from sqlalchemy import delete, select
 
 from app.maintenance import (
     delete_expired_auth_sessions,
+    delete_expired_email_otps,
     delete_old_gaze_samples,
     expire_stale_learning_sessions,
 )
 from app.models.auth import AuthSession
+from app.models.email_otp import EmailOtp
 from app.models.gaze import GazeSample, LearningSession
 from tests.conftest import SessionLocal, create_user, seed_course
 
@@ -77,6 +79,59 @@ async def test_delete_expired_auth_sessions_removes_expired_and_revoked_expired(
         async with SessionLocal() as db:
             await db.execute(
                 delete(AuthSession).where(AuthSession.id.in_(session_ids))
+            )
+            await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_delete_expired_email_otps_keeps_recent_rows():
+    now = _now()
+    old_id = str(uuid.uuid4())
+    recent_id = str(uuid.uuid4())
+    old_email = f"{uuid.uuid4().int % 100_000_000:08d}@st.neu.edu.vn"
+    recent_email = f"{uuid.uuid4().int % 100_000_000:08d}@st.neu.edu.vn"
+
+    async with SessionLocal() as db:
+        db.add_all(
+            [
+                EmailOtp(
+                    id=old_id,
+                    email=old_email,
+                    code_hash="a" * 64,
+                    expires_at=now - timedelta(days=2),
+                ),
+                EmailOtp(
+                    id=recent_id,
+                    email=recent_email,
+                    code_hash="b" * 64,
+                    expires_at=now - timedelta(hours=12),
+                ),
+            ]
+        )
+        await db.commit()
+
+    try:
+        async with SessionLocal() as db:
+            deleted = await delete_expired_email_otps(db, now=now)
+            await db.commit()
+        assert deleted == 1
+        async with SessionLocal() as db:
+            remaining = (
+                (
+                    await db.execute(
+                        select(EmailOtp.id).where(
+                            EmailOtp.id.in_([old_id, recent_id])
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert remaining == [recent_id]
+    finally:
+        async with SessionLocal() as db:
+            await db.execute(
+                delete(EmailOtp).where(EmailOtp.id.in_([old_id, recent_id]))
             )
             await db.commit()
 

@@ -21,7 +21,6 @@ SELECT
     gs.slide_x,
     gs.slide_y,
     gs.aoi_label,
-    gs.aoi_codes,
     gs.status,
     gs.quality_flags,
     cv.id AS content_view_id,
@@ -106,8 +105,8 @@ async def export_lines(
         yield json.dumps(
             {
                 "type": "manifest",
-                "schemaVersion": 10,
-                "aoiLabelVersion": "surface-v1",
+                "schemaVersion": 13,
+                "aoiLabelVersion": "surface-v2",
                 "course": {
                     "id": str(lesson["course_id"]),
                     "title": lesson["course_title"],
@@ -186,26 +185,6 @@ async def export_lines(
                 )
                 if filtered_out:
                     label = None
-                    codes = []
-                else:
-                    codes = [label] if label else list(row["aoi_codes"] or [])
-                    if scope == "slide":
-                        codes = [
-                            code
-                            for code in codes
-                            if code.startswith("SLIDE_")
-                            or (label is None and not code.startswith("ui:"))
-                        ]
-                    elif scope == "ui":
-                        codes = [
-                            code
-                            for code in codes
-                            if (
-                                label is not None
-                                and not code.startswith("SLIDE_")
-                            )
-                            or (label is None and code.startswith("ui:"))
-                        ]
                 yield json.dumps(
                     {
                         "type": "sample",
@@ -227,7 +206,6 @@ async def export_lines(
                         "slideX": row["slide_x"],
                         "slideY": row["slide_y"],
                         "aoiLabel": label,
-                        "aoiCodes": codes,
                         "status": row["status"],
                         "trackingConsent": row["tracking_consent"],
                         "qualityFlags": row["quality_flags"],
@@ -246,12 +224,9 @@ SELECT
     gs.client_batch_id,
     gs.viewport_x,
     gs.viewport_y,
-    gs.original_viewport_x,
-    gs.original_viewport_y,
     gs.slide_x,
     gs.slide_y,
     gs.aoi_label,
-    gs.aoi_codes,
     gs.status,
     gs.quality_flags,
     cv.id AS content_view_id,
@@ -322,8 +297,8 @@ async def export_visit_lines(visit_id: str) -> AsyncIterator[str]:
         yield json.dumps(
             {
                 "type": "manifest",
-                "schemaVersion": 11,
-                "aoiLabelVersion": "surface-v1",
+                "schemaVersion": 13,
+                "aoiLabelVersion": "surface-v2",
                 "visit": {
                     "id": str(visit["id"]),
                     "startedAt": visit["started_at"].isoformat(),
@@ -395,12 +370,9 @@ async def export_visit_lines(visit_id: str) -> AsyncIterator[str]:
                         "pageNumber": row["page_number"],
                         "viewportX": row["viewport_x"],
                         "viewportY": row["viewport_y"],
-                        "originalViewportX": row["original_viewport_x"],
-                        "originalViewportY": row["original_viewport_y"],
                         "slideX": row["slide_x"],
                         "slideY": row["slide_y"],
                         "aoiLabel": row["aoi_label"],
-                        "aoiCodes": row["aoi_codes"] or [],
                         "status": row["status"],
                         "qualityFlags": row["quality_flags"],
                     },

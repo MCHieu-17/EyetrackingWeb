@@ -9,12 +9,10 @@ export function PanelActions({
   controller,
   hint,
   onShowHint,
-  onOpenRegenerate,
 }: {
   controller: AoiEditorController;
   hint: string | null;
   onShowHint: (text: string) => void;
-  onOpenRegenerate: () => void;
 }) {
   const save = controller.activeSave;
   const saveLabel =
@@ -28,34 +26,17 @@ export function PanelActions({
     <>
       <div className="mt-3 flex flex-wrap gap-2">
         {controller.tab === "slide" ? (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="rounded-full border-black/10 bg-white"
-              disabled={!controller.canManage || controller.mode === "interact"}
-              onClick={() => onShowHint("Kéo chuột trên slide để vẽ vùng.")}
-            >
-              <Icon name="ri-add-line" className="size-4" />
-              Vẽ vùng
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="rounded-full border-black/10 bg-white"
-              disabled={
-                !controller.canManage ||
-                controller.mode === "interact" ||
-                controller.generatingSlide
-              }
-              onClick={onOpenRegenerate}
-            >
-              <Icon name="ri-refresh-line" className="size-4" />
-              Tạo lại gợi ý
-            </Button>
-          </>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-full border-black/10 bg-white"
+            disabled={!controller.canManage || controller.mode === "interact"}
+            onClick={() => onShowHint("Kéo chuột trên slide để vẽ vùng.")}
+          >
+            <Icon name="ri-add-line" className="size-4" />
+            Vẽ vùng
+          </Button>
         ) : (
           <>
             <Button

@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAoiSnapshot } from "./use-aoi-snapshot";
@@ -15,7 +15,10 @@ const { layoutMock } = vi.hoisted(() => ({
     vi.fn<
       (
         presentationId: string,
-        input: { layoutGeneration: number },
+        input: {
+          layoutGeneration: number;
+          imageTransform?: Record<string, number>;
+        },
       ) => Promise<LayoutSnapshot>
     >(),
 }));
@@ -60,7 +63,9 @@ describe("useAoiSnapshot", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
+    document.body.innerHTML = "";
   });
 
   it("creates a layout for two presentations with identical geometry", async () => {
@@ -150,6 +155,48 @@ describe("useAoiSnapshot", () => {
       presentationId: "presentation-2",
       ready: true,
     });
+  });
+
+  it("computes imageTransform from the slide container before the canvas paints", async () => {
+    // Container 16:9 (1024x576) chứa trang 4:3; viewport jsdom 1024x768.
+    const slide = document.createElement("div");
+    slide.dataset.aoi = "slide";
+    slide.dataset.pdfWidth = "800";
+    slide.dataset.pdfHeight = "600";
+    slide.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 1024,
+        height: 576,
+        right: 1024,
+        bottom: 576,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    document.body.append(slide);
+
+    const { result } = renderHook(() =>
+      useAoiSnapshot({
+        sessionId: "session-1",
+        presentationId: "presentation-1",
+        enabled: true,
+        layoutKey: "reader",
+        requireImageTransform: true,
+      }),
+    );
+
+    await flushSnapshotDebounce();
+
+    expect(layoutMock).toHaveBeenCalledTimes(1);
+    const imageTransform = layoutMock.mock.calls[0][1].imageTransform;
+    expect(imageTransform).toBeDefined();
+    expect(imageTransform!.left).toBeCloseTo(128 / 1024, 6);
+    expect(imageTransform!.top).toBeCloseTo(0, 6);
+    expect(imageTransform!.width).toBeCloseTo(768 / 1024, 6);
+    expect(imageTransform!.height).toBeCloseTo(576 / 768, 6);
+    expect(result.current.ready).toBe(true);
   });
 
   it("resets ready state when tracking is disabled", async () => {

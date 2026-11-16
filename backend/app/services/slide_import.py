@@ -16,7 +16,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-import pymupdf
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError, PyPdfError
 
 from app.core.config import settings
 
@@ -183,28 +184,31 @@ def validate_pdf(data: bytes) -> int:
         raise SlideImportError("File không phải PDF hợp lệ.")
 
     try:
-        document = pymupdf.open(stream=data, filetype="pdf")
-    except Exception as exc:  # noqa: BLE001
+        reader = PdfReader(io.BytesIO(data))
+    except (PdfReadError, ValueError, OSError) as exc:
         raise SlideImportError(f"Không đọc được PDF: {exc}") from exc
 
     try:
-        if document.needs_pass:
+        if reader.is_encrypted:
             raise SlideImportError(
                 "PDF đang bị bảo vệ bằng mật khẩu — hãy gỡ mật khẩu trước."
             )
-        if document.page_count == 0:
+        page_count = len(reader.pages)
+        if page_count == 0:
             raise SlideImportError("PDF không có trang nào.")
-        if document.page_count > settings.max_slide_pages:
+        if page_count > settings.max_slide_pages:
             raise SlideImportError(
-                f"Tài liệu có {document.page_count} trang, vượt quá "
+                f"Tài liệu có {page_count} trang, vượt quá "
                 f"{settings.max_slide_pages} trang cho phép."
             )
-        for page_no in range(document.page_count):
-            page = document.load_page(page_no)
-            if page.rect.width * page.rect.height > settings.max_slide_render_pixels:
+        for page_no, page in enumerate(reader.pages, start=1):
+            box = page.mediabox
+            if float(box.width) * float(box.height) > settings.max_slide_render_pixels:
                 raise SlideImportError(
-                    f"Trang {page_no + 1} có kích thước quá lớn."
+                    f"Trang {page_no} có kích thước quá lớn."
                 )
-        return document.page_count
-    finally:
-        document.close()
+        return page_count
+    except SlideImportError:
+        raise
+    except PyPdfError as exc:
+        raise SlideImportError(f"Không đọc được PDF: {exc}") from exc

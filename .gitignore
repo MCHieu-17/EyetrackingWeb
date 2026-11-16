@@ -17,6 +17,8 @@ backend/venv/
 # Env (giữ .env.example)
 .env
 frontend/.env*
+# Env thật cho Portainer stack; chỉ commit stack.env.example
+deploy/portainer/stack.env
 
 # Log local
 *.log
@@ -80,7 +82,7 @@ frontend/next-env.d.ts
 *.pem
 
 
-AGENTS.md
-DB.md
-cv/
-docs/
+# AGENTS.md
+# DB.md
+# cv/
+# docs/

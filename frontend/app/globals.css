@@ -233,6 +233,12 @@
   scrollbar-color: var(--border) transparent;
 }
 
+/* Giữ cuộn dọc/ngang bình thường nhưng chặn pinch-zoom trên các trang gaze. */
+@utility gaze-display-locked {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
+}
+
 @utility premium-canvas {
   background-color: #fdfdfa;
   background-image:

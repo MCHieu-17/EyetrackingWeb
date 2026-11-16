@@ -41,8 +41,8 @@ async def test_analysis_returns_one_priority_leaf_label():
                 Aoi(
                     slide_id=slide_ids["slide_id"],
                     code="text",
-                    name="Text",
-                    label="AOI_2",
+                    name="Thanh chát",
+                    label="AOI_THANHCHAT",
                     geometry={"xMin": 0.2, "yMin": 0.2, "xMax": 0.8, "yMax": 0.8},
                     kind="text",
                 ),
@@ -73,8 +73,6 @@ async def test_analysis_returns_one_priority_leaf_label():
         layout = ViewLayout(
             content_view_id=view.id,
             layout_no=0,
-            coordinate_space="original-v1",
-            visible_rect={"left": 0, "top": 0, "width": 1, "height": 1},
             slide_rect={"left": 0, "top": 0, "width": 1, "height": 1},
         )
         db.add(layout)
@@ -88,8 +86,6 @@ async def test_analysis_returns_one_priority_leaf_label():
                 event_time=now,
                 viewport_x=0.5,
                 viewport_y=0.5,
-                original_viewport_x=0.5,
-                original_viewport_y=0.5,
                 status="ok",
             )
         )
@@ -109,8 +105,8 @@ async def test_analysis_returns_one_priority_leaf_label():
                 )
             )
         ).mappings().one()
-        assert sample["aoi_label"] == "SLIDE_AOI_2"
-        assert sample["aoi_codes"] == ["SLIDE_AOI_2"]
+        # Nhãn giáo viên giữ nguyên sau tiền tố SLIDE_.
+        assert sample["aoi_label"] == "SLIDE_AOI_THANHCHAT"
 
 
 @pytest.mark.asyncio
@@ -168,8 +164,6 @@ async def test_inside_slide_suppresses_ui_and_outside_uses_ui_name():
         layout = ViewLayout(
             content_view_id=view.id,
             layout_no=0,
-            coordinate_space="original-v1",
-            visible_rect={"left": 0, "top": 0, "width": 1, "height": 1},
             slide_rect={"left": 0.2, "top": 0, "width": 0.6, "height": 1},
             elements=[
                 {
@@ -193,8 +187,6 @@ async def test_inside_slide_suppresses_ui_and_outside_uses_ui_name():
                     event_time=now,
                     viewport_x=0.5,
                     viewport_y=0.5,
-                    original_viewport_x=0.5,
-                    original_viewport_y=0.5,
                     status="ok",
                 ),
                 GazeSample(
@@ -205,8 +197,6 @@ async def test_inside_slide_suppresses_ui_and_outside_uses_ui_name():
                     event_time=now + timedelta(milliseconds=100),
                     viewport_x=0.1,
                     viewport_y=0.05,
-                    original_viewport_x=0.1,
-                    original_viewport_y=0.05,
                     status="ok",
                 ),
             ]
@@ -227,9 +217,7 @@ async def test_inside_slide_suppresses_ui_and_outside_uses_ui_name():
             )
         ).scalars().all()
         assert samples[0].aoi_label == "SLIDE_AOI_1"
-        assert samples[0].aoi_codes == ["SLIDE_AOI_1"]
         assert samples[1].aoi_label == "Thanh trên"
-        assert samples[1].aoi_codes == ["Thanh trên"]
 
 
 @pytest.mark.asyncio
@@ -272,8 +260,6 @@ async def test_missing_layout_does_not_identity_map():
                 event_time=now,
                 viewport_x=0.5,
                 viewport_y=0.5,
-                original_viewport_x=0.5,
-                original_viewport_y=0.5,
                 status="ok",
             )
         )
@@ -297,7 +283,6 @@ async def test_missing_layout_does_not_identity_map():
         assert sample["slide_y"] is None
         assert sample["quality_flags"]["layout_missing"] is True
         assert sample["aoi_label"] == "UI_NO_LABEL"
-        assert sample["aoi_codes"] == ["UI_NO_LABEL"]
 
 
 @pytest.mark.asyncio
@@ -340,8 +325,6 @@ async def test_quiz_does_not_count_on_slide_and_keeps_ui_aoi():
         layout = ViewLayout(
             content_view_id=view.id,
             layout_no=0,
-            coordinate_space="original-v1",
-            visible_rect={"left": 0, "top": 0, "width": 1, "height": 1},
             slide_rect={},
             elements=[
                 {
@@ -364,8 +347,6 @@ async def test_quiz_does_not_count_on_slide_and_keeps_ui_aoi():
                 event_time=now,
                 viewport_x=0.5,
                 viewport_y=0.05,
-                original_viewport_x=0.5,
-                original_viewport_y=0.05,
                 status="ok",
             )
         )
@@ -386,4 +367,3 @@ async def test_quiz_does_not_count_on_slide_and_keeps_ui_aoi():
             )
         ).mappings().one()
         assert sample["aoi_label"] == "Header"
-        assert sample["aoi_codes"] == ["Header"]

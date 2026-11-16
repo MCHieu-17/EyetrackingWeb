@@ -1,8 +1,11 @@
 import uuid
 
 import pytest
+from sqlalchemy import func, select
 
-from tests.conftest import create_user, login, seed_course, seed_slide
+from app.models.course import Enrollment
+from app.models.gaze import LearningSession
+from tests.conftest import SessionLocal, create_user, login, seed_course, seed_slide
 
 
 @pytest.mark.asyncio
@@ -64,6 +67,97 @@ async def test_teacher_course_dashboard_queries(client):
     )
     assert slides.status_code == 200, slides.text
     assert slides.json() == []
+
+
+@pytest.mark.asyncio
+async def test_remove_student_hides_roster_but_preserves_learning_data(client):
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+
+    student_token = await login(client, student_email)
+    session = await client.post(
+        "/api/learning-sessions",
+        headers={"Authorization": f"Bearer {student_token}"},
+        json={
+            "enrollmentId": ids["enrollment_id"],
+            "lessonId": ids["lesson_id"],
+            "deviceFingerprint": "test-device",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1.0,
+            "trackingConsent": True,
+        },
+    )
+    assert session.status_code == 201, session.text
+
+    teacher_token = await login(client, teacher_email)
+    headers = {"Authorization": f"Bearer {teacher_token}"}
+    removed = await client.delete(
+        f"/teacher/courses/{ids['course_id']}/students/{student_id}",
+        headers=headers,
+    )
+    assert removed.status_code == 200, removed.text
+
+    roster = await client.get(
+        f"/teacher/courses/{ids['course_id']}/students", headers=headers
+    )
+    assert roster.status_code == 200, roster.text
+    assert roster.json() == []
+
+    async with SessionLocal() as db:
+        enrollment = (
+            await db.execute(
+                select(Enrollment).where(Enrollment.id == ids["enrollment_id"])
+            )
+        ).scalar_one()
+        assert enrollment.status == "dropped"
+        session_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(LearningSession)
+                .where(LearningSession.enrollment_id == enrollment.id)
+            )
+        ).scalar_one()
+        assert session_count == 1
+
+    re_added = await client.post(
+        f"/teacher/courses/{ids['course_id']}/students",
+        headers=headers,
+        json={"studentIds": [student_id]},
+    )
+    assert re_added.status_code == 201, re_added.text
+    assert re_added.json()["added"] == 1
+
+    roster = await client.get(
+        f"/teacher/courses/{ids['course_id']}/students", headers=headers
+    )
+    assert roster.status_code == 200, roster.text
+    assert [row["id"] for row in roster.json()] == [student_id]
+
+    async with SessionLocal() as db:
+        enrollment = (
+            await db.execute(
+                select(Enrollment).where(
+                    Enrollment.course_id == ids["course_id"],
+                    Enrollment.student_id == student_id,
+                )
+            )
+        ).scalar_one()
+        assert enrollment.id == ids["enrollment_id"]
+        assert enrollment.status == "active"
+        session_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(LearningSession)
+                .where(LearningSession.enrollment_id == enrollment.id)
+            )
+        ).scalar_one()
+        assert session_count == 1
 
 
 @pytest.mark.asyncio

@@ -58,8 +58,6 @@ export interface GazeSample {
   eventTime: string;
   viewportX: number | null;
   viewportY: number | null;
-  originalViewportX?: number | null;
-  originalViewportY?: number | null;
   status: "ok" | "no_face" | "error" | "offscreen";
   qualityFlags?: Record<string, unknown>;
 }

@@ -15,7 +15,7 @@ export default function RegisterPage() {
           Tạo tài khoản
         </h1>
         <p className="text-sm text-muted-foreground">
-          Tạo tài khoản bằng Microsoft 365 của trường để bắt đầu học tập.
+          Tạo tài khoản sinh viên bằng Outlook và mã OTP.
         </p>
       </div>
       <RegisterForm />

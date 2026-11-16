@@ -2,7 +2,7 @@
 -- seed_dev_users.sql — TÀI KHOẢN MẪU CHO DEV (KHÔNG chạy tự động).
 --
 -- Mật khẩu mặc định: Password123!
--- Schema generation 12: role nằm trực tiếp trên users, hồ sơ cơ bản cũng ở users.
+-- Schema generation 13: role nằm trực tiếp trên users, hồ sơ cơ bản cũng ở users.
 -- =====================================================================
 
 -- ADMIN

@@ -84,7 +84,7 @@ Quy ước:
 | Route | Khu vực |
 |---|---|
 | `/` | Landing |
-| `/account/login`, `/account/register`, `/account/change-password` | Auth; tạo tài khoản qua Microsoft |
+| `/account/login`, `/account/register`, `/account/change-password` | Auth; đăng nhập/tạo tài khoản bằng Outlook + OTP |
 | `/student` | Dashboard học viên |
 | `/student/courses/[courseId]` | Learning reader slide/quiz |
 | `/student/courses/[courseId]/calibrate`, `/prepare` | Calibration/preflight |
@@ -104,11 +104,18 @@ Quy ước:
 5. Gaze point gom batch 1,5 giây hoặc 40 sample; gửi backend.
 6. Batch được persist IndexedDB trước khi POST; retry giữ nguyên
    `batchId`/payload để backend dedup.
+7. `useDisplayGuard` chặn/không ghi gaze khi phát hiện zoom trình duyệt hoặc
+   fullscreen ở trang calibration/reader.
+8. Resize cửa sổ tạm dừng ghi gaze ngay; `useAoiSnapshot` tạo layout mới rồi
+   mới ghi tiếp. Gaze được quy đổi từ viewport lúc calibration sang viewport
+   hiện tại khi resize/move cửa sổ.
 
 Bất biến:
 
-- Toạ độ gaze chuẩn hóa `[0,1]` theo viewport.
+- Toạ độ gaze chuẩn hóa `[0,1]` theo viewport hiện tại; layout cũng ở cùng
+  hệ toạ độ. Không còn `original-v1`/`visible_rect`.
 - Không ghi sample khi presentation/layout chưa sẵn sàng.
+- Không ghi sample khi display guard đang chặn.
 - Đổi slide/layout phải flush batch cũ trước.
 - Cleanup phải đóng WebSocket, camera và timer.
 - UI không hardcode pixel cho tọa độ gaze.
@@ -143,9 +150,12 @@ AOI editor:
   Trước/Sau là footer ngoài slide;
 - quiz không cuộn toàn khung; chỉ danh sách đáp án/review cuộn nội bộ khi dài;
 - slide AOI lưu trong `aois`, UI schema `reader-v1`;
-- vùng slide có nhãn phân tích `AOI_1`, `AOI_2`, …; UI dùng tên vùng;
-- worker gắn một nhãn duy nhất: `SLIDE_AOI_n` / `SLIDE_NO_LABEL` hoặc tên UI /
+- giáo viên tự đặt nhãn slide dạng `AOI_THANHCHAT`, `AOI_BANGBIEU`… (regex
+  `^AOI_[A-Z0-9_]{1,60}$`, unique trong slide); nhãn mặc định là `AOI_n`;
+- UI dùng tên vùng (ví dụ “Mục lục”, “Thanh chat”);
+- worker gắn một nhãn duy nhất: `SLIDE_<label>` / `SLIDE_NO_LABEL` hoặc tên UI /
   `UI_NO_LABEL`;
+- không còn nút “Tạo lại gợi ý” hay sinh vùng từ PDF;
 - nút thùng rác xóa hẳn vùng; “Bỏ đánh dấu” giữ vùng để bật lại;
 - thay đổi tự lưu; đổi slide phải flush/không gửi nhầm context;
 - không có publish AOI riêng.

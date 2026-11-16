@@ -39,6 +39,11 @@ describe("relativeMinutes", () => {
   it("trả về giá trị lớn cho chuỗi không nhận diện được", () => {
     expect(relativeMinutes("không rõ")).toBe(999999);
   });
+
+  it("xếp học viên chưa hoạt động vào cuối", () => {
+    expect(relativeMinutes(null)).toBe(999999);
+    expect(relativeMinutes(undefined)).toBe(999999);
+  });
 });
 
 describe("filterStudents", () => {
@@ -87,6 +92,20 @@ describe("sortStudents", () => {
   it("sắp xếp theo hoạt động gần nhất", () => {
     const sort: SortState = { column: "lastActive", dir: "asc" };
     expect(sortStudents(students, sort).map((s) => s.id)).toEqual(["2", "1", "3"]);
+  });
+
+  it("không lỗi khi học viên chưa có hoạt động", () => {
+    const rows = [
+      ...students,
+      makeStudent({ id: "4", name: "D", lastActive: null }),
+    ];
+    const sort: SortState = { column: "lastActive", dir: "asc" };
+    expect(sortStudents(rows, sort).map((s) => s.id)).toEqual([
+      "2",
+      "1",
+      "3",
+      "4",
+    ]);
   });
 
   it("không sửa mảng gốc", () => {

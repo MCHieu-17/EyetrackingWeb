@@ -2,14 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPresentationLayout } from "@/lib/api/aoi";
-import { getCalibrationScreenSnapshot } from "@/lib/api/calibration";
+import { fittedImageTransform } from "@/lib/aoi/image-transform";
 import { aoiSnapshotCacheKey } from "@/lib/aoi/snapshot-key";
 import { aoiRectsKey, measureAoiRects } from "@/lib/aoi/measure";
-import {
-  measureVisibleRect,
-  rectToOriginal,
-  transformToOriginal,
-} from "@/lib/gaze/coordinate-space";
 
 export interface AoiSnapshotState {
   snapshotId: string | null;
@@ -32,11 +27,29 @@ const EMPTY_STATE: InternalAoiSnapshotState = {
 };
 
 function paintedImageTransform(): Record<string, number> {
-  // PDF.js vẽ đúng vùng ảnh vào canvas; canvas đã được fit theo container nên
-  // rect của canvas chính là vùng ảnh đã vẽ (không có letterbox bên trong).
-  const canvas = document.querySelector<HTMLCanvasElement>(
-    '[data-aoi="slide"] canvas',
-  );
+  const slide = document.querySelector<HTMLElement>('[data-aoi="slide"]');
+
+  // Container biết kích thước gốc của trang PDF (do PdfPage báo lên) nên có
+  // thể tính vùng ảnh ngay cả khi canvas chưa vẽ xong. Nhờ vậy layout snapshot
+  // không phải chờ PDF paint mới sẵn sàng.
+  const pageWidth = Number(slide?.dataset.pdfWidth);
+  const pageHeight = Number(slide?.dataset.pdfHeight);
+  if (slide && pageWidth > 0 && pageHeight > 0) {
+    const fitted = fittedImageTransform(
+      slide.getBoundingClientRect(),
+      pageWidth,
+      pageHeight,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    if (fitted) return fitted;
+  }
+
+  // Fallback: PDF.js vẽ đúng vùng ảnh vào canvas; canvas đã được fit theo
+  // container nên rect của canvas chính là vùng ảnh đã vẽ.
+  const canvas =
+    slide?.querySelector<HTMLCanvasElement>("canvas") ??
+    document.querySelector<HTMLCanvasElement>('[data-aoi="slide"] canvas');
   if (!canvas) return {};
   const rect = canvas.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return {};
@@ -129,21 +142,7 @@ export function useAoiSnapshot({
     let runToken = 0;
 
     const measure = () => {
-      const calibration = getCalibrationScreenSnapshot();
-      const visible = calibration ? measureVisibleRect(calibration) : null;
-      const useOriginal = Boolean(
-        visible && visible.width > 0 && visible.height > 0,
-      );
-      const currentRects = measureAoiRects();
-      const rects = useOriginal
-        ? currentRects.map((rect) => rectToOriginal(rect, visible!))
-        : currentRects;
-      const visibleKey = useOriginal
-        ? `${visible!.left.toFixed(6)},${visible!.top.toFixed(6)},${visible!.width.toFixed(6)},${visible!.height.toFixed(6)}`
-        : "";
-      const coordinateSpace: "original-v1" | "current-v1" = useOriginal
-        ? "original-v1"
-        : "current-v1";
+      const rects = measureAoiRects();
       const key = aoiSnapshotCacheKey({
         sessionId,
         presentationId,
@@ -151,10 +150,8 @@ export function useAoiSnapshot({
         viewportHeight: window.innerHeight,
         layoutKey,
         rectsKey: aoiRectsKey(rects),
-        coordinateSpace,
-        visibleRectKey: visibleKey,
       });
-      return { rects, visible, useOriginal, coordinateSpace, key };
+      return { rects, key };
     };
 
     const schedule = () => {
@@ -171,7 +168,7 @@ export function useAoiSnapshot({
       }
 
       const measured = measure();
-      const { rects, visible, useOriginal, coordinateSpace, key } = measured;
+      const { rects, key } = measured;
       const image = paintedImageTransform();
       const hasImage =
         Number(image.width) > 0 && Number(image.height) > 0;
@@ -219,10 +216,7 @@ export function useAoiSnapshot({
         const snapshot = await createPresentationLayout(presentationId, {
           sequenceNo: generation,
           layoutGeneration: generation,
-          coordinateSpace,
-          visibleRect: useOriginal && visible ? visible : undefined,
-          imageTransform:
-            useOriginal && visible ? transformToOriginal(image, visible) : image,
+          imageTransform: image,
           rects,
         });
         if (disposed || token !== runToken) return;
@@ -271,7 +265,13 @@ export function useAoiSnapshot({
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["class", "style", "data-aoi"],
+      attributeFilter: [
+        "class",
+        "style",
+        "data-aoi",
+        "data-pdf-width",
+        "data-pdf-height",
+      ],
     });
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);

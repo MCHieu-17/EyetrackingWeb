@@ -1,7 +1,7 @@
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -11,46 +11,106 @@ from app.models.auth import User
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    OtpRequestIn,
+    OtpRequestOut,
+    OtpVerifyIn,
     RefreshRequest,
     TokenPair,
 )
-from app.services import auth_flow
+from app.services import auth_flow, email_otp
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger("app.performance")
 
+# Mã lỗi typed của email OTP → HTTP status cho client.
+_OTP_ERROR_STATUS: dict[str, int] = {
+    "invalid_email": status.HTTP_422_UNPROCESSABLE_CONTENT,
+    "otp_cooldown": status.HTTP_429_TOO_MANY_REQUESTS,
+    "otp_invalid": status.HTTP_400_BAD_REQUEST,
+    "otp_expired": status.HTTP_400_BAD_REQUEST,
+    "otp_consumed": status.HTTP_400_BAD_REQUEST,
+    "otp_too_many_attempts": status.HTTP_400_BAD_REQUEST,
+    "account_disabled": status.HTTP_403_FORBIDDEN,
+    "email_not_configured": status.HTTP_503_SERVICE_UNAVAILABLE,
+    "email_send_failed": status.HTTP_502_BAD_GATEWAY,
+    "otp_config_error": status.HTTP_503_SERVICE_UNAVAILABLE,
+    "otp_conflict": status.HTTP_409_CONFLICT,
+}
+
+
+def _otp_http_exception(exc: email_otp.EmailOtpError) -> HTTPException:
+    """Map lỗi OTP sang HTTP kèm `{code, message}` và Retry-After khi có."""
+    headers = {"Cache-Control": "no-store"}
+    if exc.retry_after_seconds:
+        headers["Retry-After"] = str(exc.retry_after_seconds)
+    return HTTPException(
+        status_code=_OTP_ERROR_STATUS.get(
+            exc.code, status.HTTP_400_BAD_REQUEST
+        ),
+        detail={"code": exc.code, "message": exc.message},
+        headers=headers,
+    )
+
 
 # ---------------------------------------------------------------------------
-# Microsoft 365 / Outlook OAuth
+# Đăng nhập sinh viên bằng email trường + OTP
 # ---------------------------------------------------------------------------
 
 
-@router.get(
-    "/oauth/microsoft/start",
-    dependencies=[Depends(rate_limit(10, 60, "oauth_start"))],
+@router.post(
+    "/otp/request",
+    response_model=OtpRequestOut,
+    dependencies=[Depends(rate_limit(5, 60, "otp_request"))],
 )
-async def microsoft_start(
-    next_path: str | None = Query(default=None, alias="next"),
-):
-    """Bắt đầu đăng nhập Microsoft 365 (Outlook)."""
-    return auth_flow.begin_microsoft_login(next_path)
-
-
-@router.get(
-    "/oauth/microsoft/callback",
-    dependencies=[Depends(rate_limit(20, 60, "oauth_callback"))],
-)
-async def microsoft_callback(
+async def request_otp(
+    body: OtpRequestIn,
     request: Request,
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Nhận callback từ Microsoft, đăng nhập hoặc tạo tài khoản sinh viên."""
-    return await auth_flow.finish_microsoft_login(
-        db, request, code=code, state=state, error=error
+    """Gửi mã OTP 6 số tới email sinh viên NEU."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        challenge = await email_otp.request_email_otp(
+            db, str(body.email), request
+        )
+    except email_otp.EmailOtpError as exc:
+        raise _otp_http_exception(exc) from exc
+    return OtpRequestOut(
+        challenge_id=challenge.challenge_id,
+        email=challenge.email,
+        expires_at=challenge.expires_at,
+        resend_after_seconds=challenge.resend_after_seconds,
+        delivery=challenge.delivery,
     )
+
+
+@router.post(
+    "/otp/verify",
+    response_model=TokenPair,
+    dependencies=[Depends(rate_limit(10, 60, "otp_verify"))],
+)
+async def verify_otp(
+    body: OtpVerifyIn,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Xác nhận OTP, tạo tài khoản sinh viên nếu cần và phát token/cookie."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        user = await email_otp.verify_email_otp(
+            db, body.challenge_id, body.code
+        )
+    except email_otp.EmailOtpError as exc:
+        raise _otp_http_exception(exc) from exc
+
+    pair = await auth_flow.issue_tokens(db, user, request)
+    await db.commit()
+    auth_flow.set_auth_cookies(
+        response, pair.access_token, pair.refresh_token
+    )
+    return pair
 
 
 @router.post(
@@ -61,12 +121,15 @@ async def microsoft_callback(
 async def register():
     """Đăng ký bằng email/mật khẩu đã bị tắt.
 
-    Tài khoản mật khẩu chỉ tồn tại từ seed development. Mọi tài khoản mới
-    phải được tạo qua Microsoft 365 (Outlook).
+    Tài khoản mật khẩu chỉ tồn tại từ seed development. Tài khoản mới được
+    tạo tự động khi sinh viên xác thực OTP email trường.
     """
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Đăng ký bằng mật khẩu đã bị tắt. Vui lòng đăng nhập bằng Outlook.",
+        detail=(
+            "Đăng ký bằng mật khẩu đã bị tắt. "
+            "Vui lòng đăng nhập bằng email sinh viên và mã OTP."
+        ),
     )
 
 

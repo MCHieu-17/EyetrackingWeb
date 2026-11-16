@@ -1,23 +1,33 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.api.access import get_viewable_course
 from app.api.deps import require_roles
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import Course, Enrollment, Lesson, Slide
 from app.models.gaze import ContentView, CourseVisit, GazeSample, LearningSession
 from app.models.profile import StudentProfile
 from app.schemas.analytics import (
+    AoiHeatmapIn,
+    AoiHeatmapOut,
+    AoiSummaryIn,
+    AoiSummaryOut,
     CourseVisitRowOut,
+    ReplaySamplesPageOut,
     VisitGazeSampleOut,
+    VisitReplayOut,
     VisitSummaryOut,
 )
 from app.services import analysis
+from app.services.analytics import replay as replay_service
+from app.services.analytics import summary as summary_service
 
 router = APIRouter(tags=["analytics"])
 
@@ -48,6 +58,7 @@ async def list_course_visits(
     student_id: str | None = Query(default=None, alias="studentId"),
     from_time: datetime | None = Query(default=None, alias="from"),
     to_time: datetime | None = Query(default=None, alias="to"),
+    include_short: bool = Query(default=True, alias="includeShort"),
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("teacher", "admin")),
@@ -63,6 +74,7 @@ async def list_course_visits(
         .group_by(LearningSession.course_visit_id)
         .subquery()
     )
+    metric_visit = aliased(CourseVisit)
     metric_sum = (
         select(
             LearningSession.course_visit_id,
@@ -75,9 +87,19 @@ async def list_course_visits(
             ).label("tracked_duration_ms"),
         )
         .join(LearningSession, LearningSession.id == ContentView.session_id)
+        .join(
+            metric_visit,
+            metric_visit.id == LearningSession.course_visit_id,
+            isouter=True,
+        )
         .group_by(LearningSession.course_visit_id)
-        .subquery()
     )
+    if not include_short:
+        metric_sum = metric_sum.where(
+            summary_service.view_dwell_ms_expr(metric_visit)
+            >= settings.content_view_min_dwell_ms
+        )
+    metric_sum = metric_sum.subquery()
 
     stmt = (
         select(
@@ -157,6 +179,7 @@ async def list_student_visits(
         student_id=student_id,
         from_time=None,
         to_time=None,
+        include_short=True,
         limit=limit,
         offset=offset,
         user=user,
@@ -172,7 +195,6 @@ async def list_visit_gaze(
     visit_id: str,
     slide_id: str | None = Query(default=None, alias="slideId"),
     aoi_label: str | None = Query(default=None, alias="aoiLabel"),
-    aoi_code: str | None = Query(default=None, alias="aoiCode"),
     limit: int = Query(default=1000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("teacher", "admin")),
@@ -204,13 +226,6 @@ async def list_visit_gaze(
         stmt = stmt.where(ContentView.slide_id == slide_id)
     if aoi_label:
         stmt = stmt.where(GazeSample.aoi_label == aoi_label)
-    elif aoi_code:
-        stmt = stmt.where(
-            or_(
-                GazeSample.aoi_label == aoi_code,
-                GazeSample.aoi_codes.contains([aoi_code]),
-            )
-        )
 
     rows = (await db.execute(stmt)).all()
     return [
@@ -227,12 +242,9 @@ async def list_visit_gaze(
             page_number=page_number,
             viewport_x=sample.viewport_x,
             viewport_y=sample.viewport_y,
-            original_viewport_x=sample.original_viewport_x,
-            original_viewport_y=sample.original_viewport_y,
             slide_x=sample.slide_x,
             slide_y=sample.slide_y,
             aoi_label=sample.aoi_label,
-            aoi_codes=list(sample.aoi_codes or []),
             status=sample.status,
             quality_flags=sample.quality_flags or {},
         )
@@ -249,28 +261,97 @@ async def list_visit_gaze(
     ]
 
 
-@router.get("/teacher/visits/{visit_id}/summary", response_model=VisitSummaryOut)
-async def summarize_visit(
+@router.get("/teacher/visits/{visit_id}/replay", response_model=VisitReplayOut)
+async def get_visit_replay(
     visit_id: str,
+    include_short: bool = Query(default=True, alias="includeShort"),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     visit, course = await _visit_with_course(db, visit_id, user)
-    row = (
-        await db.execute(
-            select(
-                func.count(func.distinct(LearningSession.id)),
-                func.count(ContentView.id),
-                func.coalesce(func.sum(ContentView.gaze_count), 0),
-                func.coalesce(func.sum(ContentView.on_slide_gaze_count), 0),
-                func.coalesce(func.sum(ContentView.tracked_duration_ms), 0),
-                func.coalesce(func.sum(ContentView.fixation_count), 0),
-            )
-            .select_from(LearningSession)
-            .outerjoin(ContentView, ContentView.session_id == LearningSession.id)
-            .where(LearningSession.course_visit_id == visit.id)
+    return await replay_service.visit_replay(
+        db, visit, course, include_short=include_short
+    )
+
+
+@router.get(
+    "/teacher/visits/{visit_id}/samples",
+    response_model=ReplaySamplesPageOut,
+)
+async def list_replay_samples(
+    visit_id: str,
+    content_view_id: str = Query(alias="contentViewId"),
+    after_time: datetime | None = Query(default=None, alias="afterTime"),
+    after_id: int | None = Query(default=None, alias="afterId", ge=0),
+    limit: int = Query(default=2000, ge=1, le=5000),
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    visit, _ = await _visit_with_course(db, visit_id, user)
+    if (after_time is None) != (after_id is None):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="afterTime và afterId phải đi cùng nhau",
         )
-    ).one()
+    try:
+        return await replay_service.visit_samples(
+            db,
+            visit,
+            content_view_id=content_view_id,
+            after_time=after_time,
+            after_id=after_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/teacher/visits/{visit_id}/summary", response_model=VisitSummaryOut)
+async def summarize_visit(
+    visit_id: str,
+    include_short: bool = Query(default=True, alias="includeShort"),
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    visit, course = await _visit_with_course(db, visit_id, user)
+    min_dwell_ms = settings.content_view_min_dwell_ms
+    rows = (
+        await db.execute(
+            select(ContentView, LearningSession)
+            .join(LearningSession, LearningSession.id == ContentView.session_id)
+            .where(LearningSession.course_visit_id == visit.id)
+            .order_by(LearningSession.started_at, ContentView.sequence_no)
+        )
+    ).all()
+    # Số session của ca không phụ thuộc bộ lọc lượt xem ngắn.
+    lesson_session_count = int(
+        (
+            await db.execute(
+                select(func.count(LearningSession.id)).where(
+                    LearningSession.course_visit_id == visit.id
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    now = datetime.now(timezone.utc)
+    short_view_count = 0
+    content_view_count = 0
+    gaze_count = on_slide_gaze_count = tracked_duration_ms = fixation_count = 0
+    for view, session in rows:
+        dwell_ms = replay_service.content_view_dwell_ms(view, session, visit, now)
+        counted = dwell_ms >= min_dwell_ms
+        if not counted:
+            short_view_count += 1
+        if not include_short and not counted:
+            continue
+        content_view_count += 1
+        gaze_count += view.gaze_count
+        on_slide_gaze_count += view.on_slide_gaze_count
+        tracked_duration_ms += view.tracked_duration_ms
+        fixation_count += view.fixation_count
+
     enrollment = await db.get(Enrollment, visit.enrollment_id)
     return VisitSummaryOut(
         visit_id=visit.id,
@@ -280,13 +361,43 @@ async def summarize_visit(
         started_at=visit.started_at.isoformat(),
         ended_at=visit.ended_at.isoformat() if visit.ended_at else None,
         status=visit.status,
-        lesson_session_count=int(row[0] or 0),
-        content_view_count=int(row[1] or 0),
-        gaze_count=int(row[2] or 0),
-        on_slide_gaze_count=int(row[3] or 0),
-        tracked_duration_ms=int(row[4] or 0),
-        fixation_count=int(row[5] or 0),
+        lesson_session_count=lesson_session_count,
+        content_view_count=content_view_count,
+        gaze_count=gaze_count,
+        on_slide_gaze_count=on_slide_gaze_count,
+        tracked_duration_ms=tracked_duration_ms,
+        fixation_count=fixation_count,
+        min_dwell_ms=min_dwell_ms,
+        short_view_count=short_view_count,
     )
+
+
+@router.post(
+    "/teacher/courses/{course_id}/analytics/aoi-summary",
+    response_model=AoiSummaryOut,
+)
+async def get_aoi_summary(
+    course_id: str,
+    body: AoiSummaryIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_viewable_course(db, course_id, user)
+    return await summary_service.aoi_summary(db, course, body)
+
+
+@router.post(
+    "/teacher/courses/{course_id}/analytics/heatmap",
+    response_model=AoiHeatmapOut,
+)
+async def get_aoi_heatmap(
+    course_id: str,
+    body: AoiHeatmapIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_viewable_course(db, course_id, user)
+    return await summary_service.aoi_heatmap(db, course, body)
 
 
 @router.get("/teacher/visits/{visit_id}/export")

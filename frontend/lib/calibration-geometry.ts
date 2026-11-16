@@ -78,11 +78,10 @@ export function buildCalibrationPoints(margins?: CalibrationMargins): CalPoint[]
   return points;
 }
 
-/** Hình chữ nhật vật lý của viewport trên màn hình (CSS px + DPR). */
+/** Hình chữ nhật vật lý của viewport trên màn hình (CSS px). */
 export interface ViewportRect {
   width: number;
   height: number;
-  dpr: number;
   screenX: number;
   screenY: number;
 }
@@ -90,8 +89,10 @@ export interface ViewportRect {
 /**
  * Quy đổi một điểm gaze từ viewport lúc calibration sang viewport hiện tại.
  *
- * `screenX/screenY` là toạ độ cửa sổ (CSS/DIP), KHÔNG nhân với DPR: khi
- * browser page zoom, DPR tăng nhưng vị trí cửa sổ trên màn hình không đổi.
+ * Chỉ dùng cho trường hợp cửa sổ bị resize hoặc di chuyển. Zoom trình duyệt
+ * và toàn màn hình do display guard phát hiện và tạm dừng ghi gaze, nên
+ * không cần bù trừ DPR ở đây.
+ *
  * Vùng đang thấy của cửa sổ hiện tại trong hệ viewport calibration là:
  *
  *   left  = (current.screenX - calibration.screenX) / calibration.width

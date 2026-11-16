@@ -56,6 +56,10 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(20))
     avatar_url: Mapped[str | None] = mapped_column(Text)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lần xác thực email gần nhất (OTP đăng nhập hoặc liên kết email).
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
@@ -101,30 +105,3 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
-
-
-class OAuthAccount(Base):
-    __tablename__ = "oauth_accounts"
-    __table_args__ = (
-        Index(
-            "oauth_accounts_provider_user_unique",
-            "provider",
-            "provider_user_id",
-            unique=True,
-        ),
-        Index("idx_oauth_accounts_user", "user_id"),
-    )
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()")
-    )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    provider: Mapped[str] = mapped_column(String(30), nullable=False)
-    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()")
-    )
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

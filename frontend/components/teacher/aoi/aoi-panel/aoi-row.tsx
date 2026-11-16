@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import type { AoiDefinitionInput } from "@/lib/api/aoi";
 import { colorFor } from "@/lib/aoi/colors";
@@ -14,6 +14,9 @@ export function AoiRow({
   canManage,
   subtitle,
   icon,
+  labelValue,
+  labelPrefix,
+  onLabelChange,
   onSelect,
   onHover,
   onRename,
@@ -28,6 +31,9 @@ export function AoiRow({
   canManage: boolean;
   subtitle?: string;
   icon: string;
+  labelValue?: string | null;
+  labelPrefix?: string;
+  onLabelChange?: (label: string) => string | null;
   onSelect: () => void;
   onHover: (value: boolean) => void;
   onRename: (name: string) => void;
@@ -36,7 +42,21 @@ export function AoiRow({
   onDelete?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  // null = chưa sửa, hiển thị nhãn hiện tại từ props.
+  const [labelDraft, setLabelDraft] = useState<string | null>(null);
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const skipLabelCommitRef = useRef(false);
   const color = inactive ? "#9ca3af" : colorFor(definition.code);
+  const labelText = labelDraft ?? labelValue ?? "";
+  const labelInputId = `aoi-label-${definition.code}`;
+
+  const commitLabel = () => {
+    if (!onLabelChange || labelDraft === null) return null;
+    const error = onLabelChange(labelDraft);
+    setLabelError(error);
+    if (!error) setLabelDraft(null);
+    return error;
+  };
 
   return (
     <div
@@ -90,6 +110,65 @@ export function AoiRow({
           ) : subtitle ? (
             <p className="truncate px-1 text-[10px] text-black/45">{subtitle}</p>
           ) : null}
+          {onLabelChange && (
+            <div className="mt-1" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center gap-1">
+                <label
+                  htmlFor={labelInputId}
+                  className="shrink-0 text-[10px] text-black/45"
+                >
+                  Nhãn phân tích
+                </label>
+                <span className="shrink-0 rounded bg-black/5 px-1 py-0.5 font-mono text-[10px] text-black/55">
+                  {labelPrefix ?? ""}
+                </span>
+                <input
+                  id={labelInputId}
+                  value={labelText}
+                  onChange={(event) => {
+                    setLabelDraft(event.target.value);
+                    setLabelError(null);
+                  }}
+                  onBlur={() => {
+                    if (skipLabelCommitRef.current) {
+                      skipLabelCommitRef.current = false;
+                      return;
+                    }
+                    commitLabel();
+                  }}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (!commitLabel()) {
+                        skipLabelCommitRef.current = true;
+                        event.currentTarget.blur();
+                      }
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      skipLabelCommitRef.current = true;
+                      setLabelDraft(null);
+                      setLabelError(null);
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  readOnly={!canManage}
+                  maxLength={64}
+                  placeholder="AOI_THANHCHAT"
+                  aria-label="Nhãn phân tích"
+                  className="min-w-0 flex-1 rounded-md border border-black/10 bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-black outline-none transition-colors hover:border-black/20 focus:border-[#36533a]/40 focus:bg-white focus:ring-2 focus:ring-[#e8f1e6]"
+                />
+              </div>
+              {labelError && (
+                <p
+                  role="alert"
+                  className="mt-0.5 pl-1 text-[10px] leading-4 text-destructive"
+                >
+                  {labelError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         {inactive && onRestore && canManage && (
           <button

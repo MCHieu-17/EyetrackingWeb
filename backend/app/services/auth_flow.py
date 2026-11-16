@@ -2,41 +2,28 @@
 
 Route `app/api/routes/auth.py` chỉ còn khai báo endpoint, dependency và response.
 Các bước nghiệp vụ nằm ở đây: đăng nhập mật khẩu seed, phát cookie/token, xoay
-vòng refresh token, đổi mật khẩu và Microsoft OAuth single-tenant.
+vòng refresh token và đổi mật khẩu. Đăng nhập OTP email nằm ở
+`app/services/email_otp.py`; gửi thư ở `app/services/mailer.py`.
 """
 
 import asyncio
 import ipaddress
-import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
 
-import jwt
 from fastapi import HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.config import settings
 from app.core.csrf import new_csrf_token
 from app.crud import user as user_crud
-from app.models.auth import OAuthAccount, User
+from app.models.auth import User
 from app.schemas.auth import RefreshRequest, TokenPair, UserSummary
-from app.services import oauth
-
-logger = logging.getLogger("app.performance")
 
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
 CSRF_COOKIE = "csrf_token"
-
-OAUTH_TX_COOKIE = "oauth_tx"
-OAUTH_TX_PATH = "/api/auth/oauth"
-OAUTH_TX_MAX_AGE = 600
 
 
 # ---------------------------------------------------------------------------
@@ -257,216 +244,3 @@ async def change_password(
     )
     await db.commit()
     await user_crud.invalidate_auth_cache(full_user.id)
-
-
-# ---------------------------------------------------------------------------
-# Microsoft 365 / Outlook OAuth
-# ---------------------------------------------------------------------------
-
-
-def _clear_oauth_tx_cookie(response: Response) -> None:
-    response.delete_cookie(
-        key=OAUTH_TX_COOKIE,
-        path=OAUTH_TX_PATH,
-        domain=settings.cookie_domain,
-    )
-
-
-def oauth_error_redirect(code: str) -> RedirectResponse:
-    url = f"{settings.frontend_url.rstrip('/')}/account/login?oauthError={quote(code)}"
-    response = RedirectResponse(url, status_code=status.HTTP_302_FOUND)
-    _clear_oauth_tx_cookie(response)
-    return response
-
-
-def _set_oauth_tx_cookie(response: Response, tx: oauth.OAuthTransaction) -> None:
-    payload = {
-        "state": tx.state,
-        "nonce": tx.nonce,
-        "code_verifier": tx.code_verifier,
-        "next": tx.next_path,
-        "type": "oauth_tx",
-        "exp": datetime.now(timezone.utc) + timedelta(seconds=OAUTH_TX_MAX_AGE),
-    }
-    token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
-    response.set_cookie(
-        key=OAUTH_TX_COOKIE,
-        value=token,
-        httponly=True,
-        secure=settings.cookie_secure_resolved,
-        samesite=settings.cookie_samesite,
-        max_age=OAUTH_TX_MAX_AGE,
-        path=OAUTH_TX_PATH,
-        domain=settings.cookie_domain,
-    )
-
-
-def _decode_oauth_tx(raw: str) -> dict:
-    payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    if payload.get("type") != "oauth_tx":
-        raise ValueError("invalid oauth transaction")
-    return payload
-
-
-def _home_for(user: User) -> str:
-    for code in ("teacher", "student", "admin"):
-        if code in user.role_codes:
-            return f"/{code}"
-    return "/student"
-
-
-def _safe_next(next_path: str | None, user: User) -> str:
-    if next_path and ".." not in next_path and "\\" not in next_path:
-        for code in user.role_codes:
-            if next_path == f"/{code}" or next_path.startswith(f"/{code}/"):
-                return next_path
-    return _home_for(user)
-
-
-async def _get_or_create_oauth_user(
-    db: AsyncSession, profile: oauth.MicrosoftProfile
-) -> User:
-    identity = (
-        await db.execute(
-            select(OAuthAccount).where(
-                OAuthAccount.provider == "microsoft",
-                OAuthAccount.provider_user_id == profile.provider_user_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if identity is not None:
-        user = await user_crud.get_user_by_id(db, identity.user_id)
-        if user is None or user.deleted_at is not None or user.status != "active":
-            raise oauth.OAuthError("account_disabled")
-        identity.email = profile.email
-        identity.last_login_at = datetime.now(timezone.utc)
-        return user
-
-    user = await user_crud.get_user_by_email(db, profile.email)
-    if user is not None:
-        if user.deleted_at is not None or user.status != "active":
-            raise oauth.OAuthError("account_disabled")
-        existing_identity = (
-            await db.execute(
-                select(OAuthAccount).where(
-                    OAuthAccount.user_id == user.id,
-                    OAuthAccount.provider == "microsoft",
-                )
-            )
-        ).scalar_one_or_none()
-        if (
-            existing_identity is not None
-            and existing_identity.provider_user_id != profile.provider_user_id
-        ):
-            raise oauth.OAuthError("identity_conflict")
-        if existing_identity is None:
-            db.add(
-                OAuthAccount(
-                    user_id=user.id,
-                    provider="microsoft",
-                    provider_user_id=profile.provider_user_id,
-                    email=profile.email,
-                    last_login_at=datetime.now(timezone.utc),
-                )
-            )
-        else:
-            existing_identity.email = profile.email
-            existing_identity.last_login_at = datetime.now(timezone.utc)
-        return user
-
-    try:
-        user = await user_crud.create_student(
-            db,
-            email=profile.email,
-            password_hash=None,
-            full_name=profile.full_name,
-        )
-        db.add(
-            OAuthAccount(
-                user_id=user.id,
-                provider="microsoft",
-                provider_user_id=profile.provider_user_id,
-                email=profile.email,
-                last_login_at=datetime.now(timezone.utc),
-            )
-        )
-        await db.flush()
-    except IntegrityError:
-        await db.rollback()
-        user = await user_crud.get_user_by_email(db, profile.email)
-        if user is None:
-            raise oauth.OAuthError("server_error")
-
-    # Đảm bảo roles/profile đã load trước khi phát token.
-    loaded = await user_crud.get_user_by_id(db, user.id)
-    if loaded is None:
-        raise oauth.OAuthError("server_error")
-    return loaded
-
-
-def begin_microsoft_login(next_path: str | None) -> RedirectResponse:
-    """Bắt đầu đăng nhập Microsoft 365 (Outlook)."""
-    if not settings.microsoft_oauth_enabled:
-        return oauth_error_redirect("not_configured")
-    tx = oauth.new_transaction(next_path)
-    response = RedirectResponse(
-        oauth.build_authorize_url(tx), status_code=status.HTTP_302_FOUND
-    )
-    _set_oauth_tx_cookie(response, tx)
-    return response
-
-
-async def finish_microsoft_login(
-    db: AsyncSession,
-    request: Request,
-    *,
-    code: str | None,
-    state: str | None,
-    error: str | None,
-) -> RedirectResponse:
-    """Nhận callback từ Microsoft, đăng nhập hoặc tạo tài khoản sinh viên."""
-    raw_tx = request.cookies.get(OAUTH_TX_COOKIE)
-    if not raw_tx:
-        return oauth_error_redirect("state_invalid")
-    try:
-        tx = _decode_oauth_tx(raw_tx)
-    except Exception:  # noqa: BLE001 — cookie hỏng/hết hạn
-        return oauth_error_redirect("state_invalid")
-
-    if not state or state != tx.get("state"):
-        return oauth_error_redirect("state_invalid")
-    if error:
-        return oauth_error_redirect(
-            "access_denied" if error == "access_denied" else "oauth_failed"
-        )
-    if not code:
-        return oauth_error_redirect("oauth_failed")
-
-    try:
-        tokens = await oauth.exchange_code(code, str(tx.get("code_verifier") or ""))
-        id_token = tokens.get("id_token")
-        if not id_token:
-            raise oauth.OAuthError("token_invalid")
-        claims = await asyncio.to_thread(
-            oauth.validate_id_token, id_token, str(tx.get("nonce") or "")
-        )
-        profile = await oauth.resolve_profile(claims, tokens.get("access_token"))
-        user = await _get_or_create_oauth_user(db, profile)
-        pair = await issue_tokens(db, user, request)
-        await db.commit()
-    except oauth.OAuthError as exc:
-        await db.rollback()
-        logger.warning("microsoft oauth failed: %s", exc.code)
-        return oauth_error_redirect(exc.code)
-    except Exception:  # noqa: BLE001 — không lộ chi tiết lỗi ra ngoài
-        await db.rollback()
-        logger.exception("microsoft oauth unexpected error")
-        return oauth_error_redirect("server_error")
-
-    response = RedirectResponse(
-        f"{settings.frontend_url.rstrip('/')}{_safe_next(tx.get('next'), user)}",
-        status_code=status.HTTP_302_FOUND,
-    )
-    set_auth_cookies(response, pair.access_token, pair.refresh_token)
-    _clear_oauth_tx_cookie(response)
-    return response

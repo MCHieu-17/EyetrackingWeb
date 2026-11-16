@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -19,10 +21,16 @@ from app.schemas.gaze import (
     PresentationCreateIn,
     PresentationOut,
 )
+from app.services.gaze_views import close_open_views
 
 router = APIRouter(tags=["gaze-ingest"])
 
 CLOSE_GRACE = timedelta(minutes=2)
+# enteredAt do client gửi có thể lệch đồng hồ; kẹp trong khoảng 5 phút trước
+# hiện tại để không tạo lượt xem quá khứ xa.
+ENTERED_AT_WINDOW = timedelta(minutes=5)
+# Dung sai thứ tự khi so enteredAt với lượt xem gần nhất.
+STALE_TOLERANCE = timedelta(milliseconds=250)
 
 
 def _now() -> datetime:
@@ -83,6 +91,177 @@ async def _rate_limit(user: User, session_id: str) -> None:
         )
 
 
+def _presentation_out(view: ContentView) -> PresentationOut:
+    return PresentationOut(
+        id=view.id,
+        session_id=view.session_id,
+        slide_id=view.slide_id,
+        surface=view.surface,
+        sequence_no=view.sequence_no,
+        started_at=view.started_at.isoformat(),
+    )
+
+
+def _same_context(view: ContentView, session_id: str, body: PresentationCreateIn) -> bool:
+    return (
+        view.session_id == session_id
+        and view.slide_id == body.slide_id
+        and view.surface == body.surface
+    )
+
+
+def _presentation_conflict() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "presentation_conflict",
+            "message": "clientPresentationId đã dùng cho lượt xem khác",
+        },
+    )
+
+
+def _stale_presentation() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "stale_presentation",
+            "message": "enteredAt cũ hơn lượt xem gần nhất của phiên",
+        },
+    )
+
+
+def _clamp_entered_at(value: datetime | None, now: datetime) -> datetime:
+    """Kẹp enteredAt của client về [now - 5 phút, now]; thiếu thì dùng now."""
+    if value is None:
+        return now
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    value = value.astimezone(timezone.utc)
+    earliest = now - ENTERED_AT_WINDOW
+    if value < earliest:
+        return earliest
+    if value > now:
+        return now
+    return value
+
+
+async def _lock_session_row(db: AsyncSession, session_id: str) -> None:
+    """Khoá row learning_sessions để cấp sequence tuần tự giữa request song song."""
+    await db.execute(
+        select(LearningSession.id)
+        .where(LearningSession.id == session_id)
+        .with_for_update()
+    )
+
+
+async def _next_sequence(db: AsyncSession, session_id: str) -> int:
+    current = (
+        await db.execute(
+            select(func.max(ContentView.sequence_no)).where(
+                ContentView.session_id == session_id
+            )
+        )
+    ).scalar_one()
+    return 0 if current is None else current + 1
+
+
+async def _latest_view(db: AsyncSession, session_id: str) -> ContentView | None:
+    return (
+        await db.execute(
+            select(ContentView)
+            .where(ContentView.session_id == session_id)
+            .order_by(ContentView.sequence_no.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _existing_client_view(
+    db: AsyncSession,
+    client_id: UUID,
+    session_id: str,
+    body: PresentationCreateIn,
+) -> ContentView | None:
+    existing = await db.get(ContentView, str(client_id))
+    if existing is None:
+        return None
+    if _same_context(existing, session_id, body):
+        return existing
+    raise _presentation_conflict()
+
+
+async def _content_view_by_sequence(
+    db: AsyncSession, session_id: str, sequence_no: int
+) -> ContentView | None:
+    return (
+        await db.execute(
+            select(ContentView).where(
+                ContentView.session_id == session_id,
+                ContentView.sequence_no == sequence_no,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _view_from_client_id(
+    db: AsyncSession,
+    session_id: str,
+    body: PresentationCreateIn,
+    entered_at: datetime,
+) -> ContentView:
+    latest = await _latest_view(db, session_id)
+    if latest is not None and entered_at < latest.started_at - STALE_TOLERANCE:
+        # Request đến trễ sau một lượt xem mới hơn: bỏ để tránh row lệch thứ tự.
+        raise _stale_presentation()
+
+    await close_open_views(db, [session_id], entered_at)
+    view = ContentView(
+        id=str(body.client_presentation_id),
+        session_id=session_id,
+        slide_id=body.slide_id,
+        surface=body.surface,
+        sequence_no=await _next_sequence(db, session_id),
+        started_at=entered_at,
+    )
+    db.add(view)
+    return view
+
+
+async def _resolve_legacy_view(
+    db: AsyncSession,
+    session_id: str,
+    body: PresentationCreateIn,
+    now: datetime,
+) -> tuple[ContentView, bool]:
+    """Nhánh client cũ (không có clientPresentationId).
+
+    Trả ``(view, created)``; ``created=False`` nghĩa là row đã tồn tại và có
+    cùng slide/surface nên caller trả lại luôn (idempotent theo sequenceNo).
+    """
+    sequence_no = body.sequence_no
+    if sequence_no is not None:
+        existing = await _content_view_by_sequence(db, session_id, sequence_no)
+        if existing is not None:
+            if _same_context(existing, session_id, body):
+                return existing, False
+            # Sau reload, sequenceNo của client có thể trùng với presentation cũ
+            # của slide khác. Không được trả row cũ vì gaze sẽ gắn nhầm slide.
+            sequence_no = await _next_sequence(db, session_id)
+    if sequence_no is None:
+        sequence_no = await _next_sequence(db, session_id)
+
+    await close_open_views(db, [session_id], now)
+    view = ContentView(
+        session_id=session_id,
+        slide_id=body.slide_id,
+        surface=body.surface,
+        sequence_no=sequence_no,
+        started_at=now,
+    )
+    db.add(view)
+    return view, True
+
+
 @router.post(
     "/api/learning-sessions/{session_id}/presentations",
     response_model=PresentationOut,
@@ -96,6 +275,7 @@ async def create_content_view(
 ):
     session = await _session_for_user(db, session_id, user)
     _ensure_open(session)
+    session_pk = session.id
 
     if body.slide_id is not None:
         slide = await db.get(Slide, body.slide_id)
@@ -105,71 +285,42 @@ async def create_content_view(
                 detail="Slide không thuộc phiên học",
             )
 
-    existing = (
-        await db.execute(
-            select(ContentView).where(
-                ContentView.session_id == session.id,
-                ContentView.sequence_no == body.sequence_no,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        if (
-            existing.slide_id == body.slide_id
-            and existing.surface == body.surface
-        ):
-            return PresentationOut(
-                id=existing.id,
-                session_id=existing.session_id,
-                slide_id=existing.slide_id,
-                surface=existing.surface,
-                sequence_no=existing.sequence_no,
-                started_at=existing.started_at.isoformat(),
-            )
-        # Sau reload, sequenceNo của client có thể trùng với presentation cũ
-        # của slide khác. Không được trả row cũ vì gaze sẽ gắn nhầm slide.
-        # Cấp sequence kế tiếp cho presentation mới.
-        max_sequence = (
-            await db.execute(
-                select(func.max(ContentView.sequence_no)).where(
-                    ContentView.session_id == session.id
-                )
-            )
-        ).scalar_one()
-        body.sequence_no = (max_sequence or 0) + 1
+    await _lock_session_row(db, session_pk)
 
-    previous = (
-        await db.execute(
-            select(ContentView)
-            .where(
-                ContentView.session_id == session.id,
-                ContentView.ended_at.is_(None),
-            )
-            .order_by(ContentView.sequence_no.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if previous is not None:
-        previous.ended_at = _now()
+    now = _now()
+    entered_at = _clamp_entered_at(body.entered_at, now)
 
-    view = ContentView(
-        session_id=session.id,
-        slide_id=body.slide_id,
-        surface=body.surface,
-        sequence_no=body.sequence_no,
-        started_at=_now(),
-    )
-    db.add(view)
-    await db.commit()
+    if body.client_presentation_id is not None:
+        existing = await _existing_client_view(
+            db, body.client_presentation_id, session_pk, body
+        )
+        if existing is not None:
+            return _presentation_out(existing)
+        view = await _view_from_client_id(db, session_pk, body, entered_at)
+    else:
+        view, created = await _resolve_legacy_view(db, session_pk, body, now)
+        if not created:
+            return _presentation_out(view)
+    assigned_sequence = view.sequence_no
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Đua PK (clientPresentationId) hoặc unique (session, sequence): đọc lại
+        # row đã thắng và trả nếu cùng ngữ cảnh.
+        await db.rollback()
+        if body.client_presentation_id is not None:
+            existing = await db.get(ContentView, str(body.client_presentation_id))
+            if existing is not None and _same_context(existing, session_pk, body):
+                return _presentation_out(existing)
+            raise _presentation_conflict() from None
+        existing = await _content_view_by_sequence(db, session_pk, assigned_sequence)
+        if existing is not None and _same_context(existing, session_pk, body):
+            return _presentation_out(existing)
+        raise _presentation_conflict() from None
+
     await db.refresh(view)
-    return PresentationOut(
-        id=view.id,
-        session_id=view.session_id,
-        slide_id=view.slide_id,
-        surface=view.surface,
-        sequence_no=view.sequence_no,
-        started_at=view.started_at.isoformat(),
-    )
+    return _presentation_out(view)
 
 
 @router.post(
@@ -191,18 +342,13 @@ async def create_layout(
     session = await _session_for_user(db, view.session_id, user)
     _ensure_open(session)
 
+    # Tab frontend cũ vẫn gửi layout ở hệ toạ độ calibration. Từ chối thay vì
+    # lưu sai hệ toạ độ; người học chỉ cần tải lại trang để nhận bundle mới.
     if body.coordinate_space == "original-v1":
-        visible = body.visible_rect or {}
-        try:
-            visible_width = float(visible.get("width", 0))
-            visible_height = float(visible.get("height", 0))
-        except (TypeError, ValueError):
-            visible_width = visible_height = 0
-        if visible_width <= 0 or visible_height <= 0:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Layout original-v1 cần visibleRect.width/height > 0",
-            )
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Frontend cũ đang gửi layout original-v1; hãy tải lại trang",
+        )
 
     existing = (
         await db.execute(
@@ -217,16 +363,12 @@ async def create_layout(
             id=existing.id,
             presentation_id=existing.content_view_id,
             layout_generation=existing.layout_no,
-            coordinate_space=existing.coordinate_space,
-            visible_rect=existing.visible_rect or {},
             captured_at=existing.captured_at.isoformat(),
         )
 
     layout = ViewLayout(
         content_view_id=view.id,
         layout_no=body.layout_generation,
-        coordinate_space=body.coordinate_space,
-        visible_rect=body.visible_rect or {},
         slide_rect=body.image_transform or {},
         elements=[rect.model_dump(by_alias=True) for rect in body.rects],
         captured_at=_now(),
@@ -238,8 +380,6 @@ async def create_layout(
         id=layout.id,
         presentation_id=layout.content_view_id,
         layout_generation=layout.layout_no,
-        coordinate_space=layout.coordinate_space,
-        visible_rect=layout.visible_rect or {},
         captured_at=layout.captured_at.isoformat(),
     )
 
@@ -309,18 +449,6 @@ async def ingest_gaze_batch(
                 "event_time": _parse_time(sample.event_time),
                 "viewport_x": sample.viewport_x,
                 "viewport_y": sample.viewport_y,
-                # Client cũ không gửi original -> dùng raw calibration làm
-                # original để không mất dữ liệu lịch sử.
-                "original_viewport_x": (
-                    sample.original_viewport_x
-                    if sample.original_viewport_x is not None
-                    else sample.viewport_x
-                ),
-                "original_viewport_y": (
-                    sample.original_viewport_y
-                    if sample.original_viewport_y is not None
-                    else sample.viewport_y
-                ),
                 "status": sample.status,
                 "quality_flags": sample.quality_flags,
             }

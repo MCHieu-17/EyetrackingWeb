@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { useStudentVisits } from "@/hooks/use-teacher";
 import {
   Sheet,
@@ -124,6 +126,18 @@ export function StudentDetailSheet({
                           <p>{visit.gazeCount} gaze</p>
                         </div>
                       </div>
+                      <Button
+                        asChild
+                        size="xs"
+                        variant="outline"
+                        className="mt-3 rounded-full border-[#eeeee9] bg-white"
+                      >
+                        <Link
+                          href={`/teacher/courses/${courseId}?tab=visualization&mode=replay&studentId=${student.id}&visitId=${visit.id}`}
+                        >
+                          Xem lại ca học
+                        </Link>
+                      </Button>
                     </li>
                   ))}
                 </ul>

@@ -4,18 +4,28 @@ Schema chuẩn là **một baseline sạch**:
 
 ```
 db/migrations/
-└── 001_baseline.sql                 # 24 bảng lõi + view + metadata generation 12
+├── 001_baseline.sql                 # generation 12: 24 bảng lõi + view + metadata
+├── 002_email_otp.sql                # generation 13: email_otps, bỏ oauth_accounts
+├── 003_aoi_single_label.sql         # bỏ gaze_samples.aoi_codes, slides.aoi_suggestions
+├── 004_content_view_aoi_stats.sql   # thêm content_views.aoi_stats
+└── 005_current_viewport_only.sql    # bỏ original-v1/visible_rect, chỉ viewport hiện tại
 ```
 
-`001_baseline.sql` chứa toàn bộ schema generation 12: 24 bảng lõi, index, view
-outline và metadata. Baseline gộp luôn `course_visits`,
-`learning_sessions.course_visit_id`, `gaze_samples.original_viewport_x/y`,
-`view_layouts.coordinate_space/visible_rect`, `aois.label` và
-`gaze_samples.aoi_label`. Không còn versioning, partition gaze,
-`user_identities`, `roles` hay các bảng job riêng.
+`001_baseline.sql` chứa schema generation 12: 24 bảng lõi, index, view outline
+và metadata. Baseline gộp luôn `course_visits`,
+`learning_sessions.course_visit_id`, `aois.label` và `gaze_samples.aoi_label`.
+Không còn versioning, partition gaze, `user_identities`, `roles` hay các bảng
+job riêng.
 
-Khi schema thay đổi, thêm file mới `002_...sql`; **không sửa file đã áp**.
-Schema generation hiện tại là `12` (giá trị trong `app_metadata`).
+`002_email_otp.sql` thay `oauth_accounts` bằng `email_otps`, thêm
+`users.email_verified_at` và nâng `schema_generation='13'`.
+`003_aoi_single_label.sql` bỏ `gaze_samples.aoi_codes` và
+`slides.aoi_suggestions`. `004_content_view_aoi_stats.sql` thêm thống kê AOI
+dẫn xuất. `005_current_viewport_only.sql` chuyển layout cũ từ hệ calibration
+sang viewport hiện tại rồi bỏ các cột bù trừ zoom.
+
+Khi schema thay đổi, thêm file mới `00x_...sql`; **không sửa file đã áp**.
+Schema generation hiện tại là `13` (giá trị trong `app_metadata`).
 
 ## Runner
 
@@ -61,7 +71,7 @@ database đích, DSN backend, ownership và kết nối còn lại. Không dùng
 `docker compose down -v`, không xóa volume, không đụng database khác.
 
 Sau reset, `docker compose up -d` sẽ chạy lại service `migrate` (baseline +
-generation 12). Nếu muốn seed tài khoản dev:
+generation 13). Nếu muốn seed tài khoản dev:
 
 ```bash
 ./scripts/seed_dev.sh
@@ -88,6 +98,6 @@ tại. Mật khẩu mặc định: `Password123!`.
 ## Quy tắc schema
 
 - Baseline đã khóa checksum; mọi thay đổi schema phải là migration mới
-  (`002_...`).
+  (`004_...`).
 - Không sửa file đã áp.
 - Không dùng `Base.metadata.create_all()` thay baseline.

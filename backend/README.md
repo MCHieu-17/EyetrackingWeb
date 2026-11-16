@@ -20,7 +20,7 @@ backend/app/
 ├── core/                # config, security, CSRF, rate limit, logging
 ├── crud/                # truy vấn user/profile dùng chung
 ├── db/                  # SQLAlchemy session/Base/Redis
-├── models/              # ánh xạ 24 bảng schema generation 12
+├── models/              # ánh xạ 24 bảng schema generation 13
 ├── schemas/             # Pydantic request/response (camelCase ở API)
 ├── services/
 │   ├── access.py        # policy admin/owner/teacher/enrollment
@@ -28,7 +28,9 @@ backend/app/
 │   ├── content/         # course/module/lesson/slide/import
 │   ├── analysis/        # analytics/export
 │   ├── aoi/             # định nghĩa và generate AOI
-│   ├── auth_flow.py     # token/cookie, refresh, Microsoft OAuth
+│   ├── auth_flow.py     # token/cookie, refresh
+│   ├── email_otp.py     # OTP đăng nhập sinh viên
+│   ├── mailer.py        # gửi OTP qua SMTP
 │   ├── media_access.py  # quyền tải PDF
 │   ├── quiz.py          # ẩn/hiện đáp án, chấm điểm, hạn làm bài
 │   ├── embedding*.py    # index RAG
@@ -98,10 +100,15 @@ Hai target Docker:
 
 1. `POST /api/learning-sessions` mở phiên học.
 2. Mỗi slide/quiz tạo `content_views`; endpoint dùng tên domain
-   `/presentations` và trả `presentationId`.
-3. Resize/mở chat tạo `view_layouts`.
-4. Frontend batch gaze vào `POST /api/learning-sessions/{id}/gaze-batches`.
-5. Đóng phiên enqueue `analyze_lesson`.
+   `/presentations` và trả `presentationId`. Frontend gửi
+   `clientPresentationId`/`enteredAt`; server cấp `sequence_no` và luôn tạo
+   lượt mới khi vào lại slide, không ghi đè row cũ.
+3. Lượt xem ngắn hơn `CONTENT_VIEW_MIN_DWELL_MS` vẫn được trả về mặc định
+   (`includeShort=true`), chỉ gắn cờ `counted=false`. `includeShort=false`
+   dùng cho bộ lọc tùy chọn.
+4. Resize/mở chat tạo `view_layouts`.
+5. Frontend batch gaze vào `POST /api/learning-sessions/{id}/gaze-batches`.
+6. Đóng phiên enqueue `analyze_lesson`.
 
 Gaze thô (`viewport_x/y`, `event_time`) là bất biến. `slide_x/y`, `aoi_label`,
 metrics là derived và có thể tính lại.
@@ -112,11 +119,18 @@ Backend lưu lịch sử `chat_sessions/chat_messages`, gọi chatbot nội bộ
 `CHATBOT_URL` + `CHATBOT_INTERNAL_TOKEN`. SSE giữ transaction DB ngắn, không giữ
 connection trong suốt thời gian stream.
 
+### Đăng nhập sinh viên
+
+Sinh viên dùng `POST /api/auth/otp/request` để nhận mã 6 số qua email trường
+(`@st.neu.edu.vn`), sau đó `POST /api/auth/otp/verify` để nhận token/cookie.
+OTP lưu dạng hash, hết hạn 15 phút, tối đa 5 lần nhập. Không còn Microsoft
+OAuth/`oauth_accounts`.
+
 ### Admin
 
 `/admin/...` quản lý user và truy vấn DB read-only qua `admin_reader`:
 transaction read-only, statement/lock timeout, giới hạn dòng/response, không
-đọc password/auth/oauth.
+đọc password/auth/OTP.
 
 ## API docs
 
@@ -129,9 +143,10 @@ Frontend và backend dùng thống nhất `slideId`, `lessonId`, `presentationId
 
 ## Database
 
-- Schema generation 12, 24 bảng lõi, baseline duy nhất `001_baseline.sql`.
-- Backend fail-fast nếu `app_metadata.schema_generation != '12'`.
-- Không sửa migration đã áp; thay đổi mới phải là `002_...`.
+- Schema generation 13, 24 bảng lõi.
+- `001_baseline.sql` (generation 12) + `002_email_otp.sql` + `003_aoi_single_label.sql`.
+- Backend fail-fast nếu `app_metadata.schema_generation != '13'`.
+- Không sửa migration đã áp; thay đổi mới phải là `004_...`.
 - Cascade/FK là cơ chế xoá dữ liệu liên quan. File media local/R2 được dọn sau
   transaction DB.
 - Từ điển cột/ERD: `DB.md`.

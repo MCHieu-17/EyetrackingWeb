@@ -4,6 +4,8 @@ import type { RefObject } from "react";
 import { LazyInlineQuiz } from "@/components/quiz/lazy-inline-quiz";
 import { ReaderFrame } from "@/components/reader/reader-frame";
 import { LazyStudyAssistantChat } from "@/components/assistant/lazy-study-assistant-chat";
+import { DisplayGuardOverlay } from "@/components/display-guard/display-guard-overlay";
+import type { DisplayGuardState } from "@/hooks/use-display-guard";
 import type { ChatCitation } from "@/lib/api/chat";
 import type { LessonItem, ModuleItem, Slide } from "@/lib/types/domain";
 import { ReaderBanners } from "./reader-banners";
@@ -42,6 +44,7 @@ export interface ReaderViewProps {
   calibrationRequired: boolean;
   showGazeDot: boolean;
   gazeDot: GazeDotPosition | null;
+  displayGuard: DisplayGuardState;
 }
 
 /**
@@ -77,6 +80,7 @@ export function ReaderView({
   calibrationRequired,
   showGazeDot,
   gazeDot,
+  displayGuard,
 }: ReaderViewProps) {
   const quizContent = quizId ? (
     <LazyInlineQuiz
@@ -136,7 +140,7 @@ export function ReaderView({
             onCitationNavigate={onCitationNavigate}
           />
         }
-        className="h-dvh"
+        className="h-dvh gaze-display-locked"
       />
 
       <GazeDotOverlay
@@ -144,6 +148,13 @@ export function ReaderView({
         gazeDot={gazeDot}
         activeLessonId={activeLessonId}
         currentSlide={currentSlide}
+      />
+
+      <DisplayGuardOverlay
+        blocked={displayGuard.blocked}
+        reason={displayGuard.reason}
+        zoomPercent={displayGuard.zoomPercent}
+        onRecheck={displayGuard.recheck}
       />
     </>
   );

@@ -38,11 +38,11 @@ embedding-worker → background_jobs(index_slides)
 | `backend/` | FastAPI API, worker phân tích, content-worker, embedding-worker |
 | `services/gaze/` | MediaPipe + UniGaze + WebSocket calibration (mặc định cần GPU) |
 | `services/chatbot/` | RAG: ingest slide, hybrid retrieval, gọi LLM/VLM NEU |
-| `db/` | Baseline PostgreSQL generation 12, 24 bảng lõi |
+| `db/` | Baseline PostgreSQL generation 13, 24 bảng lõi |
 | `nginx/` | Reverse proxy local |
 | `scripts/` | Seed, reset, backup, smoke test, kiểm tra |
 
-Database dùng **schema generation 12**, không versioning nội dung. Sửa nội dung
+Database dùng **schema generation 13**, không versioning nội dung. Sửa nội dung
 đã publish có hiệu lực ngay; quiz đã làm giữ đề trong `quiz_attempts.quiz_snapshot`.
 
 ### Chạy nhanh
@@ -166,6 +166,7 @@ Chạy lệnh trên nhiều lần để lấy các secret khác nhau.
 | `ADMIN_DATABASE_URL_DOCKER` | DSN admin read-only; **mật khẩu phải khớp `ADMIN_DB_PASSWORD`** |
 | `NEU_BASE_URL`, `NEU_API_KEY` | Endpoint LLM/VLM cho chatbot |
 | `FRONTEND_REPLICAS`, `GAZE_REPLICAS`, `WORKER_REPLICAS` | Số replica; máy cá nhân nên đặt `1` |
+| `CONTENT_VIEW_MIN_DWELL_MS` | Ngưỡng phân loại lượt xem đủ ngưỡng; mặc định `1000`, không ẩn lượt ngắn |
 
 Ví dụ các dòng cần đồng bộ (thay `<secret-N>` bằng giá trị thật):
 
@@ -196,18 +197,47 @@ Các biến còn lại có thể giữ mặc định trong `.env.example`.
 
 ### 3.3 Cấu hình tùy chọn
 
-**Microsoft 365 / Outlook OAuth** — điền đủ 3 biến đầu để bật đăng nhập Outlook:
+**Đăng nhập sinh viên bằng email + OTP** — không cần Azure App Registration
+hay quyền Microsoft Entra admin. Điền SMTP của tài khoản gửi mail:
 
 ```env
-MICROSOFT_CLIENT_ID=
-MICROSOFT_CLIENT_SECRET=
-MICROSOFT_TENANT_ID=
-MICROSOFT_REDIRECT_URI=http://localhost:3000/api/auth/oauth/microsoft/callback
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-sender@gmail.com
+SMTP_PASS=app-password
+SMTP_FROM=              # trống → dùng SMTP_USER
+SMTP_FROM_NAME=GazeEdu
+SMTP_REPLY_TO=          # trống → dùng địa chỉ From
+SMTP_USE_SSL=false
+SMTP_STARTTLS=true
+OTP_TTL_SECONDS=900
+OTP_ALLOWED_DOMAINS=st.neu.edu.vn
+OTP_STUDENT_ID_PATTERN=^\d{8}$
 FRONTEND_URL=http://localhost:3000
 ```
 
-Redirect URI phải khớp chính xác với Azure App Registration. Nếu để trống 3 biến
-đầu, nút Outlook vẫn hiển thị nhưng báo chưa cấu hình.
+Sinh viên bấm “Đăng nhập với email Outlook trường”, nhập
+`12345678@st.neu.edu.vn`, nhận mã 6 số qua hộp thư Outlook và xác nhận. Tài khoản
+mới được tạo với role `student`; email đã tồn tại giữ nguyên role hiện có.
+Không dùng `MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` nữa.
+
+Nếu chưa cấu hình SMTP, backend trả lỗi “chưa cấu hình gửi email”; dev có thể
+bật `OTP_DEV_ECHO=true` để in mã ra log backend. Khi thử với hộp thư Outlook
+trường, nhớ kiểm tra cả **Thư rác/Quarantine** ở lần gửi đầu; Gmail cá nhân
+gửi tới Microsoft 365 có thể bị chuyển vào đó. Lỗi `550 5.4.1 Recipient address
+rejected: Access denied` là địa chỉ sinh viên không tồn tại, không phải lỗi
+SMTP.
+
+**Ngưỡng lượt xem / Trực quan hoá** — mặc định mọi lượt xem đều được hiển thị,
+kể cả lượt ngắn hoặc không có mẫu gaze:
+
+```env
+CONTENT_VIEW_MIN_DWELL_MS=1000
+```
+
+Giá trị này chỉ dùng để gắn nhãn “Ngắn <1s” và bật bộ lọc “Chỉ lượt >= ngưỡng”
+trong tab Trực quan hoá; không ẩn dữ liệu mặc định. Đổi giá trị cần recreate
+backend: `docker compose up -d backend`.
 
 **Lưu trữ slide** — mặc định dùng volume local:
 
@@ -239,7 +269,7 @@ Lần đầu, Compose sẽ:
 
 1. Build image frontend, backend, chatbot, gaze, nginx và migration.
 2. Khởi động PostgreSQL + Redis.
-3. Chạy service một lần `migrate` để áp baseline schema generation 12.
+3. Chạy service một lần `migrate` để áp baseline generation 12 + nâng cấp generation 13.
 4. Khởi động backend, các worker, chatbot, gaze, frontend và nginx.
 5. Gaze tải MediaPipe/UniGaze weights; chatbot tải Qwen3-Embedding weights vào
    volume. Bước này có thể mất vài phút.
@@ -283,8 +313,9 @@ khoản đã có. Chạy lại nhiều lần vẫn an toàn.
 | `teacher@school.edu.vn` | `Password123!` | teacher |
 | `student@school.edu.vn` | `Password123!` | student |
 
-Đăng ký bằng email/password đã tắt. Tài khoản mới được tạo qua Microsoft 365
-(single tenant) và mặc định có role student.
+Đăng ký bằng email/password đã tắt. Sinh viên tạo tài khoản bằng email trường +
+OTP và mặc định có role student. Giáo viên/admin dùng tài khoản được cấp mật
+khẩu hoặc seed development.
 
 ### 4.4 Mở website
 
@@ -405,6 +436,19 @@ Luồng thử nhanh với giáo viên:
 
 Học viên cần được giáo viên ghi danh vào khóa trước khi thấy khóa trong
 `/student`.
+
+### 5.5 Triển khai production bằng Portainer
+
+Stack production dùng image build sẵn, không build trên server:
+
+- GitHub Actions build 7 image → GHCR.
+- Portainer chỉ pull image và chạy `deploy/portainer/docker-compose.yml`.
+- `cloudflared` nằm trong stack, nhận traffic Cloudflare Tunnel và trỏ tới
+  `http://nginx:80`.
+- Không publish port host; DB/Redis không lộ ra ngoài.
+
+Hướng dẫn đầy đủ, env mẫu, Cloudflare Tunnel, backup/restore và rollback:
+[`deploy/portainer/README.md`](deploy/portainer/README.md).
 
 ## 6. Seed, reset và backup dữ liệu
 

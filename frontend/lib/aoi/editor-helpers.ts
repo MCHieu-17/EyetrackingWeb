@@ -58,6 +58,66 @@ export function nextUiCustomCode(definitions: AoiDefinitionInput[]): string {
   return `ui_custom_${index}`;
 }
 
+/** Nhãn vùng slide do giáo viên đặt: AOI_ + 1..60 ký tự A-Z/0-9/_ (tối đa 64). */
+const SLIDE_LABEL_PATTERN = /^AOI_[A-Z0-9_]{1,60}$/;
+
+const SLIDE_LABEL_PREFIX = "AOI_";
+const SLIDE_LABEL_MAX_LENGTH = 64;
+
+/**
+ * Chuẩn hóa chuỗi giáo viên gõ thành nhãn slide hợp lệ:
+ * bỏ dấu, viết hoa, bỏ tiền tố SLIDE_, thay ký tự lạ bằng "_", thêm AOI_.
+ * Trả "" khi không còn nội dung để đặt nhãn.
+ */
+export function normalizeSlideLabelInput(raw: string): string {
+  let value = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .trim()
+    .toUpperCase()
+    .replace(/^SLIDE_/, "")
+    .replace(/[^A-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  // Chỉ còn đúng tiền tố (người dùng gõ "AOI_") thì coi như chưa có nhãn.
+  if (!value || value === "AOI") return "";
+  if (!value.startsWith(SLIDE_LABEL_PREFIX)) {
+    value = `${SLIDE_LABEL_PREFIX}${value}`;
+  }
+  if (value.length > SLIDE_LABEL_MAX_LENGTH) {
+    value = value.slice(0, SLIDE_LABEL_MAX_LENGTH).replace(/_+$/g, "");
+  }
+  return SLIDE_LABEL_PATTERN.test(value) ? value : "";
+}
+
+/** Trả thông báo lỗi tiếng Việt, hoặc null nếu nhãn hợp lệ và không trùng. */
+export function validateSlideLabel(
+  label: string,
+  definitions: AoiDefinitionInput[],
+  currentCode: string,
+): string | null {
+  const clean = label.trim();
+  if (!clean) {
+    return "Nhãn phân tích không được để trống.";
+  }
+  if (!SLIDE_LABEL_PATTERN.test(clean)) {
+    return "Nhãn phải có dạng AOI_..., chỉ gồm A-Z, 0-9 và dấu gạch dưới (tối đa 64 ký tự).";
+  }
+  const duplicate = definitions.some(
+    (item) =>
+      item.code !== currentCode &&
+      item.code !== "no_label" &&
+      !item.isContainer &&
+      (item.label ?? "").trim().toUpperCase() === clean,
+  );
+  if (duplicate) {
+    return `Nhãn ${clean} đã được dùng cho vùng khác trên slide này.`;
+  }
+  return null;
+}
+
 /** Nhãn slide kế tiếp: AOI_<max+1>. */
 export function nextSlideLabel(definitions: AoiDefinitionInput[]): string {
   const numbers = definitions

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -91,12 +91,52 @@ async def _process_job(job: BackgroundJob) -> None:
 
     async with SessionLocal() as db:
         row = await db.get(BackgroundJob, job.id)
+        # Batch gaze có thể tới sau khi analyze_lesson đã quét danh sách view.
+        # Lượt xem còn `pending` cần một job kế tiếp; view `failed` thì không,
+        # nên không có vòng lặp vô hạn.
+        pending_views = int(
+            (
+                await db.execute(
+                    select(func.count(ContentView.id))
+                    .join(
+                        LearningSession,
+                        LearningSession.id == ContentView.session_id,
+                    )
+                    .where(
+                        LearningSession.lesson_id == job.lesson_id,
+                        ContentView.analysis_status == "pending",
+                    )
+                )
+            ).scalar_one()
+            or 0
+        )
+        requeue = (
+            row is not None
+            and pending_views > 0
+            and row.attempts < row.max_attempts
+        )
         if row is not None:
-            row.status = "ready" if failed == 0 else "failed"
-            row.error = None if failed == 0 else f"{failed} content view lỗi"
+            notes: list[str] = []
+            if failed:
+                notes.append(f"{failed} content view lỗi")
+            if pending_views:
+                notes.append(f"{pending_views} content view chờ phân tích")
+            if requeue:
+                row.status = "ready"
+                notes.append("đã xếp lại hàng đợi")
+            elif failed or pending_views:
+                row.status = "failed"
+            else:
+                row.status = "ready"
+            row.error = "; ".join(notes) if notes else None
             row.finished_at = _now()
             row.updated_at = _now()
-            await db.commit()
+            # Flush để job hiện tại không còn `processing` khi enqueue job mới
+            # (enqueue dedupe theo job đang active của cùng lesson).
+            await db.flush()
+        if requeue:
+            await enqueue_analysis_lesson(db, job.lesson_id)
+        await db.commit()
 
 
 async def execute_pending_runs(limit: int = 10) -> int:

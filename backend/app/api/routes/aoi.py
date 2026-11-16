@@ -6,7 +6,6 @@ from app.db.session import get_db
 from app.models.auth import User
 from app.schemas.aoi import (
     AoiCollectionOut,
-    AoiGenerateIn,
     AoiRebuildIn,
     AoiRebuildOut,
     AoiSaveIn,
@@ -33,22 +32,6 @@ async def list_aois(
 async def _mark_slide_changed(db: AsyncSession, slide_id: str) -> None:
     _, lesson, _ = await slide_with_course(db, slide_id)
     await analysis.enqueue_lesson_views(db, lesson.id)
-
-
-@router.post(
-    "/api/aois/slides/{slide_id}/generate",
-    response_model=AoiCollectionOut,
-)
-async def generate_slide_aois(
-    slide_id: str,
-    body: AoiGenerateIn,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await aoi.generate_slide_aois(db, user, slide_id, body)
-    await _mark_slide_changed(db, slide_id)
-    await db.commit()
-    return result
 
 
 @router.put(

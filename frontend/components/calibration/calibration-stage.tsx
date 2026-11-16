@@ -10,7 +10,7 @@ export function CalibrationStage({ engine }: { engine: CalibrationEngine }) {
   const { current, step, total, phase, busy, error, progress, attachVideo, handleDotClick } = engine;
 
   return (
-    <div className="relative h-dvh overflow-hidden bg-[#111210] text-white">
+    <div className="gaze-display-locked relative h-dvh overflow-hidden bg-[#111210] text-white">
       <video
         ref={attachVideo}
         autoPlay

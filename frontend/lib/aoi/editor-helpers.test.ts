@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { AoiDefinition, AoiCollection } from "@/lib/api/aoi";
+import type {
+  AoiDefinition,
+  AoiDefinitionInput,
+  AoiCollection,
+} from "@/lib/api/aoi";
 import {
   collectAoiCodes,
   countCustom,
@@ -8,8 +12,10 @@ import {
   nextCustomCode,
   nextSlideLabel,
   nextUiCustomCode,
+  normalizeSlideLabelInput,
   firstAoiCollection,
   toInputs,
+  validateSlideLabel,
 } from "@/lib/aoi/editor-helpers";
 
 function makeDefinition(
@@ -88,6 +94,110 @@ describe("nextSlideLabel", () => {
       { label: null },
     ] as Parameters<typeof nextSlideLabel>[0];
     expect(nextSlideLabel(definitions)).toBe("AOI_8");
+  });
+});
+
+describe("normalizeSlideLabelInput", () => {
+  it("giữ nguyên nhãn đã hợp lệ", () => {
+    expect(normalizeSlideLabelInput("AOI_THANHCHAT")).toBe("AOI_THANHCHAT");
+    expect(normalizeSlideLabelInput("  AOI_2  ")).toBe("AOI_2");
+  });
+
+  it("bỏ dấu, viết hoa và thay ký tự lạ bằng _", () => {
+    expect(normalizeSlideLabelInput("thanh chát")).toBe("AOI_THANH_CHAT");
+    expect(normalizeSlideLabelInput("Bảng biểu")).toBe("AOI_BANG_BIEU");
+    expect(normalizeSlideLabelInput("Đường đi")).toBe("AOI_DUONG_DI");
+    expect(normalizeSlideLabelInput("THANH-CHAT")).toBe("AOI_THANH_CHAT");
+  });
+
+  it("thêm tiền tố AOI_ khi thiếu", () => {
+    expect(normalizeSlideLabelInput("thanhchat")).toBe("AOI_THANHCHAT");
+    expect(normalizeSlideLabelInput("BANGBIEU")).toBe("AOI_BANGBIEU");
+  });
+
+  it("bỏ tiền tố SLIDE_", () => {
+    expect(normalizeSlideLabelInput("SLIDE_AOI_THANHCHAT")).toBe(
+      "AOI_THANHCHAT",
+    );
+    expect(normalizeSlideLabelInput("slide_thanhchat")).toBe("AOI_THANHCHAT");
+  });
+
+  it("trả về chuỗi rỗng khi không còn nội dung", () => {
+    expect(normalizeSlideLabelInput("")).toBe("");
+    expect(normalizeSlideLabelInput("   ")).toBe("");
+    expect(normalizeSlideLabelInput("___")).toBe("");
+    expect(normalizeSlideLabelInput("!!!")).toBe("");
+    expect(normalizeSlideLabelInput("AOI_")).toBe("");
+  });
+
+  it("giới hạn tổng độ dài 64 ký tự", () => {
+    const label = normalizeSlideLabelInput("a".repeat(100));
+    expect(label).toHaveLength(64);
+    expect(label.startsWith("AOI_")).toBe(true);
+  });
+});
+
+describe("validateSlideLabel", () => {
+  const root: AoiDefinitionInput = {
+    code: "slide_1",
+    name: "Slide 1",
+    parentId: null,
+    geometry: {},
+    isContainer: true,
+    kind: "system",
+    isActive: true,
+  };
+  const leaf = (code: string, label: string | null): AoiDefinitionInput => ({
+    code,
+    name: code,
+    label,
+    parentId: "slide_1",
+    geometry: {},
+    isContainer: false,
+    kind: "custom",
+    isActive: true,
+  });
+  const definitions = [
+    root,
+    leaf("slide_1_custom_1", "AOI_THANHCHAT"),
+    leaf("slide_1_custom_2", "AOI_2"),
+  ];
+
+  it("chấp nhận nhãn đúng dạng và không trùng", () => {
+    expect(
+      validateSlideLabel("AOI_BANGBIEU", definitions, "slide_1_custom_1"),
+    ).toBeNull();
+  });
+
+  it("báo lỗi khi nhãn trống", () => {
+    expect(
+      validateSlideLabel("   ", definitions, "slide_1_custom_1"),
+    ).toContain("không được để trống");
+  });
+
+  it("báo lỗi khi sai dạng AOI_", () => {
+    expect(
+      validateSlideLabel("THANHCHAT", definitions, "slide_1_custom_1"),
+    ).toContain("AOI_");
+    expect(
+      validateSlideLabel(`AOI_${"A".repeat(61)}`, definitions, "slide_1_custom_1"),
+    ).not.toBeNull();
+  });
+
+  it("báo lỗi khi trùng nhãn của vùng khác", () => {
+    expect(
+      validateSlideLabel("AOI_2", definitions, "slide_1_custom_1"),
+    ).toContain("đã được dùng");
+  });
+
+  it("bỏ qua chính vùng hiện tại và container", () => {
+    expect(
+      validateSlideLabel("AOI_THANHCHAT", definitions, "slide_1_custom_1"),
+    ).toBeNull();
+    const withLabeledRoot = [{ ...root, label: "AOI_ROOT" }, ...definitions];
+    expect(
+      validateSlideLabel("AOI_ROOT", withLabeledRoot, "slide_1_custom_1"),
+    ).toBeNull();
   });
 });
 

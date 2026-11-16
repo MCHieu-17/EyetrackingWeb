@@ -31,6 +31,9 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
     -c "CREATE DATABASE \"$TEST_DB\";" >/dev/null
 
+log "build migration image"
+docker compose build migrate >/dev/null
+
 log "chạy migrations"
 docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 
@@ -58,10 +61,10 @@ after_rerun="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TES
     exit 1
 }
 
-log "kiểm tra schema generation 12"
+log "kiểm tra schema generation 13"
 generation="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT value FROM app_metadata WHERE key = 'schema_generation';")"
-[ "$generation" = "12" ] || { echo "expected schema_generation=12, got $generation" >&2; exit 1; }
+[ "$generation" = "13" ] || { echo "expected schema_generation=13, got $generation" >&2; exit 1; }
 
 core_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
@@ -71,7 +74,7 @@ core_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TES
     exit 1
 }
 
-for table in oauth_accounts background_jobs aois content_views view_layouts slides; do
+for table in email_otps background_jobs aois content_views view_layouts slides; do
     exists="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
         "SELECT to_regclass('public.$table');")"
     [ "$exists" = "$table" ] || {
@@ -79,6 +82,33 @@ for table in oauth_accounts background_jobs aois content_views view_layouts slid
         exit 1
     }
 done
+
+removed_objects="$(
+    docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
+        "SELECT count(*) FROM (
+           SELECT 1 FROM pg_tables
+            WHERE schemaname = 'public' AND tablename = 'oauth_accounts'
+           UNION ALL
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'gaze_samples'
+              AND column_name = 'aoi_codes'
+           UNION ALL
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'slides'
+              AND column_name = 'aoi_suggestions'
+           UNION ALL
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'gaze_samples'
+              AND column_name IN ('original_viewport_x', 'original_viewport_y')
+           UNION ALL
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'view_layouts'
+              AND column_name IN ('coordinate_space', 'visible_rect')
+         ) AS removed;")"
+[ "$removed_objects" = "0" ] || {
+    echo "legacy auth/AOI objects still present (got $removed_objects)" >&2
+    exit 1
+}
 
 legacy_tables="$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$TEST_DB" -tAc \
     "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'

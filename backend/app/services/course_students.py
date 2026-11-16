@@ -11,7 +11,7 @@ from app.models.gaze import ContentView, LearningSession
 from app.models.profile import StudentProfile
 from app.schemas.course import StudentLessonOut, StudentRowOut
 
-DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v3"
+DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v6"
 
 
 async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOut]:
@@ -39,7 +39,12 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
             select(Enrollment, User, StudentProfile)
             .join(User, User.id == Enrollment.student_id)
             .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-            .where(Enrollment.course_id == course.id)
+            .where(
+                Enrollment.course_id == course.id,
+                # "Xóa" chỉ đánh dấu dropped để giữ nguyên dữ liệu học tập;
+                # danh sách Học viên không hiển thị các enrollment này.
+                Enrollment.status != "dropped",
+            )
             .order_by(Enrollment.enrolled_at)
         )
     ).all()
@@ -85,7 +90,13 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
             .where(
                 LearningSession.enrollment_id.in_(enrollment_ids),
                 ContentView.analysis_version.in_(
-                    ("gaze-metrics-v2", DEFAULT_ALGORITHM_VERSION)
+                    (
+                        "gaze-metrics-v2",
+                        "gaze-metrics-v3",
+                        "gaze-metrics-v4",
+                        "gaze-metrics-v5",
+                        DEFAULT_ALGORITHM_VERSION,
+                    )
                 ),
                 ContentView.slide_id.is_not(None),
             )

@@ -33,6 +33,11 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
     -c "CREATE DATABASE \"$TEST_DB\";" >/dev/null
 
+log "build migration image"
+# Migration runner bake file SQL vào image, nên phải rebuild trước khi chạy
+# để test DB luôn nhận migration mới nhất.
+docker compose build migrate >/dev/null
+
 log "chạy migrations"
 docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
 

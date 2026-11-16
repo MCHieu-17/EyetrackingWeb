@@ -1,4 +1,4 @@
-"""Fixtures cho backend integration tests (schema generation 12)."""
+"""Fixtures cho backend integration tests (schema generation 13)."""
 
 from __future__ import annotations
 
@@ -46,11 +46,24 @@ for key in (
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_PUBLIC_URL",
-    "MICROSOFT_CLIENT_ID",
-    "MICROSOFT_CLIENT_SECRET",
-    "MICROSOFT_TENANT_ID",
 ):
     os.environ[key] = ""
+os.environ["SMTP_HOST"] = ""
+os.environ["SMTP_USER"] = ""
+os.environ["SMTP_PASS"] = ""
+os.environ["SMTP_FROM"] = ""
+os.environ["OTP_HASH_SECRET"] = "test-otp-hash-secret"
+os.environ["OTP_DEV_ECHO"] = "false"
+# Giữ cấu hình OTP ổn định dù .env thật có giá trị khác.
+os.environ["OTP_ALLOWED_DOMAINS"] = "st.neu.edu.vn"
+os.environ["OTP_STUDENT_ID_PATTERN"] = r"^\d{8}$"
+os.environ["OTP_TTL_SECONDS"] = "600"
+os.environ["OTP_RESEND_SECONDS"] = "60"
+os.environ["OTP_MAX_ATTEMPTS"] = "5"
+os.environ["OTP_MAX_PER_EMAIL_PER_HOUR"] = "5"
+os.environ["OTP_MAX_PER_IP_PER_HOUR"] = "20"
+# Ngưỡng phân loại lượt xem ổn định dù .env thật có giá trị khác.
+os.environ["CONTENT_VIEW_MIN_DWELL_MS"] = "1000"
 
 from app.core import security  # noqa: E402
 from app.core.config import settings  # noqa: E402

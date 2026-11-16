@@ -545,7 +545,7 @@ SELECT json_build_object(
       SELECT count(*) FROM pg_tables
       WHERE schemaname = 'public'
         AND tablename IN (
-          'users', 'courses', 'lessons', 'slides',
+          'users', 'email_otps', 'courses', 'lessons', 'slides',
           'learning_sessions', 'content_views', 'gaze_samples'
         )
   ),
@@ -566,11 +566,11 @@ SELECT json_build_object(
                 f"(got {payload.get('core_tables')!r}).",
                 exit_code=5,
             )
-        if int(payload.get("required_tables", 0)) != 7:
+        if int(payload.get("required_tables", 0)) != 8:
             raise GuardError("Smoke test: thiếu bảng lõi của baseline.", exit_code=5)
-        if payload.get("generation") != "12":
+        if payload.get("generation") != "13":
             raise GuardError(
-                f"Smoke test: schema_generation phải là 12 (got {payload.get('generation')!r}).",
+                f"Smoke test: schema_generation phải là 13 (got {payload.get('generation')!r}).",
                 exit_code=5,
             )
         if not payload.get("instance_id"):

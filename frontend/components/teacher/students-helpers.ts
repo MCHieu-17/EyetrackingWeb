@@ -11,7 +11,9 @@ const STATUS_ORDER: Record<EnrollStatus, number> = {
 };
 
 /** Quy đổi chuỗi "5 phút trước"… thành số phút để sắp xếp. */
-export function relativeMinutes(value: string): number {
+export function relativeMinutes(value: string | null | undefined): number {
+  // Học viên chưa có phiên học có lastActive = null; xếp cuối thay vì crash.
+  if (!value) return 999999;
   const text = value.toLowerCase();
   if (text.includes("vừa")) return 0;
   const amount = Number(text.match(/\d+/)?.[0] ?? 999999);
@@ -28,8 +30,8 @@ export function filterStudents(students: StudentRow[], query: string): StudentRo
   return students.filter(
     (student) =>
       !q ||
-      student.name.toLowerCase().includes(q) ||
-      student.code.toLowerCase().includes(q),
+      (student.name ?? "").toLowerCase().includes(q) ||
+      (student.code ?? "").toLowerCase().includes(q),
   );
 }
 

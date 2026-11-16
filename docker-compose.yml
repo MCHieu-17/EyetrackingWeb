@@ -27,12 +27,29 @@ x-backend-env: &backend-env
   DEBUG: ${DEBUG:-false}
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
   COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
-  # Microsoft 365 / Outlook OAuth (single tenant của trường).
-  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
-  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
-  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
-  MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://localhost:3000/api/auth/oauth/microsoft/callback}
-  MICROSOFT_ALLOWED_DOMAINS: ${MICROSOFT_ALLOWED_DOMAINS:-}
+  # SMTP gửi OTP đăng nhập sinh viên. Để trống SMTP_HOST → route OTP trả 503
+  # (trừ khi DEBUG + OTP_DEV_ECHO).
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-GazeEdu}
+  SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+  SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+  SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+  SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-15}
+  OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-900}
+  OTP_RESEND_SECONDS: ${OTP_RESEND_SECONDS:-60}
+  OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+  OTP_MAX_PER_EMAIL_PER_HOUR: ${OTP_MAX_PER_EMAIL_PER_HOUR:-10}
+  OTP_MAX_PER_IP_PER_HOUR: ${OTP_MAX_PER_IP_PER_HOUR:-40}
+  OTP_ALLOWED_DOMAINS: ${OTP_ALLOWED_DOMAINS:-st.neu.edu.vn}
+  # Regex mặc định viết dạng \d lặp 8 lần (tương đương ^\d{8}$) để dấu `}`
+  # không đóng sớm cú pháp nội suy `${...:-default}` của Compose.
+  OTP_STUDENT_ID_PATTERN: '${OTP_STUDENT_ID_PATTERN:-^\d\d\d\d\d\d\d\d$}'
+  OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
+  OTP_DEV_ECHO: ${OTP_DEV_ECHO:-false}
   FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
   MEDIA_DIR: /app/media
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
@@ -49,6 +66,9 @@ x-backend-env: &backend-env
   DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
   DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-0}
   GAZE_RETENTION_DAYS: ${GAZE_RETENTION_DAYS:-180}
+  # Ngưỡng dwell tối thiểu để một lượt xem được xếp loại "đủ ngưỡng".
+  # Mặc định vẫn hiển thị mọi lượt; UI dùng giá trị này cho badge/filter.
+  CONTENT_VIEW_MIN_DWELL_MS: ${CONTENT_VIEW_MIN_DWELL_MS:-1000}
   # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống → fallback DATABASE_URL
   # ở dev; production nên trỏ tới role admin_reader.
   ADMIN_DB_URL: ${ADMIN_DATABASE_URL_DOCKER:-}

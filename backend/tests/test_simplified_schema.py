@@ -31,6 +31,59 @@ async def test_schema_has_24_core_tables():
 
 
 @pytest.mark.asyncio
+async def test_schema_replaces_oauth_with_email_otp_and_drops_legacy_aoi_columns():
+    async with engine.connect() as conn:
+        tables = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT tablename FROM pg_tables "
+                        "WHERE schemaname = 'public'"
+                    )
+                )
+            ).scalars()
+        )
+        gaze_columns = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'gaze_samples'"
+                    )
+                )
+            ).scalars()
+        )
+        slide_columns = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'slides'"
+                    )
+                )
+            ).scalars()
+        )
+        layout_columns = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'view_layouts'"
+                    )
+                )
+            ).scalars()
+        )
+    assert "email_otps" in tables
+    assert "oauth_accounts" not in tables
+    assert "aoi_codes" not in gaze_columns
+    assert "aoi_suggestions" not in slide_columns
+    assert "original_viewport_x" not in gaze_columns
+    assert "original_viewport_y" not in gaze_columns
+    assert "coordinate_space" not in layout_columns
+    assert "visible_rect" not in layout_columns
+
+
+@pytest.mark.asyncio
 async def test_slide_delete_cascades_gaze_layout_metrics_aois():
     teacher_id = await create_user(
         email=f"cascade-t-{uuid.uuid4().hex[:8]}@example.com", role="teacher"
@@ -217,7 +270,6 @@ async def test_analysis_maps_sample_to_aoi_and_metrics():
         ).scalars().all()
         assert all(sample.slide_x == 0.5 for sample in samples)
         assert all(sample.aoi_label == "SLIDE_AOI_1" for sample in samples)
-        assert all(sample.aoi_codes == ["SLIDE_AOI_1"] for sample in samples)
 
 
 @pytest.mark.asyncio

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import uuid
 
-import pymupdf
 import pytest
+from pypdf import PdfWriter
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
@@ -16,13 +17,12 @@ from tests.conftest import create_user, login, seed_course
 
 
 def _pdf_bytes(pages: int) -> bytes:
-    document = pymupdf.open()
-    for index in range(pages):
-        page = document.new_page()
-        page.insert_text((72, 72), f"Slide {index + 1}")
-    data = document.tobytes()
-    document.close()
-    return data
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=612, height=792)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
 
 
 async def _upload(client, headers, lesson_id: str, pages: int) -> str:

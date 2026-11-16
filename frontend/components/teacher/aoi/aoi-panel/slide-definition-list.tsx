@@ -22,28 +22,6 @@ export function SlideDefinitionList({
   hoveredCode: string | null;
   onHover: (code: string | null) => void;
 }) {
-  if (controller.generatingSlide) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl bg-[#f7f7f4] px-3 py-3 text-xs text-black/55">
-        <Icon name="ri-loader-4-line" className="size-4 animate-spin" />
-        Đang tìm vùng trên slide…
-      </div>
-    );
-  }
-  if (controller.generateSlideError) {
-    return (
-      <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-3 text-xs text-destructive">
-        <p>Không tạo được gợi ý vùng.</p>
-        <button
-          type="button"
-          onClick={controller.retryGenerateSlide}
-          className="mt-1 font-semibold underline"
-        >
-          Thử lại
-        </button>
-      </div>
-    );
-  }
   if (!model.slideRoot && model.slideLeaves.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-black/10 bg-[#f7f7f4] px-3 py-4 text-center text-xs leading-5 text-black/50">
@@ -97,8 +75,12 @@ export function SlideDefinitionList({
               selected={controller.selectedCode === item.code}
               hovered={hoveredCode === item.code}
               canManage={controller.canManage}
-              subtitle={item.label ? `Nhãn: ${item.label}` : undefined}
               icon={KIND_ICON[item.kind ?? "custom"] ?? "ri-checkbox-blank-line"}
+              labelValue={item.label ?? null}
+              labelPrefix="SLIDE_"
+              onLabelChange={(label) =>
+                controller.renameAoiLabel(item.code, label)
+              }
               onSelect={() => controller.setSelectedCode(item.code)}
               onHover={(value) => onHover(value ? item.code : null)}
               onRename={(name) => controller.renameAoi(item.code, name)}
@@ -123,8 +105,12 @@ export function SlideDefinitionList({
             hovered={hoveredCode === item.code}
             inactive
             canManage={controller.canManage}
-            subtitle={item.label ? `Nhãn: ${item.label}` : undefined}
             icon={KIND_ICON[item.kind ?? "custom"] ?? "ri-checkbox-blank-line"}
+            labelValue={item.label ?? null}
+            labelPrefix="SLIDE_"
+            onLabelChange={(label) =>
+              controller.renameAoiLabel(item.code, label)
+            }
             onSelect={() => controller.setSelectedCode(item.code)}
             onHover={(value) => onHover(value ? item.code : null)}
             onRename={(name) => controller.renameAoi(item.code, name)}

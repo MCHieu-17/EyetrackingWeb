@@ -1,0 +1,487 @@
+# ============================================================
+# GazeEdu / EyeLearning — Portainer production stack
+# ------------------------------------------------------------
+# Stack này chỉ PULL image từ registry, không build trên server.
+#
+#   Portainer → Stacks → Add stack → Repository
+#   Compose path: deploy/portainer/docker-compose.yml
+#
+# Image được build bởi .github/workflows/release.yml và push lên
+# ghcr.io/<owner>/eyelearning-*.
+#
+# Không publish port ra host. cloudflared trong stack nhận traffic từ
+# Cloudflare Tunnel và chuyển tới `nginx:80`.
+#
+# Env: copy deploy/portainer/stack.env.example → điền secret → dán vào
+# Portainer (hoặc upload file .env). Không commit stack.env thật.
+# ============================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Env dùng chung cho backend API + các worker.
+# DSN được dựng từ các phần để tránh lệch mật khẩu giữa POSTGRES_PASSWORD
+# và DATABASE_URL. Dùng secret dạng hex để không phá cú pháp URL.
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eyetracking}
+  REDIS_URL: redis://redis:6379/0
+  AI_HTTP_URL: http://gaze:8000
+  CHATBOT_URL: http://chatbot:8000
+  CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+  JWT_SECRET: ${JWT_SECRET}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+  # Chỉ tin X-Forwarded-For từ nginx trong mạng Docker nội bộ.
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+  FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
+  DEBUG: "false"
+  COOKIE_SECURE: "true"
+  COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+  COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-GazeEdu}
+  SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+  SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+  SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+  SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-15}
+  OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-900}
+  OTP_RESEND_SECONDS: ${OTP_RESEND_SECONDS:-60}
+  OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+  OTP_MAX_PER_EMAIL_PER_HOUR: ${OTP_MAX_PER_EMAIL_PER_HOUR:-10}
+  OTP_MAX_PER_IP_PER_HOUR: ${OTP_MAX_PER_IP_PER_HOUR:-40}
+  OTP_ALLOWED_DOMAINS: ${OTP_ALLOWED_DOMAINS:-st.neu.edu.vn}
+  OTP_STUDENT_ID_PATTERN: '${OTP_STUDENT_ID_PATTERN:-^\d\d\d\d\d\d\d\d$}'
+  OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
+  OTP_DEV_ECHO: "false"
+  FRONTEND_URL: ${FRONTEND_URL:-https://eyetracking.nmhieu17.space}
+  MEDIA_DIR: /app/media
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
+  MAX_PDF_BYTES: ${MAX_PDF_BYTES:-104857600}
+  MAX_SLIDE_PAGES: ${MAX_SLIDE_PAGES:-150}
+  MAX_SLIDE_RENDER_PIXELS: ${MAX_SLIDE_RENDER_PIXELS:-25000000}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  DB_POOL_MIN: ${DB_POOL_MIN:-4}
+  DB_POOL_MAX: ${DB_POOL_MAX:-10}
+  DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-5}
+  DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+  DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-0}
+  GAZE_RETENTION_DAYS: ${GAZE_RETENTION_DAYS:-180}
+  CONTENT_VIEW_MIN_DWELL_MS: ${CONTENT_VIEW_MIN_DWELL_MS:-1000}
+  ADMIN_DB_URL: postgresql+asyncpg://${ADMIN_DB_USER:-admin_reader}:${ADMIN_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-eyetracking}
+  ADMIN_DB_STATEMENT_TIMEOUT_MS: ${ADMIN_DB_STATEMENT_TIMEOUT_MS:-10000}
+  ADMIN_DB_LOCK_TIMEOUT_MS: ${ADMIN_DB_LOCK_TIMEOUT_MS:-2000}
+  ADMIN_DB_MAX_ROWS: ${ADMIN_DB_MAX_ROWS:-500}
+  ADMIN_DB_SCHEMA_CACHE_SECONDS: ${ADMIN_DB_SCHEMA_CACHE_SECONDS:-60}
+
+services:
+  # Chạy một lần để tạo thư mục backup thuộc user postgres. Nhờ vậy có thể
+  # pg_dump vào volume `backups` rồi tải file qua Portainer volume browser.
+  backup-init:
+    image: postgres:16.4
+    restart: "no"
+    logging: *default-logging
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /backups
+        chown -R postgres:postgres /backups
+        chmod 700 /backups
+    volumes:
+      - backups:/backups
+    mem_limit: 64m
+    cpus: 0.2
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg16
+    restart: unless-stopped
+    logging: *default-logging
+    shm_size: 1gb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=200
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=on
+      - -c
+      - track_io_timing=on
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - max_worker_processes=8
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-eyetracking}
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - backups:/backups
+    depends_on:
+      backup-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eyetracking}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 4g
+    cpus: 4.0
+
+  # Migration runner: chỉ chạy file chưa áp, có checksum + advisory lock.
+  # Service exit 1 ⇒ stack dừng, backend không lên.
+  migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-migrations:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-eyetracking}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      CHATBOT_DB_USER: ${CHATBOT_DB_USER:-chatbot_reader}
+      CHATBOT_DB_PASSWORD: ${CHATBOT_DB_PASSWORD}
+      ADMIN_DB_USER: ${ADMIN_DB_USER:-admin_reader}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD}
+    mem_limit: 512m
+    cpus: 1.0
+
+  redis:
+    image: redis:7.4.11-alpine3.21
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 768mb
+      - --maxmemory-policy
+      - volatile-lru
+      - --tcp-keepalive
+      - "60"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 1g
+    cpus: 1.0
+
+  backend:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      CHATBOT_TIMEOUT_SECONDS: ${CHATBOT_TIMEOUT_SECONDS:-120}
+      CHATBOT_INGEST_TIMEOUT_SECONDS: ${CHATBOT_INGEST_TIMEOUT_SECONDS:-600}
+      CHATBOT_INGEST_ATTEMPTS: ${CHATBOT_INGEST_ATTEMPTS:-3}
+      CHATBOT_INGEST_BACKOFF_SECONDS: ${CHATBOT_INGEST_BACKOFF_SECONDS:-5}
+      CHATBOT_INGEST_BATCH_SIZE: ${CHATBOT_INGEST_BATCH_SIZE:-8}
+    volumes:
+      - backend-media:/app/media
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 3g
+    cpus: 4.0
+
+  # Worker chuyển đổi PPTX/PPT/ODP → PDF và tạo row slides.
+  content-worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-content-worker:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    init: true
+    logging: *default-logging
+    command: ["python", "-m", "app.content_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      CONTENT_WORKER_POLL_SECONDS: ${CONTENT_WORKER_POLL_SECONDS:-3}
+      CONTENT_WORKER_STALE_SECONDS: ${CONTENT_WORKER_STALE_SECONDS:-600}
+      LIBREOFFICE_BINARY: ${LIBREOFFICE_BINARY:-soffice}
+      LIBREOFFICE_TIMEOUT_SECONDS: ${LIBREOFFICE_TIMEOUT_SECONDS:-120}
+    volumes:
+      - backend-media:/app/media
+    mem_limit: 4g
+    cpus: 2.0
+
+  # Worker phân tích gaze/AOI từ background_jobs(kind=analyze_lesson).
+  worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-5}
+      WORKER_STALE_SECONDS: ${WORKER_STALE_SECONDS:-600}
+    healthcheck:
+      disable: true
+    mem_limit: 1536m
+    cpus: 1.0
+
+  # Worker đồng bộ index RAG qua background_jobs(kind=index_slides).
+  embedding-worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["python", "-m", "app.embedding_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      EMBEDDING_WORKER_POLL_SECONDS: ${EMBEDDING_WORKER_POLL_SECONDS:-5}
+      EMBEDDING_WORKER_STALE_SECONDS: ${EMBEDDING_WORKER_STALE_SECONDS:-600}
+    healthcheck:
+      disable: true
+    mem_limit: 2g
+    cpus: 1.0
+
+  # Chatbot RAG: FastAPI + LangChain, embedding Qwen3 chạy CPU.
+  chatbot:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-chatbot:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      CHATBOT_DATABASE_URL: postgresql://${CHATBOT_DB_USER:-chatbot_reader}:${CHATBOT_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-eyetracking}
+      CHATBOT_INTERNAL_TOKEN: ${CHATBOT_INTERNAL_TOKEN}
+      DB_POOL_MIN: ${CHATBOT_DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${CHATBOT_DB_POOL_MAX:-10}
+      DB_POOL_TIMEOUT: ${CHATBOT_DB_POOL_TIMEOUT:-10}
+      DB_POOL_RECONNECT_TIMEOUT: ${CHATBOT_DB_POOL_RECONNECT_TIMEOUT:-10}
+      EMBEDDING_NAME: ${EMBEDDING_NAME:-local}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      EMBEDDING_MODEL_PATH: ${EMBEDDING_MODEL_PATH:-/app/weights/Qwen3-Embedding-0.6B}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cpu}
+      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
+      EMBEDDING_HF_REPO: ${EMBEDDING_HF_REPO:-Qwen/Qwen3-Embedding-0.6B}
+      HF_TOKEN: ${HF_TOKEN:-}
+      NEU_BASE_URL: ${NEU_BASE_URL:-http://101.96.66.232:8037/vllm/v1}
+      NEU_API_KEY: ${NEU_API_KEY}
+      NEU_AUTH_HEADER: ${NEU_AUTH_HEADER:-x-ollama-seckey}
+      NEU_AUTH_SCHEME: ${NEU_AUTH_SCHEME:-}
+      NEU_LLM_MODEL: ${NEU_LLM_MODEL:-qwen3.5-35b-a3b-int4}
+      NEU_VLM_MODEL: ${NEU_VLM_MODEL:-qwen3.5-35b-a3b-int4}
+      NEU_ENABLE_THINKING: ${NEU_ENABLE_THINKING:-false}
+      NEU_TIMEOUT: ${NEU_TIMEOUT:-180}
+      NEU_MAX_RETRIES: ${NEU_MAX_RETRIES:-2}
+      NEU_VLM_MAX_TOKENS: ${NEU_VLM_MAX_TOKENS:-8192}
+      NEU_VLM_TIMEOUT: ${NEU_VLM_TIMEOUT:-300}
+      NEU_QUERY_MAX_TOKENS: ${NEU_QUERY_MAX_TOKENS:-400}
+      NEU_QUERY_TIMEOUT: ${NEU_QUERY_TIMEOUT:-30}
+      QUERY_REWRITE_ENABLED: ${QUERY_REWRITE_ENABLED:-true}
+      HYDE_ENABLED: ${HYDE_ENABLED:-true}
+      HYDE_MIN_QUERY_WORDS: ${HYDE_MIN_QUERY_WORDS:-8}
+      ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-2048}
+      ANSWER_TEMPERATURE: ${ANSWER_TEMPERATURE:-0.2}
+      CITATION_GATE_TOKENS: ${CITATION_GATE_TOKENS:-200}
+      CITATION_RETRY_MAX: ${CITATION_RETRY_MAX:-1}
+      RAG_TOP_K: ${RAG_TOP_K:-8}
+      RAG_BM25_CANDIDATES: ${RAG_BM25_CANDIDATES:-20}
+      RAG_DENSE_CANDIDATES: ${RAG_DENSE_CANDIDATES:-20}
+      RAG_HYDE_CANDIDATES: ${RAG_HYDE_CANDIDATES:-20}
+      RAG_HYDE_WEIGHT: ${RAG_HYDE_WEIGHT:-0.7}
+      RAG_RRF_K: ${RAG_RRF_K:-60}
+      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.2}
+      LMS_DETECTION_ENABLED: ${LMS_DETECTION_ENABLED:-true}
+      CHATBOT_BACKEND_URL: http://backend:8001
+      CHATBOT_MAX_CONCURRENT: ${CHATBOT_MAX_CONCURRENT:-20}
+      CHATBOT_QUEUE_TIMEOUT: ${CHATBOT_QUEUE_TIMEOUT:-2}
+      NEU_GENERATION_CONCURRENCY: ${NEU_GENERATION_CONCURRENCY:-4}
+      NEU_TOTAL_CONCURRENCY: ${NEU_TOTAL_CONCURRENCY:-6}
+      NEU_REQUESTS_PER_SECOND: ${NEU_REQUESTS_PER_SECOND:-0}
+      NEU_ANSWER_TIMEOUT: ${NEU_ANSWER_TIMEOUT:-120}
+      VLM_INGEST_CONCURRENCY: ${VLM_INGEST_CONCURRENCY:-1}
+      VLM_INGEST_QUEUE_TIMEOUT: ${VLM_INGEST_QUEUE_TIMEOUT:-60}
+      NEU_QUEUE_TIMEOUT: ${NEU_QUEUE_TIMEOUT:-30}
+      LOCAL_MEDIA_DIR: /app/media
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      STORAGE_HTTP_ALLOWED_HOSTS: ${STORAGE_HTTP_ALLOWED_HOSTS:-}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+    volumes:
+      - backend-media:/app/media:ro
+      - chatbot-weights:/app/weights
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+    mem_limit: 4g
+    cpus: 4.0
+
+  # Gaze cần NVIDIA GPU. Host phải có driver + nvidia-container-toolkit.
+  gaze:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-gaze:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DEVICE: ${DEVICE:-cuda}
+      ONEEURO_BETA: ${ONEEURO_BETA:-0.5}
+      ONEEURO_MIN_CUTOFF: ${ONEEURO_MIN_CUTOFF:-0.5}
+      ONEEURO_D_CUTOFF: ${ONEEURO_D_CUTOFF:-1.0}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-1800}
+      MAX_SESSIONS: ${MAX_SESSIONS:-100}
+      MAX_POINTS: ${MAX_POINTS:-64}
+      MAX_SAMPLES_PER_POINT: ${MAX_SAMPLES_PER_POINT:-50}
+      INFER_WORKERS: ${INFER_WORKERS:-1}
+      MAX_INFERENCE_QUEUE: ${MAX_INFERENCE_QUEUE:-32}
+      MIN_FRAME_INTERVAL_MS: ${MIN_FRAME_INTERVAL_MS:-80}
+      MAX_UPLOAD_BYTES: ${GAZE_MAX_UPLOAD_BYTES:-5242880}
+    volumes:
+      - gaze-weights:/app/weights
+    expose:
+      - "8000"
+    gpus: all
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/ready').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    mem_limit: 3g
+    cpus: 2.0
+
+  frontend:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 1g
+    cpus: 1.0
+
+  nginx:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-nginx:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+      # Cố ý service_started: gaze lỗi không được chặn nginx/backend.
+      gaze:
+        condition: service_started
+    volumes:
+      - backend-media:/media:ro
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/nginx-health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 512m
+    cpus: 2.0
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  # Cloudflare Tunnel connector. Public hostname trong Zero Trust phải trỏ
+  # service HTTP tới `nginx:80` (không phải localhost).
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.0
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      nginx:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
+
+volumes:
+  pgdata:
+  backend-media:
+  gaze-weights:
+  chatbot-weights:
+  redis-data:
+  backups:

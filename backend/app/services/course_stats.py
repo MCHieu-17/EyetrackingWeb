@@ -33,7 +33,13 @@ async def attention_avg_by_course(
         .where(
             CourseModule.course_id.in_(course_ids),
             ContentView.analysis_version.in_(
-                ("gaze-metrics-v2", "gaze-metrics-v3")
+                (
+                    "gaze-metrics-v2",
+                    "gaze-metrics-v3",
+                    "gaze-metrics-v4",
+                    "gaze-metrics-v5",
+                    "gaze-metrics-v6",
+                )
             ),
             ContentView.surface == "lesson",
         )

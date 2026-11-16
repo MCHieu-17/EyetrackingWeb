@@ -1,9 +1,19 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LazyPdfPage } from "@/components/pdf/lazy-pdf-page";
 import type { Slide } from "@/lib/types/domain";
+
+interface PageSize {
+  width: number;
+  height: number;
+}
+
+interface MeasuredPageSize extends PageSize {
+  key: string;
+}
 
 export function ReaderSlideContent({
   slidesLoading,
@@ -14,6 +24,29 @@ export function ReaderSlideContent({
   slidePdfUrl: string | null;
   currentContent: Slide | undefined;
 }) {
+  const pageNumber = currentContent?.pageNumber ?? 1;
+  const pageKey = `${slidePdfUrl ?? ""}:${pageNumber}`;
+  const [pageSize, setPageSize] = useState<MeasuredPageSize | null>(null);
+
+  // Đổi URL/trang: bỏ kích thước cũ ngay trong render để container không giữ
+  // data-pdf-* sai cho tới khi PdfPage báo kích thước mới.
+  if (pageSize && pageSize.key !== pageKey) setPageSize(null);
+
+  const handlePageSize = useCallback(
+    (size: PageSize) => {
+      if (!(size.width > 0) || !(size.height > 0)) return;
+      setPageSize((prev) =>
+        prev &&
+        prev.key === pageKey &&
+        prev.width === size.width &&
+        prev.height === size.height
+          ? prev
+          : { key: pageKey, width: size.width, height: size.height },
+      );
+    },
+    [pageKey],
+  );
+
   if (slidesLoading) {
     return <Skeleton className="aspect-video w-full rounded-2xl" />;
   }
@@ -22,14 +55,17 @@ export function ReaderSlideContent({
     return (
       <div
         data-aoi="slide"
+        data-pdf-width={pageSize?.width}
+        data-pdf-height={pageSize?.height}
         className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm"
       >
         <LazyPdfPage
-          key={`${slidePdfUrl}:${currentContent?.pageNumber ?? 1}`}
+          key={pageKey}
           url={slidePdfUrl}
-          pageNumber={currentContent?.pageNumber ?? 1}
+          pageNumber={pageNumber}
           alt={currentContent?.title ?? "Trang bài học"}
           className="absolute inset-0"
+          onPageSize={handlePageSize}
         />
       </div>
     );

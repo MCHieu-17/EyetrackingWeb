@@ -59,18 +59,39 @@ class Settings(BaseSettings):
     cookie_samesite: str = "lax"  # lax đủ cho same-site rewrite, strict nếu muốn
     cookie_domain: str | None = None  # None = host-only (khuyến nghị cho rewrite)
 
-    # Microsoft 365 / Outlook OAuth (single tenant của trường).
-    # Để trống CLIENT_ID/SECRET/TENANT_ID → tắt đăng nhập Outlook.
-    microsoft_client_id: str = ""
-    microsoft_client_secret: str = ""
-    microsoft_tenant_id: str = ""
-    microsoft_redirect_uri: str = (
-        "http://localhost:3000/api/auth/oauth/microsoft/callback"
-    )
-    # Danh sách domain email được phép, phẩy phân tách. Trống = cho phép mọi
-    # tài khoản thuộc tenant (khuyến nghị vì đã giới hạn single tenant).
-    microsoft_allowed_domains: str = ""
-    # Origin frontend để redirect sau callback OAuth.
+    # SMTP gửi OTP đăng nhập sinh viên. Để trống SMTP_HOST → chưa cấu hình;
+    # route OTP trả 503 (trừ khi DEBUG + OTP_DEV_ECHO bật để test local).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    # Trống → dùng SMTP_USER làm địa chỉ From.
+    smtp_from: str = ""
+    smtp_from_name: str = "GazeEdu"
+    # Trống → dùng địa chỉ From. Đặt hộp thư có người theo dõi để nhận phản hồi.
+    smtp_reply_to: str = ""
+    smtp_use_ssl: bool = False
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: float = 15
+
+    # OTP đăng nhập sinh viên NEU: email trường + mã 6 số dùng một lần.
+    # 15 phút: Microsoft 365 có thể giữ thư từ người gửi mới vài phút trước
+    # khi chuyển vào Inbox/Junk; 10 phút dễ hết hạn trước khi sinh viên thấy mã.
+    otp_ttl_seconds: int = 900
+    otp_resend_seconds: int = 60
+    otp_max_attempts: int = 5
+    otp_max_per_email_per_hour: int = 10
+    otp_max_per_ip_per_hour: int = 40
+    # Danh sách domain email được phép, phẩy phân tách.
+    otp_allowed_domains: str = "st.neu.edu.vn"
+    # Phần local (mã sinh viên) phải khớp regex này.
+    otp_student_id_pattern: str = r"^\d{8}$"
+    # Trống → fallback JWT_SECRET khi tính HMAC cho mã OTP.
+    otp_hash_secret: str = ""
+    # Chỉ dùng dev: log mã OTP khi SMTP chưa cấu hình (DEBUG bắt buộc).
+    otp_dev_echo: bool = False
+
+    # Origin frontend (dùng trong email OTP và redirect sau đăng nhập).
     frontend_url: str = "http://localhost:3000"
 
     @property
@@ -80,20 +101,30 @@ class Settings(BaseSettings):
         return not self.debug
 
     @property
-    def microsoft_oauth_enabled(self) -> bool:
-        return bool(
-            self.microsoft_client_id
-            and self.microsoft_client_secret
-            and self.microsoft_tenant_id
-        )
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host.strip())
 
     @property
-    def microsoft_allowed_domain_list(self) -> list[str]:
+    def smtp_from_resolved(self) -> str:
+        """Địa chỉ From: SMTP_FROM nếu có, fallback SMTP_USER."""
+        return self.smtp_from.strip() or self.smtp_user.strip()
+
+    @property
+    def smtp_reply_to_resolved(self) -> str:
+        """Địa chỉ Reply-To: SMTP_REPLY_TO nếu có, fallback địa chỉ From."""
+        return self.smtp_reply_to.strip() or self.smtp_from_resolved
+
+    @property
+    def otp_allowed_domain_list(self) -> list[str]:
         return [
             domain.strip().lower()
-            for domain in self.microsoft_allowed_domains.split(",")
+            for domain in self.otp_allowed_domains.split(",")
             if domain.strip()
         ]
+
+    @property
+    def otp_hash_secret_resolved(self) -> str:
+        return self.otp_hash_secret or self.jwt_secret
 
     # Dải mạng proxy tin cậy (CIDR, phẩy phân tách) — chỉ khi request đến từ
     # peer trong dải này mới tin header X-Forwarded-For (chống giả mạo IP).
@@ -143,6 +174,11 @@ class Settings(BaseSettings):
     # Retention gaze samples: row cũ hơn số ngày này bị xoá bởi maintenance.
     # Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
     gaze_retention_days: int = 180
+
+    # Ngưỡng dwell để phân loại một lượt xem là "đủ ngưỡng". Mặc định vẫn
+    # hiển thị mọi lượt xem (kể cả ngắn hơn ngưỡng); giá trị này dùng cho
+    # badge/filter "Chỉ lượt >= ngưỡng" trong tab Trực quan hoá.
+    content_view_min_dwell_ms: int = 1000
 
     # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống ở dev → fallback
     # DATABASE_URL + read-only transaction. Production nên trỏ tới role chỉ

@@ -57,8 +57,6 @@ async def test_layout_accepts_code_and_semantic_code(client):
     payload = {
         "sequenceNo": 0,
         "layoutGeneration": 0,
-        "coordinateSpace": "original-v1",
-        "visibleRect": {"left": 0.1, "top": 0.1, "width": 0.8, "height": 0.8},
         "imageTransform": {"left": 0.1, "top": 0.1, "width": 0.8, "height": 0.8},
         "rects": [
             {"code": "header", "xMin": 0, "yMin": 0, "xMax": 1, "yMax": 0.1}
@@ -70,7 +68,8 @@ async def test_layout_accepts_code_and_semantic_code(client):
         json=payload,
     )
     assert created.status_code == 201, created.text
-    assert created.json()["coordinateSpace"] == "original-v1"
+    assert "coordinateSpace" not in created.json()
+    assert "visibleRect" not in created.json()
 
     # Payload cũ với semanticCode vẫn phải được chấp nhận.
     legacy = await client.post(
@@ -112,7 +111,43 @@ async def test_layout_accepts_code_and_semantic_code(client):
             )
         ).scalars().all()
         assert len(rows) == 2
-        assert rows[0].coordinate_space == "original-v1"
-        assert rows[0].visible_rect["width"] == 0.8
+        assert rows[0].slide_rect["width"] == 0.8
         assert rows[0].elements[0]["code"] == "header"
         assert rows[1].elements[0]["code"] == "header"
+
+
+@pytest.mark.asyncio
+async def test_layout_rejects_original_v1_from_stale_client(client):
+    teacher_email = f"layout-old-t-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"layout-old-s-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    token = await login(client, student_email)
+    headers = {"Authorization": f"Bearer {token}"}
+    _, presentation_id = await _session_and_presentation(client, headers, ids)
+
+    response = await client.post(
+        f"/api/presentations/{presentation_id}/layouts",
+        headers=headers,
+        json={
+            "sequenceNo": 0,
+            "layoutGeneration": 0,
+            "coordinateSpace": "original-v1",
+            "visibleRect": {
+                "left": 0.1,
+                "top": 0.1,
+                "width": 0.8,
+                "height": 0.8,
+            },
+            "imageTransform": {
+                "left": 0.1,
+                "top": 0.1,
+                "width": 0.8,
+                "height": 0.8,
+            },
+            "rects": [],
+        },
+    )
+    assert response.status_code == 409
+    assert "tải lại trang" in response.json()["detail"]

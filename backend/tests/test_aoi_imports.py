@@ -8,7 +8,6 @@ from app.services import aoi, course_students
 
 PUBLIC_AOI_CALLABLES = (
     "list_aoi_collections",
-    "generate_slide_aois",
     "save_slide_aois",
     "generate_ui_aois",
     "save_ui_aois",

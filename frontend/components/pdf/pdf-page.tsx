@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { loadPdfDocument } from "@/lib/pdf/pdfjs";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface PdfPageSize {
@@ -44,6 +45,8 @@ export function PdfPage({
   const [visible, setVisible] = useState(!lazy);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Chỉ tăng khi người dùng bấm "Thử lại" — không tự lặp render lỗi.
+  const [retryCount, setRetryCount] = useState(0);
 
   const onPageSizeRef = useRef(onPageSize);
   const onErrorRef = useRef(onError);
@@ -127,7 +130,9 @@ export function PdfPage({
       page?.cleanup();
       if (renderTaskRef.current === task) renderTaskRef.current = null;
     }
-  }, [pageNumber, url, visible]);
+    // retryCount chỉ dùng để trigger render lại khi người dùng bấm "Thử lại".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNumber, url, visible, retryCount]);
 
   useEffect(() => {
     // PDF.js là external system; render cập nhật canvas + trạng thái loading.
@@ -158,6 +163,12 @@ export function PdfPage({
     };
   }, [render]);
 
+  const retryRender = useCallback(() => {
+    setFailed(false);
+    setReady(false);
+    setRetryCount((count) => count + 1);
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -177,8 +188,16 @@ export function PdfPage({
         )}
       />
       {failed && (
-        <div className="relative z-10 flex h-full w-full items-center justify-center bg-white p-4 text-center text-xs text-muted-foreground">
-          Không hiển thị được trang PDF.
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-3 bg-white p-4 text-center text-xs text-muted-foreground">
+          <p>Không hiển thị được trang PDF.</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={retryRender}
+          >
+            Thử lại
+          </Button>
         </div>
       )}
     </div>

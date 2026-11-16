@@ -10,7 +10,6 @@ import { LessonSlideSelector } from "./lesson-slide-selector";
 import { NoLabelRow } from "./no-label-row";
 import { PanelActions } from "./panel-actions";
 import { buildAoiPanelModel } from "./panel-model";
-import { RegenerateDialog } from "./regenerate-dialog";
 import { SlideDefinitionList } from "./slide-definition-list";
 import { UiDefinitionList } from "./ui-definition-list";
 import { useAoiPanelSections } from "./use-aoi-panel-sections";
@@ -27,7 +26,6 @@ export function AoiPanel({
   onHover: (code: string | null) => void;
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
-  const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
 
   const showHint = (text: string) => {
@@ -96,7 +94,6 @@ export function AoiPanel({
           controller={controller}
           hint={hint}
           onShowHint={showHint}
-          onOpenRegenerate={() => setRegenerateOpen(true)}
         />
       </div>
 
@@ -126,12 +123,6 @@ export function AoiPanel({
       </div>
 
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-
-      <RegenerateDialog
-        controller={controller}
-        open={regenerateOpen}
-        onOpenChange={setRegenerateOpen}
-      />
     </aside>
   );
 }

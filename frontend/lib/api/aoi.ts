@@ -57,21 +57,10 @@ export interface AoiRect {
   yMax: number;
 }
 
-export interface VisibleRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-export type AoiCoordinateSpace = "current-v1" | "original-v1";
-
 export interface AoiLayoutSnapshot {
   id: string;
   presentationId: string;
   layoutGeneration: number;
-  coordinateSpace: AoiCoordinateSpace;
-  visibleRect: VisibleRect | Record<string, never>;
   capturedAt: string;
 }
 
@@ -89,28 +78,6 @@ export function fetchAois(params: {
   uiSchema?: string;
 } = {}): Promise<AoiCollection[]> {
   return apiFetch<AoiCollection[]>("/api/aois", { params });
-}
-
-export function generateSlideAois(
-  slideId: string,
-  input: {
-    slideNumber?: number;
-    merge?: boolean;
-    replaceAuto?: boolean;
-    resetAll?: boolean;
-  } = {},
-): Promise<AoiCollection> {
-  return apiFetch<AoiCollection>(`/api/aois/slides/${slideId}/generate`, {
-    method: "POST",
-    body: {
-      slideNumber: input.slideNumber,
-      merge: input.merge ?? false,
-      replaceAuto: input.replaceAuto ?? false,
-      resetAll: input.resetAll ?? false,
-    },
-    // Sinh AOI bằng AI có thể lâu hơn timeout mặc định 30s.
-    timeoutMs: 120_000,
-  });
 }
 
 export function saveSlideAois(
@@ -171,6 +138,10 @@ export function createPresentation(
     slideId?: string | null;
     surface: "lesson" | "quiz";
     sequenceNo: number;
+    /** UUID sinh mỗi lần vào slide; retry cùng UUID là idempotent. */
+    clientPresentationId?: string;
+    /** Thời điểm slide trở thành context hiện tại. */
+    enteredAt?: string;
   },
 ): Promise<ContentPresentation> {
   return apiFetch<ContentPresentation>(
@@ -184,8 +155,6 @@ export function createPresentationLayout(
   input: {
     sequenceNo: number;
     layoutGeneration: number;
-    coordinateSpace?: AoiCoordinateSpace;
-    visibleRect?: VisibleRect;
     imageTransform?: Record<string, unknown>;
     rects: AoiRect[];
   },

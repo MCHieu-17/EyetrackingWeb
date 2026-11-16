@@ -12,6 +12,7 @@ import {
   restoreGazeSessionFromBackend,
 } from "@/lib/api/calibration";
 import { getDeviceFingerprint } from "@/lib/api/student";
+import { Icon } from "@/components/ui/icon";
 import { useCourseOutline } from "@/hooks/use-student";
 import { formatDateTimeVN } from "@/lib/utils";
 import { CameraCheck } from "./camera-check";
@@ -267,6 +268,21 @@ export function PreflightCheck({
         <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
           Giữ khuôn mặt trong khung, ánh sáng đều và nhìn thẳng vào màn hình để điểm nhìn được ghi nhận chính xác.
         </p>
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border/80 bg-white px-4 py-3.5 shadow-xs">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[#52704f]">
+            <Icon name="ri-information-line" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              Giữ hiển thị ở 100%
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Đặt zoom 100% (Ctrl+0, hoặc Cmd+0 trên Mac) và không dùng F11/toàn màn
+              hình trong lúc hiệu chỉnh và học. Nếu hiển thị thay đổi, hệ thống sẽ
+              tạm dừng ghi điểm nhìn cho đến khi bạn đưa về bình thường.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.72fr)] lg:items-stretch">

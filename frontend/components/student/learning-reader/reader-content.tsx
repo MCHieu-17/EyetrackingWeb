@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useGazeTracker, type GazeFrameResult } from "@/hooks/use-gaze-tracker";
 import { useAoiSnapshot } from "@/hooks/use-aoi-snapshot";
 import { useCourseVisit } from "@/hooks/use-course-visit";
+import { useDisplayGuard } from "@/hooks/use-display-guard";
 import {
   useCourseOutline,
   useLessonSlides,
@@ -34,6 +35,8 @@ import {
 import {
   createPresentationRequestTracker,
   presentationContextKey,
+  presentationEntryFor,
+  type PresentationEntry,
 } from "@/lib/gaze/presentation-context";
 import {
   getCalibrationScreenSnapshot,
@@ -103,6 +106,13 @@ export function ReaderContent({ courseId }: { courseId: string }) {
 
   const gazeBufferRef = useRef<GazeSample[]>([]);
   const gazeBufferLessonRef = useRef<string | null>(null);
+  // Presentation/layout tại thời điểm sample đầu tiên vào buffer. Giữ riêng
+  // để batch cuối vẫn gắn đúng lượt xem cũ kể cả khi refs presentation đã bị
+  // reset (đổi slide nhanh, unmount, đóng phiên).
+  const gazeBatchOwnerRef = useRef<{
+    presentationId: string;
+    layoutId: string | null;
+  } | null>(null);
   const flushTimerRef = useRef<number>(0);
   const sessionsRef = useRef<Record<string, string>>({});
   const aoiSnapshotIdRef = useRef<string | null>(null);
@@ -112,6 +122,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const presentationIdRef = useRef<string | null>(null);
   const activePresentationKeyRef = useRef<string | null>(null);
   const presentationRequestRef = useRef(createPresentationRequestTracker());
+  const presentationEntryRef = useRef<PresentationEntry | null>(null);
   const presentationSequenceRef = useRef(0);
   const layoutGenerationRef = useRef(0);
   const batchNoRef = useRef<Record<string, number>>({});
@@ -180,55 +191,88 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     enrollmentId: enrollmentId ?? null,
   });
 
-  // Flush đúng batch của bài/phiên cũ trước khi phiên bị đóng.
-  const flushGazeForLesson = useCallback((lessonId: string, sessionId?: string, keepalive = false) => {
-    if (gazeBufferLessonRef.current !== lessonId) return;
-    const sid = sessionId ?? sessionsRef.current[lessonId];
-    const buf = gazeBufferRef.current;
-    const presentation = presentationIdRef.current;
-    if (!sid || !presentation) {
-      // Không có presentation/session hợp lệ: bỏ buffer thay vì gán nhầm
-      // sample sang presentation kế tiếp.
+  // Flush đúng batch của bài/phiên cũ trước khi phiên bị đóng. Trả Promise
+  // của lần enqueue để closeLearningSession chờ batch cuối vào queue.
+  const flushGazeForLesson = useCallback(
+    (
+      lessonId: string,
+      sessionId?: string,
+      keepalive = false,
+    ): Promise<void> => {
+      if (gazeBufferLessonRef.current !== lessonId) return Promise.resolve();
+      const sid = sessionId ?? sessionsRef.current[lessonId];
+      const buf = gazeBufferRef.current;
+      const owner = gazeBatchOwnerRef.current;
+      // Ưu tiên presentation/layout lúc sample được ghi; fallback refs hiện
+      // tại cho luồng cũ trước khi buffer kịp có owner.
+      const presentation = owner?.presentationId ?? presentationIdRef.current;
+      const layoutId = owner ? owner.layoutId : aoiSnapshotIdRef.current;
+      if (!sid || !presentation) {
+        // Không có presentation/session hợp lệ: bỏ buffer thay vì gán nhầm
+        // sample sang presentation kế tiếp.
+        gazeBufferRef.current = [];
+        gazeBufferLessonRef.current = null;
+        gazeBatchOwnerRef.current = null;
+        return Promise.resolve();
+      }
+      if (buf.length === 0) {
+        gazeBufferLessonRef.current = null;
+        gazeBatchOwnerRef.current = null;
+        return Promise.resolve();
+      }
       gazeBufferRef.current = [];
       gazeBufferLessonRef.current = null;
-      return;
-    }
-    if (buf.length === 0) {
-      gazeBufferLessonRef.current = null;
-      return;
-    }
-    gazeBufferRef.current = [];
-    gazeBufferLessonRef.current = null;
-    const batchNo = batchNoRef.current[sid] ?? 0;
-    batchNoRef.current[sid] = batchNo + 1;
-    const sequences = buf.map((sample) => sample.sequence);
-    const input: GazeBatchInput = {
-      batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}-${batchNo}`,
-      batchNo,
-      presentationId: presentation,
-      layoutId: aoiSnapshotIdRef.current,
-      sequenceStart: Math.min(...sequences),
-      sequenceEnd: Math.max(...sequences),
-      payloadHash: hashPayload(buf),
-      samples: buf,
-    };
-    void queueGazeBatch(sid, input, keepalive);
-  }, []);
+      gazeBatchOwnerRef.current = null;
+      const batchNo = batchNoRef.current[sid] ?? 0;
+      batchNoRef.current[sid] = batchNo + 1;
+      const sequences = buf.map((sample) => sample.sequence);
+      const input: GazeBatchInput = {
+        batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}-${batchNo}`,
+        batchNo,
+        presentationId: presentation,
+        layoutId,
+        sequenceStart: Math.min(...sequences),
+        sequenceEnd: Math.max(...sequences),
+        payloadHash: hashPayload(buf),
+        samples: buf,
+      };
+      return queueGazeBatch(sid, input, keepalive).catch(() => {});
+    },
+    [],
+  );
 
-  const closeLearningSession = useCallback((lessonId: string, expectedSessionId?: string, keepalive = false) => {
-    const sessionId = sessionsRef.current[lessonId];
-    if (!sessionId || (expectedSessionId && sessionId !== expectedSessionId)) return;
+  const closeLearningSession = useCallback(
+    (lessonId: string, expectedSessionId?: string, keepalive = false) => {
+      const sessionId = sessionsRef.current[lessonId];
+      if (!sessionId || (expectedSessionId && sessionId !== expectedSessionId)) return;
 
-    flushGazeForLesson(lessonId, sessionId, keepalive);
-    delete sessionsRef.current[lessonId];
-    setLearningSessionIds((prev) => {
-      if (prev[lessonId] !== sessionId) return prev;
-      const next = { ...prev };
-      delete next[lessonId];
-      return next;
-    });
-    endLearningSession(sessionId, "completed", keepalive).catch(() => {});
-  }, [flushGazeForLesson]);
+      const flushed = flushGazeForLesson(lessonId, sessionId, keepalive);
+      delete sessionsRef.current[lessonId];
+      setLearningSessionIds((prev) => {
+        if (prev[lessonId] !== sessionId) return prev;
+        const next = { ...prev };
+        delete next[lessonId];
+        return next;
+      });
+
+      // Unload: gửi keepalive rồi đi ngay, không chờ flush.
+      if (keepalive) {
+        endLearningSession(sessionId, "completed", true).catch(() => {});
+        return;
+      }
+
+      // Best-effort: chờ batch cuối vào queue + flush tối đa 1.5s rồi mới
+      // đóng session để backend kịp gắn sample vào presentation cũ.
+      void (async () => {
+        await Promise.race([
+          flushed.then(() => flushGazeQueue(sessionId)),
+          new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+        ]).catch(() => {});
+        await endLearningSession(sessionId, "completed").catch(() => {});
+      })();
+    },
+    [flushGazeForLesson],
+  );
 
   // Mỗi lần vào bài tạo một phiên mới; phiên đã đóng bị xóa khỏi cả ref và state.
   // Bài tập trắc nghiệm cũng có phiên: gaze của bài tập được ghi thô theo viewport
@@ -333,6 +377,14 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     Boolean(activeLessonId) &&
     trackingLessons[activeLessonId] !== false;
 
+  // Trang đọc là trang gaze-critical: zoom/fullscreen làm lệch toạ độ. Guard
+  // chỉ bật khi thực sự đang ghi gaze để không chặn oan lúc khóa tắt theo dõi.
+  const displayGuard = useDisplayGuard({
+    enabled: trackingAllowed,
+    mode: "reader",
+  });
+  const displayBlocked = displayGuard.blocked;
+
   const flushGaze = useCallback(() => {
     flushGazeForLesson(activeLessonId);
   }, [activeLessonId, flushGazeForLesson]);
@@ -350,6 +402,21 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     aoiReadyRef.current = false;
     flushPendingGaze();
   }, [flushPendingGaze]);
+
+  // Khi guard phát hiện zoom/fullscreen: đóng băng nhận sample và flush batch
+  // đang giữ ngay lập tức. useGazeTracker/useAoiSnapshot cũng bị tắt bên dưới.
+  useEffect(() => {
+    if (displayBlocked) pauseAndFlushGaze();
+  }, [displayBlocked, pauseAndFlushGaze]);
+
+  // Resize làm toạ độ gaze và rect DOM đổi cùng lúc. Tạm dừng ngay thay vì
+  // chờ snapshot mới (debounce 250ms) để không map sample bằng layout cũ.
+  useEffect(() => {
+    if (!trackingAllowed) return;
+    const onResize = () => pauseAndFlushGaze();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pauseAndFlushGaze, trackingAllowed]);
 
   // Layout key đổi khi mở/đóng chat để snapshot AOI phản ánh đúng bố cục.
   const layoutKey = getReaderLayoutKey(activeIsQuiz, chatOpen);
@@ -392,9 +459,15 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     setPresentationId(null);
 
     if (!nextKey || !learningSessionId) {
+      presentationEntryRef.current = null;
       presentationRequestRef.current.invalidate();
       return;
     }
+
+    // Mỗi lần vào slide (kể cả quay lại slide cũ sau khi đã rời đi) là một
+    // content view mới. Cùng key thì giữ nguyên UUID để retry idempotent.
+    const entry = presentationEntryFor(presentationEntryRef.current, nextKey);
+    presentationEntryRef.current = entry;
 
     const token = presentationRequestRef.current.begin(nextKey);
     const sequenceNo = presentationSequenceRef.current;
@@ -403,6 +476,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       slideId: slide?.id ?? null,
       surface,
       sequenceNo,
+      clientPresentationId: entry.clientPresentationId,
+      enteredAt: entry.enteredAt,
     })
       .then((presentation) => {
         if (!presentationRequestRef.current.isActive(token)) return;
@@ -429,6 +504,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   useEffect(
     () => () => {
       presentationRequestRef.current.invalidate();
+      presentationEntryRef.current = null;
       activePresentationKeyRef.current = null;
       presentationIdRef.current = null;
       aoiReadyRef.current = false;
@@ -442,7 +518,11 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     sessionId: learningSessionId ?? null,
     presentationId,
     enabled: Boolean(
-      learningSessionId && presentationId && trackingAllowed && (total > 0 || activeIsQuiz),
+      learningSessionId &&
+        presentationId &&
+        trackingAllowed &&
+        !displayBlocked &&
+        (total > 0 || activeIsQuiz),
     ),
     layoutKey,
     onBeforeSnapshot: pauseAndFlushGaze,
@@ -473,8 +553,20 @@ export function ReaderContent({ courseId }: { courseId: string }) {
 
   const enqueueGaze = useCallback(
     (sample: GazeSample) => {
+      // Guard chặn cả ở tầng enqueue: kể cả một frame lọt qua trước khi
+      // useGazeTracker kịp cleanup cũng không được ghi vào buffer.
+      if (displayBlocked) return;
       if (gazeBufferLessonRef.current && gazeBufferLessonRef.current !== activeLessonId) {
         flushGazeForLesson(gazeBufferLessonRef.current);
+      }
+      if (!gazeBatchOwnerRef.current) {
+        const presentationId = presentationIdRef.current;
+        if (presentationId) {
+          gazeBatchOwnerRef.current = {
+            presentationId,
+            layoutId: aoiSnapshotIdRef.current,
+          };
+        }
       }
       gazeBufferLessonRef.current = activeLessonId;
       gazeBufferRef.current.push(sample);
@@ -482,7 +574,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
         flushGaze();
       }
     },
-    [activeLessonId, flushGaze, flushGazeForLesson],
+    [activeLessonId, displayBlocked, flushGaze, flushGazeForLesson],
   );
 
   useEffect(() => {
@@ -497,7 +589,10 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const { source: gazeSource } = useGazeTracker({
     // Bài giảng: cần có slide. Bài tập: không có slide nhưng vẫn thu gaze.
     enabled: Boolean(
-      activeLessonId && trackingAllowed && (total > 0 || activeIsQuiz),
+      activeLessonId &&
+        trackingAllowed &&
+        !displayBlocked &&
+        (total > 0 || activeIsQuiz),
     ),
     calibrated: gazeCalibrated,
     allowSimulation: false,
@@ -521,7 +616,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     ),
     onFrame: useCallback(
       (frame: GazeFrameResult) => {
-        if (!learningSessionId || !trackingAllowed) return;
+        if (!learningSessionId || !trackingAllowed || displayBlocked) return;
         const activePresentationId = presentationIdRef.current;
         const activeKey = activePresentationKeyRef.current;
         if (!activePresentationId || !activeKey || !aoiReadyRef.current) return;
@@ -556,13 +651,10 @@ export function ReaderContent({ courseId }: { courseId: string }) {
           captureMonotonicNs:
             frame.captureMonotonicNs ?? Math.round(performance.now() * 1e6),
           eventTime: frame.eventTime,
-          // viewportX/Y: vị trí trong viewport hiện tại (để hiển thị/legacy).
-          // originalViewportX/Y: vị trí trong viewport gốc lúc calibration
-          // (nguồn sự thật cho mapping AOI).
+          // Toạ độ đã quy đổi sang viewport hiện tại; đây là nguồn duy nhất
+          // cho mapping AOI.
           viewportX: faceDetected ? frame.currentX : null,
           viewportY: faceDetected ? frame.currentY : null,
-          originalViewportX: faceDetected ? frame.x : null,
-          originalViewportY: faceDetected ? frame.y : null,
           status: frame.status,
           qualityFlags: {},
         });
@@ -570,6 +662,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       [
         learningSessionId,
         trackingAllowed,
+        displayBlocked,
         enqueueGaze,
         activeLessonId,
         activeIsQuiz,
@@ -582,6 +675,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   // Điều hướng bàn phím
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Giữ phím không được tạo luồng đổi slide/presentation không kiểm soát.
+      if (event.repeat) return;
       if (event.key === "ArrowRight") {
         setCurrentSlide((value) => getNextSlideIndex(value, total));
       }
@@ -695,6 +790,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       calibrationRequired={calibrationRequired}
       showGazeDot={showGazeDot}
       gazeDot={gazeDot}
+      displayGuard={displayGuard}
     />
   );
 }

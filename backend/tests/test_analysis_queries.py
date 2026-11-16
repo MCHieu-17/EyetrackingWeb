@@ -9,9 +9,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.db.session import SessionLocal
+from app.models.aoi import Aoi
 from app.models.gaze import ContentView, GazeSample, LearningSession
 from app.services.analysis.export import export_lines
-from tests.conftest import create_user, seed_course
+from tests.conftest import create_user, seed_course, seed_slide
 
 
 @pytest.mark.asyncio
@@ -21,9 +22,24 @@ async def test_analysis_export_manifest_and_flat_sample():
     teacher_id = await create_user(email=teacher_email, role="teacher")
     student_id = await create_user(email=student_email)
     ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    slide = await seed_slide(
+        course_id=ids["course_id"],
+        lesson_id=ids["lesson_id"],
+        teacher_id=teacher_id,
+    )
     now = datetime.now(timezone.utc)
 
     async with SessionLocal() as db:
+        db.add(
+            Aoi(
+                slide_id=slide["slide_id"],
+                code="thanhchat",
+                name="Thanh chát",
+                label="AOI_THANHCHAT",
+                geometry={"xMin": 0.0, "yMin": 0.0, "xMax": 1.0, "yMax": 0.2},
+                kind="custom",
+            )
+        )
         learning_session = LearningSession(
             enrollment_id=ids["enrollment_id"],
             lesson_id=ids["lesson_id"],
@@ -34,6 +50,7 @@ async def test_analysis_export_manifest_and_flat_sample():
         await db.flush()
         view = ContentView(
             session_id=learning_session.id,
+            slide_id=slide["slide_id"],
             surface="lesson",
             sequence_no=0,
         )
@@ -49,8 +66,7 @@ async def test_analysis_export_manifest_and_flat_sample():
                 viewport_y=0.5,
                 slide_x=0.5,
                 slide_y=0.5,
-                aoi_label="SLIDE_AOI_1",
-                aoi_codes=["SLIDE_AOI_1"],
+                aoi_label="SLIDE_AOI_THANHCHAT",
                 status="ok",
             )
         )
@@ -63,10 +79,15 @@ async def test_analysis_export_manifest_and_flat_sample():
     await lines.aclose()
 
     assert manifest["type"] == "manifest"
+    assert manifest["schemaVersion"] == 13
+    assert manifest["aoiLabelVersion"] == "surface-v2"
     assert manifest["lesson"]["id"] == ids["lesson_id"]
+    assert any(
+        item["label"] == "AOI_THANHCHAT" for item in manifest["aois"]
+    )
     assert sample["type"] == "sample"
-    assert sample["aoiLabel"] == "SLIDE_AOI_1"
-    assert sample["aoiCodes"] == ["SLIDE_AOI_1"]
+    assert sample["aoiLabel"] == "SLIDE_AOI_THANHCHAT"
+    assert "aoiCodes" not in sample
     assert sample["slideX"] == 0.5
     assert "courseVersionId" not in sample
     assert end["type"] == "end"

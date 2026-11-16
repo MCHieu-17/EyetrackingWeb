@@ -5,8 +5,6 @@ export interface AoiSnapshotKeyInput {
   viewportHeight: number;
   layoutKey?: string | null;
   rectsKey: string;
-  coordinateSpace?: string;
-  visibleRectKey?: string;
 }
 
 /**
@@ -20,8 +18,6 @@ export function aoiSnapshotCacheKey({
   viewportHeight,
   layoutKey,
   rectsKey,
-  coordinateSpace,
-  visibleRectKey,
 }: AoiSnapshotKeyInput): string {
   return [
     sessionId,
@@ -29,7 +25,5 @@ export function aoiSnapshotCacheKey({
     `${viewportWidth}x${viewportHeight}`,
     layoutKey ?? "",
     rectsKey,
-    coordinateSpace ?? "",
-    visibleRectKey ?? "",
   ].join("|");
 }

@@ -20,7 +20,7 @@ export default function LoginPage() {
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Chưa có tài khoản?{" "}
         <Link href="/account/register" className="font-semibold text-foreground underline underline-offset-2">
-          Đăng ký bằng Outlook
+          Đăng ký với Outlook
         </Link>
       </p>
     </AuthLayout>

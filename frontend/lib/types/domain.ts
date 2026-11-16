@@ -63,7 +63,7 @@ export interface StudentRow {
   color: string;             // avatar giả
   avatarUrl?: string | null;  // users.avatar_url
   attention: number | null;  // null ⇔ learning_sessions.tracking_consent = false
-  lastActive: string;
+  lastActive: string | null;  // null ⇔ chưa có phiên học nào
   status: EnrollStatus;
   lessons: StudentLesson[];
 }
@@ -158,7 +158,7 @@ interface ProfileBase {
   phone: string | null;        // users.phone
   avatarUrl: string | null;    // users.avatar_url
   createdAt: string;           // users.created_at
-  hasPassword: boolean;        // false = chỉ đăng nhập bằng Microsoft 365
+  hasPassword: boolean;        // false = đăng nhập bằng Outlook + OTP, không có mật khẩu GazeEdu
 }
 
 interface StudentProfile extends ProfileBase {

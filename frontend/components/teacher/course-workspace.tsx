@@ -15,7 +15,7 @@ import { useTeacherCourses } from "@/hooks/use-teacher";
 import { STATUS_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-type View = "content" | "info" | "students" | "aoi";
+type View = "content" | "info" | "students" | "aoi" | "visualization";
 
 function TabLoading({ label }: { label: string }) {
   return (
@@ -50,11 +50,23 @@ const StudentsTab = dynamic(
   },
 );
 
+const VisualizationTab = dynamic(
+  () =>
+    import("@/components/teacher/visualization").then(
+      (mod) => mod.VisualizationTab,
+    ),
+  {
+    ssr: false,
+    loading: () => <TabLoading label="Đang tải dữ liệu trực quan hoá..." />,
+  },
+);
+
 const TABS: { key: View; label: string }[] = [
   { key: "content", label: "Nội dung" },
   { key: "info", label: "Thông tin" },
   { key: "students", label: "Học viên" },
   { key: "aoi", label: "Vùng phân tích" },
+  { key: "visualization", label: "Trực quan hoá" },
 ];
 
 function Workspace({ courseId }: { courseId: string }) {
@@ -183,6 +195,9 @@ function Workspace({ courseId }: { courseId: string }) {
         ) : null}
         {!isNew && view === "info" && <CourseInfoTab courseId={courseId} canManage={canManage} />}
         {!isNew && view === "students" && <StudentsTab courseId={courseId} canManage={canManage} />}
+        {!isNew && view === "visualization" && (
+          <VisualizationTab courseId={courseId} />
+        )}
         {!isNew && view === "aoi" && (
           <div className="-mx-4 -my-8 sm:-mx-8 lg:-mx-12 lg:-my-12">
             <LazyAoiEditor

@@ -12,15 +12,19 @@ from app.schemas.aoi import AoiCollectionOut, AoiDefinitionIn, AoiDefinitionOut
 
 from .common import NO_LABEL_CODE, NO_LABEL_NAME, _bad_request
 
-_SLIDE_LABEL_RE = re.compile(r"^AOI_[1-9]\d*$")
+# Nhãn slide do giáo viên đặt: AOI_1, AOI_THANHCHAT, AOI_BANGBIEU...
+# Tổng độ dài tối đa 64 ký tự, đúng với cột aois.label.
+_SLIDE_LABEL_RE = re.compile(r"^AOI_[A-Z0-9_]{1,60}$")
+# Nhãn số tự động (AOI_n) dùng để cấp số kế tiếp, không đụng nhãn giáo viên.
+_AUTO_SLIDE_LABEL_RE = re.compile(r"^AOI_([1-9]\d*)$")
 
 
 def _next_slide_label(used: set[str]) -> str:
-    numbers = [
-        int(label.split("_", 1)[1])
-        for label in used
-        if _SLIDE_LABEL_RE.match(label)
-    ]
+    numbers: list[int] = []
+    for label in used:
+        match = _AUTO_SLIDE_LABEL_RE.match(label)
+        if match:
+            numbers.append(int(match.group(1)))
     return f"AOI_{max(numbers, default=0) + 1}"
 
 

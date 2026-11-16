@@ -43,7 +43,7 @@ def _peer_is_trusted(peer: str | None) -> bool:
     return any(addr in net for net in _TRUSTED_NETWORKS)
 
 
-def _real_ip(request: Request) -> str:
+def real_client_ip(request: Request) -> str:
     """Lấy IP người dùng thật, chỉ tin header khi request đến từ proxy tin cậy.
 
     Luồng local: client → nginx (ghi đè X-Forwarded-For = $remote_addr) → backend.
@@ -159,7 +159,7 @@ def rate_limit(limit: int, seconds: int, key_prefix: str):
 
     async def dependency(request: Request):
         await enforce_rate_limit(
-            f"{key_prefix}:{_real_ip(request)}", limit, seconds
+            f"{key_prefix}:{real_client_ip(request)}", limit, seconds
         )
 
     return dependency

@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCourseTree, useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import {
   fetchAois,
-  generateSlideAois,
   generateUiAois,
   rebuildAoiHits,
   saveSlideAois,
@@ -20,8 +19,10 @@ import {
   nextCustomCode,
   nextSlideLabel,
   nextUiCustomCode,
+  normalizeSlideLabelInput,
   firstAoiCollection,
   toInputs,
+  validateSlideLabel,
 } from "@/lib/aoi/editor-helpers";
 import {
   UI_COMPONENTS,
@@ -147,7 +148,6 @@ export function useAoiEditor({
   const [syncedSlideSetId, setSyncedSlideSetId] = useState<string | null>(null);
   const [syncedUiSetId, setSyncedUiSetId] = useState<string | null>(null);
 
-  const generatedSlideRef = useRef<string | null>(null);
   const generatedUiRef = useRef<string | null>(null);
   const rebuildTimerRef = useRef(0);
 
@@ -181,37 +181,6 @@ export function useAoiEditor({
     }, 5000);
   }, [courseId, activeLessonId]);
 
-  const generateSlideMutation = useMutation({
-    mutationFn: ({
-      slideId: versionId,
-      slideNumber,
-      replaceAuto,
-      resetAll,
-    }: {
-      slideId: string;
-      slideNumber: number;
-      replaceAuto?: boolean;
-      resetAll?: boolean;
-    }) =>
-      generateSlideAois(versionId, {
-        slideNumber,
-        replaceAuto,
-        resetAll,
-      }),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(queryKeys.aoi.slide(saved.slideId), [saved]);
-      // Collection id trùng slide id sau generation 11, nên phải đổ definitions
-      // vào state cục bộ thay vì trông chờ render-phase sync theo id.
-      if (slideIdRef.current === saved.slideId) {
-        setSyncedSlideSetId(saved.id);
-        setSlideDefinitions(toInputs(saved.definitions));
-        setSlideReady(true);
-        setSelectedCode(null);
-      }
-      scheduleRebuild();
-    },
-  });
-
   const generateUiMutation = useMutation({
     mutationFn: () =>
       generateUiAois(
@@ -228,30 +197,6 @@ export function useAoiEditor({
       scheduleRebuild();
     },
   });
-
-  useEffect(() => {
-    if (
-      !canManage ||
-      !slideId ||
-      hasStoredAois(slideSet) ||
-      slideSetQuery.isLoading
-    ) {
-      return;
-    }
-    if (generatedSlideRef.current === slideId) return;
-    generatedSlideRef.current = slideId;
-    generateSlideMutation.mutate({
-      slideId,
-      slideNumber: currentSlideIndex + 1,
-    });
-  }, [
-    canManage,
-    slideId,
-    slideSet,
-    slideSetQuery.isLoading,
-    currentSlideIndex,
-    generateSlideMutation,
-  ]);
 
   useEffect(() => {
     if (
@@ -409,7 +354,7 @@ export function useAoiEditor({
 
   const createSlideAoi = useCallback(
     (rect: { xMin: number; yMin: number; xMax: number; yMax: number }) => {
-      if (!canManage || generateSlideMutation.isPending) return;
+      if (!canManage) return;
       const rootCode = `slide_${currentSlideIndex + 1}`;
       const hasRoot = slideDefinitions.some((item) => item.code === rootCode);
       const base = hasRoot
@@ -441,12 +386,7 @@ export function useAoiEditor({
       setSelectedCode(code);
       setTabState("slide");
     },
-    [
-      canManage,
-      currentSlideIndex,
-      generateSlideMutation.isPending,
-      slideDefinitions,
-    ],
+    [canManage, currentSlideIndex, slideDefinitions],
   );
 
   const createUiComponentAoi = useCallback(
@@ -519,6 +459,28 @@ export function useAoiEditor({
     [canManage, tab],
   );
 
+  // Nhãn phân tích chỉ áp dụng cho leaf slide; trả lỗi để UI hiện ngay dưới ô.
+  const renameAoiLabel = useCallback(
+    (code: string, label: string): string | null => {
+      if (!canManage) return "Bạn không có quyền đổi nhãn vùng.";
+      const target = slideDefinitions.find((item) => item.code === code);
+      if (!target || target.isContainer || code === "no_label") {
+        return "Không thể đặt nhãn cho vùng này.";
+      }
+      const normalized = normalizeSlideLabelInput(label);
+      const error = validateSlideLabel(normalized, slideDefinitions, code);
+      if (error) return error;
+      if (target.label === normalized) return null;
+      setSlideDefinitions((prev) =>
+        prev.map((item) =>
+          item.code === code ? { ...item, label: normalized } : item,
+        ),
+      );
+      return null;
+    },
+    [canManage, slideDefinitions],
+  );
+
   // Bỏ đánh dấu: giữ vùng lại (để bật lại) nhưng không tham gia phân tích.
   const deactivateAoi = useCallback(
     (code: string) => {
@@ -581,29 +543,6 @@ export function useAoiEditor({
     setTabState(next);
     setSelectedCode(null);
   }, []);
-
-  const retryGenerateSlide = useCallback(() => {
-    if (!slideId) return;
-    generatedSlideRef.current = null;
-    generateSlideMutation.mutate({
-      slideId,
-      slideNumber: currentSlideIndex + 1,
-    });
-  }, [currentSlideIndex, generateSlideMutation, slideId]);
-
-  const regenerateSlide = useCallback(
-    (mode: "auto" | "all") => {
-      if (!slideId) return;
-      generatedSlideRef.current = slideId;
-      generateSlideMutation.mutate({
-        slideId,
-        slideNumber: currentSlideIndex + 1,
-        replaceAuto: mode === "auto",
-        resetAll: mode === "all",
-      });
-    },
-    [currentSlideIndex, generateSlideMutation, slideId],
-  );
 
   const retryGenerateUi = useCallback(() => {
     generatedUiRef.current = null;
@@ -694,15 +633,12 @@ export function useAoiEditor({
     createUiComponentAoi,
     createUiCustomAoi,
     renameAoi,
+    renameAoiLabel,
     deactivateAoi,
     restoreAoi,
     deleteAoi,
-    retryGenerateSlide,
-    regenerateSlide,
     retryGenerateUi,
-    generatingSlide: generateSlideMutation.isPending,
     generatingUi: generateUiMutation.isPending,
-    generateSlideError: generateSlideMutation.error,
     generateUiError: generateUiMutation.error,
   };
 }

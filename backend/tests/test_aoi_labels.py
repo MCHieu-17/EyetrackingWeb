@@ -1,4 +1,4 @@
-"""Nhãn phân tích AOI: slide leaf dùng AOI_n, UI giữ tên hiển thị."""
+"""Nhãn phân tích AOI: slide leaf dùng AOI_..., UI giữ tên hiển thị."""
 
 import uuid
 
@@ -19,9 +19,20 @@ def _definition(code: str, *, name: str | None = None, label: str | None = None)
     }
 
 
-@pytest.mark.asyncio
-async def test_slide_save_assigns_aio_labels_and_preserves_them(client):
-    email = f"aoi-label-{uuid.uuid4().hex[:8]}@example.com"
+def _root() -> dict:
+    return {
+        "code": "slide_1",
+        "name": "Slide 1",
+        "label": None,
+        "geometry": {"xMin": 0, "yMin": 0, "xMax": 1, "yMax": 1},
+        "isContainer": True,
+        "kind": "system",
+        "isActive": True,
+    }
+
+
+async def _seed_teacher_slide(client, prefix: str):
+    email = f"{prefix}-{uuid.uuid4().hex[:8]}@example.com"
     teacher_id = await create_user(email=email, role="teacher")
     student_id = await create_user(email=f"s-{uuid.uuid4().hex[:8]}@example.com")
     ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
@@ -31,20 +42,24 @@ async def test_slide_save_assigns_aio_labels_and_preserves_them(client):
         teacher_id=teacher_id,
     )
     token = await login(client, email)
-    headers = {"Authorization": f"Bearer {token}"}
+    return slide, {"Authorization": f"Bearer {token}"}
 
-    root = {
-        "code": "slide_1",
-        "name": "Slide 1",
-        "label": None,
-        "geometry": {"xMin": 0, "yMin": 0, "xMax": 1, "yMax": 1},
-        "isContainer": True,
-        "kind": "system",
-        "isActive": True,
-    }
+
+@pytest.mark.asyncio
+async def test_slide_save_assigns_and_preserves_aio_labels(client):
+    slide, headers = await _seed_teacher_slide(client, "aoi-label")
+
+    # Chưa có nhãn -> tự cấp AOI_n; nhãn giáo viên được uppercase và giữ nguyên.
     response = await client.put(
         f"/api/aois/slides/{slide['slide_id']}",
-        json={"definitions": [root, _definition("a"), _definition("b")]},
+        json={
+            "definitions": [
+                _root(),
+                _definition("a"),
+                _definition("b"),
+                _definition("c", label="aoi_thanhchat"),
+            ]
+        },
         headers=headers,
     )
     assert response.status_code == 200, response.text
@@ -54,15 +69,17 @@ async def test_slide_save_assigns_aio_labels_and_preserves_them(client):
     assert definitions["slide_1"]["label"] is None
     assert definitions["a"]["label"] == "AOI_1"
     assert definitions["b"]["label"] == "AOI_2"
+    assert definitions["c"]["label"] == "AOI_THANHCHAT"
 
-    # Gửi lại đúng label cũ -> không đổi.
+    # Gửi lại không kèm label -> giữ nhãn cũ, kể cả nhãn giáo viên.
     response = await client.put(
         f"/api/aois/slides/{slide['slide_id']}",
         json={
             "definitions": [
-                root,
-                _definition("a", label="AOI_1"),
-                _definition("b", label="AOI_2"),
+                _root(),
+                _definition("a"),
+                _definition("b"),
+                _definition("c"),
             ]
         },
         headers=headers,
@@ -73,15 +90,17 @@ async def test_slide_save_assigns_aio_labels_and_preserves_them(client):
     }
     assert definitions["a"]["label"] == "AOI_1"
     assert definitions["b"]["label"] == "AOI_2"
+    assert definitions["c"]["label"] == "AOI_THANHCHAT"
 
-    # Xóa AOI_2 rồi thêm vùng mới -> cấp lại AOI_2.
+    # Xóa AOI_2 rồi thêm vùng mới -> cấp lại AOI_2, không đụng nhãn custom.
     response = await client.put(
         f"/api/aois/slides/{slide['slide_id']}",
         json={
             "definitions": [
-                root,
-                _definition("a", label="AOI_1"),
+                _root(),
+                _definition("a"),
                 _definition("c"),
+                _definition("d"),
             ]
         },
         headers=headers,
@@ -90,31 +109,37 @@ async def test_slide_save_assigns_aio_labels_and_preserves_them(client):
     definitions = {
         item["code"]: item for item in response.json()["definitions"]
     }
-    assert definitions["c"]["label"] == "AOI_2"
+    assert definitions["a"]["label"] == "AOI_1"
+    assert definitions["c"]["label"] == "AOI_THANHCHAT"
+    assert definitions["d"]["label"] == "AOI_2"
 
 
 @pytest.mark.asyncio
 async def test_slide_save_rejects_duplicate_label(client):
-    email = f"aoi-dupe-{uuid.uuid4().hex[:8]}@example.com"
-    teacher_id = await create_user(email=email, role="teacher")
-    student_id = await create_user(email=f"s-{uuid.uuid4().hex[:8]}@example.com")
-    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
-    slide = await seed_slide(
-        course_id=ids["course_id"],
-        lesson_id=ids["lesson_id"],
-        teacher_id=teacher_id,
-    )
-    token = await login(client, email)
-    headers = {"Authorization": f"Bearer {token}"}
+    slide, headers = await _seed_teacher_slide(client, "aoi-dupe")
 
-    response = await client.put(
-        f"/api/aois/slides/{slide['slide_id']}",
-        json={
-            "definitions": [
-                _definition("a", label="AOI_1"),
-                _definition("b", label="AOI_1"),
-            ]
-        },
-        headers=headers,
-    )
-    assert response.status_code == 400
+    for label in ("AOI_1", "AOI_THANHCHAT"):
+        response = await client.put(
+            f"/api/aois/slides/{slide['slide_id']}",
+            json={
+                "definitions": [
+                    _definition("a", label=label),
+                    _definition("b", label=label),
+                ]
+            },
+            headers=headers,
+        )
+        assert response.status_code == 400, response.text
+
+
+@pytest.mark.asyncio
+async def test_slide_save_rejects_invalid_label(client):
+    slide, headers = await _seed_teacher_slide(client, "aoi-invalid")
+
+    for label in ("SLIDE_AOI_1", "THANHCHAT", "AOI_BANG BIEU", "AOI_"):
+        response = await client.put(
+            f"/api/aois/slides/{slide['slide_id']}",
+            json={"definitions": [_definition("a", label=label)]},
+            headers=headers,
+        )
+        assert response.status_code == 400, response.text

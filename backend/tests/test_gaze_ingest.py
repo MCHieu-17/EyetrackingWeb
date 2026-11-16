@@ -3,9 +3,11 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import func, select
 
-from app.db.session import engine
-from tests.conftest import create_user, login, seed_course
+from app.db.session import SessionLocal, engine
+from app.models.gaze import ContentView, GazeSample
+from tests.conftest import create_user, login, seed_course, seed_slide
 from tests.query_counter import count_queries
 
 
@@ -171,3 +173,96 @@ async def test_gaze_batch_query_count(client):
     assert response.json()["stored"] == 2
     # session+enrollment, presentation, insert samples, update analysis status.
     assert counter.count <= 5, "\n\n".join(counter.statements)
+
+
+@pytest.mark.asyncio
+async def test_gaze_batches_bound_to_their_presentation(client):
+    teacher_email = f"teacher-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"student-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    slide = await seed_slide(
+        course_id=ids["course_id"],
+        lesson_id=ids["lesson_id"],
+        teacher_id=teacher_id,
+    )
+
+    token = await login(client, student_email)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    session_response = await client.post(
+        "/api/learning-sessions",
+        headers=headers,
+        json={
+            "enrollmentId": ids["enrollment_id"],
+            "lessonId": ids["lesson_id"],
+            "deviceFingerprint": "test-device",
+            "viewportWidthPx": 1280,
+            "viewportHeightPx": 720,
+            "calibrationWidthPx": 1280,
+            "calibrationHeightPx": 720,
+            "devicePixelRatio": 1.0,
+            "trackingConsent": True,
+        },
+    )
+    assert session_response.status_code == 201, session_response.text
+    session_id = session_response.json()["id"]
+
+    view_ids = []
+    for _ in range(2):
+        created = await client.post(
+            f"/api/learning-sessions/{session_id}/presentations",
+            headers=headers,
+            json={
+                "clientPresentationId": str(uuid.uuid4()),
+                "slideId": slide["slide_id"],
+                "surface": "lesson",
+            },
+        )
+        assert created.status_code == 201, created.text
+        view_ids.append(created.json()["id"])
+    assert view_ids[0] != view_ids[1]
+
+    for view_id in view_ids:
+        response = await client.post(
+            f"/api/learning-sessions/{session_id}/gaze-batches",
+            headers=headers,
+            json={
+                "batchId": str(uuid.uuid4()),
+                "batchNo": 0,
+                "presentationId": view_id,
+                "sequenceStart": 0,
+                "sequenceEnd": 1,
+                "payloadHash": _payload_hash(),
+                "samples": [_sample(0), _sample(1)],
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["stored"] == 2
+
+    async with SessionLocal() as db:
+        counts = dict(
+            (
+                await db.execute(
+                    select(GazeSample.content_view_id, func.count())
+                    .where(GazeSample.content_view_id.in_(view_ids))
+                    .group_by(GazeSample.content_view_id)
+                )
+            ).all()
+        )
+        assert counts == {view_ids[0]: 2, view_ids[1]: 2}
+
+        views = list(
+            (
+                await db.execute(
+                    select(ContentView)
+                    .where(ContentView.id.in_(view_ids))
+                    .order_by(ContentView.sequence_no)
+                )
+            ).scalars()
+        )
+        assert [view.sequence_no for view in views] == [0, 1]
+        assert views[0].ended_at is not None
+        assert views[0].analysis_status == "pending"
+        assert views[1].ended_at is None

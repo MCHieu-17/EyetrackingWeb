@@ -29,8 +29,8 @@ export function ChangePasswordForm({ className }: { className?: string }) {
   if (!profileLoading && profile && profile.hasPassword === false) {
     return (
       <div className={cn("w-full", className)}>
-        <Alert variant="info" title="Tài khoản đăng nhập bằng Microsoft 365">
-          Bạn đang đăng nhập bằng tài khoản trường, không cần mật khẩu GazeEdu.
+        <Alert variant="info" title="Tài khoản đăng nhập bằng Outlook (OTP)">
+          Bạn đang đăng nhập bằng Outlook và mã OTP, nên không cần mật khẩu GazeEdu.
           Nếu muốn dùng thêm mật khẩu, hãy liên hệ quản trị viên.
         </Alert>
       </div>

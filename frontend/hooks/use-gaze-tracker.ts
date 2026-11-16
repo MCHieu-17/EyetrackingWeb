@@ -44,10 +44,10 @@ const MAX_BUFFERED_BYTES = 1024 * 1024;
 /**
  * Quy đổi toạ độ gaze từ viewport lúc calibration sang viewport hiện tại.
  *
- * Model gaze trả toạ độ chuẩn hoá theo viewport calibration. Khi người học
- * zoom/resize/move cửa sổ, cùng một điểm nhìn vật lý trên màn hình sẽ có
- * toạ độ chuẩn hoá khác. Dùng hình chữ nhật vật lý của viewport (screenX/Y,
- * innerWidth/Height, DPR) để quy đổi, nhờ đó không phải hiệu chỉnh lại.
+ * Model gaze trả toạ độ chuẩn hoá theo viewport calibration. Khi cửa sổ bị
+ * resize hoặc di chuyển, cùng một điểm nhìn vật lý sẽ có toạ độ chuẩn hoá
+ * khác. Dùng hình chữ nhật vật lý của viewport (screenX/Y, innerWidth/Height)
+ * để quy đổi. Zoom/fullscreen do display guard phát hiện và tạm dừng ghi gaze.
  */
 function transformGazeToViewport(
   x: number,
@@ -61,14 +61,12 @@ function transformGazeToViewport(
     {
       width: cal.w,
       height: cal.h,
-      dpr: cal.dpr,
       screenX: cal.screenX,
       screenY: cal.screenY,
     },
     {
       width: window.innerWidth,
       height: window.innerHeight,
-      dpr: window.devicePixelRatio || 1,
       screenX: window.screenX,
       screenY: window.screenY,
     },

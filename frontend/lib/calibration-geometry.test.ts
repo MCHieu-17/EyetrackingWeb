@@ -8,7 +8,7 @@ import {
 } from "@/lib/calibration-geometry";
 
 function viewport(overrides: Partial<ViewportRect> = {}): ViewportRect {
-  return { width: 1000, height: 800, dpr: 1, screenX: 0, screenY: 0, ...overrides };
+  return { width: 1000, height: 800, screenX: 0, screenY: 0, ...overrides };
 }
 
 describe("calibrationMargins", () => {
@@ -86,17 +86,6 @@ describe("transformGazePoint", () => {
     expect(transformGazePoint(0.25, 0.25, calibration, current)).toEqual({ x: 0.5, y: 0.5 });
   });
 
-  it("không nhân screenX với DPR khi page zoom", () => {
-    const calibration = viewport({ dpr: 2 });
-    const current = viewport({ dpr: 1 });
-
-    // Cùng vị trí/kích thước cửa sổ; DPR khác nhau không làm lệch gaze.
-    expect(transformGazePoint(0.5, 0.5, calibration, current)).toEqual({
-      x: 0.5,
-      y: 0.5,
-    });
-  });
-
   it("quy đổi theo cửa sổ hiện tại nằm trong viewport gốc", () => {
     const calibration = viewport({ width: 1700, height: 900 });
     const current = viewport({
@@ -144,12 +133,5 @@ describe("transformGazePoint", () => {
       x: 0.3,
       y: 0.6,
     });
-  });
-
-  it("coi dpr 0 như 1", () => {
-    const calibration = viewport({ dpr: 0 });
-    const current = viewport({ dpr: 0 });
-
-    expect(transformGazePoint(0.5, 0.5, calibration, current)).toEqual({ x: 0.5, y: 0.5 });
   });
 });

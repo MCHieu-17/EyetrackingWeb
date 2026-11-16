@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import EmailStr, Field, model_validator
 
 from app.schemas.common import CamelModel
@@ -6,6 +8,23 @@ from app.schemas.common import CamelModel
 class LoginRequest(CamelModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
+
+
+class OtpRequestIn(CamelModel):
+    email: EmailStr
+
+
+class OtpRequestOut(CamelModel):
+    challenge_id: str
+    email: str
+    expires_at: datetime
+    resend_after_seconds: int
+    delivery: str
+
+
+class OtpVerifyIn(CamelModel):
+    challenge_id: str
+    code: str = Field(min_length=6, max_length=6)
 
 
 class RefreshRequest(CamelModel):

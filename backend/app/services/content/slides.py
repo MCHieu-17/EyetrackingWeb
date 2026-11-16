@@ -17,7 +17,7 @@ from app.models.auth import User
 from app.models.background_job import BackgroundJob
 from app.models.course import Course, CourseModule, Lesson, Slide
 from app.models.media import MediaAsset
-from app.services import media_storage, slide_aoi, slide_import
+from app.services import media_storage, slide_import
 from app.services.content.common import (
     _not_found,
     _now,
@@ -231,12 +231,6 @@ async def process_slide_import(job_id: str) -> None:
                 slide_import.convert_to_pdf, data, fmt, source_filename
             )
             page_count = slide_import.validate_pdf(pdf_bytes)
-            try:
-                aoi_candidates = await asyncio.to_thread(
-                    slide_aoi.extract_document_aois, pdf_bytes
-                )
-            except Exception:  # noqa: BLE001
-                aoi_candidates = {}
 
             lesson = await db.get(Lesson, job.lesson_id)
             if lesson is None:
@@ -274,7 +268,6 @@ async def process_slide_import(job_id: str) -> None:
                     position=page_no - 1,
                     page_number=page_no,
                     title=f"Slide {page_no}",
-                    aoi_suggestions=aoi_candidates.get(page_no, []),
                     index_status="pending",
                 )
                 for page_no in range(1, page_count + 1)
