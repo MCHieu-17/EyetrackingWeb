@@ -4,7 +4,7 @@
                             exit != 0 để container restart, vì thiếu weights thì
                             không chạy được).
 
-LLM và VLM (NEU server) đều gọi API nên không cần chuẩn bị gì.
+LLM và VLM gọi endpoint OpenAI-compatible nên không cần chuẩn bị gì.
 
 Chạy: entrypoint.sh gọi `python -m scripts.prepare_models`.
 """

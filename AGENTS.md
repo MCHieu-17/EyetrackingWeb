@@ -25,7 +25,7 @@ Không còn `course_versions`, `lesson_versions`, `slide_versions`,
 | Backend | FastAPI, Python 3.12, SQLAlchemy async, Pydantic 2 |
 | DB | PostgreSQL 16 + pgvector |
 | Gaze | MediaPipe + UniGaze, PyTorch CUDA, WebSocket |
-| Chatbot | FastAPI, hybrid FTS + pgvector, Qwen qua NEU API, embedding CPU |
+| Chatbot | FastAPI, hybrid FTS + pgvector, Qwen qua endpoint LLM OpenAI-compatible, embedding CPU |
 | Hạ tầng | Docker Compose local, nginx, Redis tùy chọn, SMTP gửi OTP |
 
 ## 2. Kiến trúc
@@ -327,6 +327,9 @@ phải lỗi cấu hình.
   vẫn trả và hiển thị mọi lượt xem, kể cả lượt 0 sample hoặc thiếu layout.
 - `scripts/reset_gaze_data.sh` chỉ xoá lịch sử gaze (`course_visits` cascade)
   và job analyze đang chờ; không xoá nội dung khóa học/AOI/người dùng.
+- Chatbot gọi LLM/VLM qua endpoint OpenAI-compatible với nhóm biến
+  `LLM_*`/`VLM_*`; không thêm key `NEU_*` hay hardcode endpoint/model của một
+  nhà cung cấp cụ thể trong code/compose.
 - Quyết định model chạy local phải đặt tường minh trong `.env`/`stack.env`,
   không có default trong code/compose: `DEVICE`, `UNIGAZE_MODEL`,
   `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`,

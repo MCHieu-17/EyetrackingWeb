@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.db import DatabaseUnavailableError, get_pool
 from app.services.storage import FileStorage
-from app.settings import embedding_dim, embedding_name, neu_base_url
+from app.settings import embedding_dim, embedding_name, llm_base_url
 from app.workflow.prompts import SLIDE_VLM_PROMPT
 from app.workflow.providers import get_embedding, get_vlm
 
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class VLMUnavailableError(RuntimeError):
-    """Không gọi được VLM (NEU server): mất mạng, timeout hoặc lỗi tạm thời 5xx/429."""
+    """Không gọi được VLM: mất mạng, timeout hoặc lỗi tạm thời 5xx/429."""
 
 
 class VLMOutput(BaseModel):
@@ -203,16 +203,16 @@ class Ingestion:
             with ingest_slot():
                 return self.slide_to_text_chain.invoke({"b64": b64}).transcript
         except openai.APITimeoutError as exc:
-            raise VLMUnavailableError("VLM (NEU server) không phản hồi kịp thời gian.") from exc
+            raise VLMUnavailableError("VLM không phản hồi kịp thời gian.") from exc
         except openai.APIConnectionError as exc:
-            base = neu_base_url()
+            base = llm_base_url()
             raise VLMUnavailableError(
-                f"Không kết nối được VLM (NEU server) tại {base}. Kiểm tra mạng và NEU_BASE_URL."
+                f"Không kết nối được VLM tại {base}. Kiểm tra mạng và LLM_BASE_URL."
             ) from exc
         except openai.APIStatusError as exc:
             if exc.status_code == 429 or exc.status_code >= 500:
                 raise VLMUnavailableError(
-                    f"VLM (NEU server) tạm thời không khả dụng (HTTP {exc.status_code})."
+                    f"VLM tạm thời không khả dụng (HTTP {exc.status_code})."
                 ) from exc
             raise
 
@@ -290,7 +290,7 @@ class Ingestion:
         # chỉ retry các slide còn failed/pending.
         if vlm_down and processed == 0:
             raise VLMUnavailableError(
-                "VLM (NEU server) tạm thời không khả dụng cho một hoặc nhiều slide."
+                "VLM tạm thời không khả dụng cho một hoặc nhiều slide."
             )
         return processed, failed, errors
 

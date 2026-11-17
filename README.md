@@ -37,7 +37,7 @@ embedding-worker → background_jobs(index_slides)
 | `frontend/` | Next.js App Router: giao diện học viên, giáo viên, admin |
 | `backend/` | FastAPI API, worker phân tích, content-worker, embedding-worker |
 | `services/gaze/` | MediaPipe + UniGaze + WebSocket calibration (mặc định cần GPU) |
-| `services/chatbot/` | RAG: ingest slide, hybrid retrieval, gọi LLM/VLM NEU |
+| `services/chatbot/` | RAG: ingest slide, hybrid retrieval, gọi LLM/VLM qua endpoint OpenAI-compatible |
 | `db/` | Baseline PostgreSQL generation 13, 24 bảng lõi |
 | `nginx/` | Reverse proxy local |
 | `scripts/` | Seed, reset, backup, smoke test, kiểm tra |
@@ -164,7 +164,7 @@ Chạy lệnh trên nhiều lần để lấy các secret khác nhau.
 | `CHATBOT_DATABASE_URL_DOCKER` | DSN chatbot; **mật khẩu phải khớp `CHATBOT_DB_PASSWORD`** |
 | `ADMIN_DB_PASSWORD` | Mật khẩu role `admin_reader` |
 | `ADMIN_DATABASE_URL_DOCKER` | DSN admin read-only; **mật khẩu phải khớp `ADMIN_DB_PASSWORD`** |
-| `NEU_BASE_URL`, `NEU_API_KEY` | Endpoint LLM/VLM cho chatbot |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `VLM_MODEL` | Endpoint/model LLM/VLM cho chatbot (OpenAI-compatible) |
 | `DEVICE`, `UNIGAZE_MODEL` | Model gaze chạy local; **bắt buộc**, không có default trong code/compose |
 | `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`, `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO` | Model embedding chatbot; **bắt buộc**, không có default |
 | `FRONTEND_REPLICAS`, `GAZE_REPLICAS`, `WORKER_REPLICAS` | Số replica; máy cá nhân nên đặt `1` |
@@ -254,9 +254,9 @@ Nếu dùng Cloudflare R2, đặt `STORAGE_PROVIDER=r2` và điền **đủ cả
 `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
 `R2_PUBLIC_URL`. Thiếu một biến, backend sẽ báo lỗi cấu hình R2.
 
-**Chatbot RAG** — cần `NEU_BASE_URL` và `NEU_API_KEY` (cùng các biến `NEU_*`
-liên quan). Nếu không có quyền gọi NEU, các chức năng khác vẫn chạy nhưng chat
-và ingest slide sẽ lỗi.
+**Chatbot RAG** — cần `LLM_BASE_URL` và `LLM_MODEL` (cùng các biến `LLM_*`/
+`VLM_*` liên quan; `LLM_API_KEY` nếu endpoint yêu cầu auth). Nếu không có quyền
+gọi endpoint LLM, các chức năng khác vẫn chạy nhưng chat và ingest slide sẽ lỗi.
 
 ## 4. Khởi động lần đầu
 
@@ -601,7 +601,7 @@ curl -fsS http://localhost:8002/ready
 Các nguyên nhân thường gặp:
 
 - Chưa tải xong embedding weights trong lần chạy đầu.
-- `NEU_BASE_URL`/`NEU_API_KEY` sai hoặc không truy cập được mạng NEU.
+- `LLM_BASE_URL`/`LLM_API_KEY` sai hoặc không truy cập được endpoint LLM/VLM.
 - `CHATBOT_DB_PASSWORD` không khớp `CHATBOT_DATABASE_URL_DOCKER`.
 - Role `chatbot_reader` chưa được tạo/cấp lại quyền.
 
@@ -668,10 +668,10 @@ cd services/gaze && .venv/bin/python -m pytest -q
 | `migrate` exit khác 0 | `docker compose logs migrate`; kiểm tra checksum migration, DB cũ hoặc sai mật khẩu |
 | Backend không healthy | `docker compose ps`, log backend; kiểm tra `POSTGRES_PASSWORD` khớp DSN, PostgreSQL đã healthy |
 | Đăng nhập không giữ phiên | Đặt `COOKIE_SECURE=false`, đảm bảo chỉ có **một dòng** cấu hình này; recreate backend; truy cập bằng `http://localhost:3000` |
-| Chatbot chưa ready | Chờ tải weights lần đầu; xem log chatbot; kiểm tra `NEU_*`, role `chatbot_reader` |
+| Chatbot chưa ready | Chờ tải weights lần đầu; xem log chatbot; kiểm tra `LLM_*`/`VLM_*`, role `chatbot_reader` |
 | Gaze chưa ready | Chờ tải weights; kiểm tra NVIDIA driver/container toolkit; xem log gaze; thử `DEVICE=cpu` nếu không có GPU |
 | Upload slide bị treo | `docker compose logs -f content-worker`; kiểm tra LibreOffice trong image content-worker và job `import_slides` |
-| Slide không index được | `docker compose logs -f embedding-worker`; kiểm tra chatbot `/ready` và cấu hình NEU |
+| Slide không index được | `docker compose logs -f embedding-worker`; kiểm tra chatbot `/ready` và cấu hình LLM/VLM |
 | Hết dung lượng Docker | `docker system df`; chạy `./scripts/docker_cleanup.sh`; **không prune volume** |
 | Muốn reset sạch | Backup rồi dùng `./scripts/reset_db.sh --apply ...`; tránh `docker compose down -v` nếu chưa chắc |
 

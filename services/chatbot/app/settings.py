@@ -80,9 +80,9 @@ def embedding_model_path() -> str:
 def embedding_device() -> str:
     """Thiết bị suy luận embedding local: cuda | cpu.
 
-    GPU chỉ dành cho services/gaze. Chatbot dùng NEU API cho LLM/VLM và
-    embedding local chạy CPU; đặt EMBEDDING_DEVICE=cuda chỉ khi chủ động muốn
-    dùng GPU cho chatbot (image phải build torch CUDA).
+    GPU chỉ dành cho services/gaze. Chatbot gọi LLM/VLM qua endpoint
+    OpenAI-compatible và chạy embedding local trên CPU; đặt EMBEDDING_DEVICE=cuda
+    chỉ khi chủ động muốn dùng GPU cho chatbot (image phải build torch CUDA).
     """
     device = _required("EMBEDDING_DEVICE").lower()
     if device not in {"cpu", "cuda"}:
@@ -108,50 +108,50 @@ def embedding_hf_repo() -> str:
     return _required("EMBEDDING_HF_REPO")
 
 
-def neu_base_url() -> str:
-    """Base URL OpenAI-compatible của NEU LLM/VLM server."""
-    return _env("NEU_BASE_URL")
+def llm_base_url() -> str:
+    """Base URL OpenAI-compatible của endpoint LLM/VLM."""
+    return _env("LLM_BASE_URL")
 
 
-def neu_api_key() -> str:
-    """API key/seckey của NEU server."""
-    return _env("NEU_API_KEY")
+def llm_api_key() -> str:
+    """API key của endpoint LLM/VLM (nếu endpoint yêu cầu auth)."""
+    return _env("LLM_API_KEY")
 
 
-def neu_auth_header() -> str:
-    """Tên header auth. Mặc định x-ollama-seckey."""
-    return _env("NEU_AUTH_HEADER", "x-ollama-seckey")
+def llm_auth_header() -> str:
+    """Tên header auth; mặc định Authorization theo chuẩn OpenAI."""
+    return _env("LLM_AUTH_HEADER", "Authorization")
 
 
-def neu_auth_scheme() -> str:
-    """Scheme auth (vd Bearer). Để trống nếu header nhận raw key."""
-    return _env("NEU_AUTH_SCHEME")
+def llm_auth_scheme() -> str:
+    """Scheme auth (mặc định Bearer). Để trống nếu header nhận raw key."""
+    return _env("LLM_AUTH_SCHEME", "Bearer")
 
 
-def neu_headers() -> dict[str, str]:
+def llm_headers() -> dict[str, str]:
     """Header auth gửi kèm request LLM/VLM."""
-    header = neu_auth_header()
-    key = neu_api_key()
+    header = llm_auth_header()
+    key = llm_api_key()
     if not header or not key:
         return {}
-    scheme = neu_auth_scheme()
+    scheme = llm_auth_scheme()
     value = f"{scheme} {key}".strip() if scheme else key
     return {header: value}
 
 
-def neu_llm_model() -> str:
-    """Tên model LLM gọi qua NEU (query prep/answer)."""
-    return _env("NEU_LLM_MODEL", "qwen3.5-35b-a3b-int4")
+def llm_model() -> str:
+    """Tên model chat dùng cho query prep/answer."""
+    return _env("LLM_MODEL")
 
 
-def neu_vlm_model() -> str:
-    """Tên model VLM gọi qua NEU (mô tả slide lúc ingest)."""
-    return _env("NEU_VLM_MODEL") or neu_llm_model()
+def vlm_model() -> str:
+    """Tên model vision cho ingest; mặc định dùng chung LLM_MODEL."""
+    return _env("VLM_MODEL") or llm_model()
 
 
-def neu_enable_thinking() -> bool:
-    """Bật reasoning của Qwen. Mặc định tắt để giảm latency/token."""
-    value = _env("NEU_ENABLE_THINKING", "false").lower()
+def llm_enable_thinking() -> bool:
+    """Bật reasoning nếu endpoint hỗ trợ. Mặc định tắt để giảm latency/token."""
+    value = _env("LLM_ENABLE_THINKING", "false").lower()
     return value in {"1", "true", "yes", "on"}
 
 
@@ -164,49 +164,49 @@ def answer_temperature() -> float:
     return float(_env("ANSWER_TEMPERATURE", "0.2"))
 
 
-def neu_query_max_tokens() -> int:
+def llm_query_max_tokens() -> int:
     """Max output cho query rewrite/HyDE (nhỏ để giảm latency)."""
-    return int(_env("NEU_QUERY_MAX_TOKENS", "400"))
+    return int(_env("LLM_QUERY_MAX_TOKENS", "400"))
 
 
-def neu_vlm_max_tokens() -> int:
-    return int(_env("NEU_VLM_MAX_TOKENS", "8192"))
+def vlm_max_tokens() -> int:
+    return int(_env("VLM_MAX_TOKENS", "8192"))
 
 
-def neu_timeout() -> float:
-    return float(_env("NEU_TIMEOUT", "180"))
+def llm_timeout() -> float:
+    return float(_env("LLM_TIMEOUT", "180"))
 
 
-def neu_max_retries() -> int:
-    return int(_env("NEU_MAX_RETRIES", "2"))
+def llm_max_retries() -> int:
+    return int(_env("LLM_MAX_RETRIES", "2"))
 
 
-def neu_query_timeout() -> float:
-    return float(_env("NEU_QUERY_TIMEOUT", "30"))
+def llm_query_timeout() -> float:
+    return float(_env("LLM_QUERY_TIMEOUT", "30"))
 
 
-def neu_answer_timeout() -> float:
-    return float(_env("NEU_ANSWER_TIMEOUT", "120"))
+def llm_answer_timeout() -> float:
+    return float(_env("LLM_ANSWER_TIMEOUT", "120"))
 
 
-def neu_vlm_timeout() -> float:
-    return float(_env("NEU_VLM_TIMEOUT", "300"))
+def vlm_timeout() -> float:
+    return float(_env("VLM_TIMEOUT", "300"))
 
 
-def neu_generation_concurrency() -> int:
-    return int(_env("NEU_GENERATION_CONCURRENCY", "4"))
+def llm_generation_concurrency() -> int:
+    return int(_env("LLM_GENERATION_CONCURRENCY", "4"))
 
 
-def neu_total_concurrency() -> int:
-    return int(_env("NEU_TOTAL_CONCURRENCY", "6"))
+def llm_total_concurrency() -> int:
+    return int(_env("LLM_TOTAL_CONCURRENCY", "6"))
 
 
-def neu_requests_per_second() -> float:
-    return float(_env("NEU_REQUESTS_PER_SECOND", "0"))
+def llm_requests_per_second() -> float:
+    return float(_env("LLM_REQUESTS_PER_SECOND", "0"))
 
 
-def neu_queue_timeout() -> float:
-    return float(_env("NEU_QUEUE_TIMEOUT", "30"))
+def llm_queue_timeout() -> float:
+    return float(_env("LLM_QUEUE_TIMEOUT", "30"))
 
 
 def rag_top_k() -> int:
@@ -342,12 +342,12 @@ def validate() -> None:
         problems.append("thiếu EMBEDDING_DIM")
     elif not embedding_dim_value.isdigit() or int(embedding_dim_value) <= 0:
         problems.append("EMBEDDING_DIM phải là số nguyên > 0")
-    if not neu_base_url():
-        problems.append("thiếu NEU_BASE_URL")
-    if not neu_llm_model():
-        problems.append("thiếu NEU_LLM_MODEL")
-    if neu_auth_header() and not neu_api_key():
-        problems.append("thiếu NEU_API_KEY khi NEU_AUTH_HEADER được đặt")
+    if not llm_base_url():
+        problems.append("thiếu LLM_BASE_URL")
+    if not llm_model():
+        problems.append("thiếu LLM_MODEL")
+    if llm_auth_header() and not llm_api_key():
+        problems.append("thiếu LLM_API_KEY khi LLM_AUTH_HEADER được đặt")
     if rag_top_k() <= 0:
         problems.append("RAG_TOP_K phải > 0")
     if rag_bm25_candidates() <= 0:
@@ -366,26 +366,26 @@ def validate() -> None:
         problems.append("ANSWER_MAX_TOKENS phải > 0")
     if not 0.0 <= answer_temperature() <= 2.0:
         problems.append("ANSWER_TEMPERATURE phải trong [0, 2]")
-    if neu_query_max_tokens() <= 0:
-        problems.append("NEU_QUERY_MAX_TOKENS phải > 0")
-    if neu_vlm_max_tokens() <= 0:
-        problems.append("NEU_VLM_MAX_TOKENS phải > 0")
-    if neu_timeout() <= 0:
-        problems.append("NEU_TIMEOUT phải > 0")
-    if neu_query_timeout() <= 0:
-        problems.append("NEU_QUERY_TIMEOUT phải > 0")
-    if neu_answer_timeout() <= 0:
-        problems.append("NEU_ANSWER_TIMEOUT phải > 0")
-    if neu_vlm_timeout() <= 0:
-        problems.append("NEU_VLM_TIMEOUT phải > 0")
-    if neu_generation_concurrency() <= 0:
-        problems.append("NEU_GENERATION_CONCURRENCY phải > 0")
-    if neu_total_concurrency() <= 0:
-        problems.append("NEU_TOTAL_CONCURRENCY phải > 0")
-    if neu_requests_per_second() < 0:
-        problems.append("NEU_REQUESTS_PER_SECOND phải >= 0")
-    if neu_queue_timeout() <= 0:
-        problems.append("NEU_QUEUE_TIMEOUT phải > 0")
+    if llm_query_max_tokens() <= 0:
+        problems.append("LLM_QUERY_MAX_TOKENS phải > 0")
+    if vlm_max_tokens() <= 0:
+        problems.append("VLM_MAX_TOKENS phải > 0")
+    if llm_timeout() <= 0:
+        problems.append("LLM_TIMEOUT phải > 0")
+    if llm_query_timeout() <= 0:
+        problems.append("LLM_QUERY_TIMEOUT phải > 0")
+    if llm_answer_timeout() <= 0:
+        problems.append("LLM_ANSWER_TIMEOUT phải > 0")
+    if vlm_timeout() <= 0:
+        problems.append("VLM_TIMEOUT phải > 0")
+    if llm_generation_concurrency() <= 0:
+        problems.append("LLM_GENERATION_CONCURRENCY phải > 0")
+    if llm_total_concurrency() <= 0:
+        problems.append("LLM_TOTAL_CONCURRENCY phải > 0")
+    if llm_requests_per_second() < 0:
+        problems.append("LLM_REQUESTS_PER_SECOND phải >= 0")
+    if llm_queue_timeout() <= 0:
+        problems.append("LLM_QUEUE_TIMEOUT phải > 0")
     if hyde_min_query_words() <= 0:
         problems.append("HYDE_MIN_QUERY_WORDS phải > 0")
     if citation_gate_tokens() <= 0:

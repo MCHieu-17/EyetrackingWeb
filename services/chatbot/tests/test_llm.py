@@ -1,42 +1,50 @@
-"""Tests cho cấu hình transport NEU."""
+"""Tests cho cấu hình transport LLM/VLM."""
 
 from app import settings
 from app.workflow.llm import LLMClient
 
 
-def test_neu_headers_uses_custom_header(monkeypatch):
-    monkeypatch.setenv("NEU_API_KEY", "research")
-    monkeypatch.setenv("NEU_AUTH_HEADER", "x-ollama-seckey")
-    monkeypatch.setenv("NEU_AUTH_SCHEME", "")
+def test_llm_headers_uses_custom_header(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "research")
+    monkeypatch.setenv("LLM_AUTH_HEADER", "x-ollama-seckey")
+    monkeypatch.setenv("LLM_AUTH_SCHEME", "")
 
-    assert settings.neu_headers() == {"x-ollama-seckey": "research"}
-
-
-def test_neu_headers_supports_bearer_scheme(monkeypatch):
-    monkeypatch.setenv("NEU_API_KEY", "secret")
-    monkeypatch.setenv("NEU_AUTH_HEADER", "Authorization")
-    monkeypatch.setenv("NEU_AUTH_SCHEME", "Bearer")
-
-    assert settings.neu_headers() == {"Authorization": "Bearer secret"}
+    assert settings.llm_headers() == {"x-ollama-seckey": "research"}
 
 
-def test_neu_headers_empty_without_key(monkeypatch):
-    monkeypatch.setenv("NEU_API_KEY", "")
+def test_llm_headers_supports_bearer_scheme(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.setenv("LLM_AUTH_HEADER", "Authorization")
+    monkeypatch.setenv("LLM_AUTH_SCHEME", "Bearer")
 
-    assert settings.neu_headers() == {}
+    assert settings.llm_headers() == {"Authorization": "Bearer secret"}
 
 
-def test_neu_vlm_model_falls_back_to_llm_model(monkeypatch):
-    monkeypatch.setenv("NEU_LLM_MODEL", "qwen3.5-35b-a3b-int4")
-    monkeypatch.setenv("NEU_VLM_MODEL", "")
+def test_llm_headers_defaults_to_bearer(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "secret")
+    monkeypatch.delenv("LLM_AUTH_HEADER", raising=False)
+    monkeypatch.delenv("LLM_AUTH_SCHEME", raising=False)
 
-    assert settings.neu_vlm_model() == "qwen3.5-35b-a3b-int4"
+    assert settings.llm_headers() == {"Authorization": "Bearer secret"}
+
+
+def test_llm_headers_empty_without_key(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "")
+
+    assert settings.llm_headers() == {}
+
+
+def test_vlm_model_falls_back_to_llm_model(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "qwen3.5-35b-a3b-int4")
+    monkeypatch.setenv("VLM_MODEL", "")
+
+    assert settings.vlm_model() == "qwen3.5-35b-a3b-int4"
 
 
 def test_llm_options_disable_thinking(monkeypatch):
-    monkeypatch.setenv("NEU_LLM_MODEL", "qwen3.5-35b-a3b-int4")
-    monkeypatch.setenv("NEU_ENABLE_THINKING", "false")
-    monkeypatch.setenv("NEU_QUERY_MAX_TOKENS", "400")
+    monkeypatch.setenv("LLM_MODEL", "qwen3.5-35b-a3b-int4")
+    monkeypatch.setenv("LLM_ENABLE_THINKING", "false")
+    monkeypatch.setenv("LLM_QUERY_MAX_TOKENS", "400")
     monkeypatch.setenv("ANSWER_MAX_TOKENS", "2048")
     monkeypatch.setenv("ANSWER_TEMPERATURE", "0.2")
 

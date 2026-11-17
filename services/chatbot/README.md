@@ -1,11 +1,12 @@
 # Chatbot service (RAG hỗ trợ học tập)
 
-FastAPI + NEU LLM/VLM: ingest slide bằng VLM → hybrid retrieval (Postgres FTS +
-pgvector + HyDE) → một LLM call streaming → kiểm tra citation bằng code → SSE.
+FastAPI + LLM/VLM qua endpoint OpenAI-compatible: ingest slide bằng VLM →
+hybrid retrieval (Postgres FTS + pgvector + HyDE) → một LLM call streaming →
+kiểm tra citation bằng code → SSE.
 
 Chatbot chạy **CPU-only**: embedding local `Qwen3-Embedding-0.6B` trên CPU,
-LLM/VLM gọi NEU API (Qwen 3.5 35B). Không cần GPU và không đặt `gpus: all` —
-GPU chỉ dành cho `services/gaze`.
+LLM/VLM gọi endpoint OpenAI-compatible (ví dụ Qwen 3.5 35B). Không cần GPU và
+không đặt `gpus: all` — GPU chỉ dành cho `services/gaze`.
 
 ## Endpoints
 
@@ -76,22 +77,22 @@ POST /chat/stream
 | `EMBEDDING_DEVICE` | **bắt buộc** | `cpu` \| `cuda` (cuda chỉ khi tự build image GPU) |
 | `EMBEDDING_LOCAL_FILES_ONLY` | **bắt buộc** | `true` \| `false` |
 | `EMBEDDING_HF_REPO` | **bắt buộc** | Repo HuggingFace, ví dụ `Qwen/Qwen3-Embedding-0.6B` |
-| `NEU_BASE_URL` | – | Endpoint OpenAI-compatible của NEU server (bắt buộc) |
-| `NEU_API_KEY` | – | API key/seckey NEU (bắt buộc nếu dùng auth header) |
-| `NEU_AUTH_HEADER` | `x-ollama-seckey` | Tên header auth |
-| `NEU_AUTH_SCHEME` | – | Scheme auth (vd `Bearer`); để trống nếu raw key |
-| `NEU_LLM_MODEL` | `qwen3.5-35b-a3b-int4` | Model LLM cho query prep/answer |
-| `NEU_VLM_MODEL` | `qwen3.5-35b-a3b-int4` | Model VLM cho ingest slide |
-| `NEU_ENABLE_THINKING` | `false` | Bật reasoning của Qwen (không khuyến nghị) |
-| `NEU_TIMEOUT` | `180` | Timeout mặc định cho LLM call |
-| `NEU_MAX_RETRIES` | `2` | Retry cho VLM ChatOpenAI |
+| `LLM_BASE_URL` | – | Endpoint Chat Completions OpenAI-compatible (bắt buộc) |
+| `LLM_API_KEY` | – | API key của endpoint (bắt buộc nếu dùng auth header) |
+| `LLM_AUTH_HEADER` | `Authorization` | Tên header auth; để trống nếu endpoint không cần auth |
+| `LLM_AUTH_SCHEME` | `Bearer` | Scheme auth; để trống nếu header nhận raw key |
+| `LLM_MODEL` | – | Model chat cho query prep/answer (bắt buộc) |
+| `VLM_MODEL` | = `LLM_MODEL` | Model vision cho ingest slide |
+| `LLM_ENABLE_THINKING` | `false` | Bật reasoning nếu endpoint hỗ trợ (không khuyến nghị) |
+| `LLM_TIMEOUT` | `180` | Timeout mặc định cho LLM call |
+| `LLM_MAX_RETRIES` | `2` | Retry cho VLM ChatOpenAI |
 | `ANSWER_MAX_TOKENS` | `2048` | Max output cho answer |
 | `ANSWER_TEMPERATURE` | `0.2` | Nhiệt độ sinh answer |
-| `NEU_QUERY_MAX_TOKENS` | `400` | Max output cho query rewrite/HyDE |
-| `NEU_QUERY_TIMEOUT` | `30` | Timeout cho query prep |
-| `NEU_ANSWER_TIMEOUT` | `120` | Timeout cho answer streaming |
-| `NEU_VLM_MAX_TOKENS` | `8192` | Max output cho VLM |
-| `NEU_VLM_TIMEOUT` | `300` | Timeout cho VLM ingest |
+| `LLM_QUERY_MAX_TOKENS` | `400` | Max output cho query rewrite/HyDE |
+| `LLM_QUERY_TIMEOUT` | `30` | Timeout cho query prep |
+| `LLM_ANSWER_TIMEOUT` | `120` | Timeout cho answer streaming |
+| `VLM_MAX_TOKENS` | `8192` | Max output cho VLM |
+| `VLM_TIMEOUT` | `300` | Timeout cho VLM ingest |
 | `RAG_TOP_K` | `8` | Số slide trả về sau RRF |
 | `RAG_BM25_CANDIDATES` | `20` | Candidate nhánh BM25-like |
 | `RAG_DENSE_CANDIDATES` | `20` | Candidate nhánh dense |
@@ -199,11 +200,11 @@ app/
 
 - Không dùng checkpointer; backend là nguồn sự thật cho lịch sử.
 - `pipeline.py` là async generator tự viết, không phải LangGraph.
-- NEU dùng chung AsyncOpenAI transport, giới hạn generation/total concurrency
-  và request pacing. Cấu hình `NEU_GENERATION_CONCURRENCY` (4),
-  `NEU_TOTAL_CONCURRENCY` (6), `NEU_REQUESTS_PER_SECOND` (0 = tắt pacing),
-  `NEU_QUEUE_TIMEOUT` (30 giây). Nếu server dùng chung, đặt
-  `NEU_REQUESTS_PER_SECOND` = 1–2 để tránh quá tải.
+- LLM/VLM dùng chung AsyncOpenAI transport, giới hạn generation/total
+  concurrency và request pacing. Cấu hình `LLM_GENERATION_CONCURRENCY` (4),
+  `LLM_TOTAL_CONCURRENCY` (6), `LLM_REQUESTS_PER_SECOND` (0 = tắt pacing),
+  `LLM_QUEUE_TIMEOUT` (30 giây). Nếu endpoint dùng chung, đặt
+  `LLM_REQUESTS_PER_SECOND` = 1–2 để tránh quá tải.
 - `CHATBOT_BACKEND_URL` phải trỏ trực tiếp tới backend (Compose:
   `http://backend:8001`). Các operation `/internal/chat/lms-query` xác định
   student/course từ session đã lưu và kiểm tra lại enrollment, teacher lock,
@@ -224,7 +225,7 @@ Bộ test hiện có:
 - `test_citations.py` — parse/validate/sanitize citation.
 - `test_retrieval.py` — RRF, citation building, format context.
 - `test_query.py` — trigger rewrite/HyDE, fallback khi provider lỗi.
-- `test_llm.py` — header auth NEU, tắt thinking, fallback VLM model.
+- `test_llm.py` — header auth LLM, tắt thinking, fallback VLM model.
 - `test_lms.py` — detect operation, pure LMS, render.
 - `test_pipeline.py` — greeting, LMS fast path, citation gate, no-docs.
 - `test_history.py` — chuẩn hoá lịch sử.

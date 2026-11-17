@@ -5,8 +5,8 @@ chung một client cho mỗi loại model thay vì mỗi request tạo một ins
 
 LLM chat dùng trực tiếp `app.workflow.llm.LLMClient` (AsyncOpenAI), không dùng
 LangChain ChatOpenAI cho answer/query. VLM (mô tả slide lúc ingest) vẫn dùng
-ChatOpenAI vì có structured output + prompt template, trỏ cùng endpoint NEU.
-Embedding chạy local (Qwen3-Embedding-0.6B trên CPU).
+ChatOpenAI vì có structured output + prompt template, trỏ cùng endpoint
+LLM/VLM OpenAI-compatible. Embedding chạy local (Qwen3-Embedding-0.6B trên CPU).
 """
 
 from functools import lru_cache
@@ -20,30 +20,30 @@ from app.settings import (
     embedding_local_files_only,
     embedding_model_path,
     embedding_name,
-    neu_api_key,
-    neu_base_url,
-    neu_enable_thinking,
-    neu_headers,
-    neu_max_retries,
-    neu_vlm_max_tokens,
-    neu_vlm_model,
-    neu_vlm_timeout,
+    llm_api_key,
+    llm_base_url,
+    llm_enable_thinking,
+    llm_headers,
+    llm_max_retries,
+    vlm_max_tokens,
+    vlm_model,
+    vlm_timeout,
 )
 
 
-def _neu_chat(model: str, max_tokens: int, timeout: float) -> ChatOpenAI:
-    """Client ChatOpenAI trỏ tới NEU LLM/VLM server (dùng cho VLM ingest)."""
+def _llm_chat(model: str, max_tokens: int, timeout: float) -> ChatOpenAI:
+    """Client ChatOpenAI trỏ tới endpoint LLM/VLM (dùng cho VLM ingest)."""
     return ChatOpenAI(
         model=model,
-        base_url=neu_base_url(),
-        api_key=neu_api_key() or "not-needed",
-        default_headers=neu_headers(),
+        base_url=llm_base_url(),
+        api_key=llm_api_key() or "not-needed",
+        default_headers=llm_headers(),
         temperature=0,
         max_tokens=max_tokens,
         timeout=timeout,
-        max_retries=neu_max_retries(),
+        max_retries=llm_max_retries(),
         extra_body={
-            "chat_template_kwargs": {"enable_thinking": neu_enable_thinking()}
+            "chat_template_kwargs": {"enable_thinking": llm_enable_thinking()}
         },
     )
 
@@ -83,14 +83,14 @@ def get_embedding(name: str | None = None) -> Embeddings:
 
 
 def _build_vlm() -> BaseChatModel:
-    return _neu_chat(
-        neu_vlm_model(),
-        neu_vlm_max_tokens(),
-        neu_vlm_timeout(),
+    return _llm_chat(
+        vlm_model(),
+        vlm_max_tokens(),
+        vlm_timeout(),
     )
 
 
 @lru_cache(maxsize=1)
 def get_vlm() -> BaseChatModel:
-    """VLM dùng chung. Mặc định từ NEU_VLM_MODEL."""
+    """VLM dùng chung. Mặc định từ VLM_MODEL hoặc LLM_MODEL."""
     return _build_vlm()

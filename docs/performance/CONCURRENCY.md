@@ -79,7 +79,7 @@ và các nút thắt còn lại.
 - `CHATBOT_MAX_CONCURRENT` (mặc định 20): giới hạn số chat xử lý đồng thời.
 - `CHATBOT_QUEUE_TIMEOUT` (mặc định 2s): quá thời gian chờ trả 429 +
   `Retry-After` thay vì xếp hàng vô hạn.
-- NEU vẫn là nút thắt bên ngoài; tăng `NEU_*` theo capacity thực tế.
+- Nhà cung cấp LLM vẫn là nút thắt bên ngoài; tăng `LLM_*` theo capacity thực tế.
 
 ### 9. Worker & retention
 
@@ -156,7 +156,7 @@ Các số trên là đo trên máy dev, không phải cam kết production. Cầ
 - **Gaze throughput**: vẫn 1 inference worker/GPU mỗi replica. Nếu cần
   > 100 stream đồng thời, đo GPU rồi cân nhắc TensorRT/ONNX hoặc thêm GPU.
 - **Chatbot**: đã có giới hạn concurrency + 429; nút thắt còn lại là quota
-  NEU (`NEU_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
+  nhà cung cấp LLM (`LLM_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
 - **Worker**: analysis đã 2 replica; content/embedding có thể scale thêm khi
   backlog lớn (chú ý RAM LibreOffice).
 - **Disk**: gaze đã có retention 180 ngày; vẫn cần retention log/backup và

@@ -38,7 +38,7 @@ Tối thiểu:
   - `*.argotunnel.com`, UDP/TCP **7844** cho cloudflared
   - `huggingface.co`, Google Drive/Storage (weights gaze/chatbot)
   - SMTP port 587 hoặc 465
-  - `101.96.66.232:8037` cho NEU LLM/VLM
+  - Endpoint LLM/VLM theo `LLM_BASE_URL` (HTTPS)
   - R2 endpoint nếu dùng Cloudflare R2
 
 Nếu server chặn 7844, thử thêm `--protocol http2` vào command cloudflared;
@@ -120,6 +120,9 @@ SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.0 ./scripts/publish_im
    - `GAZE_FPS` (mặc định `15`, hợp lệ `1..60`): frame/giây gaze; backend trả
      lại qua `/api/config`, gaze throttle `1000/FPS × 0.95`. Đổi giá trị chỉ cần
      **redeploy stack**, không build lại image (frontend đọc runtime).
+   - LLM/VLM: `LLM_BASE_URL` và `LLM_MODEL` **bắt buộc**; `LLM_API_KEY` nếu
+     endpoint cần auth. Các key cũ `NEU_*` đã được thay bằng `LLM_*`/`VLM_*`;
+     đổi tên trong Portainer trước khi deploy image mới.
 8. Deploy the stack.
 
 Nếu Portainer không cho Git repository, dùng **Web editor** và dán nội dung
@@ -384,7 +387,7 @@ reset/restore đúng quy trình.
 | Tất cả user cùng một IP / OTP bị chặn | `real_ip_header CF-Connecting-IP` + `set_real_ip_from` trong nginx; xem lại image nginx mới |
 | `migrate` exit 1 | Log migrate; checksum migration; DB cũ; sai `POSTGRES_PASSWORD` |
 | Backend không healthy | Log backend; DSN; schema generation; Redis |
-| Chatbot chưa ready | Weights HuggingFace; `chatbot_reader` role; `NEU_*` |
+| Chatbot chưa ready | Weights HuggingFace; `chatbot_reader` role; `LLM_*`/`VLM_*` |
 | Gaze chưa ready | GPU driver/toolkit; weights Google Drive/HF; egress |
 | GHCR `401/403` | Package private; thêm registry credential trong Portainer |
 | `pull access denied` | Sai `IMAGE_PREFIX`/`IMAGE_TAG`; image chưa build xong |

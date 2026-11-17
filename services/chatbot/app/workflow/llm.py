@@ -4,8 +4,9 @@ Chỉ còn hai loại call:
 - `structured`: query rewrite/HyDE (JSON schema, max_tokens nhỏ).
 - `stream`: sinh câu trả lời (streaming).
 
-Server NEU dùng header `x-ollama-seckey` thay vì `Authorization: Bearer`.
-Thinking của Qwen được tắt mặc định qua `chat_template_kwargs`.
+Endpoint có thể dùng custom header (`LLM_AUTH_HEADER`) thay vì
+`Authorization: Bearer`; auth scheme cấu hình qua `LLM_AUTH_SCHEME`.
+Thinking được tắt mặc định qua `chat_template_kwargs` khi endpoint hỗ trợ.
 """
 
 import asyncio
@@ -41,25 +42,25 @@ def messages(items):
 class LLMClient:
     def __init__(self):
         self.client = AsyncOpenAI(
-            base_url=settings.neu_base_url(),
-            api_key=settings.neu_api_key() or "not-needed",
-            default_headers=settings.neu_headers(),
+            base_url=settings.llm_base_url(),
+            api_key=settings.llm_api_key() or "not-needed",
+            default_headers=settings.llm_headers(),
             max_retries=0,
             http_client=httpx.AsyncClient(
                 limits=httpx.Limits(max_connections=40, max_keepalive_connections=40),
                 event_hooks={"request": [log_attempt], "response": [log_response]},
             ),
         )
-        self.generation = asyncio.Semaphore(settings.neu_generation_concurrency())
-        self.total = asyncio.Semaphore(settings.neu_total_concurrency())
+        self.generation = asyncio.Semaphore(settings.llm_generation_concurrency())
+        self.total = asyncio.Semaphore(settings.llm_total_concurrency())
         self.rate_lock = asyncio.Lock()
         self.next_request = 0.0
-        self.requests_per_second = settings.neu_requests_per_second()
+        self.requests_per_second = settings.llm_requests_per_second()
 
     @asynccontextmanager
     async def slot(self, purpose):
         started = time.perf_counter()
-        async with asyncio.timeout(settings.neu_queue_timeout()):
+        async with asyncio.timeout(settings.llm_queue_timeout()):
             await self.generation.acquire()
             try:
                 await self.total.acquire()
@@ -73,7 +74,7 @@ class LLMClient:
         )
         purpose_token = _purpose.set(purpose)
         try:
-            async with asyncio.timeout(settings.neu_queue_timeout()):
+            async with asyncio.timeout(settings.llm_queue_timeout()):
                 if self.requests_per_second > 0:
                     async with self.rate_lock:
                         await asyncio.sleep(
@@ -83,9 +84,9 @@ class LLMClient:
                             time.monotonic() + 1 / self.requests_per_second
                         )
             timeout = {
-                "query": settings.neu_query_timeout(),
-                "answer": settings.neu_answer_timeout(),
-            }.get(purpose, settings.neu_timeout())
+                "query": settings.llm_query_timeout(),
+                "answer": settings.llm_answer_timeout(),
+            }.get(purpose, settings.llm_timeout())
             async with asyncio.timeout(timeout):
                 yield
         except RateLimitError:
@@ -98,18 +99,18 @@ class LLMClient:
 
     def options(self, purpose):
         if purpose == "query":
-            limit = settings.neu_query_max_tokens()
+            limit = settings.llm_query_max_tokens()
             temperature = 0.2
         else:
             limit = settings.answer_max_tokens()
             temperature = settings.answer_temperature()
         return {
-            "model": settings.neu_llm_model(),
+            "model": settings.llm_model(),
             "temperature": temperature,
             "max_tokens": limit,
             "extra_body": {
                 "chat_template_kwargs": {
-                    "enable_thinking": settings.neu_enable_thinking()
+                    "enable_thinking": settings.llm_enable_thinking()
                 }
             },
         }

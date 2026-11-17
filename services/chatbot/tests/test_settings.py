@@ -17,8 +17,9 @@ EMBEDDING_KEYS = [
 def _set_required_non_embedding(monkeypatch):
     monkeypatch.setenv("CHATBOT_DATABASE_URL", "postgresql://u:p@localhost:5432/db")
     monkeypatch.setenv("CHATBOT_INTERNAL_TOKEN", "test-token")
-    monkeypatch.setenv("NEU_BASE_URL", "http://localhost:8000/v1")
-    monkeypatch.setenv("NEU_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:8000/v1")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
     for key in (
         "R2_ACCOUNT_ID",
         "R2_BUCKET_NAME",
@@ -27,6 +28,24 @@ def _set_required_non_embedding(monkeypatch):
         "R2_PUBLIC_URL",
     ):
         monkeypatch.delenv(key, raising=False)
+
+
+def _set_required_embedding(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_NAME", "local")
+    monkeypatch.setenv("EMBEDDING_DIM", "1024")
+    monkeypatch.setenv("EMBEDDING_MODEL_PATH", "/app/weights/model")
+    monkeypatch.setenv("EMBEDDING_DEVICE", "cpu")
+    monkeypatch.setenv("EMBEDDING_LOCAL_FILES_ONLY", "true")
+    monkeypatch.setenv("EMBEDDING_HF_REPO", "org/model")
+
+
+def test_validate_requires_llm_model(monkeypatch):
+    _set_required_non_embedding(monkeypatch)
+    _set_required_embedding(monkeypatch)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+
+    with pytest.raises(RuntimeError, match="LLM_MODEL"):
+        settings.validate()
 
 
 def test_validate_requires_all_local_embedding_settings(monkeypatch):
