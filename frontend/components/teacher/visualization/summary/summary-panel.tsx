@@ -72,6 +72,31 @@ export function buildSummaryQuery(input: SummaryQueryInput): AoiSummaryQuery {
   return { ...common, studentIds: input.selectedStudentIds };
 }
 
+function HeatmapSection({
+  courseId,
+  query,
+  lessons,
+}: {
+  courseId: string;
+  query: AoiSummaryQuery;
+  lessons: { id: string; title: string }[];
+}) {
+  return (
+    <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs xl:col-span-2">
+      <div className="mb-3 flex items-center gap-2">
+        <Icon name="ri-fire-line" className="size-4 text-[#36533a]" />
+        <h3 className="text-sm font-semibold text-black">
+          Bản đồ nhiệt theo slide
+        </h3>
+        <span className="ml-auto text-[11px] text-black/40">
+          {lessons.length} bài giảng có slide
+        </span>
+      </div>
+      <HeatmapCard courseId={courseId} baseQuery={query} lessons={lessons} />
+    </section>
+  );
+}
+
 export function SummaryPanel({
   courseId,
   tree,
@@ -132,6 +157,10 @@ export function SummaryPanel({
   const slideLessons = useMemo(
     () => lessons.filter((lesson) => lesson.kind === "lesson" && lesson.slides > 0),
     [lessons],
+  );
+  const heatmapLessons = useMemo(
+    () => slideLessons.map((lesson) => ({ id: lesson.id, title: lesson.title })),
+    [slideLessons],
   );
 
   const query = useMemo<AoiSummaryQuery>(
@@ -390,11 +419,20 @@ export function SummaryPanel({
           onRetry={() => void summary.refetch()}
         />
       ) : data.totals.contentViewCount === 0 ? (
-        <EmptyState
-          icon="ri-inbox-line"
-          title="Không có dữ liệu trong phạm vi đã chọn"
-          description="Thử đổi học viên, ca học, khoảng ngày hoặc bật học viên đã gỡ."
-        />
+        <div className="space-y-4">
+          <EmptyState
+            icon="ri-inbox-line"
+            title="Không có dữ liệu trong phạm vi đã chọn"
+            description="Thử đổi học viên, ca học, khoảng ngày hoặc bật học viên đã gỡ."
+          />
+          {/* Heatmap có phạm vi slide riêng; vẫn hiển thị khi bộ lọc tổng hợp
+              không có content view (ví dụ surface=quiz). */}
+          <HeatmapSection
+            courseId={courseId}
+            query={query}
+            lessons={heatmapLessons}
+          />
+        </div>
       ) : (
         <>
           <SummaryCards totals={data.totals} />
@@ -447,25 +485,11 @@ export function SummaryPanel({
               </section>
             )}
 
-            <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs xl:col-span-2">
-              <div className="mb-3 flex items-center gap-2">
-                <Icon name="ri-fire-line" className="size-4 text-[#36533a]" />
-                <h3 className="text-sm font-semibold text-black">
-                  Bản đồ nhiệt theo slide
-                </h3>
-                <span className="ml-auto text-[11px] text-black/40">
-                  {slideLessons.length} bài giảng có slide
-                </span>
-              </div>
-              <HeatmapCard
-                courseId={courseId}
-                baseQuery={query}
-                lessons={slideLessons.map((lesson) => ({
-                  id: lesson.id,
-                  title: lesson.title,
-                }))}
-              />
-            </section>
+            <HeatmapSection
+              courseId={courseId}
+              query={query}
+              lessons={heatmapLessons}
+            />
 
             <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs xl:col-span-2">
               <div className="mb-3 flex items-center gap-2">

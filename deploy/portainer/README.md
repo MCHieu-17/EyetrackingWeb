@@ -63,16 +63,16 @@ Workflow `.github/workflows/release.yml` build 7 image:
 ### Cách 1 — GitHub Actions (khuyến nghị)
 
 ```bash
-git tag v1.0.3
-git push origin v1.0.3
+git tag v1.0.4
+git push origin v1.0.4
 ```
 
-- Tag `v*` build **toàn bộ** image và gắn tag `v1.0.3`.
+- Tag `v*` build **toàn bộ** image và gắn tag `v1.0.4`.
 - Push `main` chỉ build image có path thay đổi, gắn `sha-...` + `latest`.
 - Có thể chạy tay workflow `Release` (build toàn bộ).
 
-Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.0.3`, phải push tag
-`v1.0.3` và chờ workflow build xong **trước khi** deploy stack.
+Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.0.4`, phải push tag
+`v1.0.4` và chờ workflow build xong **trước khi** deploy stack.
 
 Sau lần push đầu, vào GitHub → Packages:
 
@@ -86,13 +86,13 @@ Sau lần push đầu, vào GitHub → Packages:
 
 ```bash
 docker login ghcr.io
-IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.3 ./scripts/publish_images.sh
+IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.4 ./scripts/publish_images.sh
 ```
 
 Bỏ qua gaze nếu chỉ muốn build phần còn lại:
 
 ```bash
-SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.3 ./scripts/publish_images.sh
+SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.4 ./scripts/publish_images.sh
 ```
 
 ---
@@ -350,7 +350,7 @@ reset/restore đúng quy trình.
 
 ### Rollback code
 
-- Đổi `IMAGE_TAG` về tag cũ (`v1.0.2`, `sha-...`) → update stack.
+- Đổi `IMAGE_TAG` về tag cũ (`v1.0.3`, `sha-...`) → update stack.
 - Nếu migration mới đã chạy: không có down migration; restore DB backup.
 
 ### Rollback Cloudflare
