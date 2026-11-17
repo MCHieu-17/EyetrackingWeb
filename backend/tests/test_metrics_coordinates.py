@@ -286,6 +286,86 @@ async def test_missing_layout_does_not_identity_map():
 
 
 @pytest.mark.asyncio
+async def test_heatmap_grid_is_row_major():
+    teacher_id = await create_user(
+        email=f"grid-t-{uuid.uuid4().hex[:8]}@example.com", role="teacher"
+    )
+    student_id = await create_user(
+        email=f"grid-s-{uuid.uuid4().hex[:8]}@example.com"
+    )
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    slide_ids = await seed_slide(
+        course_id=ids["course_id"],
+        lesson_id=ids["lesson_id"],
+        teacher_id=teacher_id,
+    )
+    now = datetime.now(timezone.utc)
+
+    async with SessionLocal() as db:
+        session = LearningSession(
+            enrollment_id=ids["enrollment_id"],
+            lesson_id=ids["lesson_id"],
+            expires_at=now + timedelta(hours=1),
+        )
+        db.add(session)
+        await db.flush()
+        view = ContentView(
+            session_id=session.id,
+            slide_id=slide_ids["slide_id"],
+            surface="lesson",
+            sequence_no=0,
+        )
+        db.add(view)
+        await db.flush()
+        layout = ViewLayout(
+            content_view_id=view.id,
+            layout_no=0,
+            slide_rect={"left": 0, "top": 0, "width": 1, "height": 1},
+        )
+        db.add(layout)
+        await db.flush()
+        db.add_all(
+            [
+                GazeSample(
+                    content_view_id=view.id,
+                    layout_id=layout.id,
+                    client_batch_id=uuid.uuid4(),
+                    sequence=0,
+                    event_time=now,
+                    viewport_x=0.9,
+                    viewport_y=0.1,
+                    status="ok",
+                ),
+                GazeSample(
+                    content_view_id=view.id,
+                    layout_id=layout.id,
+                    client_batch_id=uuid.uuid4(),
+                    sequence=1,
+                    event_time=now + timedelta(milliseconds=100),
+                    viewport_x=0.1,
+                    viewport_y=0.9,
+                    status="ok",
+                ),
+            ]
+        )
+        await db.commit()
+        view_id = view.id
+
+    async with SessionLocal() as db:
+        updated = await metrics.analyze_content_view(db, view_id)
+        await db.commit()
+        grid = updated.heatmap_grid
+        # heatmap_grid row-major: row = y, col = x.
+        assert grid[2][21] == 1
+        assert grid[21][2] == 1
+        # Các ô đối xứng không bị tăng (không còn transpose).
+        assert grid[2][2] == 0
+        assert grid[21][21] == 0
+        assert updated.on_slide_gaze_count == 2
+        assert sum(sum(row) for row in grid) == 2
+
+
+@pytest.mark.asyncio
 async def test_quiz_does_not_count_on_slide_and_keeps_ui_aoi():
     teacher_id = await create_user(
         email=f"quiz-t-{uuid.uuid4().hex[:8]}@example.com", role="teacher"

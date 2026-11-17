@@ -10,8 +10,9 @@ from app.models.course import Course, CourseModule, Enrollment, Lesson, Slide
 from app.models.gaze import ContentView, LearningSession
 from app.models.profile import StudentProfile
 from app.schemas.course import StudentLessonOut, StudentRowOut
+from app.services import metrics
 
-DEFAULT_ALGORITHM_VERSION = "gaze-metrics-v7"
+DEFAULT_ALGORITHM_VERSION = metrics.ANALYSIS_VERSION
 
 
 async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOut]:
@@ -96,6 +97,7 @@ async def course_students(db: AsyncSession, course: Course) -> list[StudentRowOu
                         "gaze-metrics-v4",
                         "gaze-metrics-v5",
                         "gaze-metrics-v6",
+                        "gaze-metrics-v7",
                         DEFAULT_ALGORITHM_VERSION,
                     )
                 ),

@@ -311,6 +311,9 @@ async def test_heatmap_sums_selected_views(client):
     assert payload["onSlideSampleCount"] == 4
     assert payload["max"] == 4
     assert payload["grid"][12][12] == 4
+    # Hai ca của học viên 1 đều đã phân tích bằng version hiện hành.
+    assert payload["analyzedViewCount"] == 2
+    assert payload["staleViewCount"] == 0
 
 
 @pytest.mark.asyncio
@@ -325,6 +328,65 @@ async def test_heatmap_rejects_slide_of_other_course(client):
         json={"slideId": str(uuid.uuid4())},
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_heatmap_excludes_stale_analysis_version(client):
+    data = await _seed_summary_data()
+    stale_view_id = data["visits1"][0]["view_id"]
+    async with SessionLocal() as db:
+        view = await db.get(ContentView, stale_view_id)
+        assert view is not None and view.heatmap_grid is not None
+        view.analysis_version = "gaze-metrics-v6"
+        await db.commit()
+
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = await client.post(
+        f"/teacher/courses/{data['course_id']}/analytics/heatmap",
+        headers=headers,
+        json={"studentIds": [data["student1_id"]], "slideId": data["slide_id"]},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    # Grid của view cũ không được cộng; chỉ còn view hiện hành (2 mẫu on-slide).
+    assert payload["analyzedViewCount"] == 1
+    assert payload["staleViewCount"] == 1
+    assert payload["onSlideSampleCount"] == 2
+    assert payload["max"] == 2
+    assert payload["grid"][12][12] == 2
+
+
+@pytest.mark.asyncio
+async def test_heatmap_counts_never_analyzed_view_as_stale(client):
+    data = await _seed_summary_data()
+    pending_view_id = data["visits1"][0]["view_id"]
+    async with SessionLocal() as db:
+        view = await db.get(ContentView, pending_view_id)
+        assert view is not None
+        # View mới chưa phân tích: các cột dẫn xuất vẫn ở default (gaze_count=0,
+        # grid rỗng) nhưng gaze thô đã tồn tại.
+        view.analysis_status = "pending"
+        view.analysis_version = "gaze-metrics-v3"
+        view.gaze_count = 0
+        view.on_slide_gaze_count = 0
+        view.heatmap_grid = []
+        await db.commit()
+
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = await client.post(
+        f"/teacher/courses/{data['course_id']}/analytics/heatmap",
+        headers=headers,
+        json={"studentIds": [data["student1_id"]], "slideId": data["slide_id"]},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["analyzedViewCount"] == 1
+    assert payload["staleViewCount"] == 1
+    assert payload["onSlideSampleCount"] == 2
 
 
 @pytest.mark.asyncio
@@ -355,6 +417,8 @@ async def test_summary_and_heatmap_include_short_flag(client):
                 started_at=short_started,
                 ended_at=short_started + timedelta(milliseconds=250),
                 tracked_duration_ms=50,
+                gaze_count=1,
+                on_slide_gaze_count=1,
                 heatmap_grid=grid,
                 analysis_status="ready",
                 analysis_version=metrics.ANALYSIS_VERSION,
@@ -393,6 +457,8 @@ async def test_summary_and_heatmap_include_short_flag(client):
     payload = response.json()
     assert payload["onSlideSampleCount"] == 3
     assert payload["grid"][0][0] == 1
+    assert payload["analyzedViewCount"] == 2
+    assert payload["staleViewCount"] == 0
 
     response = await client.post(
         heatmap_url,
@@ -403,3 +469,5 @@ async def test_summary_and_heatmap_include_short_flag(client):
     payload = response.json()
     assert payload["onSlideSampleCount"] == 2
     assert payload["grid"][0][0] == 0
+    assert payload["analyzedViewCount"] == 1
+    assert payload["staleViewCount"] == 0

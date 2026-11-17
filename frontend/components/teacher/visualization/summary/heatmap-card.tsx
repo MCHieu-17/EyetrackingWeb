@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LazyPdfPage } from "@/components/pdf/lazy-pdf-page";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +8,7 @@ import { useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import { useAoiHeatmap } from "@/hooks/use-visualization";
 import { resolveMediaUrl } from "@/lib/api/client";
 import type { AoiSummaryQuery } from "@/lib/types/visualization";
+import { buildHeatmapQuery } from "./summary-helpers";
 
 const GRID = 24;
 
@@ -38,7 +39,7 @@ export function HeatmapCard({
     : slides[0]?.id ?? "";
 
   const query = useMemo(
-    () => ({ ...baseQuery, slideId: resolvedSlideId }),
+    () => buildHeatmapQuery(baseQuery, resolvedSlideId),
     [baseQuery, resolvedSlideId],
   );
   const heatmap = useAoiHeatmap(
@@ -46,6 +47,19 @@ export function HeatmapCard({
     query,
     Boolean(resolvedLessonId && resolvedSlideId),
   );
+
+  const [pageAspect, setPageAspect] = useState<number | null>(null);
+  const slide = heatmap.data?.slide;
+  const pageNumber = slide?.pageNumber ?? 1;
+  const pdfUrl = resolveMediaUrl(
+    slide?.pdfUrl ?? slides.find((item) => item.id === resolvedSlideId)?.pdfUrl,
+  );
+
+  useEffect(() => {
+    // Đổi PDF/trang thì chờ onPageSize của trang mới thay vì giữ tỉ lệ cũ.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPageAspect(null);
+  }, [pdfUrl, pageNumber]);
 
   if (lessons.length === 0) {
     return (
@@ -55,12 +69,13 @@ export function HeatmapCard({
     );
   }
 
-  const slide = heatmap.data?.slide;
-  const pdfUrl = resolveMediaUrl(
-    slide?.pdfUrl ?? slides.find((item) => item.id === resolvedSlideId)?.pdfUrl,
-  );
   const max = heatmap.data?.max ?? 0;
   const grid = heatmap.data?.grid ?? [];
+  const staleViewCount = heatmap.data?.staleViewCount ?? 0;
+  const analyzedViewCount = heatmap.data?.analyzedViewCount ?? 0;
+  // Chỉ báo "cần phân tích lại" khi chưa có view nào phân tích xong; nếu đã có
+  // view hiện hành mà max=0 thì nhiều khả năng slide không có mẫu trên slide.
+  const needsReanalysis = staleViewCount > 0 && analyzedViewCount === 0;
 
   return (
     <div className="space-y-3">
@@ -125,7 +140,10 @@ export function HeatmapCard({
       {slidesQuery.isLoading || heatmap.isLoading ? (
         <Skeleton className="aspect-video w-full rounded-[16px]" />
       ) : (
-        <div className="relative aspect-video w-full overflow-hidden rounded-[16px] border border-[#e6e8e1] bg-[#eef0ea]">
+        <div
+          className="relative w-full overflow-hidden rounded-[16px] border border-[#e6e8e1] bg-[#eef0ea]"
+          style={{ aspectRatio: pageAspect ?? 16 / 9 }}
+        >
           {pdfUrl ? (
             <LazyPdfPage
               key={`${pdfUrl}:${slide?.pageNumber ?? 1}`}
@@ -133,6 +151,9 @@ export function HeatmapCard({
               pageNumber={slide?.pageNumber ?? 1}
               alt={slide?.title ?? "Slide heatmap"}
               className="absolute inset-0"
+              onPageSize={({ width, height }) =>
+                setPageAspect(height > 0 ? width / height : null)
+              }
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-xs text-black/40">
@@ -143,9 +164,10 @@ export function HeatmapCard({
             </div>
           )}
 
+          {/* PdfPage vẽ canvas ở z-10; overlay phải nằm trên (z-20) để không bị PDF che. */}
           {max > 0 && (
             <div
-              className="pointer-events-none absolute inset-0 grid"
+              className="pointer-events-none absolute inset-0 z-20 grid"
               style={{
                 gridTemplateColumns: `repeat(${GRID}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${GRID}, minmax(0, 1fr))`,
@@ -174,22 +196,43 @@ export function HeatmapCard({
           )}
 
           {max === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/55">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/55">
               <div className="rounded-[16px] border border-dashed border-[#d7dbd1] bg-white/85 px-5 py-4 text-center">
                 <Icon
-                  name="ri-fire-line"
+                  name={needsReanalysis ? "ri-refresh-line" : "ri-fire-line"}
                   className="mx-auto mb-2 size-5 text-[#a26a2b]"
                 />
-                <p className="text-sm font-semibold text-black/65">
-                  Chưa có điểm nhìn trên slide này
-                </p>
-                <p className="mt-1 text-xs text-black/40">
-                  Chọn slide khác hoặc mở rộng phạm vi thống kê.
-                </p>
+                {needsReanalysis ? (
+                  <>
+                    <p className="text-sm font-semibold text-black/65">
+                      Dữ liệu gaze cần phân tích lại
+                    </p>
+                    <p className="mt-1 text-xs text-black/40">
+                      {staleViewCount} lượt xem chưa được phân tích lại. Bấm
+                      “Phân tích lại” để cập nhật heatmap.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-black/65">
+                      Chưa có điểm nhìn trên slide này
+                    </p>
+                    <p className="mt-1 text-xs text-black/40">
+                      Chọn slide khác hoặc mở rộng phạm vi thống kê.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {max > 0 && staleViewCount > 0 && (
+        <p className="text-xs text-[#8a5a1f]">
+          {staleViewCount} lượt xem chưa được phân tích lại; heatmap có thể
+          thiếu. Dùng nút “Phân tích lại” để cập nhật.
+        </p>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-black/40">
@@ -199,6 +242,9 @@ export function HeatmapCard({
           Nhiều
         </span>
         <span>{heatmap.data?.onSlideSampleCount ?? 0} mẫu trong slide</span>
+        {analyzedViewCount > 0 && (
+          <span>{analyzedViewCount} lượt xem đã phân tích</span>
+        )}
         {slide && <span className="ml-auto">{slide.lessonTitle}</span>}
       </div>
       {heatmap.isError && (

@@ -275,4 +275,8 @@ export interface AoiHeatmap {
   grid: number[][];
   max: number;
   onSlideSampleCount: number;
+  /** Số lượt xem có grid hợp lệ với analysis version hiện hành. */
+  analyzedViewCount?: number;
+  /** Số lượt xem có gaze nhưng grid cũ/chưa phân tích lại. */
+  staleViewCount?: number;
 }

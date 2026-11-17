@@ -20,7 +20,7 @@ from app.models.course import (
     Lesson,
     Slide,
 )
-from app.models.gaze import ContentView, CourseVisit, LearningSession
+from app.models.gaze import ContentView, CourseVisit, GazeSample, LearningSession
 from app.models.profile import StudentProfile
 from app.schemas.analytics import (
     AoiHeatmapIn,
@@ -513,8 +513,38 @@ async def aoi_heatmap(
         )
     ).all()
 
+    view_ids = [view.id for view, *_rest in rows]
+    # View chưa phân tích có gaze_count=0 dù đã có gaze thô; kiểm tra sự tồn tại
+    # sample để không bỏ sót trạng thái pending/failed.
+    sample_view_ids: set[str] = set()
+    if view_ids:
+        sample_view_ids = set(
+            (
+                await db.execute(
+                    select(GazeSample.content_view_id)
+                    .where(GazeSample.content_view_id.in_(view_ids))
+                    .distinct()
+                )
+            ).scalars()
+        )
+
     grid = _empty_grid()
+    analyzed_view_count = 0
+    stale_view_count = 0
     for view, *_rest in rows:
+        # Chỉ cộng grid của lượt xem đã phân tích bằng phiên bản hiện hành;
+        # grid cũ (version/status khác) không được trộn vào heatmap.
+        if view.gaze_count <= 0 and view.id not in sample_view_ids:
+            continue
+        current = (
+            view.analysis_status == "ready"
+            and view.analysis_version == metrics.ANALYSIS_VERSION
+            and isinstance(view.heatmap_grid, list)
+        )
+        if not current:
+            stale_view_count += 1
+            continue
+        analyzed_view_count += 1
         source = view.heatmap_grid or []
         for y, row in enumerate(source[: metrics.GRID_SIZE]):
             if not isinstance(row, list):
@@ -543,4 +573,6 @@ async def aoi_heatmap(
         grid=grid,
         max=max_value,
         on_slide_sample_count=total,
+        analyzed_view_count=analyzed_view_count,
+        stale_view_count=stale_view_count,
     )

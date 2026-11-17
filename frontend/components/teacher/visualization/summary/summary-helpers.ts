@@ -1,8 +1,10 @@
 import { colorFor } from "@/lib/aoi/colors";
 import type {
+  AoiHeatmapQuery,
   AoiSummary,
   AoiSummaryAoi,
   AoiSummaryLesson,
+  AoiSummaryQuery,
   AoiSummaryVisit,
 } from "@/lib/types/visualization";
 
@@ -128,6 +130,17 @@ export function visitTrend(byVisit: AoiSummaryVisit[]): VisitTrendPoint[] {
 
 export function maxOf(points: VisitTrendPoint[]): number {
   return Math.max(1, ...points.map((point) => point.tracked));
+}
+
+/**
+ * Heatmap luôn xem theo slide của bài đang chọn, không bị filter bài/surface
+ * toàn cục của tab Tổng hợp vô hiệu hoá. Vẫn giữ filter học viên/ca/ngày.
+ */
+export function buildHeatmapQuery(
+  base: AoiSummaryQuery,
+  slideId: string,
+): AoiHeatmapQuery {
+  return { ...base, lessonIds: [], surface: "lesson", slideId };
 }
 
 export function csvForSummary(summary: AoiSummary): string {

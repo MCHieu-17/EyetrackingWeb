@@ -307,3 +307,5 @@ class AoiHeatmapOut(CamelModel):
     grid: list[list[int]]
     max: int = 0
     on_slide_sample_count: int = 0
+    analyzed_view_count: int = 0
+    stale_view_count: int = 0

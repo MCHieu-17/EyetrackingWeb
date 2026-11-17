@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import CourseModule, Enrollment, Lesson
 from app.models.gaze import ContentView, LearningSession
+from app.services import metrics
 
 
 async def enrollment_counts(db: AsyncSession, course_ids: list[str]) -> dict[str, int]:
@@ -40,6 +41,7 @@ async def attention_avg_by_course(
                     "gaze-metrics-v5",
                     "gaze-metrics-v6",
                     "gaze-metrics-v7",
+                    metrics.ANALYSIS_VERSION,
                 )
             ),
             ContentView.surface == "lesson",

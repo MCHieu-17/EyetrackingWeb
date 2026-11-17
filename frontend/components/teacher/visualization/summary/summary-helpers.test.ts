@@ -3,8 +3,10 @@ import type {
   AoiSummary,
   AoiSummaryAoi,
   AoiSummaryLesson,
+  AoiSummaryQuery,
 } from "@/lib/types/visualization";
 import {
+  buildHeatmapQuery,
   compositionForAois,
   compositionForLesson,
   csvForSummary,
@@ -95,5 +97,31 @@ describe("summary helpers", () => {
     const csv = csvForSummary(summary);
     expect(csv.split("\n")[0]).toContain("Nhan AOI");
     expect(csv).toContain('"Vùng ""đặc biệt"""');
+  });
+
+  it("buildHeatmapQuery bỏ filter bài/surface, giữ filter học viên/ca/ngày", () => {
+    const base: AoiSummaryQuery = {
+      studentIds: ["student-1"],
+      visitIds: ["visit-1"],
+      lessonIds: ["lesson-1", "lesson-2"],
+      from: "2026-01-01",
+      to: "2026-01-31",
+      surface: "quiz",
+      includeShort: true,
+    };
+
+    const query = buildHeatmapQuery(base, "slide-9");
+
+    expect(query).toEqual({
+      studentIds: ["student-1"],
+      visitIds: ["visit-1"],
+      from: "2026-01-01",
+      to: "2026-01-31",
+      includeShort: true,
+      lessonIds: [],
+      surface: "lesson",
+      slideId: "slide-9",
+    });
+    expect(base.lessonIds).toEqual(["lesson-1", "lesson-2"]);
   });
 });

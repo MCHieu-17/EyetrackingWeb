@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -84,6 +85,7 @@ export function SummaryPanel({
 }) {
   const visitsQuery = useCourseVisits(courseId, { limit: 1000 });
   const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data]);
+  const queryClient = useQueryClient();
 
   const [scope, setScope] = useState<SummaryScope>(
     initialStudentId ? "student" : initialScope,
@@ -189,6 +191,11 @@ export function SummaryPanel({
       window.setTimeout(() => {
         void summary.refetch();
         void visitsQuery.refetch();
+        // Heatmap có query riêng (slideId); invalidate prefix để card tự tải
+        // lại sau khi worker phân tích xong.
+        void queryClient.invalidateQueries({
+          queryKey: ["visualization", "aoi-heatmap", courseId],
+        });
       }, 4000);
     } catch {
       setRebuildNote("Không gửi được yêu cầu phân tích lại.");

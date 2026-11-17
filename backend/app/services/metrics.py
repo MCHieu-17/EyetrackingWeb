@@ -21,7 +21,7 @@ _ui_aoi_label = aoi_regions.ui_aoi_label
 GRID_SIZE = 24
 FIXATION_RADIUS = 0.03
 MIN_FIXATION_POINTS = 2
-ANALYSIS_VERSION = "gaze-metrics-v7"
+ANALYSIS_VERSION = "gaze-metrics-v8"
 
 SLIDE_LABEL_PREFIX = "SLIDE_"
 SLIDE_NO_LABEL = "SLIDE_NO_LABEL"
@@ -101,10 +101,12 @@ def _empty_grid() -> list[list[int]]:
 
 
 def _grid_cell(x: float, y: float) -> tuple[int, int] | None:
+    """Trả (row, col) row-major để khớp `heatmap_grid[y][x]`."""
     if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
         return None
-    return min(GRID_SIZE - 1, int(x * GRID_SIZE)), min(
-        GRID_SIZE - 1, int(y * GRID_SIZE)
+    return (
+        min(GRID_SIZE - 1, int(y * GRID_SIZE)),
+        min(GRID_SIZE - 1, int(x * GRID_SIZE)),
     )
 
 
@@ -213,6 +215,7 @@ async def analyze_content_view(db: AsyncSession, view_id: str) -> ContentView:
                 cell = _grid_cell(x, y)
                 if cell is not None:
                     on_slide_count += 1
+                    # cell = (row, col) nên `heatmap_grid[row][col]` là row-major `grid[y][x]`.
                     grid[cell[0]][cell[1]] += 1
                     points.append((x, y))
                 label = _slide_aoi_label(x, y, slide_aois)

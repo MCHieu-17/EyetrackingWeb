@@ -291,7 +291,7 @@ Công thức:
 attention = on_slide_gaze_count / gaze_count * 100
 ```
 
-`aoi_stats` là dữ liệu dẫn xuất, được worker `gaze-metrics-v7` tính lại cùng
+`aoi_stats` là dữ liệu dẫn xuất, được worker `gaze-metrics-v8` tính lại cùng
 `gaze_samples.aoi_label`. Không thêm bảng; dashboard đọc một hàng mỗi lượt xem.
 
 Mỗi lần vào slide/quiz tạo một `content_view` mới với UUID do client gửi
@@ -388,7 +388,7 @@ Backend fail-fast nếu generation sai.
 |---|---|---|
 | `lessons` | `quiz_config` | Snapshot đề + cấu hình runtime |
 | `quiz_attempts` | `quiz_snapshot`, `answers`, `grading` | Snapshot lúc làm/chấm |
-| `content_views` | `heatmap_grid` | Derived 24×24 |
+| `content_views` | `heatmap_grid` | Derived 24×24, row-major `grid[y][x]` |
 | `view_layouts` | `slide_rect`, `elements` | Layout phụ trợ worker |
 | `aois` | `geometry` | Rect slide hoặc selector UI |
 | `gaze_samples` | `quality_flags` | Cờ pipeline linh hoạt |
@@ -431,7 +431,7 @@ toàn bộ samples của content_view
   → gaze_count, on_slide_gaze_count
   → tracked_duration_ms (gap <= max(250, 3000/FPS))
   → fixation_count
-  → heatmap_grid 24×24
+  → heatmap_grid 24×24 row-major (grid[y][x])
 ```
 
 Thiếu layout/`slide_rect` rỗng: không identity map; `slide_x/y = NULL`,

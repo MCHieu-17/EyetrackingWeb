@@ -99,6 +99,10 @@ Nếu cần rollback code cũ, phải restore backup database. Sau migration, ch
 `docker compose exec backend python -m app.reanalyze` để tính lại nhãn AOI,
 `heatmap_grid` và `aoi_stats`.
 
+`heatmap_grid` là ma trận 24×24 row-major (`grid[y][x]`). Dashboard heatmap chỉ
+cộng các lượt xem đã phân tích bằng `gaze-metrics-v8`; lượt cũ hơn được báo là
+stale cho tới khi chạy phân tích lại.
+
 `GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
 backend trả lại qua `GET /api/config`, gaze throttle `1000/FPS × 0.95`, worker
 suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị cần restart backend + gaze

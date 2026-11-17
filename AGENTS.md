@@ -191,8 +191,9 @@ Các endpoint teacher nằm dưới backend `/teacher/...`. Browser gọi
    - ngoài slide nhưng ngoài mọi UI AOI: `UI_NO_LABEL`.
    - mỗi sample chỉ có **một** `aoi_label`; không trộn nhãn slide + UI, không
      cộng container. Không còn `aoi_codes`.
-   - cập nhật metrics vào `content_views`, gồm `heatmap_grid` và `aoi_stats`
-     (`{label: {ms, samples}}`) cho dashboard Trực quan hoá.
+   - cập nhật metrics vào `content_views`, gồm `heatmap_grid` (24×24, row-major
+     `grid[y][x]`) và `aoi_stats` (`{label: {ms, samples}}`) cho dashboard
+     Trực quan hoá.
 
 Sửa AOI không xóa gaze thô; worker chỉ tính lại `slide_x/y`, `aoi_label`,
 metrics và `aoi_stats`. Nhãn slide do giáo viên đặt trong `aois.label`
@@ -229,7 +230,7 @@ trigger bất biến hay cờ `app.allow_course_delete`.
   - `003_aoi_single_label.sql`: bỏ `gaze_samples.aoi_codes` và
     `slides.aoi_suggestions`.
   - `004_content_view_aoi_stats.sql`: thêm `content_views.aoi_stats` JSONB
-    (dữ liệu dẫn xuất cho dashboard Trực quan hoá; worker `gaze-metrics-v7`
+    (dữ liệu dẫn xuất cho dashboard Trực quan hoá; worker `gaze-metrics-v8`
     ghi lại, có thể tái tạo bằng phân tích lại).
   - `005_current_viewport_only.sql`: chuyển `view_layouts` cũ từ
     `original-v1` sang viewport hiện tại, bỏ `coordinate_space`,
