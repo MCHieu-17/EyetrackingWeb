@@ -39,9 +39,22 @@ INFER_WORKERS = int(os.getenv("INFER_WORKERS", "1"))
 # để queue phình vô hạn làm tăng latency toàn hệ thống.
 MAX_INFERENCE_QUEUE = int(os.getenv("MAX_INFERENCE_QUEUE", "32"))
 
-# FPS tối thiểu giữa 2 frame của cùng một session (ms). Client có thể gửi dày
-# hơn; server drop bớt để bảo vệ GPU khi đông người.
-MIN_FRAME_INTERVAL_MS = int(os.getenv("MIN_FRAME_INTERVAL_MS", "80"))
+
+def frame_interval_ms(fps: int) -> int:
+    """Khoảng cách tối thiểu giữa 2 frame của cùng session (ms).
+
+    Trừ 5% dung sai để jitter của setTimeout phía client không làm rớt
+    frame hợp lệ. FPS ngoài 1..60 bị coi là cấu hình sai -> fail-fast.
+    """
+    if not 1 <= fps <= 60:
+        raise ValueError("GAZE_FPS phải nằm trong khoảng 1..60")
+    return max(1, int(1000 / fps * 0.95))
+
+
+# Tần số lấy mẫu gaze (frame/giây) mà trình duyệt gửi lên. Backend trả cùng
+# giá trị qua GET /api/config; service này throttle theo đúng biến đó.
+FPS = int(os.getenv("GAZE_FPS", "15"))
+MIN_FRAME_INTERVAL_MS = frame_interval_ms(FPS)
 
 # Quyết định model chạy local phải đặt tường minh trong .env/stack.env.
 # Không tự dò GPU và không hardcode tên weights trong code.

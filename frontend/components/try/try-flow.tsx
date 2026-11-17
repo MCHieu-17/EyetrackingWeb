@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { CalibrationStage } from "@/components/calibration/calibration-stage";
 import { useGazeTracker } from "@/hooks/use-gaze-tracker";
 import { useCalibration } from "@/hooks/use-calibration";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import { clearStoredGazeSession } from "@/lib/api/calibration";
 
 const TRY_SLIDES = [
@@ -88,6 +89,7 @@ export function TryFlow() {
 
   const gazeRef = useRef<GazeRecord[]>([]);
   const slideRef = useRef(0);
+  const { gazeFps } = useRuntimeConfig();
 
   useEffect(() => {
     slideRef.current = currentSlide;
@@ -109,6 +111,7 @@ export function TryFlow() {
     calibrated: true,
     onPoint: handlePoint,
     allowSimulation: false,
+    fps: gazeFps,
   });
 
   const results = useMemo(

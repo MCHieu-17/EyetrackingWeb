@@ -117,6 +117,9 @@ SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.0.0 ./scripts/publish_im
      `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`,
      `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO`.
      Thiếu một biến → Compose báo lỗi ngay, không dùng default.
+   - `GAZE_FPS` (mặc định `15`, hợp lệ `1..60`): frame/giây gaze; backend trả
+     lại qua `/api/config`, gaze throttle `1000/FPS × 0.95`. Đổi giá trị chỉ cần
+     **redeploy stack**, không build lại image (frontend đọc runtime).
 8. Deploy the stack.
 
 Nếu Portainer không cho Git repository, dùng **Web editor** và dán nội dung

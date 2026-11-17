@@ -25,6 +25,8 @@ interface GazeFrameContext {
 interface UseGazeTrackerOptions {
   enabled: boolean;
   calibrated: boolean;
+  /** Số frame/giây gửi lên service gaze; bỏ trống dùng mặc định 15. */
+  fps?: number;
   onPoint: (x: number, y: number, source: GazeSource) => void;
   onFrame?: (frame: GazeFrameResult) => void;
   getContext?: () => GazeFrameContext | null;
@@ -36,10 +38,15 @@ interface GazeTrackerState {
   source: GazeSource;
 }
 
-const FPS = 12;
-const FRAME_INTERVAL_MS = 1000 / FPS;
+const DEFAULT_FPS = 15;
 const MAX_RECONNECTS = 5;
 const MAX_BUFFERED_BYTES = 1024 * 1024;
+
+/** Khoảng cách giữa 2 frame (ms). Clamp 1..60 để tránh chia 0 / giá trị lạ. */
+export function frameIntervalMs(fps: number): number {
+  const safe = Number.isFinite(fps) ? Math.min(60, Math.max(1, fps)) : DEFAULT_FPS;
+  return 1000 / safe;
+}
 
 /**
  * Quy đổi toạ độ gaze từ viewport lúc calibration sang viewport hiện tại.
@@ -76,6 +83,7 @@ function transformGazeToViewport(
 export function useGazeTracker({
   enabled,
   calibrated,
+  fps,
   onPoint,
   onFrame,
   getContext,
@@ -87,12 +95,15 @@ export function useGazeTracker({
   const onPointRef = useRef(onPoint);
   const onFrameRef = useRef(onFrame);
   const getContextRef = useRef(getContext);
+  // FPS nằm trong ref để config runtime về muộn không phải mở lại WebSocket.
+  const fpsRef = useRef(fps ?? DEFAULT_FPS);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     onPointRef.current = onPoint;
     onFrameRef.current = onFrame;
     getContextRef.current = getContext;
+    fpsRef.current = fps ?? DEFAULT_FPS;
   });
 
   useEffect(() => {
@@ -227,13 +238,15 @@ export function useGazeTracker({
         };
         finishActiveWs = finish;
 
-        const scheduleSend = () => {
+        const scheduleSend = (delayMs = frameIntervalMs(fpsRef.current)) => {
           if (disposed || settled) {
             if (disposed) finish("abort");
             return;
           }
           sendTimer = window.setTimeout(async () => {
             sendTimer = 0;
+            // Mốc bắt đầu xử lý frame để bù vào nhịp gửi kế tiếp.
+            const startedAt = performance.now();
             if (disposed || settled) {
               if (disposed) finish("abort");
               return;
@@ -299,8 +312,13 @@ export function useGazeTracker({
                 return;
               }
             }
-            scheduleSend();
-          }, FRAME_INTERVAL_MS);
+            // Bù thời gian capture + encode vừa tốn để nhịp gửi thực tế đúng
+            // FPS đặt (nếu xử lý mất ~15ms mà vẫn chờ đủ interval thì sẽ chậm
+            // hơn). Floor 5ms để không busy-loop khi xử lý chậm hơn interval.
+            const interval = frameIntervalMs(fpsRef.current);
+            const elapsed = performance.now() - startedAt;
+            scheduleSend(Math.max(5, interval - elapsed));
+          }, delayMs);
         };
 
         ws.onopen = () => {

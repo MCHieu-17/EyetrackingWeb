@@ -39,6 +39,7 @@ async def attention_avg_by_course(
                     "gaze-metrics-v4",
                     "gaze-metrics-v5",
                     "gaze-metrics-v6",
+                    "gaze-metrics-v7",
                 )
             ),
             ContentView.surface == "lesson",

@@ -119,7 +119,7 @@ async def test_aoi_stats_accumulates_dwell_and_sample_counts():
     async with SessionLocal() as db:
         updated = await metrics.analyze_content_view(db, view_id)
         await db.commit()
-        assert updated.analysis_version == "gaze-metrics-v6"
+        assert updated.analysis_version == "gaze-metrics-v7"
         # 100ms UI + 200ms slide; khoảng no_face không được cộng.
         assert updated.tracked_duration_ms == 300
         assert updated.aoi_stats == {

@@ -32,6 +32,7 @@ from app.api.routes import (
     proxy,
     quiz_attempts,
     quiz_editor,
+    runtime_config,
     users,
 )
 from app.core.config import settings
@@ -177,6 +178,7 @@ app.include_router(analytics.router)
 app.include_router(chat.router)
 app.include_router(chat_internal.router)
 app.include_router(internal_metrics.router)
+app.include_router(runtime_config.router)
 
 
 @app.get("/health", tags=["system"])

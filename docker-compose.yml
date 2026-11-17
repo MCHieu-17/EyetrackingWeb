@@ -77,6 +77,8 @@ x-backend-env: &backend-env
   # Ngưỡng dwell tối thiểu để một lượt xem được xếp loại "đủ ngưỡng".
   # Mặc định vẫn hiển thị mọi lượt; UI dùng giá trị này cho badge/filter.
   CONTENT_VIEW_MIN_DWELL_MS: ${CONTENT_VIEW_MIN_DWELL_MS:-1000}
+  # Frame/giây gaze: backend trả qua GET /api/config, gaze throttle theo FPS.
+  GAZE_FPS: ${GAZE_FPS:-15}
   # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống → fallback DATABASE_URL
   # ở dev; production nên trỏ tới role admin_reader.
   ADMIN_DB_URL: ${ADMIN_DATABASE_URL_DOCKER:-}
@@ -473,7 +475,7 @@ services:
       - MAX_SAMPLES_PER_POINT=${MAX_SAMPLES_PER_POINT:-50}
       - INFER_WORKERS=${INFER_WORKERS:-1}
       - MAX_INFERENCE_QUEUE=${MAX_INFERENCE_QUEUE:-32}
-      - MIN_FRAME_INTERVAL_MS=${MIN_FRAME_INTERVAL_MS:-80}
+      - GAZE_FPS=${GAZE_FPS:-15}
       # Giới hạn ảnh calibration/import riêng của gaze; không dùng chung
       # MAX_UPLOAD_BYTES (50 MiB) của backend.
       - MAX_UPLOAD_BYTES=${GAZE_MAX_UPLOAD_BYTES:-5242880}

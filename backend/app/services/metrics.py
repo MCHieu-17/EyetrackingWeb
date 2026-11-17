@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.aoi import Aoi
 from app.models.gaze import ContentView, GazeSample, ViewLayout
 from app.services import aoi_regions
@@ -20,8 +21,7 @@ _ui_aoi_label = aoi_regions.ui_aoi_label
 GRID_SIZE = 24
 FIXATION_RADIUS = 0.03
 MIN_FIXATION_POINTS = 2
-MAX_GAP_MS = 250
-ANALYSIS_VERSION = "gaze-metrics-v6"
+ANALYSIS_VERSION = "gaze-metrics-v7"
 
 SLIDE_LABEL_PREFIX = "SLIDE_"
 SLIDE_NO_LABEL = "SLIDE_NO_LABEL"
@@ -171,6 +171,8 @@ async def analyze_content_view(db: AsyncSession, view_id: str) -> ContentView:
     gaze_count = 0
     on_slide_count = 0
     dwell_ms = 0
+    # Đọc một lần trước vòng lặp: ngưỡng gap phụ thuộc GAZE_FPS.
+    max_gap_ms = settings.gaze_max_gap_ms
     # Thống kê dẫn xuất cho dashboard: {label: {"ms": int, "samples": int}}.
     aoi_stats: dict[str, dict[str, int]] = {}
     previous_time: datetime | None = None
@@ -238,7 +240,7 @@ async def analyze_content_view(db: AsyncSession, view_id: str) -> ContentView:
 
         if is_ok and previous_ok and previous_time is not None:
             delta = (sample.event_time - previous_time).total_seconds() * 1000
-            if 0 <= delta <= MAX_GAP_MS:
+            if 0 <= delta <= max_gap_ms:
                 elapsed = int(delta)
                 dwell_ms += elapsed
                 if label is not None:

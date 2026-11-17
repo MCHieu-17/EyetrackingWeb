@@ -21,6 +21,9 @@ export const queryKeys = {
     slide: (slideId: string | null) => ["aois", "slide", slideId] as const,
     ui: (uiSchema: string) => ["aois", "ui", uiSchema] as const,
   },
+  config: {
+    runtime: ["config", "runtime"] as const,
+  },
   teacher: {
     coursesRoot: ["teacher", "courses"] as const,
     courses: (query: CourseListQuery = {}) => ["teacher", "courses", query] as const,

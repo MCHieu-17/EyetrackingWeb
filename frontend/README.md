@@ -32,6 +32,10 @@ NEXT_PUBLIC_GAZE_URL=http://localhost:8000
 Để trống `NEXT_PUBLIC_*` nghĩa là browser dùng same-origin qua nginx/Next
 rewrite.
 
+FPS ghi gaze **không** phải biến môi trường frontend: backend cấu hình
+`GAZE_FPS` và frontend đọc runtime qua `GET /api/config` (`gazeFps`, mặc định
+15 khi lỗi/chưa tải).
+
 ## Lệnh
 
 | Lệnh | Mục đích |
@@ -97,7 +101,8 @@ Quy ước:
 
 ## Gaze flow phía client
 
-1. `useGazeTracker` xin webcam, gửi frame ~12 FPS qua WebSocket `/gaze`.
+1. `useGazeTracker` xin webcam, gửi frame theo `GAZE_FPS` (backend trả qua
+   `/api/config`, mặc định 15) qua WebSocket `/gaze`.
 2. Frame protocol v2 gồm header JSON + JPEG; metadata có presentation/layout.
 3. `ReaderContent` tạo `content_view` theo slide/quiz.
 4. `useAoiSnapshot` đo DOM, tạo `view_layout` khi layout đổi.

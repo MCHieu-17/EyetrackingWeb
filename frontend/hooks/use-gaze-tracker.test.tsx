@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useGazeTracker } from "./use-gaze-tracker";
+import { frameIntervalMs, useGazeTracker } from "./use-gaze-tracker";
 
 class FakeWebSocket {
   static OPEN = 1;
@@ -32,6 +32,22 @@ const originalMediaDevices = Object.getOwnPropertyDescriptor(
   navigator,
   "mediaDevices",
 );
+
+describe("frameIntervalMs", () => {
+  it("tính khoảng cách giữa frame theo FPS hợp lệ", () => {
+    expect(frameIntervalMs(12)).toBeCloseTo(1000 / 12);
+    expect(frameIntervalMs(15)).toBeCloseTo(1000 / 15);
+  });
+
+  it("clamp FPS ngoài khoảng 1..60", () => {
+    expect(frameIntervalMs(0)).toBeCloseTo(1000);
+    expect(frameIntervalMs(61)).toBeCloseTo(1000 / 60);
+  });
+
+  it("dùng FPS mặc định khi giá trị không hữu hạn", () => {
+    expect(frameIntervalMs(Number.NaN)).toBeCloseTo(1000 / 15);
+  });
+});
 
 describe("useGazeTracker cleanup", () => {
   const stopTrack = vi.fn();

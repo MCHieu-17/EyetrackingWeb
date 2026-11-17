@@ -61,7 +61,9 @@ và các nút thắt còn lại.
 
 - `MAX_INFERENCE_QUEUE` (mặc định 32): queue đầy trả `overloaded` thay vì phình
   vô hạn.
-- `MIN_FRAME_INTERVAL_MS` (mặc định 80ms): giới hạn ~12.5 FPS/session.
+- `GAZE_FPS` (mặc định 15): throttle mỗi session = `1000/FPS × 0.95`; tăng FPS
+  làm tăng tải suy luận/GPU mỗi session. FPS cao hơn nghĩa là nhiều frame phải
+  inference hơn — cân nhắc `INFER_WORKERS`/`MAX_INFERENCE_QUEUE` tương ứng.
 - Calibration trả 503 + `Retry-After` khi queue đầy; WebSocket trả trạng thái
   `overloaded` và giữ stream.
 - Chạy **2 replica** gaze sau nginx (`GAZE_REPLICAS`, mặc định 2). Frontend

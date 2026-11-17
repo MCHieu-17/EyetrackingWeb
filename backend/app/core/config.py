@@ -1,6 +1,8 @@
+import math
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Nguồn duy nhất: file .env ở gốc repo (bỏ hẳn giá trị mẫu nhúng trong code).
@@ -175,6 +177,18 @@ class Settings(BaseSettings):
     # Đặt 0 để tắt (không khuyến nghị trên đĩa nhỏ).
     gaze_retention_days: int = 180
 
+    # Tần số lấy mẫu gaze (FPS) — nguồn duy nhất cho cả pipeline: backend trả
+    # qua /api/config, gaze service throttle theo giá trị này, worker suy ra
+    # ngưỡng gap khi cộng dồn dwell.
+    gaze_fps: int = 15
+
+    @field_validator("gaze_fps")
+    @classmethod
+    def _validate_gaze_fps(cls, value: int) -> int:
+        if not 1 <= value <= 60:
+            raise ValueError("GAZE_FPS phải nằm trong khoảng 1..60")
+        return value
+
     # Ngưỡng dwell để phân loại một lượt xem là "đủ ngưỡng". Mặc định vẫn
     # hiển thị mọi lượt xem (kể cả ngắn hơn ngưỡng); giá trị này dùng cho
     # badge/filter "Chỉ lượt >= ngưỡng" trong tab Trực quan hoá.
@@ -196,6 +210,11 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def gaze_max_gap_ms(self) -> int:
+        """Ngưỡng gap để cộng dồn dwell: tối thiểu 250ms, hoặc 3 chu kỳ lấy mẫu."""
+        return max(250, math.ceil(3000 / self.gaze_fps))
 
     @property
     def chatbot_url_resolved(self) -> str:

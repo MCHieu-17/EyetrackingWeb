@@ -147,7 +147,7 @@ Các giá trị `status`/`error`:
 
 JPEG legacy không có header vẫn được chấp nhận, nhưng không có metadata echo.
 Frame bị drop nếu session đang xử lý frame trước hoặc gửi dày hơn
-`MIN_FRAME_INTERVAL_MS` (mặc định 80 ms, khoảng 12.5 FPS).
+`GAZE_FPS` (mặc định 15 FPS; throttle mỗi session = 1000/FPS × 0.95 ms).
 
 WebSocket close:
 
@@ -176,7 +176,7 @@ WebSocket close:
 | `MAX_SAMPLES_PER_POINT` | `50` | Mẫu giữ lại/point |
 | `GAZE_MAX_UPLOAD_BYTES` → `MAX_UPLOAD_BYTES` | `5242880` | Ảnh upload tối đa |
 | `MAX_INFERENCE_QUEUE` | `32` | Queue suy luận |
-| `MIN_FRAME_INTERVAL_MS` | `80` | Throttle FPS mỗi session |
+| `GAZE_FPS` | `15` | Frame/giây trình duyệt gửi lên; throttle mỗi session = 1000/FPS × 0.95. Mặc định 15, hợp lệ 1..60. |
 | `ONEEURO_*` | `0.5/0.5/1.0` | Bộ lọc làm mượt |
 
 ## Test

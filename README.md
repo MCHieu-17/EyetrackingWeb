@@ -169,6 +169,7 @@ Chạy lệnh trên nhiều lần để lấy các secret khác nhau.
 | `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`, `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO` | Model embedding chatbot; **bắt buộc**, không có default |
 | `FRONTEND_REPLICAS`, `GAZE_REPLICAS`, `WORKER_REPLICAS` | Số replica; máy cá nhân nên đặt `1` |
 | `CONTENT_VIEW_MIN_DWELL_MS` | Ngưỡng phân loại lượt xem đủ ngưỡng; mặc định `1000`, không ẩn lượt ngắn |
+| `GAZE_FPS` | Frame/giây gaze, `1..60` (khuyến nghị `6..30`); backend trả qua `/api/config`, frontend không cần rebuild |
 
 Ví dụ các dòng cần đồng bộ (thay `<secret-N>` bằng giá trị thật):
 

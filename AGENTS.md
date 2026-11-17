@@ -9,7 +9,7 @@ GazeEdu là nền tảng học trực tuyến có theo dõi hướng nhìn:
 
 - Giáo viên tạo khóa → chương → bài giảng/bài tập → upload PDF/PPTX/PPT/ODP.
 - Học viên đăng nhập bằng email trường + OTP, học slide PDF, làm quiz, chat với trợ lý RAG.
-- Webcam gửi gaze 12 FPS qua WebSocket tới service `gaze`; frontend gom batch gửi backend.
+- Webcam gửi gaze theo `GAZE_FPS` (mặc định 15) qua WebSocket tới service `gaze`; frontend gom batch gửi backend.
 - Backend lưu gaze thô; worker quy đổi sang tọa độ slide, gắn `aoi_label` duy nhất và tính metrics.
 - Giáo viên xem tỷ lệ quan sát, xuất JSONL phẳng để phân tích.
 
@@ -109,6 +109,7 @@ Frontend và backend dùng thống nhất ID hiện hành, không còn alias `*V
 | `POST /teacher/courses/{courseId}/analytics/heatmap` | heatmap 24×24 theo slide |
 | `POST /api/auth/otp/request` | gửi OTP tới email sinh viên |
 | `POST /api/auth/otp/verify` | xác nhận OTP, cấp token/cookie |
+| `GET /api/config` | cấu hình runtime cho frontend, vd `{"gazeFps": 15}` |
 
 `presentationId` là tên domain cho một lượt xem slide/quiz và cũng là metadata
 trong gaze protocol; không phải bảng version.
@@ -228,7 +229,7 @@ trigger bất biến hay cờ `app.allow_course_delete`.
   - `003_aoi_single_label.sql`: bỏ `gaze_samples.aoi_codes` và
     `slides.aoi_suggestions`.
   - `004_content_view_aoi_stats.sql`: thêm `content_views.aoi_stats` JSONB
-    (dữ liệu dẫn xuất cho dashboard Trực quan hoá; worker `gaze-metrics-v6`
+    (dữ liệu dẫn xuất cho dashboard Trực quan hoá; worker `gaze-metrics-v7`
     ghi lại, có thể tái tạo bằng phân tích lại).
   - `005_current_viewport_only.sql`: chuyển `view_layouts` cũ từ
     `original-v1` sang viewport hiện tại, bỏ `coordinate_space`,
@@ -332,4 +333,9 @@ phải lỗi cấu hình.
   `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO`.
   MediaPipe face detector là ngoại lệ (luôn CPU, model cố định).
 - Sửa cascade/FK phải chạy test `test_simplified_schema.py`.
+- `GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
+  backend trả lại qua `GET /api/config`, gaze throttle mỗi session
+  `1000/FPS × 0.95`, worker suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị
+  cần restart backend + gaze (worker phân tích cũng đọc biến này); frontend đọc
+  runtime nên không rebuild.
 - Document DB mới trong `DB.md`, không dựa vào thiết kế generation 9 cũ.

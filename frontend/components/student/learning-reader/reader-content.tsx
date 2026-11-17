@@ -19,6 +19,7 @@ import {
   useLessonSlides,
   useMyEnrollments,
 } from "@/hooks/use-student";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import {
   createLearningSession,
   endLearningSession,
@@ -60,8 +61,9 @@ import {
   type GazeDotPosition,
 } from "./reader-helpers";
 
-// Gom gaze sample rồi gửi theo batch — tránh vượt rate limit 60 req/phút của backend
-// (tracker phát ~12 điểm/giây; gửi lẻ từng điểm sẽ chạm trần gần như ngay lập tức).
+// Gom gaze sample rồi gửi theo batch — tránh vượt rate limit 120 req/phút của backend
+// (tracker phát theo GAZE_FPS, tối đa 60 điểm/giây; gửi lẻ từng điểm sẽ chạm trần ngay).
+// Ở 60 FPS, 40 sample/batch ≈ 90 req/phút nên vẫn dưới ngưỡng.
 const GAZE_FLUSH_MS = 1500;
 const GAZE_MAX_BATCH = 40;
 
@@ -72,6 +74,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const { data: course, isLoading: courseLoading, isError: courseError, refetch } =
     useCourseOutline(courseId);
   const { data: enrollments = [] } = useMyEnrollments();
+  // FPS ghi gaze lấy runtime từ backend; lỗi/đang tải thì dùng fallback 15.
+  const { gazeFps } = useRuntimeConfig();
 
   const [activeLessonId, setActiveLessonId] = useState(requestedLessonId ?? "");
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -596,6 +600,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     ),
     calibrated: gazeCalibrated,
     allowSimulation: false,
+    fps: gazeFps,
     getContext: () => ({
       // Chỉ gắn presentation/layout khi snapshot AOI đã sẵn sàng; frame gửi
       // trong lúc đo layout sẽ có presentationId=null và bị ingest bỏ.

@@ -291,7 +291,7 @@ Công thức:
 attention = on_slide_gaze_count / gaze_count * 100
 ```
 
-`aoi_stats` là dữ liệu dẫn xuất, được worker `gaze-metrics-v6` tính lại cùng
+`aoi_stats` là dữ liệu dẫn xuất, được worker `gaze-metrics-v7` tính lại cùng
 `gaze_samples.aoi_label`. Không thêm bảng; dashboard đọc một hàng mỗi lượt xem.
 
 Mỗi lần vào slide/quiz tạo một `content_view` mới với UUID do client gửi
@@ -429,7 +429,7 @@ ngoài slide / quiz / layout thiếu
 
 toàn bộ samples của content_view
   → gaze_count, on_slide_gaze_count
-  → tracked_duration_ms (gap <= 250ms)
+  → tracked_duration_ms (gap <= max(250, 3000/FPS))
   → fixation_count
   → heatmap_grid 24×24
 ```

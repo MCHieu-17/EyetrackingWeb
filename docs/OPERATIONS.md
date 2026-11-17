@@ -99,6 +99,12 @@ Nếu cần rollback code cũ, phải restore backup database. Sau migration, ch
 `docker compose exec backend python -m app.reanalyze` để tính lại nhãn AOI,
 `heatmap_grid` và `aoi_stats`.
 
+`GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
+backend trả lại qua `GET /api/config`, gaze throttle `1000/FPS × 0.95`, worker
+suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị cần restart backend + gaze
+và worker phân tích (`docker compose up -d backend worker gaze`); frontend đọc
+runtime nên không rebuild.
+
 ## Bảo trì định kỳ
 
 `scripts/maintenance.sh` dọn dữ liệu hết hạn (auth session, learning session
