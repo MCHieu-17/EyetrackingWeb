@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -124,6 +124,13 @@ async def create_learning_session(
                 "message": "Cần hiệu chỉnh điểm nhìn trước khi học",
             },
         )
+
+    # Serialize toàn bộ create/continue cho cùng (enrollment, lesson), kể cả
+    # bước chọn/tạo ca. Hai tab hoặc StrictMode có thể gọi đồng thời.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"learning-session:{enrollment.id}:{lesson.id}"},
+    )
 
     # Mỗi lần vào khóa là một ca; các lesson session trong ca dùng chung
     # course_visit_id. Client cũ không gửi courseVisitId -> tự tìm/tạo ca

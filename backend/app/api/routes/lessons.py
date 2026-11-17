@@ -76,8 +76,9 @@ async def delete_lesson(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await get_managed_lesson(db, lesson_id, user)
-    await content.delete_lesson(db, course, user, lesson.id)
+    removed = await content.delete_lesson(db, course, user, lesson.id)
     await db.commit()
+    await content.delete_media_objects(removed)
     return {"ok": True}
 
 

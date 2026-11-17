@@ -31,7 +31,7 @@ export class ApiError extends Error {
 }
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const MAX_UPLOAD_LABEL = `${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`;
+const MAX_UPLOAD_LABEL = `${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`;
 /** Số trang PDF tối đa backend chấp nhận (settings.max_slide_pages). */
 export const MAX_SLIDE_PAGES = 150;
 
@@ -207,8 +207,14 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       timeoutMs > 0 &&
       typeof AbortSignal !== "undefined" &&
       typeof AbortSignal.timeout === "function";
+    const timeoutSignal = canTimeout
+      ? AbortSignal.timeout(timeoutMs)
+      : undefined;
+    // Caller signal không được vô hiệu hoá timeout; gộp cả hai khi có thể.
     const requestSignal =
-      signal ?? (canTimeout ? AbortSignal.timeout(timeoutMs) : undefined);
+      signal && timeoutSignal && typeof AbortSignal.any === "function"
+        ? AbortSignal.any([signal, timeoutSignal])
+        : (signal ?? timeoutSignal);
     return fetch(buildUrl(path, params), {
       method,
       signal: requestSignal,

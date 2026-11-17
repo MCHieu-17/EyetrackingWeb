@@ -44,10 +44,14 @@ export const queryKeys = {
       ["visualization", "visit-replay", visitId] as const,
     replaySamples: (visitId: string, contentViewId: string) =>
       ["visualization", "replay-samples", visitId, contentViewId] as const,
+    replaySamplesRoot: (visitId: string) =>
+      ["visualization", "replay-samples", visitId] as const,
     aoiSummary: (courseId: string, query: unknown) =>
       ["visualization", "aoi-summary", courseId, query] as const,
     aoiHeatmap: (courseId: string, query: unknown) =>
       ["visualization", "aoi-heatmap", courseId, query] as const,
+    aoiHeatmapRoot: (courseId: string) =>
+      ["visualization", "aoi-heatmap", courseId] as const,
   },
   student: {
     enrollments: ["student", "enrollments"] as const,

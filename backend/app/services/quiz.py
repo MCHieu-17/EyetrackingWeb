@@ -6,7 +6,7 @@ Route giữ phần HTTP, authorization và persistence; module này xử lý sna
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.auth import User
 from app.models.course import Course, Lesson
@@ -15,12 +15,20 @@ from app.schemas.quiz import QuizAssignmentOut, QuizAttemptOut
 
 
 def parse_datetime(value) -> datetime | None:
-    if value is None or isinstance(value, datetime):
-        return value
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
+    if value is None:
         return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    # Dữ liệu cũ/client tay có thể thiếu timezone; quy ước là UTC để mọi phép
+    # so sánh với expires_at/now (đều aware) không ném TypeError.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def public_question(question: dict) -> dict:

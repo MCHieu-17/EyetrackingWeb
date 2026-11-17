@@ -108,6 +108,19 @@ def embedding_hf_repo() -> str:
     return _required("EMBEDDING_HF_REPO")
 
 
+def embedding_model_version() -> str:
+    """Nhãn model embedding ghi vào metadata, suy ra từ cấu hình.
+
+    Không hardcode tên model của một nhà cung cấp; `EMBEDDING_MODEL_VERSION`
+    cho phép override khi repo/weights không trùng tên model.
+    """
+    return (
+        _env("EMBEDDING_MODEL_VERSION")
+        or _env("EMBEDDING_HF_REPO")
+        or embedding_name()
+    )
+
+
 def llm_base_url() -> str:
     """Base URL OpenAI-compatible của endpoint LLM/VLM."""
     return _env("LLM_BASE_URL")

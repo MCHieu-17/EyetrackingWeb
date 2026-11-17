@@ -14,6 +14,8 @@ const STORE = "batches";
 const GENERATION_KEY = "eyelearning-gaze-generation";
 const GAZE_QUEUE_MAX_AGE_MS = 10 * 60 * 1000;
 const GAZE_QUEUE_MAX_BYTES = 10 * 1024 * 1024;
+const PRUNE_INTERVAL_MS = 30_000;
+const PRUNE_EVERY_ENQUEUES = 20;
 
 export function gazeBatchQueueId(sessionId: string, batchId: string): string {
   return `${sessionId}:${batchId}`;
@@ -117,7 +119,7 @@ export async function enqueueGazeBatch(
   store.put(item);
   await txDone(tx);
   db.close();
-  await pruneQueue();
+  await maybePruneQueue();
 }
 
 async function clearGazeQueue(
@@ -223,7 +225,25 @@ export async function updateGazeBatchGeneration(
   db.close();
 }
 
-async function pruneQueue(): Promise<void> {
+let lastPruneAt = 0;
+let enqueuesSincePrune = 0;
+
+/**
+ * Dọn queue theo nhịp, không quét toàn bộ IndexedDB sau mỗi batch (15 FPS có
+ * thể enqueue mỗi ~1,5 giây). Vẫn đảm bảo batch quá hạn/ quá dung lượng được
+ * dọn sớm sau tối đa 30 giây hoặc 20 lần enqueue.
+ */
+async function maybePruneQueue(): Promise<void> {
+  enqueuesSincePrune += 1;
+  const now = Date.now();
+  if (
+    enqueuesSincePrune < PRUNE_EVERY_ENQUEUES &&
+    now - lastPruneAt < PRUNE_INTERVAL_MS
+  ) {
+    return;
+  }
+  lastPruneAt = now;
+  enqueuesSincePrune = 0;
   const items = await pendingGazeBatches();
   const evicted = selectGazeQueueEvictions(items);
   for (const item of evicted) {

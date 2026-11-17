@@ -6,11 +6,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
-from app.models.course import Course, CourseModule
+from app.models.course import Course, CourseModule, Lesson
 from app.services.content.common import (
     _not_found,
     _now,
     course_of_module,
+    delete_unreferenced_assets,
     touch_course,
 )
 
@@ -49,10 +50,22 @@ async def update_module(
 
 async def delete_module(
     db: AsyncSession, course: Course, user: User, module_id: str
-) -> None:
+) -> list[tuple[str, str]]:
+    """Xóa chương và trả về media asset không còn tham chiếu để route dọn file."""
     module = await db.get(CourseModule, module_id)
     if module is None or module.course_id != course.id:
         raise _not_found("Không tìm thấy chương")
+    asset_ids = list(
+        (
+            await db.execute(
+                select(Lesson.pdf_asset_id).where(
+                    Lesson.module_id == module.id,
+                    Lesson.pdf_asset_id.is_not(None),
+                )
+            )
+        ).scalars()
+    )
     await db.delete(module)
     touch_course(course)
     await db.flush()
+    return await delete_unreferenced_assets(db, asset_ids)

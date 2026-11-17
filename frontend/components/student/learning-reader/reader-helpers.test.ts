@@ -5,24 +5,9 @@ import {
   getNextSlideIndex,
   getPreviousSlideIndex,
   getReaderLayoutKey,
-  hashPayload,
   isGazeDotVisible,
   resolveActiveLessonId,
 } from "./reader-helpers";
-
-describe("hashPayload", () => {
-  it("is deterministic for the same payload", () => {
-    expect(hashPayload({ a: 1, b: [2, 3] })).toBe(hashPayload({ a: 1, b: [2, 3] }));
-  });
-
-  it("changes when the payload changes", () => {
-    expect(hashPayload({ a: 1 })).not.toBe(hashPayload({ a: 2 }));
-  });
-
-  it("returns a 64-character hex digest", () => {
-    expect(hashPayload([1, 2, 3])).toMatch(/^[0-9a-f]{64}$/);
-  });
-});
 
 describe("resolveActiveLessonId", () => {
   const lessons = [{ id: "a" }, { id: "b" }, { id: "c" }];

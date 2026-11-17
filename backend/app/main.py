@@ -182,6 +182,7 @@ app.include_router(runtime_config.router)
 
 
 @app.get("/health", tags=["system"])
+@app.get("/api/health", tags=["system"])
 async def health():
     return {
         "status": "ok",

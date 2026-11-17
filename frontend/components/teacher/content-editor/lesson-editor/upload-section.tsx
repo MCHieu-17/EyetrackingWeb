@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import type { SlideAdmin } from "@/lib/types/domain";
-import { SLIDE_LIMITS_HINT } from "../editor-helpers";
 import { UploadAlerts } from "./upload-alerts";
 import type { UploadState } from "./upload-helpers";
 
 /** Khối tải tài liệu: nút chọn file, vùng kéo thả và các cảnh báo index. */
 export function UploadSection({
+  limitsHint,
   canManage,
   uploading,
   hasSlides,
@@ -30,6 +30,7 @@ export function UploadSection({
   onChooseFile,
   onRetryIndex,
 }: {
+  limitsHint: string;
   canManage: boolean;
   uploading: boolean;
   hasSlides: boolean;
@@ -60,7 +61,7 @@ export function UploadSection({
               ? `Đang dùng ${slideCount} trang slide. Tải tài liệu mới để tạo lại toàn bộ.`
               : "Tải PDF/PPTX/PPT/ODP lên để tạo slide cho bài giảng này."}
           </p>
-          <p className="mt-1 text-xs leading-5 text-black/55">{SLIDE_LIMITS_HINT}</p>
+          <p className="mt-1 text-xs leading-5 text-black/55">{limitsHint}</p>
         </div>
         {canManage && (
           <Button
@@ -120,7 +121,7 @@ export function UploadSection({
                   ? "Kéo tài liệu mới vào đây hoặc bấm để chọn"
                   : "Kéo PDF/PPTX/PPT/ODP vào đây hoặc bấm để chọn"}
               </span>
-              <span className="text-xs text-black/55">{SLIDE_LIMITS_HINT}</span>
+              <span className="text-xs text-black/55">{limitsHint}</span>
             </>
           )}
         </button>

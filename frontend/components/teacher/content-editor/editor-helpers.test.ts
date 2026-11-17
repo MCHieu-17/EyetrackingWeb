@@ -10,9 +10,11 @@ import {
   insertQuestionAt,
   moduleOfLesson,
   moveQuestionAt,
+  patchQuizBaseline,
   quizFormFromAssignment,
   removeQuestionAt,
   serializeQuizForm,
+  slideLimitsHint,
   toLocalInput,
   validateSlideFile,
   type QuizForm,
@@ -30,7 +32,6 @@ function makeLesson(overrides: Partial<LessonNode> = {}): LessonNode {
     title: "Bài 1",
     kind: "lesson",
     slides: 3,
-    attention: null,
     ...overrides,
   };
 }
@@ -197,6 +198,22 @@ describe("toLocalInput", () => {
   });
 });
 
+describe("slide limits runtime", () => {
+  it("dùng giới hạn backend trước fallback hardcode", () => {
+    const file = { name: "slide.pdf", size: MAX_UPLOAD_BYTES + 1 };
+    expect(validateSlideFile(file)).toContain("vượt quá");
+    expect(
+      validateSlideFile(file, { maxUploadBytes: MAX_UPLOAD_BYTES * 2 }),
+    ).toBeNull();
+    expect(
+      slideLimitsHint({ maxUploadBytes: 10 * 1024 * 1024, maxSlidePages: 20 }),
+    ).toContain("tối đa 10MB");
+    expect(
+      slideLimitsHint({ maxUploadBytes: 10 * 1024 * 1024, maxSlidePages: 20 }),
+    ).toContain("tối đa 20 trang");
+  });
+});
+
 describe("serializeQuizForm", () => {
   it("ổn định với cùng nội dung", () => {
     const form: QuizForm = {
@@ -209,6 +226,33 @@ describe("serializeQuizForm", () => {
     };
 
     expect(serializeQuizForm(form)).toBe(serializeQuizForm({ ...form }));
+  });
+});
+
+describe("patchQuizBaseline", () => {
+  it("chỉ đổi trường được lưu, giữ nguyên phần baseline cũ", () => {
+    const baseline: QuizForm = {
+      instructions: "Hướng dẫn cũ",
+      durationMinutes: 30,
+      dueAt: "",
+      allowRetry: false,
+      allowChatbot: true,
+      questions: [makeQuestion()],
+    };
+    const current: QuizForm = {
+      ...baseline,
+      instructions: "Hướng dẫn mới chưa lưu",
+      allowRetry: true,
+    };
+
+    const patched = patchQuizBaseline(
+      serializeQuizForm(baseline),
+      { allowRetry: current.allowRetry },
+    );
+
+    const parsed = JSON.parse(patched) as QuizForm;
+    expect(parsed.allowRetry).toBe(true);
+    expect(parsed.instructions).toBe("Hướng dẫn cũ");
   });
 });
 

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -21,6 +22,27 @@ def _session_payload(enrollment_id: str, lesson_id: str, visit_id: str | None):
         "devicePixelRatio": 1.0,
         "trackingConsent": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_course_visit_creation_is_idempotent_under_concurrency(client):
+    teacher_email = f"visit-t-{uuid.uuid4().hex[:8]}@example.com"
+    student_email = f"visit-s-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=teacher_email, role="teacher")
+    student_id = await create_user(email=student_email)
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    token = await login(client, student_email)
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"enrollmentId": ids["enrollment_id"], "visitKey": "race-tab"}
+
+    first, second = await asyncio.gather(
+        client.post("/api/course-visits", headers=headers, json=payload),
+        client.post("/api/course-visits", headers=headers, json=payload),
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert first.json()["id"] == second.json()["id"]
 
 
 @pytest.mark.asyncio

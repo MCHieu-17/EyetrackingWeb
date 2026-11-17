@@ -26,7 +26,6 @@ READY = "ready"
 FAILED = "failed"
 NONE = "none"
 PIPELINE_VERSION = "rag-v2"
-MODEL_VERSION = "qwen3-embedding-0.6b"
 
 _ingest_client: httpx.AsyncClient | None = None
 _ingest_locks: dict[str, asyncio.Lock] = {}
@@ -79,7 +78,6 @@ async def _mark_many(
             index_status=status,
             index_error=error,
             pipeline_version=PIPELINE_VERSION,
-            model_version=MODEL_VERSION,
             updated_at=datetime.now(timezone.utc),
         )
     )

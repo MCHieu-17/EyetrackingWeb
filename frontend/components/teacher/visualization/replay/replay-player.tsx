@@ -136,6 +136,13 @@ export function ReplayPlayer({
         void queryClient.invalidateQueries({
           queryKey: queryKeys.visualization.visitReplay(replay.visit.visitId),
         });
+        // Sample chứa aoiLabel/slideX/Y đã được worker tính lại; không xóa
+        // cache này thì chấm gaze vẫn mang nhãn AOI cũ.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.visualization.replaySamplesRoot(
+            replay.visit.visitId,
+          ),
+        });
       }, 4000);
     } catch {
       // Lỗi mạng được phản ánh khi người dùng làm mới ca học.

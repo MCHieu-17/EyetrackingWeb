@@ -58,7 +58,6 @@ x-backend-env: &backend-env
   OTP_STUDENT_ID_PATTERN: '${OTP_STUDENT_ID_PATTERN:-^\d\d\d\d\d\d\d\d$}'
   OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
   OTP_DEV_ECHO: ${OTP_DEV_ECHO:-false}
-  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
   MEDIA_DIR: /app/media
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
   MAX_PDF_BYTES: ${MAX_PDF_BYTES:-104857600}
@@ -79,6 +78,8 @@ x-backend-env: &backend-env
   CONTENT_VIEW_MIN_DWELL_MS: ${CONTENT_VIEW_MIN_DWELL_MS:-1000}
   # Frame/giây gaze: backend trả qua GET /api/config, gaze throttle theo FPS.
   GAZE_FPS: ${GAZE_FPS:-15}
+  # Chỉ dùng để ghi version calibration; không load weights ở backend.
+  UNIGAZE_MODEL: ${UNIGAZE_MODEL:-}
   # Trang Truy vấn CSDL cho admin (chỉ đọc). Để trống → fallback DATABASE_URL
   # ở dev; production nên trỏ tới role admin_reader.
   ADMIN_DB_URL: ${ADMIN_DATABASE_URL_DOCKER:-}

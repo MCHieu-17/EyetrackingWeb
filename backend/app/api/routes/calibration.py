@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.calibration import GazeCalibration
@@ -19,7 +20,17 @@ from app.services.access import current_calibration
 
 router = APIRouter(prefix="/api/calibrations", tags=["calibrations"])
 
-MAPPING_MODEL_VERSION = "ubj-linreg-v2-b16"
+def _mapping_model_version() -> str:
+    """Nhãn thuật toán + backbone, suy ra từ UNIGAZE_MODEL khi được cấu hình."""
+    model = settings.unigaze_model.strip()
+    if not model:
+        # Tương thích dữ liệu calibration đã lưu trước khi có UNIGAZE_MODEL.
+        return "ubj-linreg-v2-b16"
+    suffix = model.removeprefix("unigaze_").removesuffix("_joint")
+    return f"ubj-linreg-v2-{suffix}"[:64]
+
+
+MAPPING_MODEL_VERSION = _mapping_model_version()
 MAX_MODEL_UBJ_BYTES = 256 * 1024
 
 

@@ -56,7 +56,6 @@ import {
   getNextSlideIndex,
   getPreviousSlideIndex,
   getReaderLayoutKey,
-  hashPayload,
   resolveActiveLessonId,
   type GazeDotPosition,
 } from "./reader-helpers";
@@ -129,7 +128,6 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const presentationEntryRef = useRef<PresentationEntry | null>(null);
   const presentationSequenceRef = useRef(0);
   const layoutGenerationRef = useRef(0);
-  const batchNoRef = useRef<Record<string, number>>({});
 
   const allItems = useMemo(
     () => course?.modules.flatMap((module) => module.lessons) ?? [],
@@ -227,17 +225,13 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       gazeBufferRef.current = [];
       gazeBufferLessonRef.current = null;
       gazeBatchOwnerRef.current = null;
-      const batchNo = batchNoRef.current[sid] ?? 0;
-      batchNoRef.current[sid] = batchNo + 1;
       const sequences = buf.map((sample) => sample.sequence);
       const input: GazeBatchInput = {
-        batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}-${batchNo}`,
-        batchNo,
+        batchId: globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()}`,
         presentationId: presentation,
         layoutId,
         sequenceStart: Math.min(...sequences),
         sequenceEnd: Math.max(...sequences),
-        payloadHash: hashPayload(buf),
         samples: buf,
       };
       return queueGazeBatch(sid, input, keepalive).catch(() => {});
@@ -314,7 +308,13 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     })
       .then((session) => {
         if (cancelled) {
-          endLearningSession(session.id, "completed").catch(() => {});
+          // StrictMode/route transition có thể mount lại và nhận đúng session
+          // này từ server; đợi một nhịp rồi chỉ đóng nếu không ai adopt.
+          window.setTimeout(() => {
+            if (sessionsRef.current[lessonId] !== session.id) {
+              endLearningSession(session.id, "completed").catch(() => {});
+            }
+          }, 2000);
           return;
         }
         sessionsRef.current[lessonId] = session.id;
@@ -653,8 +653,6 @@ export function ReaderContent({ courseId }: { courseId: string }) {
         if (faceDetected && (frame.x === null || frame.y === null)) return;
         enqueueGaze({
           sequence: frame.sequence,
-          captureMonotonicNs:
-            frame.captureMonotonicNs ?? Math.round(performance.now() * 1e6),
           eventTime: frame.eventTime,
           // Toạ độ đã quy đổi sang viewport hiện tại; đây là nguồn duy nhất
           // cho mapping AOI.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -28,14 +28,9 @@ async def delete_expired_auth_sessions(
     db: AsyncSession, *, now: datetime | None = None
 ) -> int:
     cutoff = _utc_now(now)
-    condition = or_(
-        AuthSession.expires_at < cutoff,
-        and_(
-            AuthSession.revoked_at.is_not(None),
-            AuthSession.expires_at < cutoff,
-        ),
+    result = await db.execute(
+        delete(AuthSession).where(AuthSession.expires_at < cutoff)
     )
-    result = await db.execute(delete(AuthSession).where(condition))
     return result.rowcount or 0
 
 

@@ -206,6 +206,7 @@ export function useGazeTracker({
       video: HTMLVideoElement,
       url: string,
       sequenceState: { value: number },
+      onOpen?: () => void,
     ): Promise<"retry" | "abort"> =>
       new Promise<"retry" | "abort">((resolve) => {
         if (disposed) {
@@ -331,6 +332,9 @@ export function useGazeTracker({
             }
             return;
           }
+          // Một kết nối thành công phải reset ngân sách reconnect; nếu không,
+          // vài lần rớt mạng rải rác trong phiên dài sẽ làm tracker bỏ cuộc.
+          onOpen?.();
           scheduleSend();
         };
 
@@ -434,6 +438,9 @@ export function useGazeTracker({
             video,
             gazeStreamUrl(sessionId),
             sequenceState,
+            () => {
+              attempts = 0;
+            },
           );
           if (result === "abort") return;
           attempts += 1;

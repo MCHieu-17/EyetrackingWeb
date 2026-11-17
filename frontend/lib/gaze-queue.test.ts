@@ -9,11 +9,9 @@ import {
 function makeBatch(presentationId: string): GazeBatchInput {
   return {
     batchId: `batch-${presentationId}`,
-    batchNo: 0,
     presentationId,
     sequenceStart: 0,
     sequenceEnd: 0,
-    payloadHash: "hash",
     samples: [],
   };
 }

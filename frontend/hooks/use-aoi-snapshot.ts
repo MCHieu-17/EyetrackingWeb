@@ -260,8 +260,13 @@ export function useAoiSnapshot({
       }
     };
 
+    // Chỉ theo dõi khung reader; observe cả body khiến mọi animation/chat bên
+    // ngoài cũng kích hoạt đo lại toàn bộ AOI.
+    const observeRoot =
+      document.querySelector<HTMLElement>('[data-aoi="reader-root"]') ??
+      document.body;
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, {
+    observer.observe(observeRoot, {
       subtree: true,
       childList: true,
       attributes: true,

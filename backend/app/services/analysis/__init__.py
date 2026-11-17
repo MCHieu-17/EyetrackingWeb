@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,7 +14,7 @@ from app.db.session import SessionLocal
 from app.models.auth import User
 from app.models.background_job import BackgroundJob
 from app.models.course import Course, CourseModule, Lesson
-from app.models.gaze import ContentView, LearningSession
+from app.models.gaze import ContentView, GazeSample, LearningSession
 from app.services import metrics
 from app.services.access import can_access_course
 from app.services.analysis.export import export_lines as export_lines
@@ -158,11 +158,7 @@ async def rebuild_course(
     *,
     course_id: str,
     lesson_id: str | None = None,
-    from_time: datetime | None = None,
-    to_time: datetime | None = None,
-    algorithm_version: str | None = None,
 ) -> tuple[int, int, int]:
-    del from_time, to_time, algorithm_version
     course = await db.get(Course, course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
@@ -214,17 +210,23 @@ async def enqueue_lesson_views(db: AsyncSession, lesson_id: str) -> None:
 
 
 async def mark_ui_changed(db: AsyncSession) -> int:
+    # Chỉ view có gaze thô mới cần tính lại nhãn UI; view rỗng không tạo
+    # thêm hàng loạt job phân tích vô ích.
+    has_samples = exists().where(GazeSample.content_view_id == ContentView.id)
     lesson_ids = list(
         (
             await db.execute(
                 select(LearningSession.lesson_id)
                 .join(ContentView, ContentView.session_id == LearningSession.id)
+                .where(has_samples)
                 .distinct()
             )
         ).scalars()
     )
     await db.execute(
-        ContentView.__table__.update().values(analysis_status="pending")
+        ContentView.__table__.update()
+        .where(has_samples)
+        .values(analysis_status="pending")
     )
     for lesson_id in lesson_ids:
         await enqueue_analysis_lesson(db, lesson_id)

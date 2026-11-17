@@ -19,7 +19,7 @@ async function currentGeneration(
 ): Promise<string | null> {
   if (generation) return generation;
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await fetch(`${API_BASE_URL}/api/health`, {
       credentials: "include",
       cache: "no-store",
     });

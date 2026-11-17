@@ -100,14 +100,8 @@ async def list_sessions(
             attempt_status=attempt.status if attempt else None,
         )
 
-    counts = (
-        select(ChatMessage.session_id, func.count(ChatMessage.id).label("n"))
-        .group_by(ChatMessage.session_id)
-        .subquery()
-    )
     stmt = (
-        select(ChatSession, func.coalesce(counts.c.n, 0))
-        .outerjoin(counts, counts.c.session_id == ChatSession.id)
+        select(ChatSession)
         .where(
             ChatSession.student_id == user.id,
             ChatSession.course_id == course.id,
@@ -119,10 +113,25 @@ async def list_sessions(
         stmt = stmt.where(ChatSession.lesson_id == str(assignment_id))
     if attempt_id is not None:
         stmt = stmt.where(ChatSession.quiz_attempt_id == str(attempt_id))
-    rows = (await db.execute(stmt.limit(limit).offset(offset))).all()
+    sessions = (
+        await db.execute(stmt.limit(limit).offset(offset))
+    ).scalars().all()
+    if not sessions:
+        return []
+
+    # Chỉ đếm tin nhắn của các session trong page, không aggregate toàn bảng.
+    counts = dict(
+        (
+            await db.execute(
+                select(ChatMessage.session_id, func.count(ChatMessage.id))
+                .where(ChatMessage.session_id.in_([session.id for session in sessions]))
+                .group_by(ChatMessage.session_id)
+            )
+        ).all()
+    )
     out: list[ChatSessionOut] = []
-    for session, count in rows:
-        item = _session_out(session, int(count))
+    for session in sessions:
+        item = _session_out(session, int(counts.get(session.id, 0)))
         item.can_continue = current_key is None or session.context_key == current_key
         out.append(item)
     return out

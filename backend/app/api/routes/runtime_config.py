@@ -11,4 +11,8 @@ router = APIRouter(prefix="/api", tags=["config"])
 async def get_runtime_config(response: Response) -> dict[str, int]:
     # Không cache: đổi GAZE_FPS + restart backend phải có hiệu lực ngay.
     response.headers["Cache-Control"] = "no-store"
-    return {"gazeFps": settings.gaze_fps}
+    return {
+        "gazeFps": settings.gaze_fps,
+        "maxUploadBytes": settings.max_upload_bytes,
+        "maxSlidePages": settings.max_slide_pages,
+    }

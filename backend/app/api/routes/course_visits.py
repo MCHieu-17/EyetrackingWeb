@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -99,8 +100,25 @@ async def get_or_create_visit(
         started_at=_now(),
         last_seen_at=_now(),
     )
-    db.add(visit)
-    await db.flush()
+    try:
+        # Savepoint để race trên unique index không phá transaction ngoài.
+        async with db.begin_nested():
+            db.add(visit)
+            await db.flush()
+    except IntegrityError:
+        if not visit_key:
+            raise
+        existing = (
+            await db.execute(
+                select(CourseVisit).where(
+                    CourseVisit.enrollment_id == enrollment.id,
+                    CourseVisit.visit_key == visit_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+        raise
     return visit
 
 

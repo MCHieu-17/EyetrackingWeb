@@ -115,19 +115,10 @@ export function saveUiAois(
 export function rebuildAoiHits(input: {
   courseId: string;
   lessonId?: string;
-  fromTime?: string;
-  toTime?: string;
-  algorithmVersion?: string;
 }): Promise<{ ok: boolean; runs: number; completed: number; failed: number }> {
   return apiFetch("/api/aoi/rebuild", {
     method: "POST",
-    body: {
-      courseId: input.courseId,
-      lessonId: input.lessonId,
-      fromTime: input.fromTime,
-      toTime: input.toTime,
-      algorithmVersion: input.algorithmVersion,
-    },
+    body: { courseId: input.courseId, lessonId: input.lessonId },
     timeoutMs: 120_000,
   });
 }

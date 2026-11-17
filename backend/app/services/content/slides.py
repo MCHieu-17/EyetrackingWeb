@@ -22,6 +22,7 @@ from app.services.content.common import (
     _not_found,
     _now,
     course_of_lesson,
+    delete_unreferenced_assets,
     touch_course,
     touch_lesson,
 )
@@ -93,9 +94,12 @@ async def create_slide_import(
         )
 
     try:
-        fmt = slide_import.detect_format(filename, mime, data)
+        # pypdf/zipfile là CPU-bound; không chạy trên event loop của API.
+        fmt = await asyncio.to_thread(
+            slide_import.detect_format, filename, mime, data
+        )
         if fmt == "pdf":
-            slide_import.validate_pdf(data)
+            await asyncio.to_thread(slide_import.validate_pdf, data)
     except slide_import.SlideImportError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -186,26 +190,6 @@ async def get_slide_import_job(
     return job
 
 
-async def _delete_unreferenced_asset(
-    db: AsyncSession, asset_id: str | None
-) -> tuple[str, str] | None:
-    if not asset_id:
-        return None
-    used = (
-        await db.execute(
-            select(Lesson.id).where(Lesson.pdf_asset_id == asset_id).limit(1)
-        )
-    ).first()
-    if used is not None:
-        return None
-    asset = await db.get(MediaAsset, asset_id)
-    if asset is None:
-        return None
-    row = (asset.object_key, asset.storage_backend)
-    await db.delete(asset)
-    return row
-
-
 async def process_slide_import(job_id: str) -> None:
     """Worker: convert staging file -> PDF and replace slides in place."""
     async with SessionLocal() as db:
@@ -276,9 +260,9 @@ async def process_slide_import(job_id: str) -> None:
             lesson.pdf_asset_id = pdf_asset.id
             lesson.updated_at = _now()
             if old_asset_id and old_asset_id != pdf_asset.id:
-                removed = await _delete_unreferenced_asset(db, old_asset_id)
-                if removed:
-                    removed_keys.append(removed)
+                removed_keys.extend(
+                    await delete_unreferenced_assets(db, [old_asset_id])
+                )
             touch_course(course)
 
             job.status = "ready"
@@ -318,7 +302,7 @@ async def process_slide_import(job_id: str) -> None:
 
     for key, backend in removed_keys:
         try:
-            await asyncio.to_thread(media_storage.delete_key, key)
+            await asyncio.to_thread(media_storage.delete_key, key, backend)
         except Exception:  # noqa: BLE001
             pass
 

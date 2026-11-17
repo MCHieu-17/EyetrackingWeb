@@ -50,7 +50,7 @@ async def test_teacher_course_dashboard_queries(client):
     assert any(item["id"] == ids["course_id"] for item in courses.json())
 
     tree = await client.get(
-        f"/teacher/courses/{ids['course_id']}/draft", headers=headers
+        f"/teacher/courses/{ids['course_id']}", headers=headers
     )
     assert tree.status_code == 200, tree.text
     assert len(tree.json()) == 1

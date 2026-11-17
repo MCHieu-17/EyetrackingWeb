@@ -217,6 +217,7 @@ async def test_summary_scopes_and_breakdowns(client):
     assert payload["totals"]["unmappedDurationMs"] == 0
     assert payload["meta"]["includeShort"] is True
     assert payload["meta"]["minDwellMs"] == 1000
+    assert payload["meta"]["maxGapMs"] == 250
     assert payload["meta"]["shortViewCount"] == 0
     by_label = {item["label"]: item for item in payload["byAoi"]}
     assert by_label["SLIDE_AOI_THANHCHAT"]["name"] == "Thân bài"
@@ -356,6 +357,56 @@ async def test_heatmap_excludes_stale_analysis_version(client):
     assert payload["onSlideSampleCount"] == 2
     assert payload["max"] == 2
     assert payload["grid"][12][12] == 2
+
+
+@pytest.mark.asyncio
+async def test_heatmap_ignores_global_surface_and_lesson_filter(client):
+    data = await _seed_summary_data()
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = await client.post(
+        f"/teacher/courses/{data['course_id']}/analytics/heatmap",
+        headers=headers,
+        json={
+            "studentIds": [data["student1_id"]],
+            "slideId": data["slide_id"],
+            "surface": "quiz",
+            "lessonIds": ["00000000-0000-0000-0000-000000000000"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    # Heatmap một slide không được bị filter surface/bài toàn cục vô hiệu hoá.
+    assert payload["onSlideSampleCount"] == 4
+    assert payload["max"] == 4
+    assert payload["analyzedViewCount"] == 2
+
+
+@pytest.mark.asyncio
+async def test_heatmap_ready_but_incomplete_grid_is_stale(client):
+    data = await _seed_summary_data()
+    view_id = data["visits1"][0]["view_id"]
+    async with SessionLocal() as db:
+        view = await db.get(ContentView, view_id)
+        assert view is not None
+        view.analysis_status = "ready"
+        view.analysis_version = metrics.ANALYSIS_VERSION
+        view.heatmap_grid = []
+        await db.commit()
+
+    token = await login(client, data["teacher_email"])
+    headers = {"Authorization": f"Bearer {token}"}
+    response = await client.post(
+        f"/teacher/courses/{data['course_id']}/analytics/heatmap",
+        headers=headers,
+        json={"studentIds": [data["student1_id"]], "slideId": data["slide_id"]},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["analyzedViewCount"] == 1
+    assert payload["staleViewCount"] == 1
+    assert payload["onSlideSampleCount"] == 2
 
 
 @pytest.mark.asyncio

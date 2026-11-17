@@ -93,9 +93,6 @@ async def rebuild_aoi(
         user,
         course_id=body.course_id,
         lesson_id=body.lesson_id,
-        from_time=body.from_time,
-        to_time=body.to_time,
-        algorithm_version=body.algorithm_version,
     )
     await db.commit()
     return AoiRebuildOut(ok=True, runs=runs, completed=completed, failed=failed)

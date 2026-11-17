@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { ApiError, parseApiError, readCsrfToken } from "./client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError, apiFetch, parseApiError, readCsrfToken } from "./client";
 
 function clearCsrfCookie() {
   document.cookie = "csrf_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
@@ -65,6 +65,39 @@ describe("parseApiError", () => {
       new Response("{}", { status: 429, headers: { "Retry-After": "0" } }),
     );
     expect(zero.retryAfter).toBeUndefined();
+  });
+});
+
+describe("apiFetch timeout", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("vẫn áp timeout khi caller truyền AbortSignal", async () => {
+    if (typeof AbortSignal.any !== "function") return;
+    let captured: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        captured = init?.signal ?? undefined;
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    const controller = new AbortController();
+
+    await apiFetch<{ ok: boolean }>("/api/test", {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+
+    expect(captured).toBeDefined();
+    expect(captured).not.toBe(controller.signal);
+    expect(captured?.aborted).toBe(false);
+    controller.abort();
+    expect(captured?.aborted).toBe(true);
   });
 });
 

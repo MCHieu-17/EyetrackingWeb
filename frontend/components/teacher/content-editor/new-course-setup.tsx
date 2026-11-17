@@ -55,7 +55,6 @@ export function NewCourseSetup({
       const created = await createCourse({
         title: cleanTitle,
         description: description.trim() || undefined,
-        status: "draft",
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.teacher.coursesRoot });
       onCreated(created.id);

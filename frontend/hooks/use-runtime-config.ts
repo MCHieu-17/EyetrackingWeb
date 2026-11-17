@@ -1,7 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_GAZE_FPS, fetchRuntimeConfig } from "@/lib/api/config";
+import {
+  DEFAULT_GAZE_FPS,
+  DEFAULT_MAX_SLIDE_PAGES,
+  DEFAULT_MAX_UPLOAD_BYTES,
+  fetchRuntimeConfig,
+  type RuntimeConfig,
+} from "@/lib/api/config";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -11,12 +17,16 @@ import { queryKeys } from "@/lib/query-keys";
  * tracker khởi động ngay. Config về muộn chỉ cập nhật ref của tracker, không
  * làm WebSocket reconnect giữa phiên.
  */
-export function useRuntimeConfig(): { gazeFps: number } {
+export function useRuntimeConfig(): RuntimeConfig {
   const { data } = useQuery({
     queryKey: queryKeys.config.runtime,
     queryFn: fetchRuntimeConfig,
     staleTime: Infinity,
     retry: 1,
   });
-  return { gazeFps: data?.gazeFps ?? DEFAULT_GAZE_FPS };
+  return {
+    gazeFps: data?.gazeFps ?? DEFAULT_GAZE_FPS,
+    maxUploadBytes: data?.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES,
+    maxSlidePages: data?.maxSlidePages ?? DEFAULT_MAX_SLIDE_PAGES,
+  };
 }

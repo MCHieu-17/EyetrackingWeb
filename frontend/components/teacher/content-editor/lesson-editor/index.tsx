@@ -3,10 +3,15 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import { useLessonSlidesAdmin } from "@/hooks/use-teacher";
 import { reindexLessonSlides, uploadLessonSlides } from "@/lib/api/teacher";
 import type { LessonNode } from "@/lib/types/domain";
-import { ALLOWED_SLIDE_EXTENSIONS, validateSlideFile } from "../editor-helpers";
+import {
+  ALLOWED_SLIDE_EXTENSIONS,
+  slideLimitsHint,
+  validateSlideFile,
+} from "../editor-helpers";
 import { SlideCheckSection } from "./slide-check-section";
 import { UploadSection } from "./upload-section";
 import { waitForImportJob, type UploadState } from "./upload-helpers";
@@ -22,6 +27,9 @@ export function LessonEditor({
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { maxUploadBytes, maxSlidePages } = useRuntimeConfig();
+  const limits = { maxUploadBytes, maxSlidePages };
+  const limitsHint = slideLimitsHint(limits);
   const {
     data: slides = [],
     isLoading: slidesLoading,
@@ -109,7 +117,7 @@ export function LessonEditor({
   const chooseFile = (files: FileList | File[] | null) => {
     const file = files ? Array.from(files)[0] : null;
     if (!file) return;
-    const problem = validateSlideFile(file);
+    const problem = validateSlideFile(file, limits);
     if (problem) {
       setLastFile(file);
       setUpload({ status: "error", fileName: file.name, message: problem });
@@ -129,7 +137,7 @@ export function LessonEditor({
 
   const retryLastFile = () => {
     if (!lastFile) return;
-    const problem = validateSlideFile(lastFile);
+    const problem = validateSlideFile(lastFile, limits);
     if (problem) {
       setUpload({ status: "error", fileName: lastFile.name, message: problem });
       return;
@@ -154,6 +162,7 @@ export function LessonEditor({
 
       {/* 1) Tài liệu: tải PDF → 2) kiểm tra tài liệu (lưới trang + xem trước). */}
       <UploadSection
+        limitsHint={limitsHint}
         canManage={canManage}
         uploading={uploading}
         hasSlides={hasSlides}

@@ -54,7 +54,6 @@ export function getDeviceFingerprint(): string {
 
 export interface GazeSample {
   sequence: number;
-  captureMonotonicNs: number;
   eventTime: string;
   viewportX: number | null;
   viewportY: number | null;
@@ -64,12 +63,10 @@ export interface GazeSample {
 
 export interface GazeBatchInput {
   batchId: string;
-  batchNo: number;
   presentationId: string;
   layoutId?: string | null;
   sequenceStart: number;
   sequenceEnd: number;
-  payloadHash: string;
   samples: GazeSample[];
 }
 

@@ -109,7 +109,8 @@ Frontend và backend dùng thống nhất ID hiện hành, không còn alias `*V
 | `POST /teacher/courses/{courseId}/analytics/heatmap` | heatmap 24×24 theo slide |
 | `POST /api/auth/otp/request` | gửi OTP tới email sinh viên |
 | `POST /api/auth/otp/verify` | xác nhận OTP, cấp token/cookie |
-| `GET /api/config` | cấu hình runtime cho frontend, vd `{"gazeFps": 15}` |
+| `GET /api/config` | cấu hình runtime cho frontend: `gazeFps`, `maxUploadBytes`, `maxSlidePages` |
+| `GET /api/health` | alias công khai của `/health` để frontend gọi qua `/api` |
 
 `presentationId` là tên domain cho một lượt xem slide/quiz và cũng là metadata
 trong gaze protocol; không phải bảng version.

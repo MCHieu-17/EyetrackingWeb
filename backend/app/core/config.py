@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     jwt_secret: str
     cors_origins: str
     ai_http_url: str
+    # Tên weights UniGaze đang dùng, chỉ để ghi metadata version calibration.
+    # Để trống giữ nhãn tương thích `ubj-linreg-v2-b16`.
+    unigaze_model: str = ""
 
     # Connection pool PostgreSQL. max_overflow được suy ra từ chênh lệch
     # db_pool_max - db_pool_min để tổng kết nối tối đa đúng bằng db_pool_max.
@@ -92,9 +95,6 @@ class Settings(BaseSettings):
     otp_hash_secret: str = ""
     # Chỉ dùng dev: log mã OTP khi SMTP chưa cấu hình (DEBUG bắt buộc).
     otp_dev_echo: bool = False
-
-    # Origin frontend (dùng trong email OTP và redirect sau đăng nhập).
-    frontend_url: str = "http://localhost:3000"
 
     @property
     def cookie_secure_resolved(self) -> bool:

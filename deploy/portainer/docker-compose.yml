@@ -72,7 +72,6 @@ x-backend-env: &backend-env
   OTP_STUDENT_ID_PATTERN: '${OTP_STUDENT_ID_PATTERN:-^\d\d\d\d\d\d\d\d$}'
   OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
   OTP_DEV_ECHO: "false"
-  FRONTEND_URL: ${FRONTEND_URL:-https://eyetracking.nmhieu17.space}
   MEDIA_DIR: /app/media
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
   MAX_PDF_BYTES: ${MAX_PDF_BYTES:-104857600}
@@ -90,6 +89,8 @@ x-backend-env: &backend-env
   CONTENT_VIEW_MIN_DWELL_MS: ${CONTENT_VIEW_MIN_DWELL_MS:-1000}
   # Frame/giây gaze: backend trả qua GET /api/config, gaze throttle theo FPS.
   GAZE_FPS: ${GAZE_FPS:-15}
+  # Chỉ dùng để ghi version calibration; không load weights ở backend.
+  UNIGAZE_MODEL: ${UNIGAZE_MODEL:-}
   ADMIN_DB_URL: postgresql+asyncpg://${ADMIN_DB_USER:-admin_reader}:${ADMIN_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-eyetracking}
   ADMIN_DB_STATEMENT_TIMEOUT_MS: ${ADMIN_DB_STATEMENT_TIMEOUT_MS:-10000}
   ADMIN_DB_LOCK_TIMEOUT_MS: ${ADMIN_DB_LOCK_TIMEOUT_MS:-2000}

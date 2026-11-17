@@ -14,6 +14,7 @@ from app.services.content.common import (
     _not_found,
     _now,
     course_of_lesson,
+    delete_unreferenced_assets,
     touch_course,
 )
 
@@ -101,11 +102,14 @@ async def update_lesson(
 
 async def delete_lesson(
     db: AsyncSession, course: Course, user: User, lesson_id: str
-) -> None:
+) -> list[tuple[str, str]]:
+    """Xóa lesson và trả về media asset không còn tham chiếu để route dọn file."""
     _, lesson = await course_of_lesson(db, lesson_id)
+    asset_ids = [lesson.pdf_asset_id] if lesson.pdf_asset_id else []
     await db.delete(lesson)
     touch_course(course)
     await db.flush()
+    return await delete_unreferenced_assets(db, asset_ids)
 
 
 async def reorder_items(

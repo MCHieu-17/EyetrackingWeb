@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.services.content.common import (
     course_of_lesson,
     course_of_module,
+    delete_media_objects,
     get_course_or_404,
     logger,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "create_slide_import",
     "delete_course",
     "delete_lesson",
+    "delete_media_objects",
     "delete_module",
     "get_course_or_404",
     "get_course_students",

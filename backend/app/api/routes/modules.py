@@ -75,6 +75,7 @@ async def delete_module(
     course, _ = await content.course_of_module(db, module_id)
     if not await can_manage_course(db, course, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    await content.delete_module(db, course, user, module_id)
+    removed = await content.delete_module(db, course, user, module_id)
     await db.commit()
+    await content.delete_media_objects(removed)
     return {"ok": True}

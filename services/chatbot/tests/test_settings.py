@@ -81,3 +81,12 @@ def test_embedding_device_requires_explicit_value(monkeypatch):
 
     monkeypatch.setenv("EMBEDDING_DEVICE", "cpu")
     assert settings.embedding_device() == "cpu"
+
+
+def test_embedding_model_version_comes_from_config(monkeypatch):
+    _set_required_embedding(monkeypatch)
+    monkeypatch.delenv("EMBEDDING_MODEL_VERSION", raising=False)
+    assert settings.embedding_model_version() == "org/model"
+
+    monkeypatch.setenv("EMBEDDING_MODEL_VERSION", "custom-embedding-v1")
+    assert settings.embedding_model_version() == "custom-embedding-v1"

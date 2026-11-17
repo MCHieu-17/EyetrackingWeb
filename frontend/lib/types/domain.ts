@@ -1,5 +1,5 @@
 // lib/types/domain.ts — Type domain dùng chung phía frontend.
-// Khớp schema generation 11: courses / course_modules / lessons / slides /
+// Khớp schema generation 13: courses / course_modules / lessons / slides /
 // enrollments / learning_sessions / content_views / gaze_samples.
 
 export type CourseStatus = 'draft' | 'published' | 'archived';
@@ -33,8 +33,6 @@ export interface LessonNode {
   slidesFailed?: number;
   /** Số slide đang chờ index. */
   slidesPending?: number;
-  attention: number | null;
-  mastery?: number | null;   // điểm hoàn thành TB (độ bao phủ nội dung)
   quizId?: string | null;
   quizStatus?: QuizAssignmentStatus | null;
   questionCount?: number;
@@ -46,8 +44,6 @@ export interface ModuleNode {
   id: string;
   title: string;
   lessons: LessonNode[];
-  moduleKey?: string | null;
-  generation?: number | null;
 }
 
 interface StudentLesson {

@@ -218,7 +218,6 @@ SMTP_STARTTLS=true
 OTP_TTL_SECONDS=900
 OTP_ALLOWED_DOMAINS=st.neu.edu.vn
 OTP_STUDENT_ID_PATTERN=^\d{8}$
-FRONTEND_URL=http://localhost:3000
 ```
 
 Sinh viên bấm “Đăng nhập với email Outlook trường”, nhập

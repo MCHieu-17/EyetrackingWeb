@@ -36,11 +36,9 @@ function healthResponse(
 function makeBatch(id: string): GazeBatchInput {
   return {
     batchId: `batch-${id}`,
-    batchNo: 0,
     presentationId: `presentation-${id}`,
     sequenceStart: 0,
     sequenceEnd: 0,
-    payloadHash: "hash",
     samples: [],
   };
 }
@@ -112,6 +110,10 @@ describe("queueGazeBatch", () => {
     expect(queueMocks.updateGazeBatchGeneration).toHaveBeenCalledWith(
       "session:batch-1",
       "gen:db",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/health",
+      expect.objectContaining({ credentials: "include" }),
     );
   });
 });

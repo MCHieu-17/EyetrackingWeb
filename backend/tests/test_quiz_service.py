@@ -47,3 +47,9 @@ def test_attempt_expiry_uses_min_of_duration_and_due_date():
     capped = attempt_expiry(_config("2026-01-01T12:10:00+00:00"), now)
     assert capped.hour == 12
     assert capped.minute == 10
+
+
+def test_attempt_expiry_treats_naive_due_date_as_utc():
+    now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    capped = attempt_expiry(_config("2026-01-01T12:10:00"), now)
+    assert capped == datetime(2026, 1, 1, 12, 10, tzinfo=timezone.utc)

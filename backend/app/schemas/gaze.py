@@ -106,7 +106,6 @@ class LayoutOut(CamelModel):
 
 class GazeSampleBatchIn(CamelModel):
     sequence: int = Field(ge=0)
-    capture_monotonic_ns: int = Field(ge=0)
     event_time: str
     viewport_x: float | None = None
     viewport_y: float | None = None
@@ -116,12 +115,10 @@ class GazeSampleBatchIn(CamelModel):
 
 class GazeBatchCreateIn(CamelModel):
     batch_id: str
-    batch_no: int = Field(ge=0)
     presentation_id: str
     layout_id: str | None = None
     sequence_start: int = Field(ge=0)
     sequence_end: int = Field(ge=0)
-    payload_hash: str = Field(min_length=64, max_length=64)
     samples: list[GazeSampleBatchIn] = Field(min_length=1, max_length=2000)
 
 

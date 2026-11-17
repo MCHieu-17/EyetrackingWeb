@@ -1,4 +1,4 @@
-import { MAX_SLIDE_PAGES, MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/api/client";
+import { MAX_SLIDE_PAGES, MAX_UPLOAD_BYTES } from "@/lib/api/client";
 import type {
   LessonNode,
   ModuleNode,
@@ -9,8 +9,21 @@ import type {
 /** Định dạng tài liệu slide được chấp nhận khi tải lên. */
 export const ALLOWED_SLIDE_EXTENSIONS = [".pdf", ".pptx", ".ppt", ".odp"] as const;
 
-/** Gợi ý giới hạn tài liệu dùng chung cho vùng tải lên. */
-export const SLIDE_LIMITS_HINT = `PDF, PPTX, PPT, ODP · tối đa ${MAX_UPLOAD_LABEL} · tối đa ${MAX_SLIDE_PAGES} trang — mỗi trang thành 1 slide.`;
+export interface SlideLimits {
+  maxUploadBytes?: number;
+  maxSlidePages?: number;
+}
+
+function uploadLabel(maxUploadBytes: number): string {
+  return `${Math.round(maxUploadBytes / (1024 * 1024))}MB`;
+}
+
+/** Gợi ý giới hạn tài liệu; ưu tiên cấu hình runtime từ backend. */
+export function slideLimitsHint(limits: SlideLimits = {}): string {
+  const maxBytes = limits.maxUploadBytes ?? MAX_UPLOAD_BYTES;
+  const maxPages = limits.maxSlidePages ?? MAX_SLIDE_PAGES;
+  return `PDF, PPTX, PPT, ODP · tối đa ${uploadLabel(maxBytes)} · tối đa ${maxPages} trang — mỗi trang thành 1 slide.`;
+}
 
 /** Thông điệp lỗi thống nhất cho các thao tác trong trình soạn nội dung. */
 export function errText(error: unknown): string {
@@ -73,14 +86,18 @@ export function moduleOfLesson(
 }
 
 /** Kiểm tra tên/định dạng/kích thước tài liệu slide trước khi tải lên. */
-export function validateSlideFile(file: { name: string; size: number }): string | null {
+export function validateSlideFile(
+  file: { name: string; size: number },
+  limits: SlideLimits = {},
+): string | null {
   const lower = file.name.toLowerCase();
   const extension = lower.slice(lower.lastIndexOf("."));
   if (!(ALLOWED_SLIDE_EXTENSIONS as readonly string[]).includes(extension)) {
     return `"${file.name}" không phải tài liệu slide hợp lệ. Hãy chọn PDF, PPTX, PPT hoặc ODP.`;
   }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return `File "${file.name}" vượt quá ${MAX_UPLOAD_LABEL} cho phép.`;
+  const maxBytes = limits.maxUploadBytes ?? MAX_UPLOAD_BYTES;
+  if (file.size > maxBytes) {
+    return `File "${file.name}" vượt quá ${uploadLabel(maxBytes)} cho phép.`;
   }
   return null;
 }
@@ -106,6 +123,23 @@ export function toLocalInput(iso: string | null | undefined): string {
 /** Chuỗi so sánh form bài tập để phát hiện thay đổi chưa lưu. */
 export function serializeQuizForm(form: QuizForm): string {
   return JSON.stringify(form);
+}
+
+/**
+ * Cập nhật một trường đã lưu trong baseline mà không đánh dấu các chỉnh sửa
+ * khác trong form hiện tại là đã lưu. Dùng cho các toggle lưu ngay.
+ */
+export function patchQuizBaseline(
+  baseline: string,
+  patch: Partial<QuizForm>,
+): string {
+  if (!baseline) return baseline;
+  try {
+    const parsed = JSON.parse(baseline) as QuizForm;
+    return serializeQuizForm({ ...parsed, ...patch });
+  } catch {
+    return baseline;
+  }
 }
 
 /** Dựng form bài tập từ dữ liệu assignment tải về. */

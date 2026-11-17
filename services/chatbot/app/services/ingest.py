@@ -22,7 +22,12 @@ from pydantic import BaseModel, Field
 
 from app.db import DatabaseUnavailableError, get_pool
 from app.services.storage import FileStorage
-from app.settings import embedding_dim, embedding_name, llm_base_url
+from app.settings import (
+    embedding_dim,
+    embedding_model_version,
+    embedding_name,
+    llm_base_url,
+)
 from app.workflow.prompts import SLIDE_VLM_PROMPT
 from app.workflow.providers import get_embedding, get_vlm
 
@@ -237,7 +242,7 @@ class Ingestion:
                     """
                     UPDATE slides
                     SET pipeline_version = 'rag-v2',
-                        model_version = 'qwen3-embedding-0.6b',
+                        model_version = %s,
                         transcript = %s,
                         embedding = %s,
                         index_status = 'ready',
@@ -245,7 +250,12 @@ class Ingestion:
                         updated_at = now()
                     WHERE id = %s
                     """,
-                    (transcript, Vector(vector), slide["slide_id"]),
+                    (
+                        embedding_model_version(),
+                        transcript,
+                        Vector(vector),
+                        slide["slide_id"],
+                    ),
                 )
 
     def _embed_slide(self, slide: dict) -> None:

@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.models.chat import ChatSession
 from app.models.course import Course, CourseModule, Enrollment, Lesson
 from app.models.quiz import QuizAttempt
+from app.services.quiz import parse_datetime
 from app.services.study_chat import ensure_access_in_db
 
 router = APIRouter(tags=["internal-chat"])
@@ -165,15 +166,7 @@ async def query_lms(body: LMSQuery, db: AsyncSession = Depends(get_db)):
         state = _attempt_state(attempt, now)
         due_at = config.get("dueAt")
         deadline_raw = attempt.expires_at if attempt else due_at
-        if isinstance(deadline_raw, str):
-            try:
-                deadline = datetime.fromisoformat(
-                    deadline_raw.replace("Z", "+00:00")
-                )
-            except ValueError:
-                deadline = None
-        else:
-            deadline = deadline_raw
+        deadline = parse_datetime(deadline_raw)
         entry = {
             "id": lesson.id,
             "lesson_id": lesson.id,

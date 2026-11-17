@@ -278,6 +278,7 @@ class AoiSummaryMetaOut(CamelModel):
     include_short: bool = True
     short_view_count: int = 0
     min_dwell_ms: int = 1000
+    max_gap_ms: int = 250
 
 
 class AoiSummaryOut(CamelModel):

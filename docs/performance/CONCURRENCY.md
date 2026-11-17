@@ -86,7 +86,7 @@ và các nút thắt còn lại.
 - Analysis worker chạy **2 replica** (`WORKER_REPLICAS`, mặc định 2; dùng
   `SKIP LOCKED`).
 - `python -m app.maintenance` giờ:
-  - schema generation 12 không còn partition; maintenance xoá `gaze_samples`
+  - schema generation 13 không còn partition; maintenance xoá `gaze_samples`
     cũ hơn `GAZE_RETENTION_DAYS` (mặc định 180 ngày) theo `event_time`.
 - Có thể scale thêm content/embedding worker bằng `docker compose up -d
   --scale content-worker=2` khi cần (chú ý RAM LibreOffice).

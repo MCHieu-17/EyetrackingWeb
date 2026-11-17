@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.core.csrf import new_csrf_token
+from app.core.ratelimit import real_client_ip
 from app.crud import user as user_crud
 from app.models.auth import User
 from app.schemas.auth import RefreshRequest, TokenPair, UserSummary
@@ -32,9 +33,12 @@ CSRF_COOKIE = "csrf_token"
 
 
 def client_ip(request: Request) -> str | None:
-    host = request.client.host if request.client else None
-    if not host:
-        return None
+    """IP người dùng thật, đã đi qua proxy tin cậy nếu có.
+
+    Trước đây chỉ đọc `request.client.host`, nên sau nginx/Cloudflare mọi
+    audit log đều ghi IP container proxy.
+    """
+    host = real_client_ip(request)
     try:
         return str(ipaddress.ip_address(host))
     except ValueError:

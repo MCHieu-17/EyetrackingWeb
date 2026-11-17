@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCourseVisits, useAoiSummary } from "@/hooks/use-visualization";
 import { rebuildAoiHits } from "@/lib/api/aoi";
+import { queryKeys } from "@/lib/query-keys";
 import type { ModuleNode } from "@/lib/types/domain";
 import type {
   AoiSummaryQuery,
@@ -223,7 +224,7 @@ export function SummaryPanel({
         // Heatmap có query riêng (slideId); invalidate prefix để card tự tải
         // lại sau khi worker phân tích xong.
         void queryClient.invalidateQueries({
-          queryKey: ["visualization", "aoi-heatmap", courseId],
+          queryKey: queryKeys.visualization.aoiHeatmapRoot(courseId),
         });
       }, 4000);
     } catch {
@@ -281,6 +282,7 @@ export function SummaryPanel({
     ? data.totals.unlabeledDurationMs / Math.max(1, data.totals.trackedDurationMs)
     : 0;
   const aoiRows = data ? visibleAois(data.byAoi) : [];
+  const maxGapMs = data?.meta.maxGapMs ?? 250;
 
   return (
     <div className="space-y-5">
@@ -293,8 +295,8 @@ export function SummaryPanel({
             Thời lượng nhìn theo vùng
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-black/45">
-            Chỉ tính các chuỗi mẫu hợp lệ liên tiếp ≤ 250ms. Số liệu lấy từ
-            thống kê AOI đã phân tích của từng lượt xem.
+            Chỉ tính các chuỗi mẫu hợp lệ liên tiếp ≤ {maxGapMs}ms. Số liệu lấy
+            từ thống kê AOI đã phân tích của từng lượt xem.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

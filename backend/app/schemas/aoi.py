@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import Field
 
 from app.schemas.common import CamelModel
@@ -49,7 +47,7 @@ class AoiUiGenerateIn(CamelModel):
 class AoiCollectionOut(CamelModel):
     """AOI hiện hành của một slide hoặc một UI schema.
 
-    Schema generation 12 lưu trực tiếp trong `aois`, không có revision hay
+    Schema generation 13 lưu trực tiếp trong `aois`, không có revision hay
     trạng thái draft/published.
     """
 
@@ -63,9 +61,6 @@ class AoiCollectionOut(CamelModel):
 class AoiRebuildIn(CamelModel):
     course_id: str
     lesson_id: str | None = None
-    from_time: datetime | None = None
-    to_time: datetime | None = None
-    algorithm_version: str = Field(default="gaze-metrics-v1", max_length=64)
 
 
 class AoiRebuildOut(CamelModel):

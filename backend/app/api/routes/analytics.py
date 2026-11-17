@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.api.access import get_viewable_course
 from app.api.deps import require_roles
@@ -66,41 +65,8 @@ async def list_course_visits(
 ):
     course = await get_viewable_course(db, course_id, user)
 
-    session_count = (
-        select(
-            LearningSession.course_visit_id,
-            func.count(LearningSession.id).label("lesson_session_count"),
-        )
-        .group_by(LearningSession.course_visit_id)
-        .subquery()
-    )
-    metric_visit = aliased(CourseVisit)
-    metric_sum = (
-        select(
-            LearningSession.course_visit_id,
-            func.coalesce(func.sum(ContentView.gaze_count), 0).label("gaze_count"),
-            func.coalesce(
-                func.sum(ContentView.on_slide_gaze_count), 0
-            ).label("on_slide_gaze_count"),
-            func.coalesce(
-                func.sum(ContentView.tracked_duration_ms), 0
-            ).label("tracked_duration_ms"),
-        )
-        .join(LearningSession, LearningSession.id == ContentView.session_id)
-        .join(
-            metric_visit,
-            metric_visit.id == LearningSession.course_visit_id,
-            isouter=True,
-        )
-        .group_by(LearningSession.course_visit_id)
-    )
-    if not include_short:
-        metric_sum = metric_sum.where(
-            summary_service.view_dwell_ms_expr(metric_visit)
-            >= settings.content_view_min_dwell_ms
-        )
-    metric_sum = metric_sum.subquery()
-
+    # Lấy page ca học trước, sau đó mới aggregate theo đúng các ca trong page.
+    # Tránh GROUP BY toàn bộ learning_sessions/content_views của hệ thống.
     stmt = (
         select(
             CourseVisit,
@@ -108,16 +74,10 @@ async def list_course_visits(
             User.full_name,
             User.email,
             StudentProfile.student_code,
-            func.coalesce(session_count.c.lesson_session_count, 0),
-            func.coalesce(metric_sum.c.gaze_count, 0),
-            func.coalesce(metric_sum.c.on_slide_gaze_count, 0),
-            func.coalesce(metric_sum.c.tracked_duration_ms, 0),
         )
         .join(Enrollment, Enrollment.id == CourseVisit.enrollment_id)
         .join(User, User.id == Enrollment.student_id)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-        .outerjoin(session_count, session_count.c.course_visit_id == CourseVisit.id)
-        .outerjoin(metric_sum, metric_sum.c.course_visit_id == CourseVisit.id)
         .where(Enrollment.course_id == course.id)
         .order_by(CourseVisit.started_at.desc())
         .offset(offset)
@@ -131,6 +91,47 @@ async def list_course_visits(
         stmt = stmt.where(CourseVisit.started_at <= to_time)
 
     rows = (await db.execute(stmt)).all()
+    if not rows:
+        return []
+    visit_ids = [row[0].id for row in rows]
+
+    session_counts = dict(
+        (
+            await db.execute(
+                select(
+                    LearningSession.course_visit_id,
+                    func.count(LearningSession.id),
+                )
+                .where(LearningSession.course_visit_id.in_(visit_ids))
+                .group_by(LearningSession.course_visit_id)
+            )
+        ).all()
+    )
+
+    metric_stmt = (
+        select(
+            LearningSession.course_visit_id,
+            func.coalesce(func.sum(ContentView.gaze_count), 0),
+            func.coalesce(func.sum(ContentView.on_slide_gaze_count), 0),
+            func.coalesce(func.sum(ContentView.tracked_duration_ms), 0),
+        )
+        .join(LearningSession, LearningSession.id == ContentView.session_id)
+        .join(CourseVisit, CourseVisit.id == LearningSession.course_visit_id)
+        .where(LearningSession.course_visit_id.in_(visit_ids))
+        .group_by(LearningSession.course_visit_id)
+    )
+    if not include_short:
+        metric_stmt = metric_stmt.where(
+            summary_service.view_dwell_ms_expr()
+            >= settings.content_view_min_dwell_ms
+        )
+    metric_counts = {
+        visit_id: (int(gaze_count), int(on_slide), int(dwell_ms))
+        for visit_id, gaze_count, on_slide, dwell_ms in (
+            await db.execute(metric_stmt)
+        ).all()
+    }
+
     return [
         CourseVisitRowOut(
             id=visit.id,
@@ -143,22 +144,12 @@ async def list_course_visits(
             ended_at=visit.ended_at.isoformat() if visit.ended_at else None,
             last_seen_at=visit.last_seen_at.isoformat(),
             status=visit.status,
-            lesson_session_count=int(lesson_count),
-            gaze_count=int(gaze_count),
-            on_slide_gaze_count=int(on_slide_count),
-            tracked_duration_ms=int(dwell_ms),
+            lesson_session_count=int(session_counts.get(visit.id, 0)),
+            gaze_count=metric_counts.get(visit.id, (0, 0, 0))[0],
+            on_slide_gaze_count=metric_counts.get(visit.id, (0, 0, 0))[1],
+            tracked_duration_ms=metric_counts.get(visit.id, (0, 0, 0))[2],
         )
-        for (
-            visit,
-            student_id_value,
-            full_name,
-            email,
-            student_code,
-            lesson_count,
-            gaze_count,
-            on_slide_count,
-            dwell_ms,
-        ) in rows
+        for visit, student_id_value, full_name, email, student_code in rows
     ]
 
 

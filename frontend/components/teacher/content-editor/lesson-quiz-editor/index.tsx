@@ -12,6 +12,7 @@ import {
   appendQuestion,
   insertQuestionAt,
   moveQuestionAt,
+  patchQuizBaseline,
   quizFormFromAssignment,
   removeQuestionAt,
   serializeQuizForm,
@@ -181,7 +182,7 @@ export function LessonQuizEditor({
     setAllowRetry(value);
     try {
       await updateAssignment.mutateAsync({ id: quizId, patch: { allowRetry: value } });
-      setBaseline(serializeQuizForm({ ...form, allowRetry: value, questions }));
+      setBaseline((current) => patchQuizBaseline(current, { allowRetry: value }));
       onChanged();
       flash("ok", value ? "Đã cho phép học viên làm lại bài này." : "Đã tắt cho phép làm lại.");
     } catch {
@@ -194,11 +195,7 @@ export function LessonQuizEditor({
     try {
       await updateAssignment.mutateAsync({ id: quizId, patch: { allowChatbot: value } });
       setAllowChatbot(value);
-      setBaseline((current) =>
-        current
-          ? serializeQuizForm({ ...(JSON.parse(current) as QuizForm), allowChatbot: value })
-          : current,
-      );
+      setBaseline((current) => patchQuizBaseline(current, { allowChatbot: value }));
       onChanged();
       flash("ok", "Đã cập nhật quyền dùng chatbot.");
     } catch (error) {

@@ -32,9 +32,6 @@ def _normalize_slide_label(label: str | None) -> str | None:
     clean = (label or "").strip().upper()
     return clean or None
 
-SCOPE = "slide"
-
-
 def _definition_out(row: Aoi) -> AoiDefinitionOut:
     return AoiDefinitionOut(
         id=row.id,

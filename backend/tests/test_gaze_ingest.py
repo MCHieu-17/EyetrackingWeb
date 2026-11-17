@@ -1,4 +1,3 @@
-import hashlib
 import uuid
 from datetime import datetime, timezone
 
@@ -11,14 +10,9 @@ from tests.conftest import create_user, login, seed_course, seed_slide
 from tests.query_counter import count_queries
 
 
-def _payload_hash() -> str:
-    return hashlib.sha256(b"test-payload").hexdigest()
-
-
 def _sample(sequence: int) -> dict:
     return {
         "sequence": sequence,
-        "captureMonotonicNs": sequence * 1_000_000,
         "eventTime": datetime.now(timezone.utc).isoformat(),
         "viewportX": 0.5,
         "viewportY": 0.5,
@@ -67,11 +61,9 @@ async def test_gaze_batch_idempotency_without_batch_table(client):
     batch_id = str(uuid.uuid4())
     batch = {
         "batchId": batch_id,
-        "batchNo": 0,
         "presentationId": presentation_id,
         "sequenceStart": 0,
         "sequenceEnd": 1,
-        "payloadHash": _payload_hash(),
         "samples": [_sample(0), _sample(1)],
     }
 
@@ -99,12 +91,10 @@ async def test_gaze_batch_idempotency_without_batch_table(client):
         headers=headers,
         json={
             "batchId": str(uuid.uuid4()),
-            "batchNo": 5,
             "presentationId": presentation_id,
             "sequenceStart": 2,
             "sequenceEnd": 2,
-            "payloadHash": _payload_hash(),
-            "samples": [_sample(2)],
+                "samples": [_sample(2)],
         },
     )
     assert later_batch.status_code == 200
@@ -150,11 +140,9 @@ async def test_gaze_batch_query_count(client):
 
     batch = {
         "batchId": str(uuid.uuid4()),
-        "batchNo": 0,
         "presentationId": presentation_id,
         "sequenceStart": 0,
         "sequenceEnd": 1,
-        "payloadHash": _payload_hash(),
         "samples": [_sample(0), _sample(1)],
     }
 
@@ -230,11 +218,9 @@ async def test_gaze_batches_bound_to_their_presentation(client):
             headers=headers,
             json={
                 "batchId": str(uuid.uuid4()),
-                "batchNo": 0,
                 "presentationId": view_id,
                 "sequenceStart": 0,
                 "sequenceEnd": 1,
-                "payloadHash": _payload_hash(),
                 "samples": [_sample(0), _sample(1)],
             },
         )

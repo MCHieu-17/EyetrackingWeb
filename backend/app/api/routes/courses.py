@@ -202,16 +202,6 @@ async def get_course_tree(
     return await content.get_course_tree(db, course, user)
 
 
-@router.get("/teacher/courses/{course_id}/draft", response_model=list[ModuleNodeOut])
-async def get_course_draft(
-    course_id: str,
-    user: User = Depends(require_roles("teacher", "admin")),
-    db: AsyncSession = Depends(get_db),
-):
-    course = await get_viewable_course(db, course_id, user)
-    return await content.get_course_tree(db, course, user)
-
-
 @router.post("/teacher/courses/{course_id}/publish")
 async def publish_course(
     course_id: str,
@@ -346,7 +336,7 @@ async def remove_course_student(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    course = await get_viewable_course(db, course_id, user)
+    course = await get_owned_course(db, course_id, user)
     enrollment = (
         await db.execute(
             select(Enrollment).where(

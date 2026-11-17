@@ -257,6 +257,7 @@ export interface AoiSummary {
     includeShort?: boolean;
     shortViewCount?: number;
     minDwellMs?: number;
+    maxGapMs?: number;
   };
 }
 

@@ -165,4 +165,43 @@ describe("useGazeTracker cleanup", () => {
     });
     expect(socket.send).not.toHaveBeenCalled();
   });
+
+  it("resets the reconnect budget after every successful open", async () => {
+    const onFrame = vi.fn();
+    const { result } = renderHook(() =>
+      useGazeTracker({
+        enabled: true,
+        calibrated: true,
+        allowSimulation: false,
+        onPoint: vi.fn(),
+        onFrame,
+        getContext: () => ({
+          presentationId: "presentation-1",
+          layoutGeneration: 0,
+          surface: "lesson",
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    // 6 lần mở-rớt liên tiếp: nếu attempts không reset sau onopen, tracker sẽ
+    // bỏ cuộc sau MAX_RECONNECTS=5 và không tạo socket thứ 7.
+    for (let i = 0; i < 6; i += 1) {
+      const socket = FakeWebSocket.instances.at(-1)!;
+      act(() => {
+        socket.onclose?.();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+    }
+
+    expect(FakeWebSocket.instances).toHaveLength(7);
+    expect(result.current.stream).not.toBeNull();
+    expect(result.current.source).toBe("real");
+  });
 });

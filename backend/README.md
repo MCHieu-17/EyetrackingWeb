@@ -144,9 +144,11 @@ Frontend và backend dùng thống nhất `slideId`, `lessonId`, `presentationId
 ## Database
 
 - Schema generation 13, 24 bảng lõi.
-- `001_baseline.sql` (generation 12) + `002_email_otp.sql` + `003_aoi_single_label.sql`.
+- `001_baseline.sql` (generation 12) + `002_email_otp.sql` +
+  `003_aoi_single_label.sql` + `004_content_view_aoi_stats.sql` +
+  `005_current_viewport_only.sql`.
 - Backend fail-fast nếu `app_metadata.schema_generation != '13'`.
-- Không sửa migration đã áp; thay đổi mới phải là `004_...`.
+- Không sửa migration đã áp; thay đổi mới phải là `006_...`.
 - Cascade/FK là cơ chế xoá dữ liệu liên quan. File media local/R2 được dọn sau
   transaction DB.
 - Từ điển cột/ERD: `DB.md`.

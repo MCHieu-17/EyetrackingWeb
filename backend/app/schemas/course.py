@@ -8,8 +8,6 @@ from app.schemas.common import CamelModel
 class CourseCreateIn(CamelModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    thumbnail_url: str | None = None
-    status: str = Field(default="draft", pattern="^(draft|published|archived)$")
     # Hiển thị chấm điểm nhìn cho sinh viên (áp cho mọi bài giảng + bài tập).
     show_gaze_dot: bool = False
     # Bắt buộc kiểm tra camera + hiệu chỉnh trước khi vào học.
@@ -19,7 +17,6 @@ class CourseCreateIn(CamelModel):
 class CourseUpdateIn(CamelModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
-    thumbnail_url: str | None = None
     status: str | None = Field(default=None, pattern="^(draft|published|archived)$")
     show_gaze_dot: bool | None = None
     require_calibration: bool | None = None
@@ -75,8 +72,6 @@ class LessonNodeOut(CamelModel):
     slides_ready: int = 0
     slides_failed: int = 0
     slides_pending: int = 0
-    attention: float | None = None
-    mastery: float | None = None
     quiz_id: str | None = None
     quiz_status: str | None = None
     question_count: int = 0
@@ -88,8 +83,6 @@ class ModuleNodeOut(CamelModel):
     id: str
     title: str
     lessons: list[LessonNodeOut]
-    module_key: str | None = None
-    generation: int | None = None
 
 
 class TeacherCourseOut(CamelModel):

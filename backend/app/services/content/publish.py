@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
@@ -74,14 +74,31 @@ async def validate_course(db: AsyncSession, course: Course) -> None:
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "content_invalid", "message": "Khóa học chưa có nội dung"},
         )
+    slide_stats = dict(
+        (
+            await db.execute(
+                select(
+                    Slide.lesson_id,
+                    func.count(Slide.id),
+                    func.count(Slide.id).filter(Slide.index_status != "ready"),
+                )
+                .where(Slide.lesson_id.in_([lesson.id for lesson in lessons]))
+                .group_by(Slide.lesson_id)
+            )
+        ).all()
+    )
+    asset_ids = [lesson.pdf_asset_id for lesson in lessons if lesson.pdf_asset_id]
+    assets = {
+        asset.id: asset
+        for asset in (
+            await db.execute(select(MediaAsset).where(MediaAsset.id.in_(asset_ids)))
+        ).scalars()
+    }
+
     for lesson in lessons:
         if lesson.kind == "lesson":
-            slides = (
-                await db.execute(
-                    select(Slide).where(Slide.lesson_id == lesson.id).order_by(Slide.position)
-                )
-            ).scalars().all()
-            if not slides:
+            slide_count, not_ready = slide_stats.get(lesson.id, (0, 0))
+            if not slide_count:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     detail={
@@ -89,20 +106,19 @@ async def validate_course(db: AsyncSession, course: Course) -> None:
                         "message": f'Bài giảng "{lesson.title}" chưa có slide',
                     },
                 )
-            not_indexed = [slide for slide in slides if slide.index_status != "ready"]
-            if not_indexed:
+            if not_ready:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     detail={
                         "code": "slides_not_indexed",
                         "message": (
-                            f'Bài giảng "{lesson.title}" còn {len(not_indexed)} '
+                            f'Bài giảng "{lesson.title}" còn {not_ready} '
                             "trang chưa index xong cho trợ lý học tập. Vui lòng chờ "
                             "hệ thống xử lý hoặc bấm \"Thử lại index\"."
                         ),
                     },
                 )
-            asset = await db.get(MediaAsset, lesson.pdf_asset_id) if lesson.pdf_asset_id else None
+            asset = assets.get(lesson.pdf_asset_id or "")
             if asset is None or asset.state != "ready":
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,

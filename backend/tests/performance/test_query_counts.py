@@ -15,7 +15,6 @@ Chạy riêng:
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from datetime import datetime, timezone
 
@@ -49,17 +48,12 @@ def _assert_budget(counter: QueryCounter, budget: int, label: str) -> None:
 def _sample(sequence: int) -> dict:
     return {
         "sequence": sequence,
-        "captureMonotonicNs": sequence * 1_000_000,
         "eventTime": datetime.now(timezone.utc).isoformat(),
         "viewportX": 0.5,
         "viewportY": 0.5,
         "status": "ok",
         "qualityFlags": {},
     }
-
-
-def _payload_hash(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 async def _seed_teacher_and_student() -> tuple[str, str, str, dict[str, str]]:
@@ -148,11 +142,9 @@ async def test_gaze_batch_query_count(client):
         headers=headers,
         json={
             "batchId": str(uuid.uuid4()),
-            "batchNo": 0,
             "presentationId": presentation_id,
             "sequenceStart": 0,
             "sequenceEnd": 1,
-            "payloadHash": _payload_hash("warmup"),
             "samples": [_sample(0), _sample(1)],
         },
     )
@@ -164,11 +156,9 @@ async def test_gaze_batch_query_count(client):
             headers=headers,
             json={
                 "batchId": str(uuid.uuid4()),
-                "batchNo": 1,
                 "presentationId": presentation_id,
                 "sequenceStart": 2,
                 "sequenceEnd": 3,
-                "payloadHash": _payload_hash("measured"),
                 "samples": [_sample(2), _sample(3)],
             },
         )

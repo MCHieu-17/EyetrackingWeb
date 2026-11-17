@@ -7,7 +7,7 @@ dashboard chỉ đọc một hàng cho mỗi lượt xem, không quét toàn b�
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -140,6 +140,7 @@ def _views_base(course: Course, body: AoiSummaryIn):
             User,
             StudentProfile,
             CourseVisit,
+            view_dwell_ms_expr().label("dwell_ms"),
         )
         .join(LearningSession, LearningSession.id == ContentView.session_id)
         .join(Lesson, Lesson.id == LearningSession.lesson_id)
@@ -167,27 +168,25 @@ def _views_base(course: Course, body: AoiSummaryIn):
     return stmt
 
 
-def _views_stmt(course: Course, body: AoiSummaryIn, *, short_only: bool = False):
+def _views_stmt(
+    course: Course,
+    body: AoiSummaryIn,
+    *,
+    ignore_short_filter: bool = False,
+    include_sample_flag: bool = False,
+):
     stmt = _views_base(course, body)
-    if short_only:
-        # Chỉ lấy các lượt xem ngắn hơn ngưỡng.
-        stmt = stmt.where(
-            view_dwell_ms_expr() < settings.content_view_min_dwell_ms
+    if include_sample_flag:
+        stmt = stmt.add_columns(
+            exists()
+            .where(GazeSample.content_view_id == ContentView.id)
+            .label("has_samples")
         )
-    elif not body.include_short:
+    if not ignore_short_filter and not body.include_short:
         stmt = stmt.where(
             view_dwell_ms_expr() >= settings.content_view_min_dwell_ms
         )
     return stmt
-
-
-async def _short_view_count(
-    db: AsyncSession, course: Course, body: AoiSummaryIn
-) -> int:
-    stmt = select(func.count()).select_from(
-        _views_stmt(course, body, short_only=True).subquery()
-    )
-    return int((await db.execute(stmt)).scalar_one() or 0)
 
 
 def _validate_time_range(body: AoiSummaryIn) -> None:
@@ -225,10 +224,19 @@ async def aoi_summary(
     db: AsyncSession, course: Course, body: AoiSummaryIn
 ) -> AoiSummaryOut:
     _validate_time_range(body)
-    rows = (await db.execute(_views_stmt(course, body))).all()
-    short_view_count = await _short_view_count(db, course, body)
+    # Một query duy nhất: giữ mọi view để đếm lượt ngắn, rồi lọc trong Python.
+    all_rows = (await db.execute(_views_stmt(course, body, ignore_short_filter=True))).all()
+    min_dwell_ms = settings.content_view_min_dwell_ms
+    short_view_count = sum(
+        1 for row in all_rows if int(row[-1] or 0) < min_dwell_ms
+    )
+    rows = (
+        all_rows
+        if body.include_short
+        else [row for row in all_rows if int(row[-1] or 0) >= min_dwell_ms]
+    )
 
-    slide_ids = sorted({slide.id for *_, slide, _e, _u, _p, _v in rows if slide})
+    slide_ids = sorted({row[3].id for row in rows if row[3] is not None})
     slide_names = await _slide_names(db, slide_ids)
 
     by_aoi: dict[str, dict] = {}
@@ -251,7 +259,7 @@ async def aoi_summary(
     student_ids: set[str] = set()
     stale_views = 0
 
-    for view, session, lesson, slide, enrollment, student, profile, visit in rows:
+    for view, session, lesson, slide, enrollment, student, profile, visit, _dwell in rows:
         visit_key = (
             visit.id
             if visit is not None
@@ -481,12 +489,22 @@ async def aoi_summary(
             include_short=body.include_short,
             short_view_count=short_view_count,
             min_dwell_ms=settings.content_view_min_dwell_ms,
+            max_gap_ms=settings.gaze_max_gap_ms,
         ),
     )
 
 
 def _empty_grid() -> list[list[int]]:
     return [[0 for _ in range(metrics.GRID_SIZE)] for _ in range(metrics.GRID_SIZE)]
+
+
+def _is_complete_grid(value: object) -> bool:
+    """Grid hợp lệ phải đúng 24×24; `[]`/grid dở dang coi là stale."""
+    if not isinstance(value, list) or len(value) != metrics.GRID_SIZE:
+        return False
+    return all(
+        isinstance(row, list) and len(row) == metrics.GRID_SIZE for row in value
+    )
 
 
 async def aoi_heatmap(
@@ -507,39 +525,30 @@ async def aoi_heatmap(
         )
     slide, lesson = slide_row
 
+    # Heatmap luôn là phạm vi một slide. Bỏ filter surface/lessonIds toàn cục
+    # để client cũ hoặc request tay không thể vô tình làm heatmap về 0.
+    scoped = body.model_copy(update={"surface": "all", "lesson_ids": []})
     rows = (
         await db.execute(
-            _views_stmt(course, body).where(ContentView.slide_id == slide.id)
+            _views_stmt(
+                course, scoped, include_sample_flag=True
+            ).where(ContentView.slide_id == slide.id)
         )
     ).all()
-
-    view_ids = [view.id for view, *_rest in rows]
-    # View chưa phân tích có gaze_count=0 dù đã có gaze thô; kiểm tra sự tồn tại
-    # sample để không bỏ sót trạng thái pending/failed.
-    sample_view_ids: set[str] = set()
-    if view_ids:
-        sample_view_ids = set(
-            (
-                await db.execute(
-                    select(GazeSample.content_view_id)
-                    .where(GazeSample.content_view_id.in_(view_ids))
-                    .distinct()
-                )
-            ).scalars()
-        )
 
     grid = _empty_grid()
     analyzed_view_count = 0
     stale_view_count = 0
-    for view, *_rest in rows:
-        # Chỉ cộng grid của lượt xem đã phân tích bằng phiên bản hiện hành;
-        # grid cũ (version/status khác) không được trộn vào heatmap.
-        if view.gaze_count <= 0 and view.id not in sample_view_ids:
+    for row in rows:
+        view = row[0]
+        # View chưa phân tích có gaze_count=0 dù đã có gaze thô; cờ EXISTS
+        # trong cùng query tránh thêm một lượt quét GazeSample riêng.
+        if view.gaze_count <= 0 and not bool(row[-1]):
             continue
         current = (
             view.analysis_status == "ready"
             and view.analysis_version == metrics.ANALYSIS_VERSION
-            and isinstance(view.heatmap_grid, list)
+            and _is_complete_grid(view.heatmap_grid)
         )
         if not current:
             stale_view_count += 1
