@@ -648,6 +648,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
           return;
         }
         if (!isValidGazeSequence(frame.sequence)) return;
+        // overloaded/stale không phải mẫu gaze; bỏ thay vì ghi dữ liệu rác.
+        if (frame.status === "overloaded" || frame.status === "stale") return;
 
         const faceDetected = frame.status === "ok";
         if (faceDetected && (frame.x === null || frame.y === null)) return;

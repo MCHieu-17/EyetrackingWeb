@@ -59,20 +59,29 @@ và các nút thắt còn lại.
 
 ### 7. Gaze service
 
-- `MAX_INFERENCE_QUEUE` (mặc định 32): queue đầy trả `overloaded` thay vì phình
-  vô hạn.
-- `GAZE_FPS` (mặc định 15): throttle mỗi session = `1000/FPS × 0.95`; tăng FPS
-  làm tăng tải suy luận/GPU mỗi session. FPS cao hơn nghĩa là nhiều frame phải
-  inference hơn — cân nhắc `INFER_WORKERS`/`MAX_INFERENCE_QUEUE` tương ứng.
-- Calibration trả 503 + `Retry-After` khi queue đầy; WebSocket trả trạng thái
-  `overloaded` và giữ stream.
-- Chạy **2 replica** gaze sau nginx (`GAZE_REPLICAS`, mặc định 2). Frontend
-  tạo cookie `gaze_affinity` trước request đầu; nginx dùng
-  `hash $cookie_gaze_affinity` giữ mọi request/WS của cùng browser trên một
-  replica vì session calibration nằm trong RAM.
-- Nếu không có cookie, mọi request hash rỗng nên vẫn về cùng một replica
-  (đúng, nhưng không phân tải). Xoá cookie giữa phiên sẽ mất session và phải
-  calibration lại.
+- **Thread cap theo CPU quota**: container gaze bị giới hạn `cpus: 2.0` nhưng
+  OpenCV/torch/MediaPipe vẫn thấy toàn bộ core host → CFS throttling và stall
+  ~80 ms/frame. `entrypoint.sh` set `OMP/MKL/OPENBLAS/NUMEXPR=1`; runtime gọi
+  `cv2.setNumThreads(1)` + `torch.set_num_threads(1)` trước khi load model.
+- Đo trên RTX 3060 (ảnh 512×512): full pipeline từ **55–85 ms p50 / 100–200 ms
+  p95** xuống **10.9 ms p50 / 11.2 ms p95** (fp32). WebSocket 4 phiên @15 FPS
+  từ **~16 FPS tổng** lên **~60 FPS tổng**; 8 phiên đạt **~115 FPS** (fp32);
+  16 phiên đạt **~238 FPS** với fp16.
+- **Pipeline 2 tầng**: CPU (decode/detect/warp) và GPU (UniGaze) chạy ở 2 thread
+  riêng, queue 1 slot → overlap CPU/GPU, throughput ~1.5–1.8×.
+- **Mailbox maxsize=1 + deadline**: receiver luôn giữ frame mới nhất; frame cũ
+  hơn `FRAME_MAX_AGE_MS` (mặc định 200 ms) bị bỏ (`stale`). Queue đầy trả
+  `overloaded` + `suggestedFps` ngay, không xếp hàng vô hạn.
+- `MAX_QUEUE` (mặc định 8) thay cho `MAX_INFERENCE_QUEUE`; `INFER_WORKERS` đã
+  bỏ vì MediaPipe không thread-safe và GPU serialize.
+- `INFERENCE_PRECISION=fp32|fp16`: fp16 ~2.2× forward (8.45 → 3.79 ms trên
+  3060), chỉ bật sau `scripts.compare_precision` đạt gate.
+- Chạy **1 replica** mặc định (`GAZE_REPLICAS=1`) vì 1 GPU serialize; 2 replica
+  chỉ tăng VRAM và cung cấp HA, không tăng throughput. Nếu dùng 2 replica,
+  nginx vẫn giữ `hash $cookie_gaze_affinity` để session calibration nằm đúng
+  process.
+- Capacity tham khảo @15 FPS/phiên: ~7–8 phiên (fp32 + pipeline 2 tầng),
+  ~15–16 phiên (fp16). Giảm `GAZE_FPS=10` tăng capacity ~1.5×.
 
 ### 8. Chatbot
 
@@ -140,7 +149,9 @@ node scripts/bundle-report.mjs
 | 1000 request, concurrency 50 | ~955 RPS, p95 139ms, 0 lỗi |
 | 10 chat stream đồng thời | DB pool `checked_out=0` trong suốt stream |
 | Gaze batch hot path | 5 SQL query (từ 14 baseline) |
-| Gaze queue 40 task, queue limit 32 | 32 ok, 8 overloaded (đúng thiết kế) |
+| Gaze pipeline (RTX 3060, 2 CPU, cap thread) | 10.9 ms p50 / 11.2 p95 (fp32) |
+| Gaze WS 8 phiên @15 FPS (fp32) | ~115 response/s, ~14.3 FPS/phiên |
+| Gaze WS 16 phiên @15 FPS (fp16) | ~238 response/s, ~14.9 FPS/phiên |
 | Initial JS `/` (Turbopack manifest) | 169.7 KB |
 | Initial JS `/student` | 299.1 KB |
 | Initial JS `/teacher` | 283.8 KB |
@@ -153,8 +164,9 @@ Các số trên là đo trên máy dev, không phải cam kết production. Cầ
 - **Gaze session state**: đã dùng cookie affinity để phân tải theo browser.
   Nếu cần chuyển session giữa replica (replica chết, đổi thiết bị), cần
   chuyển calibration state sang Redis.
-- **Gaze throughput**: vẫn 1 inference worker/GPU mỗi replica. Nếu cần
-  > 100 stream đồng thời, đo GPU rồi cân nhắc TensorRT/ONNX hoặc thêm GPU.
+- **Gaze throughput**: 1 GPU owner + pipeline 2 tầng. Nếu cần > 12–13 phiên
+  @15 FPS/GPU, đo lại và cân nhắc TensorRT/ONNX hoặc thêm GPU; batching chỉ
+  đáng khi chấp nhận thêm latency (b4 fp16 ~2.8 ms/frame so với 3.6 ms).
 - **Chatbot**: đã có giới hạn concurrency + 429; nút thắt còn lại là quota
   nhà cung cấp LLM (`LLM_REQUESTS_PER_SECOND`). Có thể thêm cache retrieval/answer.
 - **Worker**: analysis đã 2 replica; content/embedding có thể scale thêm khi

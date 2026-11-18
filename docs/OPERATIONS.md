@@ -104,10 +104,17 @@ cộng các lượt xem đã phân tích bằng `gaze-metrics-v8`; lượt cũ h
 stale cho tới khi chạy phân tích lại.
 
 `GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
-backend trả lại qua `GET /api/config`, gaze throttle `1000/FPS × 0.95`, worker
+backend trả lại qua `GET /api/config`, gaze throttle `1000/FPS × 0.85`, worker
 suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị cần restart backend + gaze
 và worker phân tích (`docker compose up -d backend worker gaze`); frontend đọc
 runtime nên không rebuild.
+
+Gaze tự cap thread (`OMP/MKL/OPENBLAS/NUMEXPR=1`, `cv2`/`torch` 1 thread) để
+không bị CFS throttling khi container bị giới hạn CPU. `INFERENCE_PRECISION`
+mặc định `fp32`; chỉ đổi sang `fp16` sau khi chạy
+`python -m scripts.compare_precision --dir <ảnh mặt>` trong container gaze và
+đạt gate. `FRAME_MAX_AGE_MS`/`MAX_QUEUE` điều chỉnh mức load shedding: frame cũ
+bị bỏ (`stale`), queue đầy trả `overloaded` kèm `suggestedFps`.
 
 ## Bảo trì định kỳ
 

@@ -97,6 +97,9 @@ export function useGazeTracker({
   const getContextRef = useRef(getContext);
   // FPS nằm trong ref để config runtime về muộn không phải mở lại WebSocket.
   const fpsRef = useRef(fps ?? DEFAULT_FPS);
+  // FPS tạm thời do server gợi ý khi quá tải; hết hạn thì quay lại FPS đích.
+  const adaptiveFpsRef = useRef<number | null>(null);
+  const adaptiveUntilRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -163,6 +166,17 @@ export function useGazeTracker({
       } catch {
         /* ignore */
       }
+    };
+
+    /** FPS hiện tại: tạm hạ theo gợi ý server, hết hạn thì về FPS đích. */
+    const effectiveFps = () => {
+      const target = fpsRef.current;
+      if (adaptiveFpsRef.current === null) return target;
+      if (performance.now() >= adaptiveUntilRef.current) {
+        adaptiveFpsRef.current = null;
+        return target;
+      }
+      return Math.min(target, adaptiveFpsRef.current);
     };
 
     const startSimulation = () => {
@@ -239,7 +253,7 @@ export function useGazeTracker({
         };
         finishActiveWs = finish;
 
-        const scheduleSend = (delayMs = frameIntervalMs(fpsRef.current)) => {
+        const scheduleSend = (delayMs = frameIntervalMs(effectiveFps())) => {
           if (disposed || settled) {
             if (disposed) finish("abort");
             return;
@@ -250,6 +264,12 @@ export function useGazeTracker({
             const startedAt = performance.now();
             if (disposed || settled) {
               if (disposed) finish("abort");
+              return;
+            }
+            // Tab ẩn: không capture/gửi (trình duyệt có thể trả frame đen và
+            // vẫn tốn GPU server). Thử lại khi tab hiện lại.
+            if (typeof document !== "undefined" && document.hidden) {
+              scheduleSend(500);
               return;
             }
             if (ws.readyState !== WebSocket.OPEN) return;
@@ -316,7 +336,7 @@ export function useGazeTracker({
             // Bù thời gian capture + encode vừa tốn để nhịp gửi thực tế đúng
             // FPS đặt (nếu xử lý mất ~15ms mà vẫn chờ đủ interval thì sẽ chậm
             // hơn). Floor 5ms để không busy-loop khi xử lý chậm hơn interval.
-            const interval = frameIntervalMs(fpsRef.current);
+            const interval = frameIntervalMs(effectiveFps());
             const elapsed = performance.now() - startedAt;
             scheduleSend(Math.max(5, interval - elapsed));
           }, delayMs);
@@ -345,6 +365,12 @@ export function useGazeTracker({
             new Date().toISOString(),
           );
           if (!frame) return;
+
+          // Server gợi ý giảm FPS khi quá tải; giữ 10s rồi tự hồi phục.
+          if (frame.suggestedFps !== null) {
+            adaptiveFpsRef.current = frame.suggestedFps;
+            adaptiveUntilRef.current = performance.now() + 10_000;
+          }
 
           let currentX: number | null = null;
           let currentY: number | null = null;

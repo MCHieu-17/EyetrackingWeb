@@ -1,4 +1,10 @@
-type GazeFrameStatus = "ok" | "no_face" | "error" | "offscreen";
+type GazeFrameStatus =
+  | "ok"
+  | "no_face"
+  | "error"
+  | "offscreen"
+  | "overloaded"
+  | "stale";
 export type GazeSurface = "lesson" | "quiz";
 
 /**
@@ -20,6 +26,8 @@ export interface GazeFrameResult {
   presentationId: string | null;
   layoutGeneration: number | null;
   surface: GazeSurface | null;
+  /** FPS server gợi ý khi quá tải; null = giữ nguyên FPS hiện tại. */
+  suggestedFps: number | null;
 }
 
 export interface ActiveGazeFrameContext {
@@ -76,9 +84,14 @@ export function parseGazeFrameResponse(
   const noFace = data.status === "no_face" || data.error === "no_face";
   const status: GazeFrameStatus = noFace
     ? "no_face"
-    : data.ok === true && x !== null && y !== null
-      ? "ok"
-      : "error";
+    : data.status === "overloaded"
+      ? "overloaded"
+      : data.status === "stale"
+        ? "stale"
+        : data.ok === true && x !== null && y !== null
+          ? "ok"
+          : "error";
+  const suggested = finiteNumber(data.suggestedFps);
 
   return {
     frameId: typeof data.frameId === "string" ? data.frameId : null,
@@ -93,6 +106,10 @@ export function parseGazeFrameResponse(
     presentationId: presentationId(data.presentationId),
     layoutGeneration: nonNegativeInteger(data.layoutGeneration),
     surface: surface(data.surface),
+    suggestedFps:
+      suggested !== null && suggested >= 1 && suggested <= 60
+        ? suggested
+        : null,
   };
 }
 

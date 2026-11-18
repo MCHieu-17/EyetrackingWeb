@@ -42,6 +42,7 @@ describe("parseGazeFrameResponse", () => {
       presentationId: "presentation-a",
       layoutGeneration: 2,
       surface: null,
+      suggestedFps: null,
     });
   });
 
@@ -89,6 +90,23 @@ describe("parseGazeFrameResponse", () => {
     expect(parseGazeFrameResponse({ ok: true, x: "0.5", y: 0.5 })?.status).toBe(
       "error",
     );
+  });
+
+  it("maps overloaded/stale and keeps suggestedFps in range", () => {
+    expect(
+      parseGazeFrameResponse({ ok: false, status: "overloaded", suggestedFps: 7 }),
+    ).toMatchObject({ status: "overloaded", suggestedFps: 7, x: null, y: null });
+    expect(
+      parseGazeFrameResponse({ ok: false, status: "stale", suggestedFps: 15 }),
+    ).toMatchObject({ status: "stale", suggestedFps: 15 });
+    expect(
+      parseGazeFrameResponse({ ok: false, status: "overloaded", suggestedFps: 0 })
+        ?.suggestedFps,
+    ).toBeNull();
+    expect(
+      parseGazeFrameResponse({ ok: false, status: "overloaded", suggestedFps: 99 })
+        ?.suggestedFps,
+    ).toBeNull();
   });
 
   it("normalises invalid sequence and layout generation to null", () => {
