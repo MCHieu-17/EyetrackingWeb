@@ -340,7 +340,7 @@ phải lỗi cấu hình.
 - Sửa cascade/FK phải chạy test `test_simplified_schema.py`.
 - `GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
   backend trả lại qua `GET /api/config`, gaze throttle mỗi session
-  `1000/FPS × 0.95`, worker suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị
+  `1000/FPS × 0.85`, worker suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị
   cần restart backend + gaze (worker phân tích cũng đọc biến này); frontend đọc
   runtime nên không rebuild.
 - Document DB mới trong `DB.md`, không dựa vào thiết kế generation 9 cũ.

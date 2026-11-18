@@ -6,9 +6,11 @@ Chạy:
 Tài liệu đầy đủ các endpoint: README.md cùng thư mục.
 
 Endpoint vận hành:
-    GET /health  -> liveness, luôn 200 khi tiến trình còn sống
+    GET /health  -> liveness + thống kê runtime, luôn 200 khi tiến trình sống
     GET /ready   -> readiness, 503 khi pipeline (mediapipe + unigaze) chưa load
 """
+
+from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -18,17 +20,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.session import router as session_router
-from app.api.session import sessions
-from app.services import inference
+from app.api import session as session_api
 
 logger = logging.getLogger("app.gaze")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    inference.init_pipeline()  # load mediapipe + unigaze 1 lần
-    logger.info("Pipeline sẵn sàng (gpu=%s)", inference.gpu_available())
+    session_api.settings.validate()
+    session_api.runtime.start()  # load mediapipe + unigaze + warmup
     task = asyncio.create_task(cleanup_loop())
     try:
         yield
@@ -36,38 +36,36 @@ async def lifespan(app: FastAPI):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        session_api.runtime.close()
 
 
 app = FastAPI(title="Gaze API", lifespan=lifespan)
-app.include_router(session_router)
+app.include_router(session_api.router)
 
 
 async def cleanup_loop():
     """Xoá session hết TTL mỗi phút (giới hạn MAX_SESSIONS)."""
     while True:
         await asyncio.sleep(60)
-        sessions.cleanup_expired()
+        session_api.sessions.cleanup_expired()
 
 
-def _pipeline_status() -> dict:
-    ready = inference.pipeline_ready()
-    return {
-        "status": "ok" if ready else "degraded",
-        "gpu_available": inference.gpu_available(),
-        "pipeline_ready": ready,
-    }
+def _status() -> dict:
+    status = session_api.runtime.snapshot()
+    status["sessions"] = session_api.sessions.stats()
+    return status
 
 
 @app.get("/health")
 def health():
-    """Liveness: tiến trình HTTP còn phản hồi."""
-    return _pipeline_status()
+    """Liveness: tiến trình HTTP còn phản hồi + thống kê pipeline."""
+    return _status()
 
 
 @app.get("/ready")
 def ready():
     """Readiness: chỉ 200 khi pipeline đã load xong, ngược lại 503."""
-    status = _pipeline_status()
+    status = _status()
     if not status["pipeline_ready"]:
         return JSONResponse(status, status_code=503)
     return status

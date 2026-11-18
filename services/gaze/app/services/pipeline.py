@@ -1,31 +1,60 @@
-"""Pipeline: mediapipe face detect -> UniGaze -> (pitch, yaw).
+"""Pipeline hai tầng: CPU (decode/detect/chuẩn hoá) và GPU (UniGaze).
 
-Chỉ được import lazily (qua `inference.init_pipeline`) vì kéo theo mediapipe/
+Tách stage để runtime có thể overlap CPU và GPU: trong khi GPU chạy ViT cho
+frame trước, CPU thread đã decode + detect + warp frame kế tiếp.
+
+Chỉ được import lazily (qua `app.services.runtime`) vì kéo theo mediapipe/
 torch/opencv nặng.
 """
 
+from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+
+import cv2
 import mediapipe as mp
 import numpy as np
 import torch
-import unigaze.loader as loader
 
-from app.services.preprocessing import Preprocessor
-from app.settings import WEIGHTS_DIR, get_device, unigaze_weights_path
+from app.services.errors import InvalidImage
+from app.services.preprocessing import ROI_SIZE, Preprocessor
+from app.settings import Settings
 
-# Model UniGaze lấy từ UNIGAZE_MODEL trong .env/stack.env. Tên file (bỏ
-# `.safetensors`) PHẢI trùng key trong `unigaze.loader.MODEL_INDEX` vì ta dùng
-# `path.stem` làm builder key. Các model hỗ trợ:
-#   unigaze_b16_joint (vit_b_16, 346 MB) | unigaze_l16_joint (vit_l_16, 1.2 GB)
-#   unigaze_h14_joint (vit_h_14, 2.5 GB) | unigaze_h14_cross_X (vit_h_14, 2.5 GB)
-MEDIAPIPE_WEIGHTS = WEIGHTS_DIR / "mediapipe.tflite"
+logger = logging.getLogger("app.gaze")
 
 
-class FaceDetectorModel:
-    def __init__(self):
+def decode_image(data: bytes) -> np.ndarray:
+    """bytes ảnh (JPEG/PNG) -> ảnh BGR; raise InvalidImage nếu hỏng."""
+    if not data:
+        raise InvalidImage("ảnh rỗng")
+    buf = np.frombuffer(data, dtype=np.uint8)
+    frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    if frame is None:
+        raise InvalidImage("không decode được ảnh")
+    return frame
+
+
+@dataclass(frozen=True)
+class PreparedFace:
+    """Mặt đã warp về ROI chuẩn, RGB uint8, sẵn sàng đưa vào GPU."""
+
+    rgb: np.ndarray
+
+
+class FaceDetector:
+    """MediaPipe BlazeFace (CPU) + 6 keypoint cho solvePnP."""
+
+    def __init__(self, weights_path: Path):
+        if not weights_path.is_file():
+            raise RuntimeError(
+                f"Không thấy MediaPipe weights tại {weights_path}. "
+                "Kiểm tra WEIGHTS_DIR và volume gaze-weights."
+            )
         base_options = mp.tasks.BaseOptions(
-            model_asset_path=str(MEDIAPIPE_WEIGHTS),
-            delegate=mp.tasks.BaseOptions.Delegate.CPU,  # model rất nhẹ -> chạy CPU
+            model_asset_path=str(weights_path),
+            delegate=mp.tasks.BaseOptions.Delegate.CPU,  # model rất nhẹ
         )
         options = mp.tasks.vision.FaceDetectorOptions(
             base_options=base_options,
@@ -33,19 +62,20 @@ class FaceDetectorModel:
         )
         self.detector = mp.tasks.vision.FaceDetector.create_from_options(options)
 
-    def predict(self, frame):
-        h, w = frame.shape[:2]
-        mp_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+    def detect(self, frame_rgb: np.ndarray):
+        """Trả ((xmin, ymin, xmax, ymax), landmarks) hoặc None."""
+        h, w = frame_rgb.shape[:2]
+        mp_frame = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
         results = self.detector.detect(mp_frame)
-
         if not results.detections:
             return None
-        res = results.detections[0]
-        if not res.keypoints:
+
+        detection = results.detections[0]
+        # solvePnP cần đúng 6 điểm; detection lạ/không đủ điểm -> bỏ frame.
+        if not detection.keypoints or len(detection.keypoints) != 6:
             return None
 
-        box = res.bounding_box
-        # Kẹp bbox vào biên ảnh để crop không rỗng / lệch.
+        box = detection.bounding_box
         xmin = max(0, box.origin_x)
         ymin = max(0, box.origin_y)
         xmax = min(w, box.origin_x + box.width)
@@ -54,18 +84,48 @@ class FaceDetectorModel:
             return None
 
         landmarks = np.array(
-            [[pt.x * w, pt.y * h] for pt in res.keypoints], dtype=np.float32
+            [[pt.x * w, pt.y * h] for pt in detection.keypoints],
+            dtype=np.float32,
         )
         return (xmin, ymin, xmax, ymax), landmarks
 
-    def __call__(self, frame):
-        return self.predict(frame)
+
+class CpuStage:
+    """decode JPEG -> detect -> warp 224x224. Chạy trong 1 thread riêng."""
+
+    def __init__(self, settings: Settings):
+        self.detector = FaceDetector(settings.mediapipe_weights_path())
+        self.preprocessor = Preprocessor()
+
+    def prepare(self, image_bytes: bytes) -> PreparedFace | None:
+        frame = decode_image(image_bytes)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        detection = self.detector.detect(rgb)
+        if detection is None:
+            return None
+        (xmin, ymin, xmax, ymax), landmarks = detection
+
+        face = np.ascontiguousarray(rgb[ymin:ymax, xmin:xmax])
+        landmarks_crop = landmarks - np.array([xmin, ymin], dtype=np.float32)
+        warped = self.preprocessor.process(face, landmarks_crop)
+        if warped is None:
+            return None
+        return PreparedFace(warped)
+
+    def warmup(self) -> None:
+        """Chạy graph MediaPipe một lần để tránh spike ở frame đầu."""
+        blank = np.zeros((360, 480, 3), dtype=np.uint8)
+        self.detector.detect(blank)
 
 
-class GazeModel:
-    def __init__(self, device=None):
-        device = device or get_device()
-        weights = unigaze_weights_path()
+class GpuStage:
+    """UniGaze forward + normalize tensor. Chạy trong 1 thread riêng."""
+
+    def __init__(self, settings: Settings):
+        import unigaze.loader as loader
+
+        weights = settings.unigaze_weights_path()
         if not weights.is_file():
             raise RuntimeError(
                 f"Không thấy weights UniGaze tại {weights}. "
@@ -76,42 +136,64 @@ class GazeModel:
                 f"UNIGAZE_MODEL={weights.stem!r} không có trong "
                 f"unigaze.loader.MODEL_INDEX: {sorted(loader.MODEL_INDEX)}"
             )
+
+        self.device = torch.device(settings.device)
+        if self.device.type == "cuda":
+            if not torch.cuda.is_available():
+                raise RuntimeError("DEVICE=cuda nhưng torch không thấy CUDA")
+            if self.device.index is None:
+                self.device = torch.device("cuda", torch.cuda.current_device())
+            torch.cuda.set_device(self.device)
+            self.gpu_name = torch.cuda.get_device_name(self.device)
+        else:
+            self.gpu_name = None
+
+        self.dtype = (
+            torch.float16 if settings.precision == "fp16" else torch.float32
+        )
+        self.model_name = settings.unigaze_model
+        self.precision = settings.precision
+        self.is_cuda = self.device.type == "cuda"
+
         self.model = loader.build_unigaze_model(weights.stem)
         self.model.load_unigaze_weights(str(weights))
-        self.model.to(device)
+        self.model.to(self.device)
+        # Module.half() sửa tại chỗ; chỉ gọi đúng một lần ở đây.
+        if self.dtype == torch.float16:
+            self.model.half()
         self.model.eval()
 
-    def predict(self, preprocessed_face):
-        with torch.no_grad():
-            pred = self.model(preprocessed_face)["pred_gaze"]
-            pitch, yaw = pred.cpu().detach().numpy()[0]
-            return float(pitch), float(yaw)
+        self._mean = torch.tensor(
+            [0.485, 0.456, 0.406], device=self.device, dtype=torch.float32
+        ).view(1, 3, 1, 1)
+        self._std = torch.tensor(
+            [0.229, 0.224, 0.225], device=self.device, dtype=torch.float32
+        ).view(1, 3, 1, 1)
 
-    def __call__(self, preprocessed_face):
-        return self.predict(preprocessed_face)
+    def _to_tensor(self, prepared: PreparedFace) -> torch.Tensor:
+        rgb = np.ascontiguousarray(prepared.rgb)
+        tensor = (
+            torch.from_numpy(rgb)
+            .permute(2, 0, 1)
+            .unsqueeze(0)
+            .to(self.device)
+        )
+        tensor = tensor.to(torch.float32).div_(255.0)
+        tensor = (tensor - self._mean) / self._std
+        return tensor.to(self.dtype)
 
+    @torch.inference_mode()
+    def predict(self, prepared: PreparedFace) -> tuple[float, float]:
+        pred = self.model(self._to_tensor(prepared))["pred_gaze"]
+        pitch, yaw = pred[0].tolist()
+        return float(pitch), float(yaw)
 
-class Pipeline:
-    def __init__(self):
-        self.device = get_device()
-        self.face_detector = FaceDetectorModel()
-        self.gaze_estimator = GazeModel(device=self.device)
-        self.preprocessor = Preprocessor(device=self.device)
-
-    def process(self, frame):
-        rgb_frame = self.preprocessor.process_rgb(frame)
-        result = self.face_detector(rgb_frame)
-        if result is None:
-            return None
-
-        (xmin, ymin, xmax, ymax), landmarks = result
-        face = rgb_frame[ymin:ymax, xmin:xmax]
-        landmarks_crop = landmarks - np.array([xmin, ymin], dtype=np.float32)
-        preprocessed_face = self.preprocessor.process(face, landmarks=landmarks_crop)
-        if preprocessed_face is None:
-            return None
-
-        return self.gaze_estimator(preprocessed_face)
-
-    def __call__(self, frame):
-        return self.process(frame)
+    def warmup(self) -> None:
+        """Chạy forward vài lần để CUDA autotune/kernel sẵn sàng."""
+        dummy = PreparedFace(
+            rgb=np.zeros((ROI_SIZE[1], ROI_SIZE[0], 3), dtype=np.uint8)
+        )
+        for _ in range(3):
+            self.predict(dummy)
+        if self.is_cuda:
+            torch.cuda.synchronize()

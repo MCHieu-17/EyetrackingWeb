@@ -14,10 +14,9 @@ from pathlib import Path
 # Cho phép chạy trực tiếp file script (khi đó sys.path[0] là scripts/).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.settings import WEIGHTS_DIR as _WEIGHTS_DIR  # noqa: E402
-from app.settings import get_device, get_unigaze_model  # noqa: E402
+from app.settings import Settings  # noqa: E402
 
-WEIGHTS_DIR = str(_WEIGHTS_DIR)
+WEIGHTS_DIR = str(Settings.from_env().weights_dir)
 
 MEDIAPIPE_FILE = {
     "name": "mediapipe.tflite",
@@ -143,9 +142,9 @@ def ensure(name, sources, min_size, sha256=None):
     return False
 
 
-def _selected_model_file():
+def _selected_model_file(settings: Settings):
     """Entry cần tải cho UNIGAZE_MODEL; None nếu file đã có sẵn."""
-    model = get_unigaze_model()
+    model = settings.unigaze_model
     known = KNOWN_UNIGAZE.get(model)
     if known is not None:
         return known
@@ -162,10 +161,11 @@ def _selected_model_file():
 
 
 def main() -> int:
+    settings = Settings.from_env()
     try:
-        get_device()  # fail-fast nếu thiếu DEVICE
-        selected = _selected_model_file()
-    except RuntimeError as exc:
+        settings.validate()  # fail-fast nếu thiếu DEVICE/UNIGAZE_MODEL
+        selected = _selected_model_file(settings)
+    except (RuntimeError, ValueError) as exc:
         print(f"LOI: {exc}", file=sys.stderr)
         return 1
 

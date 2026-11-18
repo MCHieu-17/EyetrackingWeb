@@ -6,16 +6,36 @@ GPU** trong stack mặc định; chatbot embedding chạy CPU.
 ## Kiến trúc
 
 ```text
-JPEG frame
-  → MediaPipe face detection
-  → UniGaze (pitch, yaw)
-  → calibration hồi quy tuyến tính
-  → (x, y) chuẩn hóa theo viewport
-  → One-Euro smoothing
+WebSocket (per session)
+  receiver task: đọc frame, throttle GAZE_FPS, mailbox maxsize=1
+  processor task: lấy frame mới nhất -> pipeline -> response
+
+Pipeline 2 tầng (2 thread riêng)
+  CPU: decode JPEG -> MediaPipe detect -> warp 224x224
+       -> queue 1 slot ->
+  GPU: normalize -> UniGaze -> calibration -> One-Euro -> (x, y)
 ```
 
-Session calibration nằm trong RAM và mất khi container restart. Backend lưu
-model `.ubj` trong `gaze_calibrations` để frontend import lại.
+- Mỗi session chỉ có tối đa 1 frame trong pipeline → không lệch thứ tự.
+- Frame cũ hơn `FRAME_MAX_AGE_MS` bị bỏ (`stale`) thay vì inference.
+- Queue đầy → trả `overloaded` ngay, kèm `suggestedFps`.
+- Calibration nằm trong RAM và mất khi container restart. Backend lưu model
+  `.ubj` trong `gaze_calibrations` để frontend import lại.
+
+### Vì sao cap thread?
+
+Container gaze bị giới hạn CPU (mặc định `cpus: 2.0`) nhưng OpenCV/torch/
+MediaPipe vẫn thấy toàn bộ core của host. Oversubscription gây CFS throttling
+và stall ~80 ms/frame. Service cap `cv2`/`torch` về 1 thread trong code và
+`entrypoint.sh` export `OMP/MKL/OPENBLAS/NUMEXPR=1`.
+
+Đo trên RTX 3060 (container 2 CPU, ảnh 512×512):
+
+| Cấu hình | Full pipeline p50 | p95 |
+|---|---:|---:|
+| Không cap thread | 55–85 ms | 100–200 ms |
+| Có cap thread (fp32) | **10.9 ms** | **11.2 ms** |
+| Có cap thread (fp16) | ~7–8 ms | — |
 
 ## Chạy
 
@@ -26,8 +46,8 @@ docker compose up -d --build gaze
 docker compose logs -f gaze
 ```
 
-Gaze không publish cổng host trong compose mặc định (2 replica dùng chung GPU).
-Browser truy cập qua nginx `/gaze/*`; debug trực tiếp bằng:
+Gaze không publish cổng host trong compose mặc định. Browser truy cập qua nginx
+`/gaze/*`; debug trực tiếp bằng:
 
 ```bash
 docker compose exec gaze python -c \
@@ -49,8 +69,8 @@ python -m venv .venv
 
 | Method | Path | Ý nghĩa |
 |---|---|---|
-| GET | `/health` | Liveness; 200 khi process còn sống |
-| GET | `/ready` | Readiness; 503 khi MediaPipe/UniGaze chưa load |
+| GET | `/health` | Liveness + `device/model/precision/stats/queue/sessions` |
+| GET | `/ready` | Readiness; 503 khi pipeline chưa load/warmup xong |
 | POST | `/session` | Tạo session và khai báo các điểm calibration |
 | GET | `/session/{sid}` | Trạng thái `collecting` hoặc `ready` |
 | DELETE | `/session/{sid}` | Giải phóng session |
@@ -71,7 +91,7 @@ python -m venv .venv
 }
 ```
 
-Tối đa 64 điểm/session, ID không trùng. `POST /session` trả
+Tối đa 64 điểm/session (và `MAX_POINTS`), ID không trùng. `POST /session` trả
 `{"session_id": "..."}` và 503 khi vượt `MAX_SESSIONS`.
 
 ### Thu mẫu và train
@@ -85,7 +105,7 @@ HTTP 200 có thể mang `status`:
 
 - `accepted`: đã lưu mẫu;
 - `no_face`: không detect được mặt;
-- `invalid_image`: JPEG hỏng;
+- `invalid_image`: JPEG hỏng/quá lớn;
 - `unknown_point`: point ID sai.
 
 `POST /session/{sid}/train` trả `{"status":"ok","n_samples":N}`. Nếu thiếu mẫu,
@@ -125,7 +145,7 @@ Header:
 }
 ```
 
-Server echo lại `frameId`, `sequence`, `captureMonotonicNs`,
+Server echo lại `frameId`, `sequence`, `captureMonotonicNs`, `eventTime`,
 `presentationId`, `layoutGeneration` trong response. Response thành công:
 
 ```json
@@ -140,14 +160,15 @@ Khi lỗi:
 
 Các giá trị `status`/`error`:
 
-- `no_face`: frame không có mặt;
-- `invalid_image`: frame hỏng;
-- `internal`: lỗi suy luận một frame, stream vẫn tiếp tục;
-- `overloaded`: queue suy luận đầy, client nên giảm FPS.
+- `no_face`: frame không có mặt (hoặc tư thế đầu vượt ngưỡng);
+- `invalid_image`: frame hỏng/quá `MAX_FRAME_BYTES`;
+- `stale`: frame chờ quá `FRAME_MAX_AGE_MS`, bị bỏ để giữ latency;
+- `overloaded`: queue đầy; response kèm `suggestedFps`;
+- `internal`: lỗi suy luận một frame, stream vẫn tiếp tục.
 
 JPEG legacy không có header vẫn được chấp nhận, nhưng không có metadata echo.
-Frame bị drop nếu session đang xử lý frame trước hoặc gửi dày hơn
-`GAZE_FPS` (mặc định 15 FPS; throttle mỗi session = 1000/FPS × 0.95 ms).
+Frame bị drop nếu session đang xử lý frame trước, gửi dày hơn `GAZE_FPS`
+(throttle = `1000/FPS × 0.85` ms), hoặc bị frame mới hơn thay thế trong mailbox.
 
 WebSocket close:
 
@@ -159,8 +180,8 @@ WebSocket close:
 - Gaze trả `[0,1]` theo **viewport lúc calibration**.
 - Giá trị có thể âm hoặc > 1 khi người dùng nhìn ra ngoài màn hình.
 - Frontend quy đổi từ viewport calibration sang viewport hiện tại bằng
-  `innerWidth/innerHeight`, `screenX/screenY`, DPR. Vì vậy zoom/resize/move cửa
-  sổ không cần calibration lại.
+  `innerWidth/innerHeight`, `screenX/screenY`, DPR. Zoom/resize/move cửa sổ
+  không cần calibration lại.
 - Backend lưu gaze thô theo viewport; worker mới quy đổi sang slide/AOI.
 
 ## Cấu hình chính
@@ -169,15 +190,36 @@ WebSocket close:
 |---|---|---|
 | `DEVICE` | **bắt buộc** | `cuda` hoặc `cpu`; thiếu/sai → fail-fast |
 | `UNIGAZE_MODEL` | **bắt buộc** | `unigaze_b16_joint` \| `unigaze_l16_joint` \| `unigaze_h14_joint` \| `unigaze_h14_cross_X` |
+| `INFERENCE_PRECISION` | `fp32` | `fp32` \| `fp16`; fp16 ~2.2× forward, chỉ bật sau validate |
 | `WEIGHTS_DIR` | `/app/weights` | Volume weights runtime |
 | `MAX_SESSIONS` | `100` | Session đồng thời |
 | `SESSION_TTL_SECONDS` | `1800` | TTL session không hoạt động |
 | `MAX_POINTS` | `64` | Điểm calibration tối đa |
 | `MAX_SAMPLES_PER_POINT` | `50` | Mẫu giữ lại/point |
-| `GAZE_MAX_UPLOAD_BYTES` → `MAX_UPLOAD_BYTES` | `5242880` | Ảnh upload tối đa |
-| `MAX_INFERENCE_QUEUE` | `32` | Queue suy luận |
-| `GAZE_FPS` | `15` | Frame/giây trình duyệt gửi lên; throttle mỗi session = 1000/FPS × 0.95. Mặc định 15, hợp lệ 1..60. |
+| `GAZE_MAX_UPLOAD_BYTES` → `MAX_UPLOAD_BYTES` | `5242880` | Ảnh calibration/import tối đa |
+| `MAX_FRAME_BYTES` | `1048576` | JPEG tối đa cho 1 frame WS |
+| `MAX_QUEUE` | `8` | Số frame chờ trong queue CPU |
+| `FRAME_MAX_AGE_MS` | `200` | Tuổi tối đa trước khi drop `stale` |
+| `INFERENCE_TIMEOUT_S` | `5` | Timeout 1 job suy luận |
+| `GAZE_FPS` | `15` | Frame/giây trình duyệt gửi; throttle = `1000/FPS × 0.85` |
 | `ONEEURO_*` | `0.5/0.5/1.0` | Bộ lọc làm mượt |
+
+Thread cap (`OMP/MKL/OPENBLAS/NUMEXPR=1`) được `entrypoint.sh` set mặc định;
+`cv2.setNumThreads(1)` và `torch.set_num_threads(1)` được gọi trong runtime.
+
+## Capacity (RTX 3060, 1 GPU, 15 FPS/phiên)
+
+| Cấu hình | FPS/GPU | Phiên @15 FPS |
+|---|---:|---:|
+| Không cap thread | ~16 | ~1 |
+| Cap thread + pipeline 2 tầng (fp32) | ~115 | ~7–8 |
+| + fp16 | ~235 | ~15–16 |
+
+Số đo bằng `scripts/bench.py` trên RTX 3060 (container 2 CPU, ảnh 480px):
+8 phiên @15 FPS đạt ~115 response/s (fp32); 16 phiên đạt ~238 response/s
+(fp16). Chạy lại trên máy thật trước khi công bố.
+Giảm `GAZE_FPS` xuống 10 sẽ tăng capacity ~1.5× (worker vẫn tính đúng gap
+threshold vì suy ra từ `GAZE_FPS`).
 
 ## Test
 
@@ -188,8 +230,22 @@ cd services/gaze
 ```
 
 Test hiện có bao phủ protocol v2/legacy, calibration `.ubj`, One-Euro filter,
-TTL/giới hạn session và giữ mẫu. Test inference đầy đủ cần image có
-MediaPipe/UniGaze/GPU.
+TTL/giới hạn session, runtime scheduler/deadline/overload và HTTP/WS với
+pipeline giả. Test inference đầy đủ cần image có MediaPipe/UniGaze/GPU.
+
+## Bench & validate fp16
+
+```bash
+# Cần ảnh JPEG/PNG có mặt người
+docker compose exec -T gaze python -m scripts.bench \
+  --image /tmp/face.jpg --sessions 1,4,8,12 --fps 15 --duration 10
+
+# So sánh fp32 vs fp16 trên thư mục ảnh; exit 1 nếu vượt gate
+docker compose exec -T gaze python -m scripts.compare_precision \
+  --dir /tmp/faces --max-mean-deg 0.05 --max-abs-deg 0.3
+```
+
+Chỉ bật `INFERENCE_PRECISION=fp16` sau khi script precision đạt gate.
 
 ## Đổi backbone UniGaze
 

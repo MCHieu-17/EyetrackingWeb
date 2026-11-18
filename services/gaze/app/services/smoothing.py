@@ -4,6 +4,8 @@ Tách riêng khỏi `preprocessing.py` để không phải kéo theo numpy/torch
 khi chỉ cần làm mượt — nhờ đó test nhẹ và module độc lập.
 """
 
+from __future__ import annotations
+
 import time
 
 import numpy as np
@@ -13,14 +15,15 @@ class OneEuroFilter2D:
     """One-Euro filter cho tín hiệu 2 chiều (x, y) chuẩn hóa.
 
     Tham số mặc định phù hợp tọa độ [0, 1] và có thể chỉnh qua biến môi trường
-    (xem ``app.settings.ONEEURO_MIN_CUTOFF`` / ``ONEEURO_BETA`` /
-    ``ONEEURO_D_CUTOFF``):
+    (xem ``app.settings.Settings.oneeuro_*``):
 
     - ``min_cutoff``: cutoff khi đứng yên — thấp để giảm rung, cao để bớt trễ.
-    - ``beta``: độ nhạy theo tốc độ — càng cao càng bám nhanh khi lia mắt
-      (đây là nút chính để giảm trễ mà gần như không thêm rung lúc đứng yên).
-    - ``d_cutoff``: cutoff làm mượt vận tốc — cao hơn để thích ứng tốc độ nhanh hơn.
+    - ``beta``: độ nhạy theo tốc độ — càng cao càng bám nhanh khi lia mắt.
+    - ``d_cutoff``: cutoff làm mượt vận tốc — cao hơn để thích ứng nhanh hơn.
     """
+
+    #: Khoảng nghỉ tối đa (giây). Lớn hơn -> reset thay vì trộn với vị trí cũ.
+    MAX_GAP_SECONDS = 1.0
 
     def __init__(self, min_cutoff=0.5, beta=0.5, d_cutoff=1.0):
         self.min_cutoff = min_cutoff
@@ -34,13 +37,30 @@ class OneEuroFilter2D:
     def _alpha(dt: float, cutoff: float) -> float:
         return 1.0 / (1.0 + (1.0 / (2 * np.pi * cutoff)) / dt)
 
-    def process(self, coord):
-        """Nhận [x, y], trả về [x, y] đã làm mượt."""
-        coord_np = np.asarray(coord, dtype=float)
-        t = time.monotonic()
+    def reset(self, coord=None, timestamp: float | None = None) -> None:
+        self.dx_prev = np.zeros(2)
+        if coord is None:
+            self.x_prev = None
+            self.t_prev = None
+            return
+        self.x_prev = np.asarray(coord, dtype=float)
+        self.t_prev = time.monotonic() if timestamp is None else timestamp
 
-        if self.x_prev is None:
-            self.x_prev, self.t_prev = coord_np, t
+    def process(self, coord, timestamp: float | None = None):
+        """Nhận [x, y], trả về [x, y] đã làm mượt.
+
+        ``timestamp`` nên là thời điểm capture (monotonic, giây) để dt không bị
+        méo khi frame xếp hàng; bỏ trống thì dùng thời điểm hiện tại.
+        """
+        coord_np = np.asarray(coord, dtype=float)
+        t = time.monotonic() if timestamp is None else timestamp
+
+        if (
+            self.x_prev is None
+            or self.t_prev is None
+            or t - self.t_prev > self.MAX_GAP_SECONDS
+        ):
+            self.reset(coord_np, t)
             return coord_np.tolist()
 
         dt = t - self.t_prev

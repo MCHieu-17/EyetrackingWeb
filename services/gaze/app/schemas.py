@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.settings import MAX_POINTS
+from app.settings import MAX_POINTS_HARD_CAP
 
 
 class CalibPoint(BaseModel):
@@ -14,7 +14,9 @@ class CalibPoint(BaseModel):
 
 
 class SessionRequest(BaseModel):
-    points: list[CalibPoint] = Field(min_length=1, max_length=MAX_POINTS)
+    points: list[CalibPoint] = Field(
+        min_length=1, max_length=MAX_POINTS_HARD_CAP
+    )
 
     @field_validator("points")
     @classmethod

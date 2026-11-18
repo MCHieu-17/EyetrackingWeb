@@ -8,10 +8,18 @@ Vòng đời 4 bước:
 
 Model đã train có thể tải về (/model) và nạp lại (/import, format .ubj v2) để
 khỏi calibration lại.
+
+WebSocket dùng mô hình mailbox `maxsize=1`: receiver đọc frame liên tục và giữ
+frame mới nhất, processor lấy frame đó đưa vào pipeline. Nhờ vậy khi GPU chậm,
+frame cũ bị thay thế thay vì xếp hàng làm tăng latency.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import time
+from contextlib import suppress
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.responses import JSONResponse, Response
@@ -27,21 +35,18 @@ from app.schemas import (
     SessionStatus,
     TrainResult,
 )
-from app.services import inference
+from app.services.errors import InferenceOverloaded, ModelNotReady
+from app.services.runtime import FrameJob, GazeFrame, InferenceRuntime
 from app.services.sessions import SessionManager
-from app.settings import (
-    MAX_SESSIONS,
-    MAX_UPLOAD_BYTES,
-    MIN_FRAME_INTERVAL_MS,
-    MIN_SAMPLES,
-    SESSION_TTL_SECONDS,
-)
+from app.settings import Settings
 
 logger = logging.getLogger("app.gaze")
 
 router = APIRouter(tags=["session"])
 
-sessions = SessionManager(ttl=SESSION_TTL_SECONDS, max_sessions=MAX_SESSIONS)
+settings = Settings.from_env()
+sessions = SessionManager(settings)
+runtime = InferenceRuntime(settings)
 
 
 def _get_or_404(sid: str):
@@ -51,24 +56,59 @@ def _get_or_404(sid: str):
     return session
 
 
-async def _read_limited(upload: UploadFile, limit: int = MAX_UPLOAD_BYTES) -> bytes:
+async def _read_limited(upload: UploadFile, limit: int | None = None) -> bytes:
     """Đọc tối đa `limit` bytes; vượt -> 413 (không nạp cả file khổng lồ vào RAM)."""
+    limit = settings.max_upload_bytes if limit is None else limit
     data = await upload.read(limit + 1)
     if len(data) > limit:
         raise HTTPException(413, "file quá lớn")
     return data
 
 
+def _put_latest(mailbox: asyncio.Queue, job: FrameJob | None) -> None:
+    """Đặt job vào mailbox 1 slot; frame cũ hơn bị thay thế (freshness)."""
+    try:
+        mailbox.put_nowait(job)
+        return
+    except asyncio.QueueFull:
+        pass
+    with suppress(asyncio.QueueEmpty):
+        old = mailbox.get_nowait()
+        if isinstance(old, FrameJob):
+            runtime.stats.count_drop("superseded")
+    with suppress(asyncio.QueueFull):
+        mailbox.put_nowait(job)
+
+
+def _ws_payload(job: FrameJob, result: GazeFrame) -> dict:
+    payload: dict = {"ok": result.ok, "status": result.status}
+    if result.ok:
+        payload["x"] = result.x
+        payload["y"] = result.y
+    else:
+        payload["error"] = result.status
+    if result.status in {"overloaded", "stale"}:
+        payload["suggestedFps"] = runtime.suggested_fps()
+    return apply_header_echo(payload, job.header)
+
+
+async def _send_json(ws: WebSocket, payload: dict) -> None:
+    with suppress(Exception):
+        await ws.send_json(payload)
+
+
 @router.get("/session/{sid}", response_model=SessionStatus)
 def session_status(sid: str):
     session = _get_or_404(sid)
-    return SessionStatus(
-        state=session.state, calibrated=session.state == "ready"
-    )
+    return SessionStatus(state=session.state.value, calibrated=session.ready)
 
 
 @router.post("/session", response_model=SessionCreated)
 def create_session(req: SessionRequest):
+    if len(req.points) > settings.max_points:
+        raise HTTPException(
+            422, f"tối đa {settings.max_points} điểm calibration"
+        )
     points = {p.id: (p.x, p.y) for p in req.points}
     try:
         sid = sessions.create(points)
@@ -89,29 +129,30 @@ async def calibrate(sid: str, image: UploadFile = File(...), point_id: str = For
     session = _get_or_404(sid)
     if point_id not in session.points:
         return CalibrateResult(status="unknown_point")
-    if not inference.pipeline_ready():
+    if not runtime.pipeline_ready():
         raise HTTPException(503, "pipeline chưa sẵn sàng")
 
-    frame = inference.decode_jpeg(await _read_limited(image))
-    if frame is None:
-        return CalibrateResult(status="invalid_image")
-
+    data = await _read_limited(image)
+    runtime.stats.count_in()
     try:
-        result = await inference.run_inference(inference.process_frame, frame)
-    except inference.InferenceOverloaded:
+        result = await runtime.submit(runtime.new_job(jpeg=data))
+    except InferenceOverloaded:
         raise HTTPException(
-            503,
-            "inference overloaded",
-            headers={"Retry-After": "1"},
+            503, "inference overloaded", headers={"Retry-After": "1"}
         )
-    except Exception:  # lỗi suy luận không được làm sập request
-        logger.exception("Calibration inference lỗi (sid=%s, point=%s)", sid, point_id)
-        raise HTTPException(500, "inference failed")
-    if result is None:
-        return CalibrateResult(status="no_face")
+    except ModelNotReady:
+        raise HTTPException(503, "pipeline chưa sẵn sàng")
 
-    pitch, yaw = result
-    count = session.add_sample(point_id, pitch, yaw)
+    if result.status == "invalid_image":
+        return CalibrateResult(status="invalid_image")
+    if result.status == "no_face":
+        return CalibrateResult(status="no_face")
+    if not result.ok or result.pitch is None or result.yaw is None:
+        raise HTTPException(
+            503, "inference failed", headers={"Retry-After": "1"}
+        )
+
+    count = session.add_sample(point_id, result.pitch, result.yaw)
     return CalibrateResult(status="accepted", count=count)
 
 
@@ -124,24 +165,24 @@ def train(sid: str):
     session = _get_or_404(sid)
 
     missing = {pid: len(session.samples.get(pid, [])) for pid in session.points}
-    bad = {pid: n for pid, n in missing.items() if n < MIN_SAMPLES}
+    bad = {pid: n for pid, n in missing.items() if n < settings.min_samples}
     if bad:  # bảo đảm đủ N điểm × K mẫu
         return JSONResponse(
             InsufficientSamples(detail=bad).model_dump(), status_code=422
         )
 
-    X = [m[:2] for ms in session.samples.values() for m in ms]
+    x = [m[:2] for ms in session.samples.values() for m in ms]
     y = [m[2:] for ms in session.samples.values() for m in ms]
-    session.calib.fit(X, y)
-    session.state = "ready"
-    logger.info("Train xong sid=%s n_samples=%d", sid, len(X))
-    return TrainResult(n_samples=len(X))
+    session.calib.fit(x, y)
+    session.mark_ready()
+    logger.info("Train xong sid=%s n_samples=%d", sid, len(x))
+    return TrainResult(n_samples=len(x))
 
 
 @router.get("/session/{sid}/model")
 def download_model(sid: str):
     session = _get_or_404(sid)
-    if session.state != "ready":
+    if not session.ready:
         raise HTTPException(409, "not calibrated")
     return Response(
         session.calib.serialize(),
@@ -159,7 +200,7 @@ async def import_model(sid: str, model: UploadFile = File(...)):
         session.calib.deserialize(await _read_limited(model))
     except (ValueError, KeyError, TypeError):
         return ImportResult(status="invalid_model")
-    session.state = "ready"  # bỏ qua calibration
+    session.mark_ready()  # bỏ qua calibration
     return ImportResult(status="ready")
 
 
@@ -167,52 +208,74 @@ async def import_model(sid: str, model: UploadFile = File(...)):
 async def stream(ws: WebSocket, sid: str):
     await ws.accept()
     session = sessions.get(sid)
-    if session is None or session.state != "ready":
+    if session is None or not session.ready:
         # accept() trước để client nhận đúng close code (không phải HTTP 403).
         await ws.close(code=1008, reason="not_calibrated")
         return
-    if not inference.pipeline_ready():
+    if not runtime.pipeline_ready():
         await ws.close(code=1013, reason="pipeline_not_ready")
         return
 
-    while True:
-        msg = await ws.receive()
-        if msg["type"] == "websocket.disconnect":
-            break
-        data = msg.get("bytes")
-        if data is None:
-            continue
-        if session.processing:  # drop frame, không xếp hàng
-            continue
-        now = time.monotonic()
-        if now - session.last_frame_at < MIN_FRAME_INTERVAL_MS / 1000:
-            continue
-        session.last_frame_at = now
-        session.processing = True
-        header, jpeg = parse_frame(data)
-        try:
-            error, point = await inference.run_inference(
-                inference.predict, session, jpeg
+    mailbox: asyncio.Queue[FrameJob | None] = asyncio.Queue(maxsize=1)
+
+    async def receive_loop() -> None:
+        while True:
+            msg = await ws.receive()
+            if msg["type"] == "websocket.disconnect":
+                _put_latest(mailbox, None)
+                return
+            data = msg.get("bytes")
+            if data is None:
+                continue
+
+            runtime.stats.count_in()
+            now = time.monotonic()
+            if now - session.last_frame_at < settings.min_frame_interval_s:
+                runtime.stats.count_drop("throttle")
+                continue
+            session.last_frame_at = now
+
+            header, jpeg = parse_frame(data)
+            if not jpeg or len(jpeg) > settings.max_frame_bytes:
+                runtime.stats.count_drop("invalid_image")
+                continue
+            _put_latest(
+                mailbox,
+                runtime.new_job(jpeg=jpeg, session=session, header=header),
             )
-            response: dict = apply_header_echo(
-                {
-                    "ok": not error,
-                    "status": "ok" if not error else error,
-                },
-                header,
-            )
-            if error:
-                response["error"] = error
-            else:
-                response["x"], response["y"] = point
-            await ws.send_json(response)
-        except inference.InferenceOverloaded:
-            # Queue đầy: báo client giảm FPS, không làm sập stream.
-            await ws.send_json(
-                {"ok": False, "error": "overloaded", "status": "overloaded"}
-            )
-        except Exception:
-            # Lỗi suy luận 1 frame không được ngắt phiên stream.
-            await ws.send_json({"ok": False, "error": "internal", "status": "error"})
-        finally:
-            session.processing = False
+
+    async def process_loop() -> None:
+        while True:
+            job = await mailbox.get()
+            if job is None:
+                return
+            if time.monotonic() - job.received_at > settings.frame_max_age_s:
+                runtime.stats.count_drop("stale")
+                await _send_json(ws, _ws_payload(job, GazeFrame("stale")))
+                continue
+            try:
+                result = await runtime.submit(job)
+            except InferenceOverloaded:
+                result = GazeFrame("overloaded")
+            except ModelNotReady:
+                await ws.close(code=1013, reason="pipeline_not_ready")
+                return
+            await _send_json(ws, _ws_payload(job, result))
+
+    recv_task = asyncio.create_task(receive_loop())
+    proc_task = asyncio.create_task(process_loop())
+    try:
+        done, pending = await asyncio.wait(
+            {recv_task, proc_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            with suppress(asyncio.CancelledError, Exception):
+                task.result()
+    finally:
+        for task in (recv_task, proc_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(recv_task, proc_task, return_exceptions=True)

@@ -11,9 +11,15 @@ Format `.ubj` v2:
 
 `coef` xếp sao cho `coef @ [pitch, yaw] + intercept` ra `[x, y]`. Không có
 `pickle`, không cần scikit-learn ở đường predict.
+
+Model được giữ trong một object bất biến và hoán đổi nguyên tử, nhờ đó thread
+suy luận luôn đọc được cặp (coef, intercept) nhất quán khi `/train` hoặc
+`/import` chạy song song.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import numpy as np
 import ubjson
@@ -21,42 +27,48 @@ import ubjson
 FORMAT = "gaze-lr-v2"
 
 
+@dataclass(frozen=True)
+class LinearModel:
+    coef: np.ndarray  # shape (2, 2)
+    intercept: np.ndarray  # shape (2,)
+
+
 class Calibration:
     def __init__(self):
-        self._coef: np.ndarray | None = None      # shape (2, 2)
-        self._intercept: np.ndarray | None = None  # shape (2,)
+        self._model: LinearModel | None = None
 
     @property
     def ready(self) -> bool:
-        return self._coef is not None
+        return self._model is not None
 
     # Fit / predict
-    def fit(self, X, y) -> None:
+    def fit(self, x, y) -> None:
         """Fit bình phương nhỏ nhất từ mẫu (X: Nx2, y: Nx2)."""
-        X = np.asarray(X, dtype=float).reshape(-1, 2)
+        x = np.asarray(x, dtype=float).reshape(-1, 2)
         y = np.asarray(y, dtype=float).reshape(-1, 2)
-        if len(X) == 0:
+        if len(x) == 0:
             raise ValueError("cần ít nhất 1 mẫu để fit")
-        design = np.hstack([X, np.ones((len(X), 1))])
+        design = np.hstack([x, np.ones((len(x), 1))])
         sol, *_ = np.linalg.lstsq(design, y, rcond=None)  # (3, 2)
-        self._coef = sol[:2].T
-        self._intercept = sol[2]
+        self._model = LinearModel(coef=sol[:2].T, intercept=sol[2])
 
     def predict(self, pitch: float, yaw: float) -> tuple[float, float]:
-        if self._coef is None:
+        model = self._model
+        if model is None:
             raise RuntimeError("model chưa được train/import")
-        point = self._coef @ np.array([pitch, yaw], dtype=float) + self._intercept
+        point = model.coef @ np.array([pitch, yaw], dtype=float) + model.intercept
         return float(point[0]), float(point[1])
 
     # Serialize (ubjson v2, không pickle)
     def serialize(self) -> bytes:
-        if self._coef is None:
+        model = self._model
+        if model is None:
             raise RuntimeError("model chưa được train")
         return ubjson.dumpb(
             {
                 "format": FORMAT,
-                "coef": self._coef.tolist(),
-                "intercept": self._intercept.tolist(),
+                "coef": model.coef.tolist(),
+                "intercept": model.intercept.tolist(),
             }
         )
 
@@ -81,5 +93,4 @@ class Calibration:
         if not (np.all(np.isfinite(coef)) and np.all(np.isfinite(intercept))):
             raise ValueError("model chứa giá trị không hợp lệ")
 
-        self._coef = coef
-        self._intercept = intercept
+        self._model = LinearModel(coef=coef, intercept=intercept)
