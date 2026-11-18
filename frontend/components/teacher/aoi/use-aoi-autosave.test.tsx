@@ -112,6 +112,44 @@ describe("useAoiAutosave", () => {
     expect(saveB).not.toHaveBeenCalled();
     expect(result.current.dirty).toBe(false);
   });
+
+  it("giữ lỗi thật và cho phép thử lại sau khi lưu thất bại", async () => {
+    const save = vi
+      .fn<(value: string[]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("Origin không hợp lệ"))
+      .mockResolvedValueOnce(undefined);
+    const { result, rerender } = renderHook(
+      ({ value }: { value: string[] }) =>
+        useAoiAutosave({
+          value,
+          ready: true,
+          baselineKey: "set-a",
+          save,
+          delay: 800,
+        }),
+      { initialProps: { value: ["saved"] } },
+    );
+
+    rerender({ value: ["pending"] });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe("Origin không hợp lệ");
+
+    await act(async () => {
+      result.current.retry();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(["pending"]);
+    expect(result.current.status).toBe("saved");
+    expect(result.current.error).toBeNull();
+    expect(result.current.dirty).toBe(false);
+  });
 });
 
 describe("hasUnsavedAoiChanges", () => {

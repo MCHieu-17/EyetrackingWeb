@@ -10,7 +10,10 @@ export function PanelActions({
   hint,
   onShowHint,
 }: {
-  controller: AoiEditorController;
+  controller: Pick<
+    AoiEditorController,
+    "tab" | "canManage" | "mode" | "activeSave"
+  >;
   hint: string | null;
   onShowHint: (text: string) => void;
 }) {
@@ -71,30 +74,54 @@ export function PanelActions({
         </p>
       )}
 
-      <div className="mt-3 flex items-center gap-1.5 text-[11px]">
+      <div
+        className="mt-3 flex items-start gap-1.5 text-[11px]"
+        aria-live="polite"
+      >
         {save.status === "saving" ? (
-          <Icon name="ri-loader-4-line" className="size-3.5 animate-spin text-black/45" />
+          <Icon
+            name="ri-loader-4-line"
+            className="mt-0.5 size-3.5 animate-spin text-black/45"
+          />
         ) : save.status === "error" ? (
-          <Icon name="ri-error-warning-line" className="size-3.5 text-destructive" />
+          <Icon
+            name="ri-error-warning-line"
+            className="mt-0.5 size-3.5 text-destructive"
+          />
         ) : (
-          <Icon name="ri-check-line" className="size-3.5 text-[#36533a]" />
+          <Icon
+            name="ri-check-line"
+            className="mt-0.5 size-3.5 text-[#36533a]"
+          />
         )}
-        <span
-          className={cn(
-            save.status === "error" ? "text-destructive" : "text-black/50",
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                save.status === "error" ? "text-destructive" : "text-black/50",
+              )}
+            >
+              {saveLabel}
+            </span>
+            {save.status === "error" && (
+              <button
+                type="button"
+                onClick={save.retry}
+                className="font-semibold text-destructive underline"
+              >
+                Thử lại
+              </button>
+            )}
+          </div>
+          {save.status === "error" && save.error && (
+            <p
+              className="mt-0.5 line-clamp-2 break-words leading-snug text-destructive/80"
+              title={save.error}
+            >
+              {save.error}
+            </p>
           )}
-        >
-          {saveLabel}
-        </span>
-        {save.status === "error" && (
-          <button
-            type="button"
-            onClick={save.retry}
-            className="font-semibold text-destructive underline"
-          >
-            Thử lại
-          </button>
-        )}
+        </div>
       </div>
     </>
   );

@@ -80,6 +80,8 @@ export function useAoiAutosave<T>({
   const processJob = useCallback(async (job: SaveJob<T>) => {
     if (job.key === lastSavedRef.current) {
       if (job.epoch === epochRef.current) {
+        setStatus("saved");
+        setError(null);
         setDirty(JSON.stringify(valueRef.current) !== job.key);
         setPending(jobsRef.current.length > 0);
       }
@@ -213,6 +215,7 @@ export function useAoiAutosave<T>({
   }, [run]);
 
   const retry = useCallback(() => {
+    setError(null);
     setStatus("saving");
     void run();
   }, [run]);

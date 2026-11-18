@@ -63,16 +63,16 @@ Workflow `.github/workflows/release.yml` build 7 image:
 ### Cách 1 — GitHub Actions (khuyến nghị)
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.1.1
+git push origin v1.1.1
 ```
 
-- Tag `v*` build **toàn bộ** image và gắn tag `v1.1.0`.
+- Tag `v*` build **toàn bộ** image và gắn tag `v1.1.1`.
 - Push `main` chỉ build image có path thay đổi, gắn `sha-...` + `latest`.
 - Có thể chạy tay workflow `Release` (build toàn bộ).
 
-Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.1.0`, phải push tag
-`v1.1.0` và chờ workflow build xong **trước khi** deploy stack.
+Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.1.1`, phải push tag
+`v1.1.1` và chờ workflow build xong **trước khi** deploy stack.
 
 Sau lần push đầu, vào GitHub → Packages:
 
@@ -86,13 +86,13 @@ Sau lần push đầu, vào GitHub → Packages:
 
 ```bash
 docker login ghcr.io
-IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.0 ./scripts/publish_images.sh
+IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.1 ./scripts/publish_images.sh
 ```
 
 Bỏ qua gaze nếu chỉ muốn build phần còn lại:
 
 ```bash
-SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.0 ./scripts/publish_images.sh
+SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.1 ./scripts/publish_images.sh
 ```
 
 ---
@@ -203,13 +203,18 @@ trỏ được một nơi; traffic sẽ bị chia và lỗi.
 
 ### Lưu ý CORS/CSRF
 
-Backend kiểm tra `Origin` với `CORS_ORIGINS`. Khi test staging, phải có cả
-staging và production:
+Backend kiểm tra double-submit CSRF cho request ghi bằng cookie. Request
+**cùng host** với request hiện tại (same-origin) luôn được chấp nhận sau khi
+token khớp; chỉ request cross-origin mới phải nằm trong `CORS_ORIGINS`.
+
+Khi staging/domain phụ có frontend gọi API khác origin, khai báo đủ hostname:
 
 ```env
-CORS_ORIGINS=https://eyetracking.nmhieu17.space,https://staging-eyelearning.nmhieu17.space
+CORS_ORIGINS=https://eyetracking.nmhieu17.space,https://eyetracking01.nmhieu17.space,https://staging-eyelearning.nmhieu17.space
 ```
 
+Nếu frontend và API cùng public hostname (đi qua nginx), không cần thêm
+hostname đó chỉ để lưu dữ liệu; vẫn nên khai báo đủ nếu có client cross-origin.
 Sau cutover có thể bỏ staging rồi recreate backend.
 
 ---
@@ -391,7 +396,7 @@ reset/restore đúng quy trình.
 | Gaze chưa ready | GPU driver/toolkit; weights Google Drive/HF; egress |
 | GHCR `401/403` | Package private; thêm registry credential trong Portainer |
 | `pull access denied` | Sai `IMAGE_PREFIX`/`IMAGE_TAG`; image chưa build xong |
-| Login không giữ phiên | `COOKIE_SECURE=true` + truy cập HTTPS; `CORS_ORIGINS` đúng origin |
+| Login không giữ phiên | `COOKIE_SECURE=true` + truy cập HTTPS; `CORS_ORIGINS` nếu frontend gọi API khác origin |
 | Upload slide lỗi | content-worker log; LibreOffice; dung lượng disk |
 | `permission denied /backups` | `backup-init` chưa chạy exit 0; xem volume `backups` |
 | Portainer không build được | Stack này cố ý không có `build:`; chỉ pull image |

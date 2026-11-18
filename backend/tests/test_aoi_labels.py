@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from app.core.config import settings
 from tests.conftest import create_user, login, seed_course, seed_slide
 
 
@@ -143,3 +144,39 @@ async def test_slide_save_rejects_invalid_label(client):
             headers=headers,
         )
         assert response.status_code == 400, response.text
+
+
+@pytest.mark.asyncio
+async def test_slide_save_accepts_cookie_auth_from_same_origin(client, monkeypatch):
+    """Regression: hostname mới không có trong CORS_ORIGINS vẫn phải lưu được."""
+    email = f"aoi-cookie-{uuid.uuid4().hex[:8]}@example.com"
+    teacher_id = await create_user(email=email, role="teacher")
+    student_id = await create_user(email=f"s-{uuid.uuid4().hex[:8]}@example.com")
+    ids = await seed_course(teacher_id=teacher_id, student_id=student_id)
+    slide = await seed_slide(
+        course_id=ids["course_id"],
+        lesson_id=ids["lesson_id"],
+        teacher_id=teacher_id,
+    )
+    # Login bằng cookie, không dùng Bearer để buộc middleware kiểm tra CSRF.
+    await login(client, email)
+    monkeypatch.setattr(settings, "cors_origins", "https://different.example")
+    csrf = client.cookies.get("csrf_token")
+    assert csrf
+    headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf}
+
+    response = await client.put(
+        f"/api/aois/slides/{slide['slide_id']}",
+        json={"definitions": [_root(), _definition("a")]},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+    # Cross-origin lạ vẫn bị chặn dù token đúng.
+    response = await client.put(
+        f"/api/aois/slides/{slide['slide_id']}",
+        json={"definitions": [_root(), _definition("a")]},
+        headers={"Origin": "https://evil.example", "X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Origin không hợp lệ"
