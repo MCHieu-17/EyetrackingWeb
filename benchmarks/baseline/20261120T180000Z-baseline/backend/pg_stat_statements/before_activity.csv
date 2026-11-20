@@ -1,0 +1,16 @@
+pid,state,wait_event_type,wait_event,query,age
+2707,idle,Client,ClientRead,SELECT 1,00:01:14.406694
+6169,idle,Client,ClientRead,COMMIT;,00:00:58.679325
+6168,idle,Client,ClientRead,COMMIT;,00:00:58.669906
+8755,idle,Client,ClientRead,COMMIT;,00:00:58.669158
+5396,idle,Client,ClientRead,COMMIT;,00:00:58.657849
+8754,idle,Client,ClientRead,COMMIT;,00:00:58.65741
+5397,idle,Client,ClientRead,COMMIT;,00:00:58.656995
+5394,idle,Client,ClientRead,COMMIT;,00:00:58.655009
+5395,idle,Client,ClientRead,COMMIT;,00:00:58.652776
+7581,idle,Client,ClientRead,SELECT 1,00:00:44.374629
+7035,idle,Client,ClientRead,SELECT 1,00:00:14.311022
+8017,idle,Client,ClientRead,ROLLBACK;,00:00:01.88632
+8036,idle,Client,ClientRead,ROLLBACK;,00:00:01.36245
+8035,idle,Client,ClientRead,ROLLBACK;,00:00:01.355042
+2145,idle,Client,ClientRead,SELECT 1,00:00:00.573998

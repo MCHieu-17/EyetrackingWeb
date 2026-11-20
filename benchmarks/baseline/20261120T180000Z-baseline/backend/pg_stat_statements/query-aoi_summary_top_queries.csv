@@ -1,0 +1,12 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT content_views.id, content_views.session_id, content_views.slide_id, content_views.surface, content_views.sequence_no, content_views.started_at, content_views.ended_at, content_views.gaze_count, content_views.on_slide_gaze_count, cont",20,11792.15268,589.6076340000001,194000,702600,0,0
+"SELECT aois.id, aois.slide_id, aois.ui_schema, aois.code, aois.name, aois.label, aois.parent_id, aois.geometry, aois.is_container, aois.kind, aois.is_active, aois.created_at, aois.updated_at
+FROM aois
+WHERE aois.slide_id IN ($1::UUID, $2:",20,5.003744,0.25018720000000005,4800,260,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.6219469999999999,0.03109735,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",22,0.25542899999999996,0.01161040909090909,0,22,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",22,0.142563,0.006480136363636362,0,22,0,0
+BEGIN,84,0.07783400000000003,0.0009265952380952381,0,0,0,0
+ROLLBACK,84,0.05514799999999998,0.0006565238095238096,0,0,0,0
+"SELECT users.id, users.email, users.password_hash, users.role, users.status, users.full_name, users.date_of_birth, users.gender, users.phone, users.avatar_url, users.last_login_at, users.email_verified_at, users.created_at, users.updated_at",1,0.045743,0.045743,1,2,0,0
+SELECT 1,1,0.003201,0.003201,1,0,0,0

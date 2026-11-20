@@ -1,0 +1,7 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",4,0.10438,0.026095,0,4,0,0
+"SELECT enrollments.id, enrollments.course_id, enrollments.student_id, enrollments.enrolled_at, enrollments.status, courses.id AS id_1, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.",1,0.10078,0.10078,4,14,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",4,0.061466,0.0153665,0,4,0,0
+"SELECT users.id, users.email, users.password_hash, users.role, users.status, users.full_name, users.date_of_birth, users.gender, users.phone, users.avatar_url, users.last_login_at, users.email_verified_at, users.created_at, users.updated_at",1,0.013756,0.013756,1,2,0,0
+BEGIN,10,0.010344,0.0010344,0,0,0,0
+ROLLBACK,10,0.007892,0.0007892,0,0,0,0

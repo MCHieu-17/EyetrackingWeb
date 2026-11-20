@@ -1,0 +1,164 @@
+# =============================================================================
+# Stack benchmark cô lập cho EyeLearning.
+#
+# Chạy từ root repo:
+#   docker compose -p eyelearning-bench \
+#     --env-file .env \
+#     -f docker-compose.yml \
+#     -f benchmarks/stack/docker-compose.bench.yml \
+#     up -d --build
+#
+# Không dùng file này cho production. Nó đổi port/container name/DB name,
+# bật pg_stat_statements + auto_explain và mount benchmarks/ vào container.
+# =============================================================================
+
+# Dùng lại weights đã tải của stack dev để benchmark không phải tải lại model.
+# Chỉ đọc/ghi weights, không ảnh hưởng DB/media của dev.
+volumes:
+  gaze-weights:
+    external: true
+    name: eyelearning_gaze-weights
+  chatbot-weights:
+    external: true
+    name: eyelearning_chatbot-weights
+
+x-bench-local-media: &bench-local-media
+  R2_ACCOUNT_ID: ""
+  R2_BUCKET_NAME: ""
+  R2_ACCESS_KEY_ID: ""
+  R2_SECRET_ACCESS_KEY: ""
+  R2_PUBLIC_URL: ""
+  STORAGE_PROVIDER: local
+
+services:
+  postgres:
+    container_name: bench-postgres
+    ports: !override
+      - "127.0.0.1:5436:5432"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=200
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=on
+      - -c
+      - track_io_timing=on
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - max_worker_processes=8
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+      # Chỉ bật trong benchmark; thêm overhead nhỏ, dùng để lấy query count
+      # và plan thật của query chậm.
+      - -c
+      - shared_preload_libraries=pg_stat_statements,auto_explain
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - auto_explain.log_min_duration=200ms
+      - -c
+      - auto_explain.log_analyze=on
+      - -c
+      - auto_explain.log_buffers=on
+      - -c
+      - auto_explain.log_parameter_max_length=0
+      - -c
+      - log_min_duration_statement=200ms
+    environment:
+      POSTGRES_DB: eyetracking_bench
+
+  redis:
+    container_name: bench-redis
+    ports: !override
+      - "127.0.0.1:6380:6379"
+
+  migrate:
+    container_name: bench-migrate
+    environment:
+      PGDATABASE: eyetracking_bench
+
+  backend:
+    container_name: bench-backend
+    ports: !override
+      - "127.0.0.1:8101:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
+      CORS_ORIGINS: http://127.0.0.1:3100,http://localhost:3100
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      ADMIN_DB_URL: ""
+      # Media local trong bench; không dùng credential R2 của .env dev.
+      R2_ACCOUNT_ID: ""
+      R2_BUCKET_NAME: ""
+      R2_ACCESS_KEY_ID: ""
+      R2_SECRET_ACCESS_KEY: ""
+      R2_PUBLIC_URL: ""
+      STORAGE_PROVIDER: local
+    volumes:
+      - backend-media:/app/media
+      - ./benchmarks:/bench:rw
+
+  content-worker:
+    container_name: bench-content-worker
+    environment:
+      <<: *bench-local-media
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
+
+  worker:
+    deploy:
+      replicas: 1
+    environment:
+      <<: *bench-local-media
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
+
+  embedding-worker:
+    container_name: bench-embedding-worker
+    environment:
+      <<: *bench-local-media
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
+
+  chatbot:
+    container_name: bench-chatbot
+    ports: !override
+      - "127.0.0.1:8102:8000"
+    environment:
+      <<: *bench-local-media
+      CHATBOT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
+      # Dataset benchmark dùng vector tổng hợp; hạ ngưỡng để retrieval luôn
+      # trả docs và pipeline generation/citation được đo. Chỉ áp dụng bench.
+      RAG_SCORE_THRESHOLD: "-1.0"
+    volumes:
+      - backend-media:/app/media:ro
+      - chatbot-weights:/app/weights
+      - ./benchmarks:/bench:rw
+
+  gaze:
+    deploy:
+      replicas: 1
+    volumes:
+      - gaze-weights:/app/weights
+      - ./benchmarks:/bench:rw
+      - ./services/gaze/tests/fixtures:/fixtures:ro
+
+  frontend:
+    deploy:
+      replicas: 1
+
+  nginx:
+    container_name: bench-nginx
+    ports: !override
+      - "127.0.0.1:3100:80"

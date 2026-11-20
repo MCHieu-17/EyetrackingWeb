@@ -27,6 +27,8 @@
   tường minh trong `.env`/`stack.env`; không thêm default trong code/compose.
 - Không commit `.env`, `deploy/portainer/stack.env`, tunnel token, backup hay
   media. Không prune volume Docker.
+- Bộ test hộp đen là lưới an toàn: không xoá test hoặc nới assertion để làm
+  xanh CI; hành vi cố ý đổi thì cập nhật test trong cùng thay đổi.
 
 ## 1. Stack, service và cổng
 
@@ -82,7 +84,7 @@ docker compose up -d --build  # service migrate chạy một lần rồi Exited 
 image migration (`docker compose build migrate`) — `test_migrations.sh` đã làm
 việc này.
 
-Kiểm tra code:
+Kiểm tra code và test:
 
 ```bash
 make check          # ruff + eslint + typecheck + compose config
@@ -92,11 +94,49 @@ make test-smoke     # model thật + chatbot RAG + Playwright trước merge
 ./scripts/test_migrations.sh
 ```
 
-Test fast dùng PostgreSQL/Redis test thật trong image `backend-test`; test smoke
-cần stack, weights và LLM/VLM thật. Chạy riêng:
-`./scripts/test_backend.sh`, `./scripts/test_gaze.sh fast|smoke`,
-`./scripts/test_chatbot.sh fast|smoke`, `./scripts/e2e.sh`. Phạm vi chi tiết:
-`TEST_PLAN.md`.
+### 2.1 Bộ test đã có
+
+Test hộp đen đã được triển khai; không dựng lại kế hoạch test. Chỉ bổ sung/sửa
+case khi hành vi cố ý thay đổi.
+
+| Khu vực | Vị trí | Số case | Lệnh |
+|---|---|---|---|
+| Backend | `backend/tests/fast/` | 79 fast | `./scripts/test_backend.sh` |
+| Gaze | `services/gaze/tests/fast/` | 22 fast | `./scripts/test_gaze.sh fast` |
+| Gaze smoke | `services/gaze/tests/smoke/` | 1 | `./scripts/test_gaze.sh smoke` |
+| Chatbot | `services/chatbot/tests/fast/` | 22 fast | `./scripts/test_chatbot.sh fast` |
+| Chatbot RAG smoke | `services/chatbot/tests/smoke/` | 1 | `./scripts/test_chatbot.sh smoke` |
+| Frontend E2E | `frontend/e2e/` (Playwright) | 5 flow / 9 test | `./scripts/e2e.sh` |
+
+- Backend chia theo file: `test_auth`, `test_courses_content`, `test_publish`,
+  `test_visits_sessions`, `test_presentations`, `test_quiz`, `test_aoi`,
+  `test_metrics`, `test_analytics`, `test_chat`, `test_maintenance`,
+  `test_schema_contract`; helper ở `conftest.py` + `support/`.
+- Gaze: `test_health_ready`, `test_session_api`, `test_calibration_regression`,
+  `test_stream_ws`; chatbot: `test_ingest_api`, `test_ingest_failures`,
+  `test_query`.
+- `fast` mock model/LLM/VLM/embedding nhưng dùng PostgreSQL + Redis thật;
+  `smoke` chạy model/LLM thật trên stack thật. Flow chat E2E chỉ bật khi
+  `E2E_CHAT=1`.
+- Backend/chatbot dùng database `eyetracking_test` và Redis DB 15; fixture
+  truncate/flush trước mỗi test. DB test migrate bằng
+  `docker compose run --rm migrate`, không `create_all()`.
+- Test chạy trong image test riêng (`backend-test`, `chatbot-test`, `gaze-test`,
+  compose profile `test`, Dockerfile target `test`) và mount `tests/` từ host.
+  Image production không cài pytest. `test_backend.sh` / `test_chatbot.sh` tạo
+  lại DB test trước khi chạy.
+- Mock nằm ở biên: `respx` cho chatbot/LMS, fake VLM/embedding/LLM, fake gaze
+  runtime. Fixture được seed bằng SQL; assertion cuối vẫn qua API/DB như người
+  dùng thật.
+- Calibration gaze kiểm tra Linear Regression thật qua HTTP/WS; smoke dùng
+  `services/gaze/tests/fixtures/face_sample.jpg` (CC0, nguồn trong
+  `fixtures/README.md`).
+- E2E seed bằng `scripts/seed_e2e.py`, ghi `frontend/e2e/.fixtures.json`
+  (gitignored) và xoá course prefix `E2E Seed` / `E2E Draft` trước khi chạy.
+- Sửa hành vi có chủ đích thì cập nhật test trong cùng thay đổi; không xoá test
+  để làm xanh CI.
+
+### 2.2 Seed dev, reset và backup
 
 Seed dev (mật khẩu `Password123!`): `admin@school.edu.vn` (admin),
 `teacher@school.edu.vn` (teacher), `student@school.edu.vn` (student). Script
@@ -117,8 +157,35 @@ Reset/backup:
 chỉ xoá lịch sử gaze (`course_visits` cascade) và job analyze đang chờ, giữ
 nội dung khoá học/AOI/người dùng.
 
+### 2.3 Áp dụng biến môi trường
+
 Sau khi sửa `.env`, dùng `docker compose up -d --force-recreate <service>`;
 `docker compose restart` không áp dụng biến môi trường mới.
+
+### 2.4 Benchmark baseline
+
+Harness nằm trong `benchmarks/`, chạy trên stack cô lập
+`eyelearning-bench` (port nginx `3100`, backend `8101`, chatbot `8102`,
+Postgres `5436`, Redis `6380`; DB `eyetracking_bench`). Không đo trên stack
+dev/production và không dùng `next dev`.
+
+```bash
+./benchmarks/preflight.sh
+./benchmarks/run_all.sh --quick --scale tiny     # smoke harness
+./benchmarks/run_all.sh --scale baseline         # baseline đầy đủ
+./benchmarks/run_all.sh --only backend --quick   # một nhóm
+```
+
+- Kết quả JSON/Markdown nằm trong `benchmarks/baseline/<run-id>/`; so sánh
+  bằng `benchmarks/report/compare.py`.
+- Stack benchmark dùng chung weights gaze/chatbot với dev qua external volume,
+  nhưng DB/media/Redis riêng. Không seed vào DB không kết thúc bằng `_bench`.
+- Đo capacity trực tiếp backend `:8101`; nginx có `api_rl` 20 r/s/IP nên chỉ
+  dùng để đo overhead/user-facing.
+- Chatbot hiện là pipeline tuyến tính, không LangGraph; ingest không chunk
+  text (mỗi slide là một transcript/embedding). Gaze calibration dùng numpy
+  `lstsq`, không sklearn.
+- Benchmark không thay thế test hộp đen; sửa hành vi vẫn phải cập nhật test.
 
 ## 3. Bố cục code và ranh giới
 
@@ -128,12 +195,16 @@ Sau khi sửa `.env`, dùng `docker compose up -d --force-recreate <service>`;
   API dùng camelCase qua `CamelModel`.
 - `backend/app/main.py`: đăng ký router và **fail-fast** nếu
   `app_metadata.schema_generation != '13'`.
-- `backend/Dockerfile` có 2 target: `api` (backend/worker/embedding-worker) và
-  `content-worker` (thêm LibreOffice + fonts). Worker content không nằm trong
-  image API.
+- `backend/Dockerfile` có 3 target: `api` (backend/worker/embedding-worker),
+  `content-worker` (thêm LibreOffice + fonts) và `test` (thêm dev deps cho
+  pytest). Worker content không nằm trong image API; target `test` không dùng
+  cho production.
 - `services/gaze/` chỉ xử lý calibration/WebSocket/frame; backend mới ghi DB.
 - `services/chatbot/` chỉ đọc view outline + đọc/ghi cột index trên `slides`.
 - `frontend/` gọi API qua `lib/api/`, không truy cập DB; PDF render bằng PDF.js.
+- `benchmarks/` là harness đo hiệu năng; không import vào app production, không
+  thay đổi schema/API. Artifact nằm dưới `benchmarks/baseline/` và không chứa
+  secret (token nằm trong `.runtime/` đã gitignore).
 
 ## 4. Mô hình dữ liệu
 
@@ -230,7 +301,8 @@ nhất khi thêm tính năng; đọc migration tương ứng trước khi sửa 
 | `background_jobs` | không cascade ngược; job thuộc lesson và bị xoá khi lesson bị xoá |
 
 Không có trigger bất biến hay cờ `app.allow_course_delete`. Kiểm tra cascade
-thủ công bằng SQL khi sửa FK; bổ sung test tự động khi bộ test được viết lại.
+thủ công bằng SQL khi sửa FK; test cascade nằm trong
+`backend/tests/fast/test_courses_content.py` và `test_schema_contract.py`.
 
 ## 5. Gaze → AOI → metrics
 
@@ -489,11 +561,21 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 - Nếu sửa schema: thêm `006_...sql`, cập nhật model/schema/API, chạy
   `./scripts/test_migrations.sh` và `./scripts/test_backend.sh`.
 - Nếu sửa cascade/FK/metrics/AOI: chạy `./scripts/test_backend.sh`; test metrics
-  nằm trong `backend/tests/fast/test_metrics.py` và `test_analytics.py`.
-- Nếu sửa gaze UI/layout: chạy `./scripts/test_backend.sh` và
-  `./scripts/test_gaze.sh fast`; kiểm tra thêm `aoi_regions.py` + replay.
+  nằm trong `backend/tests/fast/test_metrics.py` và `test_analytics.py`, cascade
+  trong `test_courses_content.py` và `test_schema_contract.py`.
+- Nếu sửa gaze service/WS/layout: chạy `./scripts/test_backend.sh` và
+  `./scripts/test_gaze.sh fast`; chạy `./scripts/test_gaze.sh smoke` nếu sửa
+  model/preprocess; kiểm tra thêm `aoi_regions.py` + replay.
+- Nếu sửa chatbot ingest/retrieval/query/SSE: chạy
+  `./scripts/test_chatbot.sh fast`; chạy `./scripts/test_chatbot.sh smoke` khi
+  sửa luồng ingest hoặc LLM.
 - Nếu sửa frontend API: giữ camelCase và rewrite `/api/teacher|admin`; cập nhật
-  query key/hook và chạy `./scripts/e2e.sh` nếu đổi luồng người dùng.
+  query key/hook và chạy `./scripts/e2e.sh` nếu đổi luồng người dùng
+  (`E2E_CHAT=1 ./scripts/e2e.sh` nếu đổi chat).
+- Nếu sửa luồng hiệu năng backend/DB/gaze/chatbot: chạy nhóm benchmark liên
+  quan (`./benchmarks/run_all.sh --only backend --quick`, tương tự `gaze` /
+  `chatbot`) trước khi kết luận tối ưu; baseline đầy đủ chỉ chạy khi có
+  stack/GPU/LLM.
 - Nếu sửa env/compose: cập nhật `.env.example` và `deploy/portainer/stack.env.example`;
   không thêm default cho model local.
 - Nếu sửa hành vi người dùng: cập nhật `README.md`/`backend/README.md` và mục

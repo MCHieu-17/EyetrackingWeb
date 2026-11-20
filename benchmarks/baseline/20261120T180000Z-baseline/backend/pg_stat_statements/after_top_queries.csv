@@ -1,0 +1,37 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"INSERT INTO gaze_samples (content_view_id, layout_id, client_batch_id, sequence, event_time, viewport_x, viewport_y, status, quality_flags) VALUES ($1::UUID, $2::UUID, $3::UUID, $4::BIGINT, $5::TIMESTAMP WITH TIME ZONE, $6::FLOAT, $7::FLOAT",80,72.71854599999998,0.908981825,3200,82751,0,0
+"SELECT slides.id, slides.lesson_id, slides.position, slides.page_number, slides.title, slides.transcript, slides.embedding, slides.content_tsv, slides.index_status, slides.index_error, slides.pipeline_version, slides.model_version, slides.c",20,13.309013,0.6654506499999999,120,480,0,0
+"SELECT $2 FROM ONLY ""public"".""content_views"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,4.951700999999991,0.0015474065624999998,3200,12800,0,0
+"SELECT $2 FROM ONLY ""public"".""view_layouts"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,3.6210150000000034,0.001131567187499999,3200,9600,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",1,1.725011,1.725011,82,1062,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",1,1.719911,1.719911,25,928,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, 160 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO",1,1.274676,1.274676,15,502,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",80,1.273359,0.0159169875,80,480,0,0
+"SELECT content_views.id, content_views.session_id, content_views.slide_id, content_views.surface, content_views.sequence_no, content_views.started_at, content_views.ended_at, content_views.gaze_count, content_views.on_slide_gaze_count, cont",80,1.100028,0.013750349999999996,80,240,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( 'shared_buffers' , 'work_mem' , 'maintenance_work_mem' , 'effective_cache_size' , 'max_connections' , 'random_page_cost' , 'track_io_timing' , 'shared_preload_lib",1,1.053032,1.053032,10,171,0,0
+"SELECT view_layouts.id, view_layouts.content_view_id, view_layouts.layout_no, view_layouts.slide_rect, view_layouts.elements, view_layouts.captured_at
+FROM view_layouts
+WHERE view_layouts.id = $1::UUID",80,0.9763839999999999,0.012204799999999997,80,160,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",20,0.761691,0.038084549999999995,20,60,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at
+FROM lessons
+WHERE lessons.id = $1::UUID",40,0.713718,0.01784295,40,80,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( $1 , $2 , $3 , $4 , $5 , $6 , $7 , $8 , $9 , $10 ) ORDER BY name ) TO STDOUT WITH CSV HEADER",1,0.574564,0.574564,10,3,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",19,0.50567,0.02661421052631579,0,19,0,0
+"SELECT course_modules.id, course_modules.course_id, course_modules.title, course_modules.position, course_modules.created_at, course_modules.updated_at
+FROM course_modules
+WHERE course_modules.id = $1::UUID",20,0.39647699999999997,0.01982385,20,20,0,0
+"SELECT enrollments.student_id
+FROM enrollments
+WHERE enrollments.id = $1::UUID",20,0.341728,0.017086399999999998,20,60,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.34072300000000005,0.01703615,20,20,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",1,0.332011,0.332011,82,276,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",19,0.320209,0.0168531052631579,0,19,0,0
+"SELECT media_assets.id, media_assets.course_id, media_assets.storage_backend, media_assets.object_key, media_assets.sha256, media_assets.mime_type, media_assets.byte_size, media_assets.state, media_assets.page_count, media_assets.source_for",20,0.319252,0.015962600000000004,20,20,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",1,0.257228,0.257228,25,30,0,0
+BEGIN,238,0.16791999999999996,0.000705546218487395,0,0,0,0
+ROLLBACK,158,0.11352100000000004,0.0007184873417721518,0,0,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, $1 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO ",1,0.109912,0.109912,15,4,0,0
+"SELECT users.id, users.email, users.password_hash, users.role, users.status, users.full_name, users.date_of_birth, users.gender, users.phone, users.avatar_url, users.last_login_at, users.email_verified_at, users.created_at, users.updated_at",8,0.083857,0.010482125,8,16,0,0
+COMMIT,80,0.034617,0.0004327124999999999,0,0,0,0
+SELECT 1,1,0.00317,0.00317,1,0,0,0

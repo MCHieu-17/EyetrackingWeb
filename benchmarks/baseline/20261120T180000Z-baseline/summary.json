@@ -1,0 +1,2011 @@
+{
+  "run": "20261120T180000Z-baseline",
+  "fixtures": {
+    "scale": "baseline",
+    "counts": {
+      "users": 202,
+      "courses": 6,
+      "course_modules": 21,
+      "lessons": 105,
+      "slides": 540,
+      "aois": 243,
+      "enrollments": 400,
+      "course_visits": 419,
+      "learning_sessions": 1057,
+      "content_views": 19240,
+      "view_layouts": 160,
+      "gaze_samples": 3445200,
+      "chat_sessions": 200,
+      "chat_messages": 2000,
+      "quiz_attempts": 1000,
+      "gaze_calibrations": 100,
+      "background_jobs": 100
+    },
+    "pdf_sha256": "bf4dab9a094d5494ea09fee883e69e6d66e1d29ae8be59f3e558bf59f78f8cd9"
+  },
+  "backend": {
+    "k6": [
+      {
+        "file": "aoi_summary.summary.json",
+        "scenario": "aoi_summary",
+        "p50": 1249.2489460000002,
+        "p95": 1307.93029815,
+        "p99": 1316.13079643,
+        "avg": 1248.4204255,
+        "rps": 1.378679860808355,
+        "error_rate": 0,
+        "count": 14
+      },
+      {
+        "file": "course_visits.summary.json",
+        "scenario": "course_visits",
+        "p50": 35.5837055,
+        "p95": 70.7518683,
+        "p99": 76.40201957999997,
+        "avg": 37.59221740566037,
+        "rps": 20.725437822178222,
+        "error_rate": 0,
+        "count": 212
+      },
+      {
+        "file": "enrollments.summary.json",
+        "scenario": "enrollments",
+        "p50": 8.196232,
+        "p95": 11.862307849999999,
+        "p99": 12.628795720000001,
+        "avg": 8.253067049586772,
+        "rps": 23.76562262517474,
+        "error_rate": 0,
+        "count": 242
+      },
+      {
+        "file": "gaze_batch.summary.json",
+        "scenario": "gaze_batch",
+        "p50": 36.184841,
+        "p95": 53.07606355,
+        "p99": 54.87644513,
+        "avg": 37.36463163749999,
+        "rps": 7.69230631139078,
+        "error_rate": 0,
+        "count": 80
+      },
+      {
+        "file": "lesson_contents.summary.json",
+        "scenario": "lesson_contents",
+        "p50": 16.798515000000002,
+        "p95": 34.493512149999994,
+        "p99": 40.840621450000015,
+        "avg": 18.57645510869564,
+        "rps": 22.78264645375851,
+        "error_rate": 0,
+        "count": 230
+      },
+      {
+        "file": "outline.summary.json",
+        "scenario": "outline",
+        "p50": 15.436152,
+        "p95": 20.9499589,
+        "p99": 24.40384061999999,
+        "avg": 13.869514863829789,
+        "rps": 23.28141330854175,
+        "error_rate": 0,
+        "count": 235
+      },
+      {
+        "file": "replay.summary.json",
+        "scenario": "replay",
+        "p50": 53.415807,
+        "p95": 60.5299602,
+        "p99": 75.81350381,
+        "avg": 50.23790745,
+        "rps": 7.964303953046647,
+        "error_rate": 0,
+        "count": 80
+      },
+      {
+        "file": "samples.summary.json",
+        "scenario": "samples",
+        "p50": 18.337073500000002,
+        "p95": 30.545115749999994,
+        "p99": 57.97288631,
+        "avg": 20.42521257826087,
+        "rps": 22.565647080558946,
+        "error_rate": 0,
+        "count": 230
+      },
+      {
+        "file": "session_contents.summary.json",
+        "scenario": "session_contents",
+        "p50": 14.552413999999999,
+        "p95": 34.786608149999864,
+        "p99": 43.50324269000001,
+        "avg": 17.13855255217391,
+        "rps": 22.905850741386182,
+        "error_rate": 0,
+        "count": 230
+      },
+      {
+        "file": "teacher_courses.summary.json",
+        "scenario": "teacher_courses",
+        "p50": 33.4146755,
+        "p95": 45.51259525,
+        "p99": 52.54304465,
+        "avg": 32.31868509302328,
+        "rps": 8.573055261099574,
+        "error_rate": 0,
+        "count": 86
+      }
+    ],
+    "query_counts": {
+      "aoi_summary": {
+        "queries_total": 274,
+        "iterations": 20,
+        "queries_per_request": 13.7
+      },
+      "course_students": {
+        "queries_total": 256,
+        "iterations": 20,
+        "queries_per_request": 12.8
+      },
+      "course_visits": {
+        "queries_total": 184,
+        "iterations": 20,
+        "queries_per_request": 9.2
+      },
+      "enrollments": {
+        "queries_total": 30,
+        "iterations": 20,
+        "queries_per_request": 1.5
+      },
+      "outline": {
+        "queries_total": 146,
+        "iterations": 20,
+        "queries_per_request": 7.3
+      },
+      "replay": {
+        "queries_total": 305,
+        "iterations": 20,
+        "queries_per_request": 15.25
+      },
+      "samples": {
+        "queries_total": 224,
+        "iterations": 20,
+        "queries_per_request": 11.2
+      },
+      "session_contents": {
+        "queries_total": 265,
+        "iterations": 20,
+        "queries_per_request": 13.25
+      },
+      "teacher_courses": {
+        "queries_total": 185,
+        "iterations": 20,
+        "queries_per_request": 9.25
+      }
+    }
+  },
+  "gaze": {
+    "device": "cuda:0",
+    "precision": "fp32",
+    "model": "unigaze_b16_joint",
+    "vram_allocated_mib": 346.2,
+    "rss_kib": 1303108,
+    "stage_total": {
+      "480px": {
+        "count": 50,
+        "mean": 11.013,
+        "p50": 10.962,
+        "p95": 11.329,
+        "p99": 11.415,
+        "min": 10.806,
+        "max": 11.415
+      },
+      "720px": {
+        "count": 50,
+        "mean": 11.744,
+        "p50": 11.68,
+        "p95": 12.411,
+        "p99": 12.674,
+        "min": 11.564,
+        "max": 12.674
+      },
+      "1080px": {
+        "count": 50,
+        "mean": 13.2,
+        "p50": 13.187,
+        "p95": 13.325,
+        "p99": 13.692,
+        "min": 13.03,
+        "max": 13.692
+      }
+    },
+    "ws": [
+      {
+        "sessions": 1,
+        "fps": 15.0,
+        "duration": 10.0,
+        "sent": 150,
+        "received": 147,
+        "responses_per_s": 14.7,
+        "fps_per_session": 14.7,
+        "drop": 3,
+        "drop_rate": 0.02,
+        "rtt_ms": {
+          "p50": 39.415,
+          "p95": 45.004,
+          "p99": 46.051,
+          "mean": 37.826,
+          "max": 46.058
+        },
+        "statuses": {
+          "ok": 147
+        },
+        "health_before": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 1963,
+            "frames_inferred": 1825,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 117,
+              "superseded": 21
+            },
+            "drop_rate": 0.0703,
+            "overload_rate": 0.0596,
+            "infer_ms": {
+              "p50": 12.81,
+              "p95": 22.77
+            },
+            "cpu_ms": {
+              "p50": 4.13,
+              "p95": 5.52
+            },
+            "gpu_ms": {
+              "p50": 8.65,
+              "p95": 15.26
+            },
+            "uptime_s": 2656.8
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        },
+        "health_after": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 2114,
+            "frames_inferred": 1973,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 120,
+              "superseded": 21
+            },
+            "drop_rate": 0.0667,
+            "overload_rate": 0.0568,
+            "infer_ms": {
+              "p50": 15.63,
+              "p95": 23.93
+            },
+            "cpu_ms": {
+              "p50": 5.15,
+              "p95": 12.25
+            },
+            "gpu_ms": {
+              "p50": 8.8,
+              "p95": 12.14
+            },
+            "uptime_s": 2667.8
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        }
+      },
+      {
+        "sessions": 4,
+        "fps": 15.0,
+        "duration": 10.0,
+        "sent": 600,
+        "received": 581,
+        "responses_per_s": 58.1,
+        "fps_per_session": 14.53,
+        "drop": 19,
+        "drop_rate": 0.0317,
+        "rtt_ms": {
+          "p50": 25.38,
+          "p95": 29.204,
+          "p99": 33.295,
+          "mean": 26.021,
+          "max": 49.691
+        },
+        "statuses": {
+          "ok": 581
+        },
+        "health_before": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 2114,
+            "frames_inferred": 1973,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 120,
+              "superseded": 21
+            },
+            "drop_rate": 0.0667,
+            "overload_rate": 0.0568,
+            "infer_ms": {
+              "p50": 15.63,
+              "p95": 23.93
+            },
+            "cpu_ms": {
+              "p50": 5.15,
+              "p95": 12.25
+            },
+            "gpu_ms": {
+              "p50": 8.8,
+              "p95": 12.14
+            },
+            "uptime_s": 2667.9
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        },
+        "health_after": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 2718,
+            "frames_inferred": 2558,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 139,
+              "superseded": 21
+            },
+            "drop_rate": 0.0589,
+            "overload_rate": 0.0511,
+            "infer_ms": {
+              "p50": 12.99,
+              "p95": 15.11
+            },
+            "cpu_ms": {
+              "p50": 4.53,
+              "p95": 6.28
+            },
+            "gpu_ms": {
+              "p50": 8.42,
+              "p95": 8.66
+            },
+            "uptime_s": 2679.0
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        }
+      },
+      {
+        "sessions": 8,
+        "fps": 15.0,
+        "duration": 10.0,
+        "sent": 1200,
+        "received": 1079,
+        "responses_per_s": 107.9,
+        "fps_per_session": 13.49,
+        "drop": 121,
+        "drop_rate": 0.1008,
+        "rtt_ms": {
+          "p50": 109.543,
+          "p95": 145.462,
+          "p99": 151.737,
+          "mean": 109.018,
+          "max": 168.995
+        },
+        "statuses": {
+          "ok": 1079
+        },
+        "health_before": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 2718,
+            "frames_inferred": 2558,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 139,
+              "superseded": 21
+            },
+            "drop_rate": 0.0589,
+            "overload_rate": 0.0511,
+            "infer_ms": {
+              "p50": 12.99,
+              "p95": 15.11
+            },
+            "cpu_ms": {
+              "p50": 4.53,
+              "p95": 6.28
+            },
+            "gpu_ms": {
+              "p50": 8.42,
+              "p95": 8.66
+            },
+            "uptime_s": 2679.0
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        },
+        "health_after": {
+          "status": "ok",
+          "pipeline_ready": true,
+          "device": "cuda:0",
+          "model": "unigaze_b16_joint",
+          "precision": "fp32",
+          "gpu_available": true,
+          "gpu_name": "NVIDIA GeForce RTX 3060",
+          "queue": {
+            "cpu": 0,
+            "gpu": 0
+          },
+          "stats": {
+            "frames_in": 3926,
+            "frames_inferred": 3645,
+            "no_face": 0,
+            "dropped": {
+              "throttle": 167,
+              "superseded": 114
+            },
+            "drop_rate": 0.0716,
+            "overload_rate": 0.0425,
+            "infer_ms": {
+              "p50": 12.8,
+              "p95": 22.2
+            },
+            "cpu_ms": {
+              "p50": 4.13,
+              "p95": 5.6
+            },
+            "gpu_ms": {
+              "p50": 8.66,
+              "p95": 16.08
+            },
+            "uptime_s": 2690.2
+          },
+          "sessions": {
+            "total": 0,
+            "ready": 0
+          }
+        }
+      }
+    ]
+  },
+  "chatbot": {
+    "query_chatbot": [
+      {
+        "concurrency": 1,
+        "requests": 8,
+        "repeats": 1,
+        "wall_s": 333.531,
+        "rps": 0.024,
+        "error_rate": 0.0,
+        "ttft_total_ms": {
+          "count": 8,
+          "p50": 26296.5,
+          "p95": 34692.18,
+          "p99": 34692.18,
+          "mean": 20495.29,
+          "max": 34692.18
+        },
+        "t_prep_ms": {
+          "count": 8,
+          "p50": 32.31,
+          "p95": 61.01,
+          "p99": 61.01,
+          "mean": 34.39,
+          "max": 61.01
+        },
+        "t_retrieve_ms": {
+          "count": 8,
+          "p50": 1315.62,
+          "p95": 1695.94,
+          "p99": 1695.94,
+          "mean": 1225.95,
+          "max": 1695.94
+        },
+        "t_llm_ttft_ms": {
+          "count": 8,
+          "p50": 25421.98,
+          "p95": 33432.53,
+          "p99": 33432.53,
+          "mean": 19234.77,
+          "max": 33432.53
+        },
+        "t_total_ms": {
+          "count": 8,
+          "p50": 45724.87,
+          "p95": 63612.96,
+          "p99": 63612.96,
+          "mean": 41690.32,
+          "max": 63612.96
+        },
+        "t_conn_close_ms": {
+          "count": 8,
+          "p50": 45725.84,
+          "p95": 63613.91,
+          "p99": 63613.91,
+          "mean": 41691.19,
+          "max": 63613.91
+        },
+        "by_kind": {
+          "course_qa": {
+            "ttft_total_ms": {
+              "count": 8,
+              "p50": 26296.5,
+              "p95": 34692.18,
+              "p99": 34692.18,
+              "mean": 20495.29,
+              "max": 34692.18
+            },
+            "t_total_ms": {
+              "count": 8,
+              "p50": 45724.87,
+              "p95": 63612.96,
+              "p99": 63612.96,
+              "mean": 41690.32,
+              "max": 63612.96
+            }
+          }
+        },
+        "errors": [],
+        "records_sample": [
+          {
+            "id": "qa-01",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 7628.77,
+            "t_prep_ms": 25.93,
+            "t_retrieve_ms": 1695.94,
+            "t_llm_ttft_ms": 5906.86,
+            "t_total_ms": 27361.42,
+            "t_conn_close_ms": 27362.3,
+            "answer_chars": 1988,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-02",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 4331.31,
+            "t_prep_ms": 32.31,
+            "t_retrieve_ms": 509.32,
+            "t_llm_ttft_ms": 3789.66,
+            "t_total_ms": 24652.92,
+            "t_conn_close_ms": 24653.16,
+            "answer_chars": 1869,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-03",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 28656.71,
+            "t_prep_ms": 30.9,
+            "t_retrieve_ms": 1315.27,
+            "t_llm_ttft_ms": 27310.51,
+            "t_total_ms": 58601.3,
+            "t_conn_close_ms": 58602.25,
+            "answer_chars": 2220,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-04",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 26296.5,
+            "t_prep_ms": 31.49,
+            "t_retrieve_ms": 842.82,
+            "t_llm_ttft_ms": 25421.98,
+            "t_total_ms": 45724.87,
+            "t_conn_close_ms": 45725.84,
+            "answer_chars": 2162,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-05",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 34692.18,
+            "t_prep_ms": 61.01,
+            "t_retrieve_ms": 1198.0,
+            "t_llm_ttft_ms": 33432.53,
+            "t_total_ms": 63612.96,
+            "t_conn_close_ms": 63613.91,
+            "answer_chars": 2588,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          }
+        ]
+      },
+      {
+        "concurrency": 5,
+        "requests": 8,
+        "repeats": 1,
+        "wall_s": 106.064,
+        "rps": 0.075,
+        "error_rate": 0.125,
+        "ttft_total_ms": {
+          "count": 7,
+          "p50": 30691.01,
+          "p95": 35655.2,
+          "p99": 35655.2,
+          "mean": 30598.93,
+          "max": 35655.2
+        },
+        "t_prep_ms": {
+          "count": 7,
+          "p50": 20.77,
+          "p95": 31.8,
+          "p99": 31.8,
+          "mean": 23.09,
+          "max": 31.8
+        },
+        "t_retrieve_ms": {
+          "count": 7,
+          "p50": 10.68,
+          "p95": 13.6,
+          "p99": 13.6,
+          "mean": 9.11,
+          "max": 13.6
+        },
+        "t_llm_ttft_ms": {
+          "count": 7,
+          "p50": 30656.53,
+          "p95": 35628.73,
+          "p99": 35628.73,
+          "mean": 30566.57,
+          "max": 35628.73
+        },
+        "t_total_ms": {
+          "count": 7,
+          "p50": 56532.24,
+          "p95": 64049.65,
+          "p99": 64049.65,
+          "mean": 54940.27,
+          "max": 64049.65
+        },
+        "t_conn_close_ms": {
+          "count": 7,
+          "p50": 56532.44,
+          "p95": 64050.97,
+          "p99": 64050.97,
+          "mean": 54941.01,
+          "max": 64050.97
+        },
+        "by_kind": {
+          "course_qa": {
+            "ttft_total_ms": {
+              "count": 7,
+              "p50": 30691.01,
+              "p95": 35655.2,
+              "p99": 35655.2,
+              "mean": 30598.93,
+              "max": 35655.2
+            },
+            "t_total_ms": {
+              "count": 7,
+              "p50": 56532.24,
+              "p95": 64049.65,
+              "p99": 64049.65,
+              "mean": 54940.27,
+              "max": 64049.65
+            }
+          }
+        },
+        "errors": [
+          {
+            "id": "qa-05",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": "Trợ lý tạm thời không thể hoàn tất. Vui lòng gửi lại câu hỏi.",
+            "ttft_total_ms": null,
+            "t_prep_ms": 33.04,
+            "t_retrieve_ms": 4.2,
+            "t_llm_ttft_ms": null,
+            "t_total_ms": null,
+            "t_conn_close_ms": 30043.39,
+            "answer_chars": 0,
+            "finish_reason": null,
+            "verified": null,
+            "intent": null
+          }
+        ],
+        "records_sample": [
+          {
+            "id": "qa-01",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 30691.01,
+            "t_prep_ms": 20.77,
+            "t_retrieve_ms": 13.6,
+            "t_llm_ttft_ms": 30656.53,
+            "t_total_ms": 56532.24,
+            "t_conn_close_ms": 56532.44,
+            "answer_chars": 2232,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-02",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 25176.23,
+            "t_prep_ms": 16.13,
+            "t_retrieve_ms": 4.9,
+            "t_llm_ttft_ms": 25155.1,
+            "t_total_ms": 42011.0,
+            "t_conn_close_ms": 42012.02,
+            "answer_chars": 1434,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-03",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 25220.77,
+            "t_prep_ms": 18.76,
+            "t_retrieve_ms": 10.75,
+            "t_llm_ttft_ms": 25191.13,
+            "t_total_ms": 53994.25,
+            "t_conn_close_ms": 53995.22,
+            "answer_chars": 2255,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-04",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 35655.2,
+            "t_prep_ms": 15.66,
+            "t_retrieve_ms": 10.68,
+            "t_llm_ttft_ms": 35628.73,
+            "t_total_ms": 61146.89,
+            "t_conn_close_ms": 61147.14,
+            "answer_chars": 2335,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-05",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": "Trợ lý tạm thời không thể hoàn tất. Vui lòng gửi lại câu hỏi.",
+            "ttft_total_ms": null,
+            "t_prep_ms": 33.04,
+            "t_retrieve_ms": 4.2,
+            "t_llm_ttft_ms": null,
+            "t_total_ms": null,
+            "t_conn_close_ms": 30043.39,
+            "answer_chars": 0,
+            "finish_reason": null,
+            "verified": null,
+            "intent": null
+          }
+        ]
+      }
+    ],
+    "query_backend": [
+      {
+        "concurrency": 1,
+        "requests": 8,
+        "repeats": 1,
+        "wall_s": 228.617,
+        "rps": 0.035,
+        "error_rate": 0.0,
+        "ttft_total_ms": {
+          "count": 8,
+          "p50": 11248.9,
+          "p95": 15674.12,
+          "p99": 15674.12,
+          "mean": 9317.63,
+          "max": 15674.12
+        },
+        "t_prep_ms": {
+          "count": 8,
+          "p50": 26.68,
+          "p95": 51.75,
+          "p99": 51.75,
+          "mean": 31.76,
+          "max": 51.75
+        },
+        "t_retrieve_ms": {
+          "count": 8,
+          "p50": 2.38,
+          "p95": 6.05,
+          "p99": 6.05,
+          "mean": 2.93,
+          "max": 6.05
+        },
+        "t_llm_ttft_ms": {
+          "count": 8,
+          "p50": 11210.95,
+          "p95": 15649.09,
+          "p99": 15649.09,
+          "mean": 9282.78,
+          "max": 15649.09
+        },
+        "t_total_ms": {
+          "count": 8,
+          "p50": 31506.54,
+          "p95": 35133.38,
+          "p99": 35133.38,
+          "mean": 28556.37,
+          "max": 35133.38
+        },
+        "t_conn_close_ms": {
+          "count": 8,
+          "p50": 31528.17,
+          "p95": 35154.85,
+          "p99": 35154.85,
+          "mean": 28576.94,
+          "max": 35154.85
+        },
+        "by_kind": {
+          "course_qa": {
+            "ttft_total_ms": {
+              "count": 8,
+              "p50": 11248.9,
+              "p95": 15674.12,
+              "p99": 15674.12,
+              "mean": 9317.63,
+              "max": 15674.12
+            },
+            "t_total_ms": {
+              "count": 8,
+              "p50": 31506.54,
+              "p95": 35133.38,
+              "p99": 35133.38,
+              "mean": 28556.37,
+              "max": 35133.38
+            }
+          }
+        },
+        "errors": [],
+        "records_sample": [
+          {
+            "id": "qa-01",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 11248.9,
+            "t_prep_ms": 36.09,
+            "t_retrieve_ms": 1.75,
+            "t_llm_ttft_ms": 11210.95,
+            "t_total_ms": 28537.58,
+            "t_conn_close_ms": 28557.7,
+            "answer_chars": 1577,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-02",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 4924.47,
+            "t_prep_ms": 51.75,
+            "t_retrieve_ms": 3.79,
+            "t_llm_ttft_ms": 4868.64,
+            "t_total_ms": 20954.1,
+            "t_conn_close_ms": 20977.48,
+            "answer_chars": 1363,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-03",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 7203.46,
+            "t_prep_ms": 47.74,
+            "t_retrieve_ms": 3.77,
+            "t_llm_ttft_ms": 7151.81,
+            "t_total_ms": 32123.25,
+            "t_conn_close_ms": 32142.55,
+            "answer_chars": 1934,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-04",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 15668.08,
+            "t_prep_ms": 16.44,
+            "t_retrieve_ms": 2.38,
+            "t_llm_ttft_ms": 15649.09,
+            "t_total_ms": 35133.38,
+            "t_conn_close_ms": 35154.85,
+            "answer_chars": 1839,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-05",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 3497.66,
+            "t_prep_ms": 25.74,
+            "t_retrieve_ms": 2.33,
+            "t_llm_ttft_ms": 3469.5,
+            "t_total_ms": 33464.75,
+            "t_conn_close_ms": 33481.11,
+            "answer_chars": 2414,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          }
+        ]
+      },
+      {
+        "concurrency": 5,
+        "requests": 8,
+        "repeats": 1,
+        "wall_s": 101.184,
+        "rps": 0.079,
+        "error_rate": 0.0,
+        "ttft_total_ms": {
+          "count": 8,
+          "p50": 19885.58,
+          "p95": 45125.62,
+          "p99": 45125.62,
+          "mean": 22415.53,
+          "max": 45125.62
+        },
+        "t_prep_ms": {
+          "count": 8,
+          "p50": 36.11,
+          "p95": 53.73,
+          "p99": 53.73,
+          "mean": 34.74,
+          "max": 53.73
+        },
+        "t_retrieve_ms": {
+          "count": 8,
+          "p50": 4.77,
+          "p95": 5.33,
+          "p99": 5.33,
+          "mean": 4.12,
+          "max": 5.33
+        },
+        "t_llm_ttft_ms": {
+          "count": 8,
+          "p50": 19842.98,
+          "p95": 45106.16,
+          "p99": 45106.16,
+          "mean": 22376.32,
+          "max": 45106.16
+        },
+        "t_total_ms": {
+          "count": 8,
+          "p50": 39187.39,
+          "p95": 71413.19,
+          "p99": 71413.19,
+          "mean": 44483.67,
+          "max": 71413.19
+        },
+        "t_conn_close_ms": {
+          "count": 8,
+          "p50": 39206.16,
+          "p95": 71434.1,
+          "p99": 71434.1,
+          "mean": 44503.37,
+          "max": 71434.1
+        },
+        "by_kind": {
+          "course_qa": {
+            "ttft_total_ms": {
+              "count": 8,
+              "p50": 19885.58,
+              "p95": 45125.62,
+              "p99": 45125.62,
+              "mean": 22415.53,
+              "max": 45125.62
+            },
+            "t_total_ms": {
+              "count": 8,
+              "p50": 39187.39,
+              "p95": 71413.19,
+              "p99": 71413.19,
+              "mean": 44483.67,
+              "max": 71413.19
+            }
+          }
+        },
+        "errors": [],
+        "records_sample": [
+          {
+            "id": "qa-01",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 9112.53,
+            "t_prep_ms": 28.04,
+            "t_retrieve_ms": 5.33,
+            "t_llm_ttft_ms": 9077.82,
+            "t_total_ms": 29742.0,
+            "t_conn_close_ms": 29749.21,
+            "answer_chars": 1503,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-02",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 10398.96,
+            "t_prep_ms": 36.11,
+            "t_retrieve_ms": 2.82,
+            "t_llm_ttft_ms": 10359.85,
+            "t_total_ms": 25784.41,
+            "t_conn_close_ms": 25807.6,
+            "answer_chars": 1371,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-03",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 11417.9,
+            "t_prep_ms": 36.04,
+            "t_retrieve_ms": 5.06,
+            "t_llm_ttft_ms": 11376.64,
+            "t_total_ms": 39042.61,
+            "t_conn_close_ms": 39064.52,
+            "answer_chars": 2089,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-04",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 19885.58,
+            "t_prep_ms": 37.45,
+            "t_retrieve_ms": 5.03,
+            "t_llm_ttft_ms": 19842.98,
+            "t_total_ms": 48579.94,
+            "t_conn_close_ms": 48603.47,
+            "answer_chars": 2555,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          },
+          {
+            "id": "qa-05",
+            "kind": "course_qa",
+            "status_code": 200,
+            "error": null,
+            "ttft_total_ms": 37091.78,
+            "t_prep_ms": 40.68,
+            "t_retrieve_ms": 4.77,
+            "t_llm_ttft_ms": 37046.13,
+            "t_total_ms": 66128.07,
+            "t_conn_close_ms": 66154.93,
+            "answer_chars": 2128,
+            "finish_reason": "stop",
+            "verified": true,
+            "intent": "course_qa"
+          }
+        ]
+      }
+    ],
+    "components": {
+      "mode": "retriever",
+      "retriever": {
+        "query": "Giải thích embedding và vector search trong bài giảng.",
+        "hyde": true,
+        "iterations": 5,
+        "embed_query_ms": {
+          "count": 5,
+          "p50": 0.05,
+          "p95": 0.34,
+          "p99": 0.34,
+          "mean": 0.11
+        },
+        "embed_hyde_ms": {
+          "count": 5,
+          "p50": 0.03,
+          "p95": 0.21,
+          "p99": 0.21,
+          "mean": 0.07
+        },
+        "bm25_ms": {
+          "count": 5,
+          "p50": 0.75,
+          "p95": 49.8,
+          "p99": 49.8,
+          "mean": 10.59
+        },
+        "dense_ms": {
+          "count": 5,
+          "p50": 1.75,
+          "p95": 3.68,
+          "p99": 3.68,
+          "mean": 2.0
+        },
+        "hyde_dense_ms": {
+          "count": 5,
+          "p50": 2.1,
+          "p95": 2.23,
+          "p99": 2.23,
+          "mean": 1.96
+        },
+        "rrf_fuse_ms": {
+          "count": 5,
+          "p50": 0.06,
+          "p95": 0.06,
+          "p99": 0.06,
+          "mean": 0.06
+        },
+        "asearch_total_ms": {
+          "count": 5,
+          "p50": 2.33,
+          "p95": 4.51,
+          "p99": 4.51,
+          "mean": 2.87
+        },
+        "query_dim": 1024,
+        "hyde_dim": 1024
+      }
+    },
+    "components_all": {
+      "mode": "all",
+      "retriever": {
+        "query": "Giải thích embedding và vector search trong bài giảng.",
+        "hyde": true,
+        "iterations": 3,
+        "embed_query_ms": {
+          "count": 3,
+          "p50": 0.08,
+          "p95": 0.35,
+          "p99": 0.35,
+          "mean": 0.16
+        },
+        "embed_hyde_ms": {
+          "count": 3,
+          "p50": 0.04,
+          "p95": 0.22,
+          "p99": 0.22,
+          "mean": 0.1
+        },
+        "bm25_ms": {
+          "count": 3,
+          "p50": 1.01,
+          "p95": 88.89,
+          "p99": 88.89,
+          "mean": 30.21
+        },
+        "dense_ms": {
+          "count": 3,
+          "p50": 1.94,
+          "p95": 5.09,
+          "p99": 5.09,
+          "mean": 2.91
+        },
+        "hyde_dense_ms": {
+          "count": 3,
+          "p50": 2.16,
+          "p95": 3.51,
+          "p99": 3.51,
+          "mean": 2.43
+        },
+        "rrf_fuse_ms": {
+          "count": 3,
+          "p50": 0.06,
+          "p95": 0.08,
+          "p99": 0.08,
+          "mean": 0.06
+        },
+        "asearch_total_ms": {
+          "count": 3,
+          "p50": 3.23,
+          "p95": 6.22,
+          "p99": 6.22,
+          "mean": 3.92
+        },
+        "query_dim": 1024,
+        "hyde_dim": 1024
+      },
+      "llm": {
+        "concurrency": 4,
+        "iterations": 3,
+        "ttft_ms": {
+          "count": 3,
+          "p50": 505.27,
+          "p95": 520.67,
+          "p99": 520.67,
+          "mean": 509.59
+        },
+        "total_ms": {
+          "count": 3,
+          "p50": 3326.42,
+          "p95": 3342.31,
+          "p99": 3342.31,
+          "mean": 3203.47
+        },
+        "chunks": {
+          "count": 3,
+          "p50": 65.0,
+          "p95": 65.0,
+          "p99": 65.0,
+          "mean": 62.0
+        }
+      },
+      "embedding": {
+        "batch_docs": 4,
+        "batch_ms": {
+          "count": 3,
+          "p50": 1975.75,
+          "p95": 2273.55,
+          "p99": 2273.55,
+          "mean": 1927.64
+        },
+        "query_ms": {
+          "count": 3,
+          "p50": 0.1,
+          "p95": 893.88,
+          "p99": 893.88,
+          "mean": 298.02
+        }
+      }
+    },
+    "ingest": {
+      "lesson_id": "659b48bb-8100-5e00-b4c6-8751d4685a19",
+      "slide_count": 2,
+      "processed": 2,
+      "failed": 0,
+      "errors": [],
+      "wall_ms": 25439.55,
+      "slides_per_second": 0.079,
+      "stages_ms": {
+        "pdf_render": {
+          "count": 2,
+          "p50": 57.85,
+          "p95": 57.85,
+          "p99": 57.85,
+          "mean": 54.4,
+          "max": 57.85
+        },
+        "vlm": {
+          "count": 2,
+          "p50": 10739.37,
+          "p95": 10739.37,
+          "p99": 10739.37,
+          "mean": 10210.45,
+          "max": 10739.37
+        },
+        "embedding": {
+          "count": 2,
+          "p50": 8161.31,
+          "p95": 8161.31,
+          "p99": 8161.31,
+          "mean": 7839.85,
+          "max": 8161.31
+        },
+        "db_upsert": {
+          "count": 2,
+          "p50": 16.81,
+          "p95": 16.81,
+          "p99": 16.81,
+          "mean": 15.87,
+          "max": 16.81
+        },
+        "db_mark": {
+          "count": 2,
+          "p50": 8.83,
+          "p95": 8.83,
+          "p99": 8.83,
+          "mean": 5.4,
+          "max": 8.83
+        }
+      },
+      "slides": [
+        {
+          "slide_id": "286f3026-c011-5f0a-87b8-cee61d128cee",
+          "_mark_ms": 8.83,
+          "_load_image_ms": 50.95,
+          "_describe_image_ms": 10739.37,
+          "embedding_ms": 7518.38,
+          "_upsert_ms": 14.93,
+          "total_ms": 18332.46
+        },
+        {
+          "slide_id": "9cf00711-7634-5443-8b02-6128348adfad",
+          "_mark_ms": 1.97,
+          "_load_image_ms": 57.85,
+          "_describe_image_ms": 9681.53,
+          "embedding_ms": 8161.31,
+          "_upsert_ms": 16.81,
+          "total_ms": 17919.47
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "bundle": {
+      "nextDir": "/home/hieu/Documents/NCKH Eyetracking/EyeLearning/benchmarks/baseline/20261120T180000Z-baseline/frontend/.next",
+      "generatedAt": "2026-11-20T18:13:57.698Z",
+      "static": {
+        "files": 132,
+        "raw": 4143473,
+        "gzip": 2005967
+      },
+      "routes": {
+        "/_global-error": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js"
+          ],
+          "cssFiles": [],
+          "jsRaw": 14377,
+          "jsGzip": 3655,
+          "cssRaw": 0,
+          "cssGzip": 0
+        },
+        "/_not-found": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 152789,
+          "jsGzip": 45220,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/change-password": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1l7tncpkxpp57.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/411t2-7feetci.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 208034,
+          "jsGzip": 64602,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/login": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0edxnqxtzepah.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2r9qvlob9ig0l.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 253259,
+          "jsGzip": 80637,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/register": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1iamzt7et5exs.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2r9qvlob9ig0l.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 249672,
+          "jsGzip": 79451,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin/database": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0cp4-94fjju6f.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1v1p8ps1h_aeb.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 358047,
+          "jsGzip": 112890,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/14abmr9svhlr2.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 319577,
+          "jsGzip": 102657,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin/profile": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/27zkgra7yp21m.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/3l2lcf6uivksu.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 308774,
+          "jsGzip": 99311,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0logf_d4yyv0v.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css",
+            "static/chunks/1kaysz1e3x6db.css"
+          ],
+          "jsRaw": 180952,
+          "jsGzip": 55371,
+          "cssRaw": 125506,
+          "cssGzip": 23156
+        },
+        "/student/courses/[courseId]/calibrate": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1l9x643a4he-9.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2teuv5iigd05v.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 188884,
+          "jsGzip": 57702,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/courses/[courseId]": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0i-yoqum9tp-p.js",
+            "static/chunks/13e-xjj6e7b81.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1l3h4bsixc_ek.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 258324,
+          "jsGzip": 80714,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/courses/[courseId]/prepare": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/14m806d1ur5h9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2k4h3kc5txckr.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 329183,
+          "jsGzip": 105309,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0yf5utwyoml7r.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 314634,
+          "jsGzip": 101218,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/profile": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0u5hd_n6cc9i4.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 318420,
+          "jsGzip": 102167,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher/courses/[courseId]": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1j2swa6m73gfr.js",
+            "static/chunks/2-9o5bd00f42w.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 245477,
+          "jsGzip": 76523,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher": {
+          "jsFiles": [
+            "static/chunks/0-gg9njaxzmuu.js",
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 316527,
+          "jsGzip": 101377,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher/profile": {
+          "jsFiles": [
+            "static/chunks/08rxdtbf5w6a5.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0u5hd_n6cc9i4.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 318420,
+          "jsGzip": 102167,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/try": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0xs5p5s00mckt.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2g8b2tlzkltec.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2teuv5iigd05v.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 223397,
+          "jsGzip": 69260,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        }
+      },
+      "topChunks": [
+        {
+          "file": "static/chunks/0msi-bp7zi27h.css",
+          "raw": 101467,
+          "gzip": 17464
+        },
+        {
+          "file": "static/chunks/36ou6uiwi88q3.js",
+          "raw": 53949,
+          "gzip": 18530
+        },
+        {
+          "file": "static/chunks/13e-xjj6e7b81.js",
+          "raw": 50757,
+          "gzip": 15606
+        },
+        {
+          "file": "static/chunks/1ezb8gmqwd76o.js",
+          "raw": 49220,
+          "gzip": 11743
+        },
+        {
+          "file": "static/chunks/0cp4-94fjju6f.js",
+          "raw": 44447,
+          "gzip": 12263
+        },
+        {
+          "file": "static/chunks/2g8b2tlzkltec.js",
+          "raw": 42145,
+          "gzip": 13668
+        },
+        {
+          "file": "static/chunks/1l9x643a4he-9.js",
+          "raw": 35925,
+          "gzip": 12322
+        },
+        {
+          "file": "static/chunks/1_f52-r8am_0c.js",
+          "raw": 35609,
+          "gzip": 11922
+        },
+        {
+          "file": "static/chunks/2gmhlpli9_q3u.js",
+          "raw": 33895,
+          "gzip": 10490
+        },
+        {
+          "file": "static/chunks/2k4h3kc5txckr.js",
+          "raw": 33452,
+          "gzip": 11554
+        },
+        {
+          "file": "static/chunks/27zkgra7yp21m.js",
+          "raw": 32406,
+          "gzip": 11295
+        },
+        {
+          "file": "static/chunks/2r9qvlob9ig0l.js",
+          "raw": 31939,
+          "gzip": 11376
+        },
+        {
+          "file": "static/chunks/133f-tzqs5_hb.js",
+          "raw": 29481,
+          "gzip": 10349
+        },
+        {
+          "file": "static/chunks/08rxdtbf5w6a5.js",
+          "raw": 28331,
+          "gzip": 10229
+        },
+        {
+          "file": "static/chunks/3fwc2e69z2sr_.js",
+          "raw": 28329,
+          "gzip": 8937
+        },
+        {
+          "file": "static/chunks/0xs5p5s00mckt.js",
+          "raw": 28293,
+          "gzip": 10212
+        },
+        {
+          "file": "static/chunks/0logf_d4yyv0v.js",
+          "raw": 28163,
+          "gzip": 10151
+        },
+        {
+          "file": "static/chunks/1j2swa6m73gfr.js",
+          "raw": 27997,
+          "gzip": 8806
+        },
+        {
+          "file": "static/chunks/411t2-7feetci.js",
+          "raw": 27878,
+          "gzip": 9496
+        },
+        {
+          "file": "static/chunks/1l7tncpkxpp57.js",
+          "raw": 27367,
+          "gzip": 9886
+        },
+        {
+          "file": "static/chunks/1l3h4bsixc_ek.js",
+          "raw": 25809,
+          "gzip": 9332
+        },
+        {
+          "file": "static/chunks/14m806d1ur5h9.js",
+          "raw": 25053,
+          "gzip": 7854
+        },
+        {
+          "file": "static/chunks/1kaysz1e3x6db.css",
+          "raw": 24039,
+          "gzip": 5692
+        },
+        {
+          "file": "static/chunks/14abmr9svhlr2.js",
+          "raw": 19418,
+          "gzip": 6407
+        },
+        {
+          "file": "static/chunks/0u5hd_n6cc9i4.js",
+          "raw": 18261,
+          "gzip": 5917
+        },
+        {
+          "file": "static/chunks/1gwvpbqgh4pi3.js",
+          "raw": 17028,
+          "gzip": 6496
+        },
+        {
+          "file": "static/chunks/0-gg9njaxzmuu.js",
+          "raw": 16368,
+          "gzip": 5127
+        },
+        {
+          "file": "static/chunks/0yf5utwyoml7r.js",
+          "raw": 14475,
+          "gzip": 4968
+        },
+        {
+          "file": "static/chunks/0ehjiuuxbbhq9.js",
+          "raw": 14377,
+          "gzip": 3655
+        },
+        {
+          "file": "static/chunks/1v1p8ps1h_aeb.js",
+          "raw": 13441,
+          "gzip": 4377
+        }
+      ]
+    },
+    "lighthouse": {}
+  },
+  "redis": {
+    "before": {
+      "keyspace_hits": 6666,
+      "keyspace_misses": 217,
+      "hit_rate": 0.968473,
+      "used_memory_human": "1.49M",
+      "used_memory_peak_human": "1.61M",
+      "evicted_keys": 0,
+      "expired_keys": 227,
+      "total_commands_processed": 1728507,
+      "instantaneous_ops_per_sec": 788,
+      "commandstats": {
+        "zrange": "calls=22,usec=44,usec_per_call=2.00,rejected_calls=0,failed_calls=0",
+        "eval": "calls=143,usec=5911,usec_per_call=41.34,rejected_calls=0,failed_calls=0",
+        "info": "calls=25,usec=1420,usec_per_call=56.80,rejected_calls=0,failed_calls=0",
+        "hello": "calls=8,usec=46,usec_per_call=5.75,rejected_calls=0,failed_calls=0",
+        "get": "calls=6718,usec=27007,usec_per_call=4.02,rejected_calls=0,failed_calls=0",
+        "client|setinfo": "calls=16,usec=8,usec_per_call=0.50,rejected_calls=0,failed_calls=0",
+        "set": "calls=162,usec=826,usec_per_call=5.10,rejected_calls=0,failed_calls=0",
+        "slowlog|get": "calls=8,usec=10,usec_per_call=1.25,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=240,usec=587,usec_per_call=2.45,rejected_calls=0,failed_calls=0",
+        "zremrangebyscore": "calls=143,usec=687,usec_per_call=4.80,rejected_calls=0,failed_calls=0",
+        "ping": "calls=1720662,usec=1236965,usec_per_call=0.72,rejected_calls=0,failed_calls=0",
+        "expire": "calls=145,usec=389,usec_per_call=2.68,rejected_calls=0,failed_calls=0",
+        "zadd": "calls=121,usec=928,usec_per_call=7.67,rejected_calls=0,failed_calls=0",
+        "zcard": "calls=143,usec=119,usec_per_call=0.83,rejected_calls=0,failed_calls=0"
+      }
+    },
+    "after": {
+      "keyspace_hits": 8966,
+      "keyspace_misses": 253,
+      "hit_rate": 0.972557,
+      "used_memory_human": "1.63M",
+      "used_memory_peak_human": "1.65M",
+      "evicted_keys": 0,
+      "expired_keys": 250,
+      "total_commands_processed": 1902551,
+      "instantaneous_ops_per_sec": 894,
+      "commandstats": {
+        "zrange": "calls=22,usec=44,usec_per_call=2.00,rejected_calls=0,failed_calls=0",
+        "eval": "calls=143,usec=5911,usec_per_call=41.34,rejected_calls=0,failed_calls=0",
+        "info": "calls=28,usec=1611,usec_per_call=57.54,rejected_calls=0,failed_calls=0",
+        "hello": "calls=8,usec=46,usec_per_call=5.75,rejected_calls=0,failed_calls=0",
+        "get": "calls=9054,usec=36689,usec_per_call=4.05,rejected_calls=0,failed_calls=0",
+        "client|setinfo": "calls=16,usec=8,usec_per_call=0.50,rejected_calls=0,failed_calls=0",
+        "set": "calls=198,usec=991,usec_per_call=5.01,rejected_calls=0,failed_calls=0",
+        "slowlog|get": "calls=9,usec=11,usec_per_call=1.22,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=320,usec=749,usec_per_call=2.34,rejected_calls=0,failed_calls=0",
+        "zremrangebyscore": "calls=143,usec=687,usec_per_call=4.80,rejected_calls=0,failed_calls=0",
+        "ping": "calls=1892256,usec=1307314,usec_per_call=0.69,rejected_calls=0,failed_calls=0",
+        "expire": "calls=153,usec=407,usec_per_call=2.66,rejected_calls=0,failed_calls=0",
+        "zadd": "calls=121,usec=928,usec_per_call=7.67,rejected_calls=0,failed_calls=0",
+        "zcard": "calls=143,usec=119,usec_per_call=0.83,rejected_calls=0,failed_calls=0"
+      }
+    }
+  }
+}

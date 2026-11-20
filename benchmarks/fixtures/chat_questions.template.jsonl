@@ -1,0 +1,19 @@
+{"id":"qa-01","kind":"course_qa","question":"Giải thích sự khác nhau giữa học có giám sát và học không giám sát trong bài giảng này."}
+{"id":"qa-02","kind":"course_qa","question":"Quy trình xây dựng một mô hình học máy gồm những bước chính nào?"}
+{"id":"qa-03","kind":"course_qa","question":"Vì sao cần tách tập train, validation và test khi đánh giá mô hình?"}
+{"id":"qa-04","kind":"course_qa","question":"Regularization giúp giảm overfitting như thế nào trong mô hình tuyến tính?"}
+{"id":"qa-05","kind":"course_qa","question":"Hãy so sánh ưu và nhược điểm của decision tree và logistic regression."}
+{"id":"qa-06","kind":"course_qa","question":"Embedding văn bản hỗ trợ tìm kiếm ngữ nghĩa trong hệ thống RAG ra sao?"}
+{"id":"qa-07","kind":"course_qa","question":"Approximate nearest neighbour trong pgvector đánh đổi recall và tốc độ như thế nào?"}
+{"id":"qa-08","kind":"course_qa","question":"Tóm tắt nội dung chính của bài giảng này trong năm gạch đầu dòng."}
+{"id":"hyde-01","kind":"hyde","question":"Học máy là gì?"}
+{"id":"hyde-02","kind":"hyde","question":"Regularization là gì?"}
+{"id":"hyde-03","kind":"hyde","question":"Embedding là gì?"}
+{"id":"hyde-04","kind":"hyde","question":"Vector search là gì?"}
+{"id":"followup-01","kind":"followup","question":"Vậy khi dữ liệu ít nhãn thì nên chọn cách nào?","history":[{"role":"student","content":"So sánh học có giám sát và học không giám sát."},{"role":"assistant","content":"Học có giám sát dùng dữ liệu có nhãn; học không giám sát tìm cấu trúc trong dữ liệu chưa có nhãn."}]}
+{"id":"followup-02","kind":"followup","question":"Còn nếu mô hình bị overfitting thì sao?","history":[{"role":"student","content":"Làm sao để đánh giá mô hình phân loại?"},{"role":"assistant","content":"Dùng tập validation/test, confusion matrix, precision, recall và F1."}]}
+{"id":"followup-03","kind":"followup","question":"Giải thích thêm về cách chọn số chiều embedding.","history":[{"role":"student","content":"Embedding là gì?"},{"role":"assistant","content":"Embedding ánh xạ văn bản thành vector số thực trong không gian nhiều chiều."}]}
+{"id":"greeting-01","kind":"fast","question":"Xin chào"}
+{"id":"greeting-02","kind":"fast","question":"Cảm ơn bạn"}
+{"id":"fast-01","kind":"fast","question":"Bạn giúp được gì?"}
+{"id":"no-answer-01","kind":"no_answer","question":"Giá cổ phiếu của một công ty không có trong tài liệu là bao nhiêu?"}

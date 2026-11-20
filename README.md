@@ -666,7 +666,7 @@ Chạy riêng:
 E2E_CHAT=1 ./scripts/e2e.sh        # thêm luồng chat thật
 ```
 
-Kế hoạch và phạm vi test: `TEST_PLAN.md`.
+Phạm vi và quy ước test: mục 2 `AGENTS.md`.
 
 ## 9. Xử lý sự cố nhanh
 

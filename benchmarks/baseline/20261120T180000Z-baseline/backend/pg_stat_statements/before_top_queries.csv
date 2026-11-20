@@ -1,0 +1,230 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"INSERT INTO gaze_samples (content_view_id, layout_id, client_batch_id, sequence, event_time, viewport_x, viewport_y, status, quality_flags) VALUES ($1::UUID, $2::UUID, $3::UUID, $4::BIGINT, $5::TIMESTAMP WITH TIME ZONE, $6::FLOAT, $7::FLOAT",80,72.51425900000001,0.9064282375,3200,82841,1,0
+"SELECT slides.id, slides.lesson_id, slides.position, slides.page_number, slides.title, slides.transcript, slides.embedding, slides.content_tsv, slides.index_status, slides.index_error, slides.pipeline_version, slides.model_version, slides.c",20,10.401622,0.5200811000000001,120,480,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.id,
+    cv.tracked_duration_ms,
+    cv.gaze_count,
+    cv.on_slide_gaze_count,
+    cv.aoi_stats,
+    ls.id AS session_id,
+    l.id AS lesson_id,
+    s.id AS slide_id,
+    e.id AS e",1,10.221276,10.221276,0,3657,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.id,
+    cv.tracked_duration_ms,
+    cv.gaze_count,
+    cv.on_slide_gaze_count,
+    cv.aoi_stats,
+    ls.id AS session_id,
+    l.id AS lesson_id,
+    s.id AS slide_id,
+    e.id AS e",1,7.302221,7.302221,9700,2752,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.slide_id,
+    ls.enrollment_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_view",1,7.091625,7.091625,0,3147,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.slide_id,
+    ls.enrollment_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_view",1,6.061251,6.061251,3400,2727,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    ls.course_visit_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_views cv
+JOIN learn",1,5.527823,5.527823,0,3242,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cm.course_id,
+    sum(cv.on_slide_gaze_count),
+    sum(cv.gaze_count),
+    count(ls.id)
+FROM course_modules cm
+JOIN lessons l ON l.module_id = cm.id
+JOIN learning_sessions ls ON ls.le",1,5.346801,5.346801,0,3451,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH view_ids AS (
+    SELECT cv.id
+    FROM content_views cv
+    JOIN learning_sessions ls ON ls.id = cv.session_id
+    WHERE ls.course_visit_id = $1::uuid
+)
+SELECT
+    cv.id,
+    ls.started_at",1,5.011193,5.011193,0,1466,0,0
+"SELECT $2 FROM ONLY ""public"".""content_views"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,4.823071999999999,0.0015072100000000006,3200,12800,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    ls.course_visit_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_views cv
+JOIN learn",1,4.399139,4.399139,260,2734,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cm.course_id,
+    sum(cv.on_slide_gaze_count),
+    sum(cv.gaze_count),
+    count(ls.id)
+FROM course_modules cm
+JOIN lessons l ON l.module_id = cm.id
+JOIN learning_sessions ls ON ls.le",1,4.33216,4.33216,1,2996,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",2,3.58929,1.794645,50,1856,0,0
+"SELECT $2 FROM ONLY ""public"".""view_layouts"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,3.5160160000000036,0.0010987549999999986,3200,9600,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",2,3.426693,1.7133465,164,2124,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH q AS (
+    SELECT embedding
+    FROM slides s
+    JOIN lessons l ON l.id = s.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = $1::uuid
+      AND s.embedding",1,3.189849,3.189849,0,2407,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH view_ids AS (
+    SELECT cv.id
+    FROM content_views cv
+    JOIN learning_sessions ls ON ls.id = cv.session_id
+    WHERE ls.course_visit_id = $1::uuid
+)
+SELECT
+    cv.id,
+    ls.started_at",1,3.062205,3.062205,60,882,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT d.slide_id, d.course_id, d.lesson_id, d.transcript,
+       ts_rank_cd(d.content_tsv, q) AS rank_score
+FROM v_chatbot_slide_documents d,
+     plainto_tsquery($1, immutable_unaccent($2)) q
+",1,3.020276,3.020276,0,1021,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, 160 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO",2,2.536807,1.2684035,30,1004,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( 'shared_buffers' , 'work_mem' , 'maintenance_work_mem' , 'effective_cache_size' , 'max_connections' , 'random_page_cost' , 'track_io_timing' , 'shared_preload_lib",2,2.073948,1.036974,20,342,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT cv.id, cv.heatmap_grid, cv.analysis_status, cv.analysis_version,
+       exists (
+           SELECT $1 FROM gaze_samples gs WHERE gs.content_view_id = cv.id
+       ) AS has_samples
+FROM co",1,2.028555,2.028555,0,881,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",80,1.503684,0.01879605,80,480,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",54,1.4124209999999997,0.02615594444444444,0,54,0,0
+"SELECT content_views.id, content_views.session_id, content_views.slide_id, content_views.surface, content_views.sequence_no, content_views.started_at, content_views.ended_at, content_views.gaze_count, content_views.on_slide_gaze_count, cont",80,1.244443,0.015555537500000004,80,240,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH q AS (
+    SELECT embedding
+    FROM slides s
+    JOIN lessons l ON l.id = s.lesson_id
+    JOIN course_modules m ON m.id = l.module_id
+    WHERE m.course_id = $1::uuid
+      AND s.embedding",1,1.135093,1.135093,20,1639,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( $1 , $2 , $3 , $4 , $5 , $6 , $7 , $8 , $9 , $10 ) ORDER BY name ) TO STDOUT WITH CSV HEADER",2,1.134188,0.567094,20,6,0,0
+"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ""chatbot_reader""",1,1.1322,1.1322,0,1843,0,0
+"SELECT view_layouts.id, view_layouts.content_view_id, view_layouts.layout_no, view_layouts.slide_rect, view_layouts.elements, view_layouts.captured_at
+FROM view_layouts
+WHERE view_layouts.id = $1::UUID",80,1.0076919999999998,0.012596150000000004,80,160,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT cv.id, cv.heatmap_grid, cv.analysis_status, cv.analysis_version,
+       exists (
+           SELECT $1 FROM gaze_samples gs WHERE gs.content_view_id = cv.id
+       ) AS has_samples
+FROM co",1,0.906418,0.906418,62,286,0,0
+"DO $$
+DECLARE
+    old_count integer;
+BEGIN
+    IF to_regclass('public.schema_migrations') IS NULL THEN
+        IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public') THEN
+            RAISE EXCEPTION 'old schema detected: public tab",1,0.903325,0.903325,0,242,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",54,0.8086210000000001,0.014974462962962964,0,54,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",20,0.708013,0.03540065,20,60,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at
+FROM lessons
+WHERE lessons.id = $1::UUID",40,0.6657869999999999,0.016644675,40,80,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",2,0.649601,0.3248005,164,552,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT d.slide_id, d.course_id, d.lesson_id, d.transcript,
+       ts_rank_cd(d.content_tsv, q) AS rank_score
+FROM v_chatbot_slide_documents d,
+     plainto_tsquery($1, immutable_unaccent($2)) q
+",1,0.5881649999999999,0.5881649999999999,20,89,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT id, event_time, sequence, status, viewport_x, viewport_y,
+       slide_x, slide_y, aoi_label, quality_flags
+FROM gaze_samples
+WHERE content_view_id = $1::uuid
+ORDER BY event_time, id
+LIMI",1,0.559302,0.559302,0,295,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",2,0.5337609999999999,0.26688049999999996,50,60,0,0
+"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ""admin_reader""",1,0.507174,0.507174,0,472,0,0
+"SELECT translate(unaccent($2, $1), $3, $4)",1,0.42085700000000004,0.42085700000000004,1,12,0,0
+"SELECT course_modules.id, course_modules.course_id, course_modules.title, course_modules.position, course_modules.created_at, course_modules.updated_at
+FROM course_modules
+WHERE course_modules.id = $1::UUID",20,0.367676,0.0183838,20,20,0,0
+"SELECT enrollments.student_id
+FROM enrollments
+WHERE enrollments.id = $1::UUID",20,0.323254,0.0161627,20,60,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.28820700000000005,0.014410349999999999,20,20,0,0
+"GRANT SELECT ON ALL TABLES IN SCHEMA public TO ""admin_reader""",1,0.285666,0.285666,0,292,0,0
+BEGIN,306,0.26391999999999993,0.0008624836601307191,0,0,0,0
+"SELECT media_assets.id, media_assets.course_id, media_assets.storage_backend, media_assets.object_key, media_assets.sha256, media_assets.mime_type, media_assets.byte_size, media_assets.state, media_assets.page_count, media_assets.source_for",20,0.262677,0.013133849999999999,20,20,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, $1 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO ",2,0.22333999999999998,0.11166999999999999,30,8,0,0
+ROLLBACK,226,0.173056,0.000765734513274336,0,0,0,0
+"REVOKE ALL ON users, auth_sessions, email_otps, enrollments,
+    quiz_attempts, learning_sessions, chat_sessions, chat_messages
+    FROM ""chatbot_reader""",1,0.139475,0.139475,0,128,0,0
+"SELECT users.id, users.email, users.password_hash, users.role, users.status, users.full_name, users.date_of_birth, users.gender, users.phone, users.avatar_url, users.last_login_at, users.email_verified_at, users.created_at, users.updated_at",8,0.13428500000000002,0.016785625,8,16,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT id, event_time, sequence, status, viewport_x, viewport_y,
+       slide_x, slide_y, aoi_label, quality_flags
+FROM gaze_samples
+WHERE content_view_id = $1::uuid
+ORDER BY event_time, id
+LIMI",1,0.126558,0.126558,180,59,0,0
+"GRANT SELECT (
+    id, email, role, status, full_name, date_of_birth, gender, phone,
+    avatar_url, last_login_at, email_verified_at, created_at, updated_at,
+    deleted_at
+) ON users TO ""admin_reader""",1,0.102714,0.102714,0,104,0,0
+"GRANT UPDATE (
+    transcript, embedding, index_status, index_error,
+    pipeline_version, model_version, updated_at
+) ON slides TO ""chatbot_reader""",1,0.072568,0.072568,0,77,0,0
+"REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ""chatbot_reader""",1,0.052941,0.052941,0,47,0,0
+"GRANT SELECT ON v_published_course_outline TO ""chatbot_reader""",1,0.052084,0.052084,0,34,0,0
+"REVOKE ALL ON users FROM ""admin_reader""",1,0.043742,0.043742,0,54,0,0
+"REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ""admin_reader""",1,0.036068,0.036068,0,20,0,0
+COMMIT,80,0.03327499999999999,0.0004159375,0,0,0,0
+"REVOKE ALL ON auth_sessions, email_otps FROM ""admin_reader""",1,0.032255,0.032255,0,24,0,0
+"GRANT CONNECT ON DATABASE ""eyetracking_bench"" TO ""chatbot_reader""",1,0.031711,0.031711,0,7,0,0
+"GRANT CONNECT ON DATABASE ""eyetracking_bench"" TO ""admin_reader""",1,0.02589,0.02589,0,7,0,0
+"GRANT USAGE ON SCHEMA public TO ""chatbot_reader""",1,0.025385,0.025385,0,8,0,0
+"SELECT (coalesce((SELECT checksum FROM schema_migrations WHERE filename = $1), $2) = $3)::text AS missing,
+       (coalesce((SELECT checksum FROM schema_migrations WHERE filename = $4), $5) = $6)::text AS same",5,0.018534,0.0037068,5,10,0,0
+"GRANT SELECT ON v_course_outline TO ""chatbot_reader""",1,0.017252,0.017252,0,12,0,0
+"REVOKE ALL ON schema_migrations FROM ""admin_reader""",1,0.015615,0.015615,0,12,0,0
+"SELECT format($1, $2, $3)
+WHERE EXISTS (SELECT $4 FROM pg_roles WHERE rolname = $5)",2,0.015484999999999999,0.007742499999999999,2,2,0,0
+"GRANT SELECT ON v_chatbot_slide_documents TO ""chatbot_reader""",1,0.014947,0.014947,0,12,0,0
+"GRANT SELECT ON slides TO ""chatbot_reader""",1,0.014194,0.014194,0,12,0,0
+SELECT 1,4,0.013178000000000002,0.0032945,4,0,0,0
+"GRANT USAGE ON SCHEMA public TO ""admin_reader""",1,0.011686,0.011686,0,3,0,0
+"SELECT format($1, $2, $3)
+WHERE NOT EXISTS (SELECT $4 FROM pg_roles WHERE rolname = $5)",2,0.010098,0.005049,0,2,0,0
+"SELECT count(*)                          FROM schema_migrations
+         WHERE filename NOT IN ($1,$2,$3,$4,$5)",1,0.00991,0.00991,1,1,0,0
+SELECT pg_advisory_lock(hashtext($1)),1,0.00666,0.00666,1,0,0,0
+SELECT current_database() || $1 || current_user,1,0.005424,0.005424,1,0,0,0
+SELECT pg_advisory_unlock_all(),1,0.002332,0.002332,1,0,0,0

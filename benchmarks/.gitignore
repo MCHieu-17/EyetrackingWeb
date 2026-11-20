@@ -1,0 +1,16 @@
+# Token và cookie benchmark không được commit.
+baseline/**/.runtime/
+baseline/**/*.cookies
+baseline/**/*.dump
+baseline/**/*.sql.gz
+baseline/**/postgres.log
+baseline/**/lighthouse/*.html
+baseline/**/.next/
+
+# PDF fixture được sinh lại từ script; không commit binary.
+fixtures/*.pdf
+fixtures/*.png
+fixtures/*.meta.json
+
+# Kết quả lighthouse JSON khá lớn; giữ summary + raw nếu cần.
+# (Không ignore toàn bộ JSON vì summary.json là artifact chính.)

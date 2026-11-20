@@ -29,7 +29,7 @@ gốc repo.
 Test tự động nằm trong image test riêng (`backend-test`, `chatbot-test`,
 `gaze-test`) và mount thư mục `tests/` từ host; không cần cài pytest vào image
 production. Chạy `make test-fast` sau mỗi lần sửa, `make test-smoke` trước merge.
-Chi tiết phạm vi: `TEST_PLAN.md` ở root repo.
+Chi tiết phạm vi: mục 2 `AGENTS.md`.
 
 ## Production qua Portainer
 

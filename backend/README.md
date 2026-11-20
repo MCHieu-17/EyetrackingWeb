@@ -178,4 +178,4 @@ make test-fast
 ./scripts/test_backend.sh tests/fast/test_quiz.py -q
 ```
 
-`TEST_PLAN.md` mô tả phạm vi hộp đen và nhóm `fast`/`smoke`.
+Phạm vi hộp đen và nhóm `fast`/`smoke`: mục 2 `AGENTS.md`.

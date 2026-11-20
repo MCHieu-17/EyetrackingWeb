@@ -1,0 +1,27 @@
+{
+  "keyspace_hits": 8966,
+  "keyspace_misses": 253,
+  "hit_rate": 0.972557,
+  "used_memory_human": "1.63M",
+  "used_memory_peak_human": "1.65M",
+  "evicted_keys": 0,
+  "expired_keys": 250,
+  "total_commands_processed": 1902551,
+  "instantaneous_ops_per_sec": 894,
+  "commandstats": {
+    "zrange": "calls=22,usec=44,usec_per_call=2.00,rejected_calls=0,failed_calls=0",
+    "eval": "calls=143,usec=5911,usec_per_call=41.34,rejected_calls=0,failed_calls=0",
+    "info": "calls=28,usec=1611,usec_per_call=57.54,rejected_calls=0,failed_calls=0",
+    "hello": "calls=8,usec=46,usec_per_call=5.75,rejected_calls=0,failed_calls=0",
+    "get": "calls=9054,usec=36689,usec_per_call=4.05,rejected_calls=0,failed_calls=0",
+    "client|setinfo": "calls=16,usec=8,usec_per_call=0.50,rejected_calls=0,failed_calls=0",
+    "set": "calls=198,usec=991,usec_per_call=5.01,rejected_calls=0,failed_calls=0",
+    "slowlog|get": "calls=9,usec=11,usec_per_call=1.22,rejected_calls=0,failed_calls=0",
+    "incrby": "calls=320,usec=749,usec_per_call=2.34,rejected_calls=0,failed_calls=0",
+    "zremrangebyscore": "calls=143,usec=687,usec_per_call=4.80,rejected_calls=0,failed_calls=0",
+    "ping": "calls=1892256,usec=1307314,usec_per_call=0.69,rejected_calls=0,failed_calls=0",
+    "expire": "calls=153,usec=407,usec_per_call=2.66,rejected_calls=0,failed_calls=0",
+    "zadd": "calls=121,usec=928,usec_per_call=7.67,rejected_calls=0,failed_calls=0",
+    "zcard": "calls=143,usec=119,usec_per_call=0.83,rejected_calls=0,failed_calls=0"
+  }
+}

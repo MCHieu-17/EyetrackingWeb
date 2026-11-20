@@ -1,0 +1,50 @@
+                                                                                                                                                                     QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join  (cost=51.29..130.50 rows=16 width=293) (actual time=0.294..0.901 rows=62 loops=1)
+   Output: cv.id, cv.heatmap_grid, cv.analysis_status, cv.analysis_version, (SubPlan 1)
+   Hash Cond: (cv.session_id = ls.id)
+   Buffers: shared hit=286
+   ->  Bitmap Heap Scan on public.content_views cv  (cost=1.87..68.45 rows=62 width=308) (actual time=0.018..0.097 rows=62 loops=1)
+         Output: cv.id, cv.heatmap_grid, cv.analysis_status, cv.analysis_version, cv.session_id
+         Recheck Cond: (cv.slide_id = '50a0b4df-53d3-5cbc-bcad-3e38e5deef08'::uuid)
+         Heap Blocks: exact=63
+         Buffers: shared hit=65
+         ->  Bitmap Index Scan on idx_content_views_slide  (cost=0.00..1.85 rows=62 width=0) (actual time=0.007..0.007 rows=64 loops=1)
+               Index Cond: (cv.slide_id = '50a0b4df-53d3-5cbc-bcad-3e38e5deef08'::uuid)
+               Buffers: shared hit=2
+   ->  Hash  (cost=46.13..46.13 rows=264 width=16) (actual time=0.233..0.234 rows=580 loops=1)
+         Output: ls.id
+         Buckets: 1024  Batches: 1  Memory Usage: 36kB
+         Buffers: shared hit=27
+         ->  Hash Join  (cost=10.75..46.13 rows=264 width=16) (actual time=0.045..0.189 rows=580 loops=1)
+               Output: ls.id
+               Inner Unique: true
+               Hash Cond: (ls.enrollment_id = e.id)
+               Buffers: shared hit=27
+               ->  Seq Scan on public.learning_sessions ls  (cost=0.00..32.57 rows=1057 width=32) (actual time=0.002..0.068 rows=1057 loops=1)
+                     Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                     Buffers: shared hit=22
+               ->  Hash  (cost=9.50..9.50 rows=100 width=16) (actual time=0.032..0.033 rows=100 loops=1)
+                     Output: e.id
+                     Buckets: 1024  Batches: 1  Memory Usage: 13kB
+                     Buffers: shared hit=5
+                     ->  Bitmap Heap Scan on public.enrollments e  (cost=3.25..9.50 rows=100 width=16) (actual time=0.015..0.022 rows=100 loops=1)
+                           Output: e.id
+                           Recheck Cond: (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid)
+                           Heap Blocks: exact=2
+                           Buffers: shared hit=5
+                           ->  Bitmap Index Scan on enrollments_course_id_student_id_key  (cost=0.00..3.22 rows=100 width=0) (actual time=0.013..0.013 rows=100 loops=1)
+                                 Index Cond: (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid)
+                                 Buffers: shared hit=3
+   SubPlan 1
+     ->  Index Only Scan using idx_gaze_samples_view_time on public.gaze_samples gs  (cost=0.43..70.07 rows=208 width=0) (actual time=0.009..0.009 rows=1 loops=62)
+           Index Cond: (gs.content_view_id = cv.id)
+           Heap Fetches: 3
+           Buffers: shared hit=194
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: -6957664941189909372
+ Planning:
+   Buffers: shared hit=556
+ Planning Time: 0.890 ms
+ Execution Time: 0.982 ms
+(47 rows)

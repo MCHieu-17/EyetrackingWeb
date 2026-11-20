@@ -1,0 +1,293 @@
+{
+  "device": "cuda:0",
+  "precision": "fp32",
+  "model": "unigaze_b16_joint",
+  "gpu_name": "NVIDIA GeForce RTX 3060",
+  "cuda_available": true,
+  "max_rss_kib": 1303108,
+  "cuda_max_memory_allocated_mib": 346.2,
+  "cuda_max_memory_reserved_mib": 388.0,
+  "iterations": 50,
+  "warmup": 10,
+  "images": {
+    "480px": {
+      "width": 480,
+      "height": 320,
+      "jpeg_bytes": 33179,
+      "jpeg_sha256": "ada4cae7ee7b0944e1a52cee104717d14619551b73dfb1937cac1933eb8adfe3",
+      "stages_ms": {
+        "decode": {
+          "count": 50,
+          "mean": 0.52,
+          "p50": 0.518,
+          "p95": 0.561,
+          "p99": 0.563,
+          "min": 0.484,
+          "max": 0.563
+        },
+        "cvt_color": {
+          "count": 50,
+          "mean": 0.025,
+          "p50": 0.024,
+          "p95": 0.036,
+          "p99": 0.041,
+          "min": 0.02,
+          "max": 0.041
+        },
+        "mediapipe_detect": {
+          "count": 50,
+          "mean": 1.42,
+          "p50": 1.415,
+          "p95": 1.498,
+          "p99": 1.538,
+          "min": 1.34,
+          "max": 1.538
+        },
+        "warp_preprocess": {
+          "count": 50,
+          "mean": 0.641,
+          "p50": 0.639,
+          "p95": 0.691,
+          "p99": 0.702,
+          "min": 0.603,
+          "max": 0.702
+        },
+        "tensor_prep": {
+          "count": 50,
+          "mean": 0.15,
+          "p50": 0.146,
+          "p95": 0.182,
+          "p99": 0.232,
+          "min": 0.135,
+          "max": 0.232
+        },
+        "unigaze_forward": {
+          "count": 50,
+          "mean": 8.217,
+          "p50": 8.165,
+          "p95": 8.479,
+          "p99": 8.489,
+          "min": 8.112,
+          "max": 8.489
+        },
+        "calibration": {
+          "count": 50,
+          "mean": 0.015,
+          "p50": 0.014,
+          "p95": 0.023,
+          "p99": 0.028,
+          "min": 0.013,
+          "max": 0.028
+        },
+        "smoothing": {
+          "count": 50,
+          "mean": 0.023,
+          "p50": 0.022,
+          "p95": 0.028,
+          "p99": 0.031,
+          "min": 0.006,
+          "max": 0.031
+        },
+        "total": {
+          "count": 50,
+          "mean": 11.013,
+          "p50": 10.962,
+          "p95": 11.329,
+          "p99": 11.415,
+          "min": 10.806,
+          "max": 11.415
+        }
+      },
+      "last_prediction": {
+        "pitch": -0.13780367374420166,
+        "yaw": -0.04872043803334236
+      }
+    },
+    "720px": {
+      "width": 720,
+      "height": 480,
+      "jpeg_bytes": 65432,
+      "jpeg_sha256": "70bbbc5fbbcfa14c14df8e8e4e3ccc4c2a18dc469b197ec80ae9e88fd7b1701c",
+      "stages_ms": {
+        "decode": {
+          "count": 50,
+          "mean": 1.044,
+          "p50": 1.042,
+          "p95": 1.092,
+          "p99": 1.165,
+          "min": 0.979,
+          "max": 1.165
+        },
+        "cvt_color": {
+          "count": 50,
+          "mean": 0.046,
+          "p50": 0.04,
+          "p95": 0.066,
+          "p99": 0.07,
+          "min": 0.035,
+          "max": 0.07
+        },
+        "mediapipe_detect": {
+          "count": 50,
+          "mean": 1.545,
+          "p50": 1.528,
+          "p95": 1.679,
+          "p99": 1.963,
+          "min": 1.443,
+          "max": 1.963
+        },
+        "warp_preprocess": {
+          "count": 50,
+          "mean": 0.697,
+          "p50": 0.676,
+          "p95": 0.85,
+          "p99": 1.266,
+          "min": 0.647,
+          "max": 1.266
+        },
+        "tensor_prep": {
+          "count": 50,
+          "mean": 0.173,
+          "p50": 0.163,
+          "p95": 0.25,
+          "p99": 0.298,
+          "min": 0.154,
+          "max": 0.298
+        },
+        "unigaze_forward": {
+          "count": 50,
+          "mean": 8.195,
+          "p50": 8.185,
+          "p95": 8.299,
+          "p99": 8.338,
+          "min": 8.151,
+          "max": 8.338
+        },
+        "calibration": {
+          "count": 50,
+          "mean": 0.016,
+          "p50": 0.015,
+          "p95": 0.027,
+          "p99": 0.029,
+          "min": 0.013,
+          "max": 0.029
+        },
+        "smoothing": {
+          "count": 50,
+          "mean": 0.024,
+          "p50": 0.023,
+          "p95": 0.032,
+          "p99": 0.037,
+          "min": 0.021,
+          "max": 0.037
+        },
+        "total": {
+          "count": 50,
+          "mean": 11.744,
+          "p50": 11.68,
+          "p95": 12.411,
+          "p99": 12.674,
+          "min": 11.564,
+          "max": 12.674
+        }
+      },
+      "last_prediction": {
+        "pitch": -0.14406713843345642,
+        "yaw": -0.049545686691999435
+      }
+    },
+    "1080px": {
+      "width": 1080,
+      "height": 720,
+      "jpeg_bytes": 138513,
+      "jpeg_sha256": "b65399b30d5fcfb39e9c2e32a4147ec201edf047cca856b3e7759bb374dfc783",
+      "stages_ms": {
+        "decode": {
+          "count": 50,
+          "mean": 2.158,
+          "p50": 2.141,
+          "p95": 2.238,
+          "p99": 2.642,
+          "min": 2.039,
+          "max": 2.642
+        },
+        "cvt_color": {
+          "count": 50,
+          "mean": 0.097,
+          "p50": 0.094,
+          "p95": 0.123,
+          "p99": 0.134,
+          "min": 0.065,
+          "max": 0.134
+        },
+        "mediapipe_detect": {
+          "count": 50,
+          "mean": 1.704,
+          "p50": 1.695,
+          "p95": 1.816,
+          "p99": 1.838,
+          "min": 1.585,
+          "max": 1.838
+        },
+        "warp_preprocess": {
+          "count": 50,
+          "mean": 0.759,
+          "p50": 0.764,
+          "p95": 0.803,
+          "p99": 0.872,
+          "min": 0.707,
+          "max": 0.872
+        },
+        "tensor_prep": {
+          "count": 50,
+          "mean": 0.212,
+          "p50": 0.209,
+          "p95": 0.242,
+          "p99": 0.25,
+          "min": 0.198,
+          "max": 0.25
+        },
+        "unigaze_forward": {
+          "count": 50,
+          "mean": 8.226,
+          "p50": 8.226,
+          "p95": 8.257,
+          "p99": 8.274,
+          "min": 8.2,
+          "max": 8.274
+        },
+        "calibration": {
+          "count": 50,
+          "mean": 0.016,
+          "p50": 0.016,
+          "p95": 0.017,
+          "p99": 0.017,
+          "min": 0.014,
+          "max": 0.017
+        },
+        "smoothing": {
+          "count": 50,
+          "mean": 0.025,
+          "p50": 0.025,
+          "p95": 0.029,
+          "p99": 0.03,
+          "min": 0.023,
+          "max": 0.03
+        },
+        "total": {
+          "count": 50,
+          "mean": 13.2,
+          "p50": 13.187,
+          "p95": 13.325,
+          "p99": 13.692,
+          "min": 13.03,
+          "max": 13.692
+        }
+      },
+      "last_prediction": {
+        "pitch": -0.12528881430625916,
+        "yaw": 0.004153076559305191
+      }
+    }
+  }
+}
