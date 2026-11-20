@@ -114,7 +114,7 @@ class GazeSampleBatchIn(CamelModel):
 
 
 class GazeBatchCreateIn(CamelModel):
-    batch_id: str
+    batch_id: UUID
     presentation_id: str
     layout_id: str | None = None
     sequence_start: int = Field(ge=0)

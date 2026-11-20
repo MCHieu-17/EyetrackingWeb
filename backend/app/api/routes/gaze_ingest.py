@@ -470,7 +470,7 @@ async def ingest_gaze_batch(
     view.analysis_status = "pending"
     await db.commit()
     return GazeBatchAckOut(
-        batch_id=body.batch_id,
+        batch_id=str(body.batch_id),
         received=len(rows),
         stored=stored,
         duplicate=len(rows) - stored,

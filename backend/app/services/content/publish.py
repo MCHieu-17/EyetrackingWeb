@@ -74,8 +74,9 @@ async def validate_course(db: AsyncSession, course: Course) -> None:
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "content_invalid", "message": "Khóa học chưa có nội dung"},
         )
-    slide_stats = dict(
-        (
+    slide_stats = {
+        lesson_id: (int(slide_count), int(not_ready))
+        for lesson_id, slide_count, not_ready in (
             await db.execute(
                 select(
                     Slide.lesson_id,
@@ -86,7 +87,7 @@ async def validate_course(db: AsyncSession, course: Course) -> None:
                 .group_by(Slide.lesson_id)
             )
         ).all()
-    )
+    }
     asset_ids = [lesson.pdf_asset_id for lesson in lessons if lesson.pdf_asset_id]
     assets = {
         asset.id: asset
