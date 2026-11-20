@@ -1,70 +1,143 @@
 # AGENTS.md — GazeEdu / EyeLearning
 
-> Trạng thái: **schema generation 13**, **24 bảng lõi**, không versioning nội dung.
-> Tài liệu phản ánh code hiện tại ngày 2026-11-16.
+> Nguồn sự thật: code hiện tại + `db/migrations/` + `scripts/`. Schema generation
+> **13**, **24 bảng lõi**, không versioning nội dung. File này đã gộp `DB.md` cũ;
+> không tạo lại `DB.md`, hãy cập nhật trực tiếp tại đây.
 
-## 0. Tóm tắt
+## 0. Bất biến — đọc trước khi sửa
 
-GazeEdu là nền tảng học trực tuyến có theo dõi hướng nhìn:
+- Không thêm bảng `*_versions`, `course_version_items`, `slide_documents`,
+  `gaze_batches`, `aoi_sets`, `aoi_hits`, `analysis_runs`,
+  `presentation_metrics`, `oauth_accounts`, `quiz_specs`.
+- 24 bảng lõi **bao gồm** `app_metadata`; `schema_migrations` là bảng hạ tầng
+  của migration runner, **không** tính vào 24. Các view `v_*` cũng không tính.
+- Sửa nội dung đã publish áp dụng ngay. Quiz đã bắt đầu giữ đề trong
+  `quiz_attempts.quiz_snapshot`; không có bản draft/published song song.
+- `presentationId` là `content_views.id` — tên domain cho một lượt xem
+  slide/quiz, không phải version.
+- `gaze_samples.viewport_x/y` là toạ độ chuẩn hoá theo viewport tại thời điểm
+  ghi và là nguồn duy nhất để map AOI. `slide_x/y`, `aoi_label`, metrics,
+  `heatmap_grid`, `aoi_stats` đều là dữ liệu dẫn xuất, được phép tính lại.
+- Mỗi gaze sample chỉ có **một** `aoi_label`: nhãn slide `SLIDE_<label>` /
+  `SLIDE_NO_LABEL`, hoặc tên UI AOI / `UI_NO_LABEL`. Không lưu nhiều nhãn,
+  không cộng container.
+- Migration đã áp là bất biến: thêm file `006_...sql`, không sửa
+  `001`–`005`. Không dùng `Base.metadata.create_all()` thay migration.
+- Các biến model local (`DEVICE`, `UNIGAZE_MODEL`, `EMBEDDING_*`) phải đặt
+  tường minh trong `.env`/`stack.env`; không thêm default trong code/compose.
+- Không commit `.env`, `deploy/portainer/stack.env`, tunnel token, backup hay
+  media. Không prune volume Docker.
 
-- Giáo viên tạo khóa → chương → bài giảng/bài tập → upload PDF/PPTX/PPT/ODP.
-- Học viên đăng nhập bằng email trường + OTP, học slide PDF, làm quiz, chat với trợ lý RAG.
-- Webcam gửi gaze theo `GAZE_FPS` (mặc định 15) qua WebSocket tới service `gaze`; frontend gom batch gửi backend.
-- Backend lưu gaze thô; worker quy đổi sang tọa độ slide, gắn `aoi_label` duy nhất và tính metrics.
-- Giáo viên xem tỷ lệ quan sát, xuất JSONL phẳng để phân tích.
+## 1. Stack, service và cổng
 
-Không còn `course_versions`, `lesson_versions`, `slide_versions`,
-`course_version_items`, `slide_documents`, `gaze_batches`, `aoi_sets`,
-`aoi_hits`, `analysis_runs` hay `presentation_metrics`.
-
-## 1. Công nghệ
-
-| Lớp | Công nghệ |
+| Thành phần | Công nghệ / vai trò |
 |---|---|
-| Frontend | Next.js 16 App Router, React 19, TypeScript, Tailwind 4, TanStack Query |
-| Backend | FastAPI, Python 3.12, SQLAlchemy async, Pydantic 2 |
-| DB | PostgreSQL 16 + pgvector |
-| Gaze | MediaPipe + UniGaze, PyTorch CUDA, WebSocket |
-| Chatbot | FastAPI, hybrid FTS + pgvector, Qwen qua endpoint LLM OpenAI-compatible, embedding CPU |
-| Hạ tầng | Docker Compose local, nginx, Redis tùy chọn, SMTP gửi OTP |
+| `frontend/` | Next.js 16 App Router, React 19, Tailwind 4, TanStack Query |
+| `backend/` | FastAPI, Python 3.12.8, SQLAlchemy async, Pydantic 2; API + 3 worker |
+| `services/gaze/` | MediaPipe + UniGaze, PyTorch, WebSocket; mặc định cần GPU |
+| `services/chatbot/` | FastAPI RAG: FTS + pgvector, embedding Qwen3-Embedding-0.6B trên CPU |
+| `db/` | Baseline + migrations + role SQL; `db/migrate.sh` là runner duy nhất |
+| `nginx/` | Reverse proxy local; production dùng `deploy/portainer/` |
+| `scripts/` | Seed, reset có guard, backup, smoke, migration, publish image |
 
-## 2. Kiến trúc
+Cổng local (chỉ bind loopback):
+
+| Cổng | Dịch vụ |
+|---|---|
+| `3000` | Website qua nginx, đồng thời `/api`, `/media`, `/gaze` |
+| `8001` | Backend API / Swagger `/docs` |
+| `8002` | Chatbot |
+| `5435` | PostgreSQL 16 + pgvector |
+| `6379` | Redis 7 |
+| `6432` | PgBouncer (chỉ bật với profile `pgbouncer`) |
+
+Gaze không publish cổng host vì chạy nhiều replica; truy cập qua nginx
+`/gaze/...` hoặc `docker compose exec gaze ...`.
+
+Luồng request local:
 
 ```text
 Browser → nginx :3000
-  /api, /media → backend :8001
-  /gaze        → gaze :8000
-  /*           → frontend :3000
-
-backend → PostgreSQL
-backend → SMTP (OTP đăng nhập sinh viên)
-backend → chatbot :8000 (internal token)
-worker  → background_jobs (analyze_lesson)
-content-worker → background_jobs (import_slides)
-embedding-worker → background_jobs (index_slides)
+  /api/teacher/*, /api/admin/* → backend :8001 (bỏ prefix /api)
+  /api/*, /media/*             → backend :8001 (giữ prefix)
+  /gaze/*                      → gaze :8000 (bỏ prefix /gaze)
+  /*                           → frontend :3000
 ```
 
-Volume chính: `pgdata`, `backend-media`, `gaze-weights`, `chatbot-weights`.
-`docker compose down -v` xóa toàn bộ DB/media/weights; chỉ dùng khi reset sạch.
+Next.js dev cũng rewrite `/api/teacher` và `/api/admin`; các `/api/*` khác giữ
+nguyên. Backend route là nguồn sự thật, không đoán endpoint từ tài liệu.
 
-## 3. Mô hình dữ liệu hiện tại
+## 2. Lệnh chạy và kiểm tra
 
-24 bảng lõi, chia 8 nhóm:
+Khởi động lần đầu:
 
-| Nhóm | Bảng |
-|---|---|
-| Danh tính | `users`, `auth_sessions`, `email_otps`, `student_profiles`, `teacher_profiles` |
-| Khóa học | `courses`, `course_teachers`, `enrollments`, `course_visits`, `media_assets` |
-| Nội dung | `course_modules`, `lessons`, `slides` |
-| Job | `background_jobs` |
-| Quiz | `quiz_attempts` |
-| Gaze/AOI | `gaze_calibrations`, `learning_sessions`, `content_views`, `view_layouts`, `gaze_samples`, `aois` |
-| Chat | `chat_sessions`, `chat_messages` |
-| Metadata | `app_metadata` |
+```bash
+cp .env.example .env          # điền secret, cấu hình SMTP/model
+docker compose up -d --build  # service migrate chạy một lần rồi Exited (0)
+./scripts/seed_dev.sh
+./scripts/smoke.sh
+```
 
-Xem từ điển cột/ERD trong [`DB.md`](DB.md).
+`docker compose up -d --build` tự chạy migration. Khi sửa file SQL, phải rebuild
+image migration (`docker compose build migrate`) — `test_migrations.sh` đã làm
+việc này.
 
-### Quan hệ nội dung
+Kiểm tra code:
+
+```bash
+make check          # ruff + eslint + typecheck + compose config
+make check-full     # thêm knip + frontend build
+make test-fast      # backend + gaze + chatbot, mock model/LLM
+make test-smoke     # model thật + chatbot RAG + Playwright trước merge
+./scripts/test_migrations.sh
+```
+
+Test fast dùng PostgreSQL/Redis test thật trong image `backend-test`; test smoke
+cần stack, weights và LLM/VLM thật. Chạy riêng:
+`./scripts/test_backend.sh`, `./scripts/test_gaze.sh fast|smoke`,
+`./scripts/test_chatbot.sh fast|smoke`, `./scripts/e2e.sh`. Phạm vi chi tiết:
+`TEST_PLAN.md`.
+
+Seed dev (mật khẩu `Password123!`): `admin@school.edu.vn` (admin),
+`teacher@school.edu.vn` (teacher), `student@school.edu.vn` (student). Script
+không ghi đè mật khẩu đã tồn tại.
+
+Reset/backup:
+
+```bash
+./scripts/backup.sh
+./scripts/reset_db.sh                  # preview, không đổi gì
+./scripts/reset_db.sh --apply --database eyetracking \
+  --confirm-reset eyetracking --seed-dev
+./scripts/reset_gaze_data.sh --all     # preview; thêm --apply --confirm-reset-gaze
+```
+
+`reset_db.sh` chỉ xoá database đích sau khi guard khớp; không dùng
+`docker compose down -v` để reset (mất DB, media, weights, Redis). `reset_gaze_data.sh`
+chỉ xoá lịch sử gaze (`course_visits` cascade) và job analyze đang chờ, giữ
+nội dung khoá học/AOI/người dùng.
+
+Sau khi sửa `.env`, dùng `docker compose up -d --force-recreate <service>`;
+`docker compose restart` không áp dụng biến môi trường mới.
+
+## 3. Bố cục code và ranh giới
+
+- `backend/app/api/routes/`: transport + validation; giữ mỏng.
+- `backend/app/services/`: business logic, access policy, worker, analytics.
+- `backend/app/models/`: ánh xạ 24 bảng; `backend/app/schemas/`: Pydantic,
+  API dùng camelCase qua `CamelModel`.
+- `backend/app/main.py`: đăng ký router và **fail-fast** nếu
+  `app_metadata.schema_generation != '13'`.
+- `backend/Dockerfile` có 2 target: `api` (backend/worker/embedding-worker) và
+  `content-worker` (thêm LibreOffice + fonts). Worker content không nằm trong
+  image API.
+- `services/gaze/` chỉ xử lý calibration/WebSocket/frame; backend mới ghi DB.
+- `services/chatbot/` chỉ đọc view outline + đọc/ghi cột index trên `slides`.
+- `frontend/` gọi API qua `lib/api/`, không truy cập DB; PDF render bằng PDF.js.
+
+## 4. Mô hình dữ liệu
+
+### 4.1 ERD rút gọn
 
 ```text
 courses
@@ -79,268 +152,351 @@ enrollments
               └── content_views
                     ├── view_layouts
                     └── gaze_samples
+
+users → auth_sessions, profiles, gaze_calibrations, chat_sessions
+chat_sessions → chat_messages
 ```
 
-- Mỗi user có **một role**: `admin | teacher | student`.
-- Không có versioning. Sửa nội dung đã publish áp dụng ngay cho học viên.
-- Publish chỉ validate rồi đổi `courses.status = 'published'`.
-- Replace PDF của bài = xóa slide cũ + cascade gaze/AOI của các slide đó.
-- Quiz attempt lưu `quiz_snapshot` để xem lại đúng đề lúc làm.
+### 4.2 24 bảng lõi
 
-## 4. API contract
+| # | Nhóm | Bảng | Cột / ràng buộc đáng nhớ |
+|---:|---|---|---|
+| 1 | Danh tính | `users` | `role` admin/teacher/student; `status`; `email` unique lower; `password_hash` nullable cho OTP; `email_verified_at` |
+| 2 | | `auth_sessions` | Chỉ lưu `refresh_token_hash`; `expires_at`, `revoked_at` |
+| 3 | | `email_otps` | `code_hash` HMAC-SHA256; `consumed_at`/`invalidated_at`; partial unique một challenge active/email |
+| 4 | | `student_profiles` | 1:1 `user_id`, `student_code` unique |
+| 5 | | `teacher_profiles` | 1:1 `user_id`, `teacher_code` unique |
+| 6 | Khóa học | `courses` | `owner_id`, `created_by`, status draft/published/archived, `show_gaze_dot`, `require_calibration` |
+| 7 | | `course_teachers` | PK `(course_id, teacher_id)`; chỉ được xem, không sở hữu |
+| 8 | | `enrollments` | Unique `(course_id, student_id)`; status active/completed/dropped |
+| 9 | | `course_visits` | “Ca học”; status active/ended/expired; `visit_key` unique theo enrollment; `last_seen_at` |
+| 10 | | `media_assets` | local/r2; unique `(course_id, sha256)`; state staging/ready/failed/deleted |
+| 11 | Nội dung | `course_modules` | Unique `(course_id, position)` |
+| 12 | | `lessons` | `module_id`, kind lesson/quiz, unique `(module_id, position)`, `pdf_asset_id`, `quiz_config` JSONB |
+| 13 | | `slides` | Unique `(lesson_id, position)`; `page_number`; `transcript`; `embedding vector(1024)`; FTS generated; `index_status` |
+| 14 | Job | `background_jobs` | `lesson_id` NOT NULL; kind import_slides/index_slides/analyze_lesson; status queued/processing/ready/failed/cancelled |
+| 15 | Quiz | `quiz_attempts` | Unique `(enrollment, lesson, attempt_no)`; partial unique một `in_progress`; snapshot/answers/grading JSONB |
+| 16 | Gaze/AOI | `gaze_calibrations` | Model UBJ + hash + viewport/DPR + `num_points`; current = row mới nhất theo user/device |
+| 17 | | `learning_sessions` | `enrollment_id`, `lesson_id`, `course_visit_id`, `quiz_attempt_id`, calibration; viewport hiện tại + calibration; status; `expires_at` |
+| 18 | | `content_views` | `session_id`, `slide_id` nullable (quiz), surface lesson/quiz, `sequence_no` unique/session, metrics + `heatmap_grid` + `aoi_stats` |
+| 19 | | `view_layouts` | `layout_no` unique/view; `slide_rect` + `elements` JSONB; chỉ hệ viewport hiện tại |
+| 20 | | `gaze_samples` | `BIGSERIAL`; unique `(content_view, batch, sequence)`; viewport canonical, slide derived, một `aoi_label` |
+| 21 | | `aois` | Đúng một trong `slide_id`/`ui_schema`; `code`, `name`, `label`, `parent_id`, `geometry`, `is_container`, `kind` |
+| 22 | Chat | `chat_sessions` | student/course/lesson/quiz; `context_key`, `archived_at` |
+| 23 | | `chat_messages` | role student/assistant; `content`, `citations` JSONB, `intent` |
+| 24 | Metadata | `app_metadata` | `schema_generation='13'`, `db_instance_id` |
 
-Frontend và backend dùng thống nhất ID hiện hành, không còn alias `*VersionId`:
+`background_jobs`, `content_views`, `gaze_samples` là các bảng dễ viết sai
+nhất khi thêm tính năng; đọc migration tương ứng trước khi sửa query.
 
-| Field/endpoint | Giá trị |
+### 4.3 Quy ước schema
+
+- PK UUID `gen_random_uuid()`, riêng `gaze_samples.id` là `BIGSERIAL`.
+- Timestamp `TIMESTAMPTZ` UTC. Không hardcode pixel; mọi toạ độ gaze/AOI đã
+  chuẩn hoá.
+- FK cascade là cơ chế xoá dữ liệu liên quan chính; file media local/R2 được
+  dọn **sau** transaction DB theo prefix/object key.
+- JSONB chỉ dùng cho dữ liệu lồng nhau có kiểm soát hoặc derived: `quiz_config`,
+  `quiz_snapshot`, `answers`, `grading`, `heatmap_grid`, `aoi_stats`,
+  `slide_rect`, `elements`, `aois.geometry`, `quality_flags`, `citations`,
+  `payload`.
+- Unique/partial index quan trọng: `users(lower(email))`;
+  `email_otps(email) WHERE active`; `course_visits(enrollment_id, visit_key)
+  WHERE visit_key IS NOT NULL`; `quiz_attempts(enrollment, lesson) WHERE
+  status='in_progress'`; `aois(slide_id, code)`, `aois(ui_schema, code)`,
+  `aois(slide_id, label)`.
+- `schema_migrations` lưu filename + checksum SHA-256; không sửa file đã áp.
+- `slides.embedding` là `vector(1024)`; `EMBEDDING_DIM` hiện phải là `1024`.
+  Đổi model/chiều embedding cần migration + reindex toàn bộ slide, không chỉ
+  đổi biến môi trường.
+- `aois.label` do giáo viên đặt, regex app-level `^AOI_[A-Z0-9_]{1,60}$`,
+  unique trong slide; UI/container/no_label để NULL. Nhãn gaze có tiền tố
+  `SLIDE_`; UI dùng `aois.name`.
+- `content_views.analysis_version` hiện là `gaze-metrics-v8`; heatmap chỉ dùng
+  view `ready` + đúng version + grid đủ 24×24, còn tổng hợp đánh dấu stale nếu
+  sai version hoặc thiếu `aoi_stats` khi đã có gaze. View cũ có thể phân tích
+  lại, không cần xoá gaze thô.
+
+### 4.4 Cascade xoá
+
+| Xoá | Dữ liệu mất |
 |---|---|
-| `slideId` | `slides.id` |
-| `lessonId` | `lessons.id` |
-| `presentationId` | `content_views.id` |
-| `layoutId` | `view_layouts.id` |
+| `courses` | modules, lessons, slides, aois, media, enrollments, visits, sessions, views, layouts, samples, quiz attempts, chats, jobs |
+| `course_modules` | lessons và toàn bộ dữ liệu con của lessons |
+| `lessons` | slides, quiz attempts, learning sessions, views, gaze, chats, jobs |
+| `slides` | aois, content views (kéo theo layouts, gaze samples) |
+| `enrollments` | course visits, learning sessions/views/gaze, quiz attempts |
+| `users` | profiles, enrollments, auth sessions, calibrations, chat; courses do user sở hữu cũng cascade, còn `courses.created_by` là RESTRICT |
+| `background_jobs` | không cascade ngược; job thuộc lesson và bị xoá khi lesson bị xoá |
+
+Không có trigger bất biến hay cờ `app.allow_course_delete`. Kiểm tra cascade
+thủ công bằng SQL khi sửa FK; bổ sung test tự động khi bộ test được viết lại.
+
+## 5. Gaze → AOI → metrics
+
+### 5.1 Pipeline
+
+```text
+viewport_x/y (normalized, viewport lúc ghi)
+  → trừ slide_rect.left/top, chia width/height
+  → slide_x/y
+
+slide_x/y trong [0,1]
+  → chọn MỘT leaf slide đang active:
+    custom > text > table > image > drawing > system;
+    cùng hạng thì diện tích nhỏ hơn, rồi code
+  → SLIDE_<aois.label>; không match → SLIDE_NO_LABEL
+
+ngoài slide / quiz / thiếu layout
+  → chọn MỘT UI AOI: custom trước, rồi diện tích nhỏ hơn, rồi code
+  → aois.name; không match → UI_NO_LABEL
+
+toàn bộ sample của content_view
+  → gaze_count, on_slide_gaze_count
+  → tracked_duration_ms = tổng gap sample hợp lệ
+  → fixation_count
+  → heatmap_grid 24×24 row-major, grid[y][x]
+  → aoi_stats = {label: {ms, samples}}
+```
+
+- Container, `is_active=false`, code `no_label` bị bỏ qua khi match.
+- Thiếu layout hoặc `slide_rect` rỗng: không identity map; `slide_x/y = NULL`,
+  `quality_flags.layout_missing=true`, rơi về nhãn UI.
+- `gaze_samples.aoi_label` có thể NULL với sample lỗi/không map được; sample
+  `status='ok'` bắt buộc có `viewport_x/y`, status khác bắt buộc NULL.
+- `view_layouts` chỉ lưu hệ toạ độ viewport hiện tại. Payload
+  `coordinateSpace='original-v1'` bị từ chối `409`; không tái thêm
+  `original_viewport_x/y`, `coordinate_space`, `visible_rect`.
+
+### 5.2 Hai loại thời lượng — đừng nhầm
+
+- `content_views.tracked_duration_ms`: worker cộng các gap giữa sample hợp lệ,
+  chỉ khi `0 <= gap <= max(250, ceil(3000 / GAZE_FPS))` ms. Đây là thời lượng
+  theo sample, không phải thời gian treo tab.
+- `dwell_ms`: tính khi đọc, theo wall time:
+  `COALESCE(view.ended_at, session.ended_at, visit.ended_at, now()) - started_at`.
+  `CONTENT_VIEW_MIN_DWELL_MS` (mặc định 1000) chỉ phân loại `counted` và bộ
+  lọc “Chỉ lượt >= ngưỡng”; mặc định Replay/Tổng hợp vẫn trả mọi lượt, kể cả
+  0 sample hoặc thiếu layout.
+- `heatmap_grid` chỉ cộng sample nằm trong slide; `aoi_stats.ms` cộng gap cho
+  nhãn của sample, `samples` đếm sample `ok` có nhãn.
+- Sửa/xoá AOI không xoá gaze thô: enqueue phân tích lại để tính `slide_x/y`,
+  `aoi_label`, metrics và `aoi_stats` mới.
+
+### 5.3 AOI UI và replay
+
+- `aois` UI dùng `ui_schema='reader-v1'`; `geometry` là `selector` hoặc
+  `anchor` + rect (container có thể rỗng; dữ liệu cũ có thể chứa rect trực
+  tiếp). `backend/app/services/aoi_regions.py` là nguồn duy nhất quy đổi
+  geometry UI, dùng chung bởi worker và replay.
+- `view_layouts.elements` là snapshot các phần tử `[data-aoi]`, gồm rect
+  normalized; `elements` có thể có nhiều instance cùng code.
+- Replay dùng đúng implementation đó để vùng AOI sáng khớp nhãn đã lưu.
+
+### 5.4 Client gaze flow
+
+1. WebSocket tới gaze service; frame được throttle theo `GAZE_FPS`.
+2. Frontend quy đổi toạ độ calibration → viewport hiện tại, gửi batch
+   `POST /api/learning-sessions/{id}/gaze-batches`.
+3. Backend ghi trực tiếp `gaze_samples`, unique
+   `(content_view_id, client_batch_id, sequence)`; duplicate bị bỏ qua và trả
+   `duplicate > 0`.
+4. Đóng session enqueue `analyze_lesson`; worker phân tích theo content view.
+5. Display guard phát hiện zoom/fullscreen và tạm dừng ghi; resize cửa sổ tạm
+   dừng để snapshot layout mới. Trình duyệt không chặn tuyệt đối F11/page
+   zoom — guard là best-effort, không được giả định đã chặn.
+
+## 6. Luồng giáo viên và học viên
+
+### 6.1 Giáo viên
+
+1. Tạo khoá `draft`; tạo chương `course_modules`, bài `lessons` với
+   `module_id` + `position`.
+2. Upload PDF/PPTX/PPT/ODP: API lưu staging, trả `202 {jobId}`, tạo
+   `background_jobs(kind='import_slides')`; content-worker convert PDF, thay
+   toàn bộ slides, set `index_status='pending'`, enqueue `index_slides`.
+3. Replace PDF của bài = xoá slides cũ + cascade AOI/view/gaze của các slide
+   đó; không cố giữ dữ liệu gaze cũ.
+4. Quiz nằm trong `lessons.quiz_config`; `quiz_attempts` giữ snapshot.
+5. AOI vẽ tay trong tab “Vùng phân tích”, lưu trực tiếp `aois`; lưu AOI sẽ
+   enqueue phân tích lại các view của bài.
+6. Publish validate: có chương/bài; bài giảng có slide; mọi slide
+   `index_status='ready'`; media `ready`; quiz có câu hỏi/đáp án/điểm hợp lệ.
+   Sau đó chỉ đổi `courses.status='published'` và `published_at`.
+7. `PATCH /teacher/lessons/{id}/quiz` với `status='published'` cũng gọi
+   publish course, nên có thể thất bại nếu phần còn lại chưa đủ điều kiện.
+
+### 6.2 Học viên
+
+1. Đăng nhập OTP → enroll → nếu `require_calibration` thì calibration 25 điểm.
+2. Mở khoá: `POST /api/course-visits`; mỗi lần vào khoá là một ca. `visit_key`
+   idempotent theo `(enrollment, visit_key)`. Ca idle quá 30 phút bị maintenance
+   đánh `expired`.
+3. Mở bài: `POST /api/learning-sessions`; session thuộc ca, TTL 12 giờ. Cùng
+   enrollment + lesson + context thì trả session đang mở; đổi calibration/
+   viewport thì session cũ bị `aborted`.
+4. Mỗi slide/quiz: `POST /api/learning-sessions/{id}/presentations` với
+   `clientPresentationId`. Cùng UUID + cùng context là idempotent; UUID mới
+   luôn tạo lượt mới kể cả quay lại slide cũ. Server khoá session và cấp
+   `sequence_no = max + 1`, không dùng bộ đếm client.
+5. `enteredAt` bị kẹp trong `[now - 5 phút, now]`; request đến trễ hơn lượt
+   mới nhất quá 250ms bị `409 stale_presentation`.
+6. Resize/mở chat/đổi layout: `POST /api/presentations/{id}/layouts`; mỗi
+   `layout_no` unique trong presentation.
+7. Đóng session: `PATCH /api/learning-sessions/{id}`, đóng mọi view mở, enqueue
+   `analyze_lesson`. Đóng ca: `PATCH /api/course-visits/{id}`.
+8. Tab Trực quan hoá hiển thị **tất cả** lượt xem; `includeShort=true` mặc
+   định, chỉ bật `false` khi người dùng chọn lọc “Chỉ lượt >= ngưỡng”.
+
+## 7. API contract và quy ước
+
+- API dùng camelCase; DB dùng snake_case. `CamelModel` đặt
+  `alias_generator=to_camel`, `populate_by_name=True`.
+- ID thống nhất: `slideId=slides.id`, `lessonId=lessons.id`,
+  `presentationId=content_views.id`, `layoutId=view_layouts.id`.
+- Backend route teacher/admin không có prefix `/api`; browser gọi
+  `/api/teacher/...` hoặc `/api/admin/...` và được rewrite. Các route `/api/*`
+  khác giữ nguyên prefix.
+- Route module là nguồn sự thật; danh sách dưới đây chỉ là các endpoint dễ
+  quên:
+
+| Endpoint | Ý nghĩa |
+|---|---|
+| `POST /api/auth/otp/request`, `/otp/verify` | OTP sinh viên |
+| `POST /api/auth/login` | Giáo viên/admin đăng nhập mật khẩu |
+| `GET /api/config` | `gazeFps`, `maxUploadBytes`, `maxSlidePages`, không cache |
+| `GET /api/health` | Alias công khai của `/health` |
+| `POST /api/course-visits`, `GET /api/course-visits/active`, `PATCH /api/course-visits/{id}` | Ca học |
+| `POST /api/learning-sessions`, `PATCH /api/learning-sessions/{id}` | Phiên học |
+| `POST /api/learning-sessions/{id}/presentations` | Tạo content view |
+| `POST /api/presentations/{id}/layouts` | Snapshot layout |
+| `POST /api/learning-sessions/{id}/gaze-batches` | Ghi gaze batch |
 | `GET /api/aois?slideId=...` | AOI hiện hành của slide |
-| `GET /api/lessons/{lessonId}/quiz` | quiz config của bài tập |
-| `PATCH /teacher/lessons/{lessonId}/quiz` | cập nhật quiz config |
-| `POST /api/course-visits` | tạo ca học khi vào khóa |
-| `GET /teacher/courses/{courseId}/visits` | tất cả ca của khóa |
-| `GET /teacher/visits/{visitId}/gaze` | gaze/AOI của một ca |
-| `GET /teacher/visits/{visitId}/replay` | layout + AOI + thống kê để phát lại ca |
-| `GET /teacher/visits/{visitId}/samples` | sample replay, phân trang keyset |
-| `POST /teacher/courses/{courseId}/analytics/aoi-summary` | tổng hợp thời lượng AOI |
-| `POST /teacher/courses/{courseId}/analytics/heatmap` | heatmap 24×24 theo slide |
-| `POST /api/auth/otp/request` | gửi OTP tới email sinh viên |
-| `POST /api/auth/otp/verify` | xác nhận OTP, cấp token/cookie |
-| `GET /api/config` | cấu hình runtime cho frontend: `gazeFps`, `maxUploadBytes`, `maxSlidePages` |
-| `GET /api/health` | alias công khai của `/health` để frontend gọi qua `/api` |
+| `GET /api/lessons/{id}/quiz`, `PATCH /teacher/lessons/{id}/quiz` | Quiz |
+| `GET /teacher/courses/{courseId}/visits` | Tất cả ca của khoá |
+| `GET /teacher/visits/{visitId}/gaze` | Gaze/AOI của ca |
+| `GET /teacher/visits/{visitId}/replay` | Layout + AOI + thống kê replay |
+| `GET /teacher/visits/{visitId}/samples?contentViewId=...` | Sample keyset |
+| `POST /teacher/courses/{courseId}/analytics/aoi-summary` | Tổng hợp AOI |
+| `POST /teacher/courses/{courseId}/analytics/heatmap` | Heatmap 24×24 |
+| `GET /teacher/visits/{visitId}/export`, `/teacher/lessons/{id}/export` | JSONL phẳng |
 
-`presentationId` là tên domain cho một lượt xem slide/quiz và cũng là metadata
-trong gaze protocol; không phải bảng version.
-
-Đăng nhập sinh viên dùng OTP qua SMTP, không cần Microsoft Entra admin.
-Email hợp lệ mặc định: `^\d{8}@st\.neu\.edu\.vn$`.
-
-## 5. Luồng giáo viên
-
-1. Tạo khóa: `courses.status='draft'`.
-2. Tạo chương trong `course_modules`.
-3. Tạo bài trong `lessons`, gắn trực tiếp `module_id` + `position`.
-4. Upload slide:
-   - API lưu file staging, tạo `background_jobs(kind='import_slides')`.
-   - content-worker convert PDF, tạo `media_assets`, thay toàn bộ `slides` của bài.
-   - slide mới có `index_status='pending'`; enqueue `index_slides`.
-5. Soạn quiz trong `lessons.quiz_config JSONB`.
-6. AOI slide do giáo viên vẽ tay trong “Vùng phân tích” và lưu trực tiếp trong
-   `aois`; nhãn do giáo viên đặt dạng `AOI_THANHCHAT`, `AOI_BANGBIEU`…
-   Không còn sinh gợi ý vùng từ PDF. AOI UI dùng `ui_schema='reader-v1'`.
-7. Tab **Trực quan hoá**:
-   - **Xem lại ca học** dựng lại `view_layouts` + slide PDF + gaze dot; vùng
-     AOI khớp `gaze_samples.aoi_label` sáng lên.
-   - **Tổng hợp** đọc `content_views.aoi_stats`, lọc theo ca/học viên/bài/ngày
-     và vẽ biểu đồ thời lượng, cơ cấu, xu hướng, heatmap 24×24.
-   - Nút “Xem lại” trong sheet học viên mở đúng ca; cảnh báo
-     `SLIDE_NO_LABEL`/`UI_NO_LABEL` mở đúng slide trong tab Vùng phân tích.
-8. Publish:
-   - Kiểm tra có chương/bài, bài giảng có slide, mọi slide `index_status='ready'`,
-     quiz có câu hỏi hợp lệ.
-   - Đổi `courses.status='published'`; không tạo snapshot.
-
-Các endpoint teacher nằm dưới backend `/teacher/...`. Browser gọi
-`/api/teacher/...`; nginx/Next bỏ prefix `/api`.
-
-## 6. Luồng học viên và gaze
-
-1. Đăng nhập bằng email trường + OTP → chọn khóa đã enroll.
-2. Nếu `courses.require_calibration=true`: calibration 25 điểm, lưu
-   `gaze_calibrations`.
-3. Mở trang khóa: tạo `course_visits` (mỗi lần vào khóa là một ca).
-4. Mở từng bài: tạo `learning_sessions` với `course_visit_id` của ca hiện tại.
-5. Mỗi slide/quiz: tạo `content_views(session_id, slide_id, sequence_no)`.
-   - Frontend gửi `clientPresentationId` (UUID) cho mỗi lần vào slide; retry
-     cùng UUID là idempotent, UUID mới luôn tạo lượt xem mới kể cả khi quay
-     lại slide cũ.
-   - Server cấp `sequence_no = max + 1` trong session; không phụ thuộc bộ đếm
-     của client để tránh ghi đè sau reload.
-   - Tab Trực quan hoá hiển thị **tất cả** lượt xem, kể cả lượt ngắn hơn
-     `CONTENT_VIEW_MIN_DWELL_MS` và lượt không có sample gaze. Ngưỡng này chỉ
-     phân loại `counted` và làm bộ lọc tùy chọn, không ẩn mặc định.
-   - Kết thúc session/visit đóng `ended_at` của mọi content view đang mở.
-6. Resize/mở chat/đổi layout: tạo `view_layouts` trong hệ toạ độ viewport
-   hiện tại:
-   - `slide_rect`: vùng PDF trong viewport hiện tại.
-   - `elements`: mảng rect UI trong viewport hiện tại.
-   - Gaze được quy đổi từ viewport lúc calibration sang viewport hiện tại khi
-     cửa sổ resize/move. Zoom/fullscreen bị display guard phát hiện và tạm
-     dừng ghi gaze.
-7. Khung reader cố định: slide co vừa vùng nội dung, không cuộn dọc; nút
-   Trước/Sau là footer ngoài slide. Quiz chỉ cuộn nội bộ danh sách đáp án
-   (và danh sách review), không cuộn toàn khung.
-8. Gaze batch:
-   - POST `/api/learning-sessions/{id}/gaze-batches`.
-   - Mỗi sample ghi trực tiếp vào `gaze_samples`.
-   - `viewport_x/y`: toạ độ viewport hiện tại, đã quy đổi từ calibration.
-   - Unique `(content_view_id, client_batch_id, sequence)` chống trùng.
-9. Đóng phiên: enqueue `background_jobs(kind='analyze_lesson')`.
-10. Worker phân tích:
-   - `viewport_x/y` → `slide_x/y` bằng `view_layouts.slide_rect`.
-   - nếu điểm nằm trong slide `[0,1]`: chọn **một** leaf slide theo
-     `custom > text > table > image > drawing > system`, cùng hạng thì diện
-     tích nhỏ hơn; nhãn là `SLIDE_<aois.label>` (ví dụ `SLIDE_AOI_1`,
-     `SLIDE_AOI_THANHCHAT`).
-   - trong slide nhưng ngoài mọi leaf: `SLIDE_NO_LABEL`.
-   - ngoài slide (kể cả quiz/layout thiếu): chọn **một** UI AOI, ưu tiên
-     `custom` rồi diện tích nhỏ hơn; nhãn là `aois.name` (ví dụ
-     `Mục lục`, `Thanh chat`, `Nút gửi`).
-   - ngoài slide nhưng ngoài mọi UI AOI: `UI_NO_LABEL`.
-   - mỗi sample chỉ có **một** `aoi_label`; không trộn nhãn slide + UI, không
-     cộng container. Không còn `aoi_codes`.
-   - cập nhật metrics vào `content_views`, gồm `heatmap_grid` (24×24, row-major
-     `grid[y][x]`) và `aoi_stats` (`{label: {ms, samples}}`) cho dashboard
-     Trực quan hoá.
-
-Sửa AOI không xóa gaze thô; worker chỉ tính lại `slide_x/y`, `aoi_label`,
-metrics và `aoi_stats`. Nhãn slide do giáo viên đặt trong `aois.label`
-(dạng `AOI_...`).
-
-## 7. Xóa dữ liệu
-
-| Xóa | Cascade |
-|---|---|
-| Slide | AOI, content views, layout, gaze, metrics của slide |
-| Bài học | Slide và toàn bộ session/view/gaze/quiz attempt/chat/job của bài |
-| Chương | Toàn bộ bài trong chương |
-| Khóa học | Chương/bài/slide/enrollment/course visit/session/gaze/chat/media/job |
-
-File local/R2 được dọn theo prefix/object key sau thao tác DB. Không còn
-trigger bất biến hay cờ `app.allow_course_delete`.
+`POST /api/auth/otp/request` trả `challengeId` (UUID của row OTP); mã không bao
+giờ lưu/log ở production. OTP mặc định 6 số, TTL 15 phút, tối đa 5 lần nhập,
+resend 60 giây; email khớp domain + pattern cấu hình.
 
 ## 8. Chatbot / RAG
 
-- Index nằm trực tiếp trên `slides` (`transcript`, `embedding`, `content_tsv`,
-  `index_status`, `index_error`).
-- Backend enqueue `index_slides`; worker gọi chatbot `/ingest/slides` theo batch.
-- Chatbot chỉ được role DB đọc view outline và UPDATE các cột index của `slides`.
-- Retrieval lọc theo `course_id`; không còn version filter.
-- Citation mới dùng `courseId/lessonId/slideId/assetId/pageNumber`; response vẫn
-  kèm alias cũ cho frontend.
-- Không đọc được users, quiz attempts, chat của user khác.
+- Index nằm trên `slides` (`transcript`, `embedding`, `content_tsv`,
+  `index_status`, `index_error`); worker gọi chatbot `/ingest/slides` theo batch.
+- Backend enqueue `index_slides` khi slide mới; publish chặn nếu còn slide
+  `index_status != 'ready'`.
+- Retrieval lọc theo `course_id`; citation mới dùng
+  `courseId/lessonId/slideId/assetId/pageNumber` (response có alias cũ cho
+  frontend).
+- Chatbot chỉ có role `chatbot_reader`: SELECT 3 view outline + SELECT/UPDATE
+  cột index trên `slides`; không đọc users, enrollments, quiz, chat.
+- Backend lưu `chat_sessions/chat_messages`; chatbot không được đọc lịch sử
+  của user khác.
+- Gọi LLM/VLM qua endpoint OpenAI-compatible bằng nhóm biến `LLM_*`/`VLM_*`;
+  không thêm key `NEU_*`, không hardcode endpoint/model của nhà cung cấp.
 
-## 9. Database/migration
+## 9. Auth và OTP
 
-- Baseline: `001_baseline.sql` (generation 12). Nâng cấp hiện hành:
-  - `002_email_otp.sql`: `email_otps`, `users.email_verified_at`, bỏ
-    `oauth_accounts`, nâng `schema_generation='13'`.
-  - `003_aoi_single_label.sql`: bỏ `gaze_samples.aoi_codes` và
-    `slides.aoi_suggestions`.
-  - `004_content_view_aoi_stats.sql`: thêm `content_views.aoi_stats` JSONB
-    (dữ liệu dẫn xuất cho dashboard Trực quan hoá; worker `gaze-metrics-v8`
-    ghi lại, có thể tái tạo bằng phân tích lại).
-  - `005_current_viewport_only.sql`: chuyển `view_layouts` cũ từ
-    `original-v1` sang viewport hiện tại, bỏ `coordinate_space`,
-    `visible_rect`, `gaze_samples.original_viewport_x/y`. Giữ generation 13.
-- DB generation cũ không migrate tại chỗ nếu chưa có `schema_migrations`; phải backup rồi reset có guard:
-  ```bash
-  ./scripts/backup.sh
-  ./scripts/reset_db.sh --apply --database eyetracking \
-    --confirm-reset eyetracking --seed-dev
-  ```
-- Backend fail-fast nếu `app_metadata.schema_generation != '13'`.
-- `schema_migrations`, `app_metadata` không tính vào 24 bảng lõi.
-- Role `chatbot_reader` và `admin_reader` được tạo bởi `db/migrate.sh`.
-  `admin_reader` không đọc `auth_sessions`, `email_otps`; chatbot role cũng
-  không đọc `email_otps`.
+- Sinh viên: email trường + OTP qua SMTP. Không cần Microsoft Entra/Azure;
+  không dùng `MICROSOFT_CLIENT_ID/SECRET/TENANT_ID`.
+- OTP lưu `HMAC-SHA256(email:code)`; một challenge active/email; maintenance
+  xoá row hết hạn quá 1 ngày.
+- Email hợp lệ mặc định: local part `^\d{8}$`, domain `st.neu.edu.vn`
+  (`OTP_ALLOWED_DOMAINS` có thể nhận nhiều domain).
+- Giáo viên/admin dùng mật khẩu; seed dev dùng `Password123!`.
+- SMTP chưa cấu hình → API trả 503; dev có thể bật `DEBUG=true` +
+  `OTP_DEV_ECHO=true` để log mã. Không bật ở production.
+- Local HTTP phải đặt `COOKIE_SECURE=false`; nếu không cookie auth không được
+  lưu. Production dùng HTTPS và cookie secure.
+- Gmail cá nhân gửi tới `st.neu.edu.vn` có thể vào Spam/Quarantine lần đầu;
+  lỗi `550 5.4.1 Recipient address rejected` là địa chỉ không tồn tại, không
+  phải lỗi cấu hình SMTP.
 
-## 10. Chạy và kiểm tra
+## 10. Migration, retention và role DB
 
-```bash
-cp .env.example .env
-docker compose up -d --build
-./scripts/seed_dev.sh
+- Baseline `001_baseline.sql` là generation 12 (24 bảng); `002_email_otp.sql`
+  nâng generation 13; `003_aoi_single_label.sql` bỏ `aoi_codes` /
+  `aoi_suggestions`; `004_content_view_aoi_stats.sql` thêm `aoi_stats`;
+  `005_current_viewport_only.sql` bỏ hệ toạ độ cũ.
+- Thay đổi schema mới phải là `006_...sql`; không sửa migration đã áp.
+  `db/migrate.sh` giữ advisory lock, ghi checksum, fail nếu file đã áp bị đổi
+  hoặc DB có bảng public mà chưa có `schema_migrations`.
+- Không chạy `psql -f` từng file migration; dùng `docker compose run --rm migrate`
+  hoặc service `migrate`.
+- Backend fail-fast nếu `app_metadata.schema_generation != '13'`. DB cũ không
+  migrate tại chỗ nếu chưa có lịch sử migration: backup rồi reset có guard.
+- Role `chatbot_reader` và `admin_reader` do `db/migrate.sh` tạo/cập nhật.
+  `admin_reader` không đọc `auth_sessions`, `email_otps`; `users` chỉ đọc cột
+  an toàn (không `password_hash`). Grant lại khi thêm bảng bằng cách chạy lại
+  `docker compose run --rm migrate` (idempotent).
+- Retention: gaze mặc định 180 ngày (`GAZE_RETENTION_DAYS`); maintenance xoá
+  auth session hết hạn, expire learning session/visit, xoá OTP hết hạn quá 1
+  ngày và gaze cũ. `gaze_samples` không còn partition tháng.
+- `./scripts/maintenance.sh` chạy maintenance; `./scripts/test_migrations.sh`
+  kiểm tra checksum, idempotent, generation 13 và đúng 24 bảng.
 
-make check
-make test-backend
-make test-frontend
-```
+## 11. Cấu hình, deploy và vận hành
 
-Tài khoản seed (mật khẩu `Password123!`):
-
-| Email | Role |
-|---|---|
-| admin@school.edu.vn | admin |
-| teacher@school.edu.vn | teacher |
-| student@school.edu.vn | student |
-
-Đăng nhập sinh viên NEU dùng OTP qua SMTP. Cấu hình tối thiểu trong `.env`:
-
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASS=...
-SMTP_FROM=              # trống → dùng SMTP_USER
-SMTP_REPLY_TO=          # trống → dùng địa chỉ From
-OTP_TTL_SECONDS=900
-OTP_ALLOWED_DOMAINS=st.neu.edu.vn
-OTP_STUDENT_ID_PATTERN=^\d{8}$
-```
-
-Không cần `MICROSOFT_CLIENT_ID/SECRET/TENANT_ID`.
-
-Gmail cá nhân gửi tới `st.neu.edu.vn` (Microsoft 365) có thể bị chuyển vào
-Thư rác/Quarantine ở lần gửi đầu. Email OTP không chèn link để giảm tín hiệu
-phishing; nếu triển khai thật nên dùng SMTP relay/transactional provider với
-domain gửi đã có SPF/DKIM/DMARC. Lỗi SMTP `550 5.4.1 Recipient address rejected:
-Access denied` nghĩa là địa chỉ sinh viên không tồn tại trong tenant, không
-phải lỗi cấu hình.
-
-### 10.1 Production qua Portainer
-
-- Stack production: `deploy/portainer/docker-compose.yml`; chỉ pull image từ
-  GHCR, **không** build trên server.
-- `cloudflared` nằm trong stack, public hostname trỏ `http://nginx:80`.
-- Nginx phải giữ `real_ip_header CF-Connecting-IP` và forward
-  `X-Forwarded-Proto` từ Cloudflare; nếu không rate limit/OTP sẽ tính chung IP
-  cloudflared.
-- Không commit `deploy/portainer/stack.env`, `.env`, tunnel token, backup.
-- Hướng dẫn đầy đủ: `deploy/portainer/README.md`.
-
-## 11. Lưu ý cho coding agent
-
-- Không thêm lại bảng `*_versions`, `slides_documents`, `gaze_batches`,
-  `aoi_sets`, `aoi_hits`, `presentation_metrics`, `oauth_accounts`.
-- Tên bảng/cột mới là nguồn sự thật; alias cũ chỉ ở API/frontend.
-- `gaze_samples.viewport_x/y` chuẩn hóa `[0,1]` theo viewport tại thời điểm
-  ghi và là nguồn duy nhất cho mapping AOI. Không hardcode pixel.
-- `view_layouts.slide_rect/elements` luôn ở hệ toạ độ viewport hiện tại;
-  không còn `original-v1`, `visible_rect` hay `original_viewport_x/y`.
-- Gaze lưu thô bất biến; `slide_x/y`, `aoi_label`, metrics là dẫn xuất, được
-  phép tính lại.
-- Nhãn duy nhất: slide dùng `SLIDE_<aois.label>`/`SLIDE_NO_LABEL`; UI dùng tên
-  AOI/`UI_NO_LABEL`. Không lưu nhiều AOI chồng nhau trong `aoi_label`.
-- `aois.label` do giáo viên đặt, regex `^AOI_[A-Z0-9_]{1,60}$`, unique trong
-  slide. Ví dụ `AOI_THANHCHAT` → nhãn gaze `SLIDE_AOI_THANHCHAT`.
-- Backend không dùng `pymupdf`; validate PDF bằng `pypdf`. Chatbot vẫn dùng
-  `pymupdf` để render slide cho RAG.
-- Trang calibration và reader có display guard: phát hiện zoom/fullscreen, hiện
-  overlay và tạm dừng ghi gaze. Resize cửa sổ cũng tạm dừng ngay để snapshot
-  layout mới sẵn sàng trước khi ghi tiếp. Trình duyệt không cho chặn tuyệt đối
-  F11/page zoom; guard là best-effort + không ghi dữ liệu khi trạng thái sai.
-- “Ca học” là `course_visits`, không phải `learning_sessions` (mỗi lesson một session).
-- `CONTENT_VIEW_MIN_DWELL_MS` (mặc định 1000) chỉ dùng để tính
-  `dwell_ms/counted` và bộ lọc “Chỉ lượt >= ngưỡng”. Mặc định Replay/Tổng hợp
-  vẫn trả và hiển thị mọi lượt xem, kể cả lượt 0 sample hoặc thiếu layout.
-- `scripts/reset_gaze_data.sh` chỉ xoá lịch sử gaze (`course_visits` cascade)
-  và job analyze đang chờ; không xoá nội dung khóa học/AOI/người dùng.
-- Chatbot gọi LLM/VLM qua endpoint OpenAI-compatible với nhóm biến
-  `LLM_*`/`VLM_*`; không thêm key `NEU_*` hay hardcode endpoint/model của một
-  nhà cung cấp cụ thể trong code/compose.
-- Quyết định model chạy local phải đặt tường minh trong `.env`/`stack.env`,
-  không có default trong code/compose: `DEVICE`, `UNIGAZE_MODEL`,
-  `EMBEDDING_NAME`, `EMBEDDING_DIM`, `EMBEDDING_MODEL_PATH`,
-  `EMBEDDING_DEVICE`, `EMBEDDING_LOCAL_FILES_ONLY`, `EMBEDDING_HF_REPO`.
-  MediaPipe face detector là ngoại lệ (luôn CPU, model cố định).
-- Sửa cascade/FK phải chạy test `test_simplified_schema.py`.
-- `GAZE_FPS` (mặc định 15, hợp lệ 1..60) là nguồn duy nhất cho tần số gaze:
-  backend trả lại qua `GET /api/config`, gaze throttle mỗi session
-  `1000/FPS × 0.85`, worker suy ra ngưỡng gap `max(250, 3000/FPS)`. Đổi giá trị
-  cần restart backend + gaze (worker phân tích cũng đọc biến này); frontend đọc
+- `.env` ở gốc repo là nguồn env duy nhất cho local; frontend Docker build
+  nhận build args, không đọc `.env` trong context frontend.
+- Biến bắt buộc tối thiểu: `POSTGRES_*`, `DATABASE_URL_DOCKER`, `JWT_SECRET`,
+  `CORS_ORIGINS`; model local `DEVICE`, `UNIGAZE_MODEL`, `EMBEDDING_*`.
+- `GAZE_FPS` (1..60, mặc định 15) là nguồn duy nhất cho tần số gaze: backend
+  trả `/api/config`, gaze throttle `1000/FPS × 0.85`, worker dùng gap
+  `max(250, ceil(3000/FPS))`. Đổi FPS cần restart backend + gaze; frontend đọc
   runtime nên không rebuild.
-- Document DB mới trong `DB.md`, không dựa vào thiết kế generation 9 cũ.
+- `CONTENT_VIEW_MIN_DWELL_MS` chỉ ảnh hưởng phân loại/lọc; đổi cần recreate
+  backend.
+- Local: `docker compose up -d --build`; `migrate` exit 0 là bình thường.
+  `docker compose down -v` xoá DB/media/weights/Redis — chỉ dùng khi thật sự
+  muốn reset sạch.
+- Production: GitHub Actions build 7 image (backend, content-worker, chatbot,
+  gaze, frontend, nginx, migrations) → GHCR; Portainer chỉ pull
+  `deploy/portainer/docker-compose.yml`, không build trên server. `cloudflared`
+  nằm trong stack, trỏ `http://nginx:80`.
+- Nginx production phải giữ `real_ip_header CF-Connecting-IP` và forward
+  `X-Forwarded-Proto`; nếu không rate limit/OTP sẽ tính chung IP cloudflared.
+- Không commit `deploy/portainer/stack.env`, tunnel token, backup. Hướng dẫn
+  đầy đủ: `deploy/portainer/README.md`.
+- Redis là service compose bình thường nhưng backend chịu được thiếu Redis ở
+  mức cache/rate-limit tùy tính năng; không coi Redis là nguồn sự thật.
+
+## 12. Quy tắc Refactor & Tối ưu
+
+- Giữ nguyên hành vi chức năng hiện tại: cùng input → cùng output, status code,
+  side effect và thứ tự ghi DB. Refactor không kèm đổi feature.
+- Nếu buộc phải đổi API contract (field, kiểu, endpoint, status), báo trước và
+  cập nhật frontend, schema Pydantic và tài liệu trong cùng thay đổi.
+- Không tự ý cài thêm thư viện ngoài khi chưa được duyệt; ưu tiên thư viện đã
+  có trong `package.json`, `requirements*.txt` và image hiện tại.
+- Chỉ sửa file trong phạm vi thư mục được chỉ định ở từng task; không lan sang
+  module khác, không dọn dẹp ngoài phạm vi, không đổi format cả file.
+- Luôn giữ code ngắn gọn, ưu tiên chuẩn của stack: FastAPI (dependency
+  injection, Pydantic, async), Next.js (App Router, ranh giới server/client),
+  Postgres (SQL set-based, index đúng), Redis (key/TTL rõ ràng), PyTorch
+  (`eval`/`no_grad`, đúng `DEVICE`) và LangGraph (StateGraph/node rõ ràng) khi
+  luồng agent dùng tới.
+
+## 13. Checklist cho agent trước khi kết thúc
+
+- Đọc migration/model/route liên quan; ưu tiên code hơn README nếu lệch.
+- Nếu sửa schema: thêm `006_...sql`, cập nhật model/schema/API, chạy
+  `./scripts/test_migrations.sh` và `./scripts/test_backend.sh`.
+- Nếu sửa cascade/FK/metrics/AOI: chạy `./scripts/test_backend.sh`; test metrics
+  nằm trong `backend/tests/fast/test_metrics.py` và `test_analytics.py`.
+- Nếu sửa gaze UI/layout: chạy `./scripts/test_backend.sh` và
+  `./scripts/test_gaze.sh fast`; kiểm tra thêm `aoi_regions.py` + replay.
+- Nếu sửa frontend API: giữ camelCase và rewrite `/api/teacher|admin`; cập nhật
+  query key/hook và chạy `./scripts/e2e.sh` nếu đổi luồng người dùng.
+- Nếu sửa env/compose: cập nhật `.env.example` và `deploy/portainer/stack.env.example`;
+  không thêm default cho model local.
+- Nếu sửa hành vi người dùng: cập nhật `README.md`/`backend/README.md` và mục
+  tương ứng trong file này; không tạo lại `DB.md`.
+- Trước khi dừng: chạy `make check` và `make test-fast`; chạy `make test-smoke`
+  nếu có stack/GPU/LLM. Ghi rõ phần chưa kiểm tra được vì thiếu môi trường.

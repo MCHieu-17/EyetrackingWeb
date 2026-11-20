@@ -75,7 +75,7 @@ function getAuthHeader(): Record<string, string> {
 }
 
 /** Đọc CSRF token từ cookie; null nếu không có hoặc không chạy trong browser. */
-export function readCsrfToken(): string | null {
+function readCsrfToken(): string | null {
   if (typeof document === "undefined") return null;
   const m = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/);
   return m ? decodeURIComponent(m[1]) : null;

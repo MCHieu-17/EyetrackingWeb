@@ -73,3 +73,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -fsS http://localhost:8000/ready || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+# ---- Stage 3: test (dev deps, không dùng cho production) ----
+FROM runtime AS test
+
+USER root
+COPY requirements-dev.txt .
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR pip install -r requirements-dev.txt
+USER appuser
+
+ENTRYPOINT ["python", "-m", "pytest"]

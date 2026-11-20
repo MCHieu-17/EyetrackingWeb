@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Chạy backend integration tests trên database tạm.
+# Chạy backend fast tests trên database test riêng.
 #
 #   ./scripts/test_backend.sh
+#   ./scripts/test_backend.sh tests/fast/test_auth.py -q
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,18 +15,9 @@ set +a
 
 : "${POSTGRES_USER:?thiếu POSTGRES_USER}"
 : "${POSTGRES_PASSWORD:?thiếu POSTGRES_PASSWORD}"
-: "${POSTGRES_DB:?thiếu POSTGRES_DB}"
 
 TEST_DB="${TEST_DB:-eyetracking_test}"
-POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5435}"
-
 log() { printf '[test_backend] %s\n' "$*"; }
-
-cleanup() {
-    docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
-        -c "DROP DATABASE IF EXISTS \"$TEST_DB\";" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
 
 log "tạo database $TEST_DB"
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
@@ -33,18 +25,13 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d postgres \
     -c "CREATE DATABASE \"$TEST_DB\";" >/dev/null
 
-log "build migration image"
-# Migration runner bake file SQL vào image, nên phải rebuild trước khi chạy
-# để test DB luôn nhận migration mới nhất.
-docker compose build migrate >/dev/null
+log "build migrate + backend-test"
+docker compose build migrate backend-test >/dev/null
 
-log "chạy migrations"
-docker compose run --rm -e PGDATABASE="$TEST_DB" migrate
+log "chạy migrations cho $TEST_DB"
+docker compose run --rm -e PGDATABASE="$TEST_DB" migrate >/dev/null
 
 log "chạy pytest"
-cd backend
-PYTEST_BIN="${PYTEST_BIN:-.venv/bin/pytest}"
-TEST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_HOST_PORT}/${TEST_DB}" \
-    "$PYTEST_BIN" -q
-
+docker compose --profile test run --rm backend-test \
+    python -m pytest -m fast -q --tb=short "$@"
 log "OK"

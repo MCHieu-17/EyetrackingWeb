@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 
 DEFAULT_URL = "http://localhost:8002"
-DEFAULT_INPUT = "services/chatbot/tests/eval/questions.example.jsonl"
+DEFAULT_INPUT = "services/chatbot/eval/questions.example.jsonl"
 DEFAULT_OUTPUT = "/tmp/chatbot-eval-results.jsonl"
 DEFAULT_COURSE_ID = "00000000-0000-0000-0000-000000000000"
 DEFAULT_THREAD_ID = "eval-thread"
@@ -71,7 +71,7 @@ def resolve_input(path_str: str) -> Path:
     if path.is_file():
         return path
     if path_str == DEFAULT_INPUT:
-        fallback = Path(__file__).resolve().parents[1] / "tests/eval/questions.example.jsonl"
+        fallback = Path(__file__).resolve().parents[1] / "eval/questions.example.jsonl"
         if fallback.is_file():
             return fallback
     return path

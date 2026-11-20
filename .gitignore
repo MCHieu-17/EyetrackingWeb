@@ -60,6 +60,7 @@ frontend/.next/
 frontend/out/
 frontend/build/
 frontend/test-results/
+frontend/e2e/.fixtures.json
 frontend/playwright-report/
 frontend/blob-report/
 

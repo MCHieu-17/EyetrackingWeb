@@ -10,6 +10,3 @@ ignore = ["E501", "E402"]
 
 [lint.isort]
 known-first-party = ["app"]
-
-[lint.per-file-ignores]
-"**/tests/**" = ["E731"]

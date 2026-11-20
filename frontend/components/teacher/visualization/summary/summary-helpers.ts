@@ -53,10 +53,6 @@ export function percent(value: number, total: number): number {
   return total > 0 ? Math.max(0, Math.min(100, (value / total) * 100)) : 0;
 }
 
-export function shareLabel(share: number): string {
-  return `${Math.round(share * 100)}%`;
-}
-
 export interface CompositionSegment {
   label: string;
   name: string;

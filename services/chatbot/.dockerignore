@@ -8,7 +8,6 @@
 **/.mypy_cache/
 README.md
 *.md
-requirements-dev.txt
 # Weights embedding local: tải lúc runtime vào volume (entrypoint) — không nhúng
 # vào image qua COPY.
 weights/

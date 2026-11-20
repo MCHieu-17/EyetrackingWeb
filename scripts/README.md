@@ -7,16 +7,29 @@ gốc repo.
 
 | Script | Mục đích |
 |---|---|
-| `check.sh` | Kiểm tra nhanh trạng thái stack |
+| `check.sh` | Kiểm tra chất lượng: ruff, lint, typecheck, compose config; `--full` thêm knip + build |
 | `seed_dev.sh` | Seed tài khoản dev (`admin@`, `teacher@`, `student@`) |
 | `reset_db.sh` / `reset_db.py` | Reset DB development có guard |
 | `reset_gaze_data.sh` | Xoá lịch sử gaze/visualization có guard, giữ nội dung khóa học |
-| `test_backend.sh` | Chạy test backend |
-| `test_migrations.sh` | Test migration runner + checksum/idempotent |
-| `tests/test_reset_db.py` | Guard tests cho reset (stdlib unittest) |
+| `test_migrations.sh` | Kiểm tra migration runner + checksum/idempotent trên DB tạm |
+| `test_fast.sh` | Backend + gaze + chatbot fast test (mock model/LLM) |
+| `test_smoke.sh` | Gaze model + chatbot RAG + E2E smoke trước merge |
+| `test_backend.sh` | Backend pytest trên DB `eyetracking_test` |
+| `test_gaze.sh` | Gaze fast/smoke trong image test |
+| `test_chatbot.sh` | Chatbot fast/smoke |
+| `seed_e2e.py` | Seed course/quiz/gaze cho Playwright |
+| `e2e.sh` | Seed + chạy Playwright trên stack local |
 | `smoke.sh` | Smoke test sau khi stack lên |
+| `backup.sh` | Backup/restore PostgreSQL local |
+| `maintenance.sh` | Dọn session/OTP/gaze hết hạn |
+| `docker_cleanup.sh` | Prune image + build cache cũ |
 | `publish_images.sh` | Build/push image production lên GHCR (fallback nếu không dùng GitHub Actions) |
 | `smoke_remote.sh` | Smoke test qua domain public, không cần SSH/Portainer |
+
+Test tự động nằm trong image test riêng (`backend-test`, `chatbot-test`,
+`gaze-test`) và mount thư mục `tests/` từ host; không cần cài pytest vào image
+production. Chạy `make test-fast` sau mỗi lần sửa, `make test-smoke` trước merge.
+Chi tiết phạm vi: `TEST_PLAN.md` ở root repo.
 
 ## Production qua Portainer
 
@@ -36,20 +49,20 @@ Stack production dùng `deploy/portainer/docker-compose.yml`; chỉ pull image,
 không build trên server, không publish port host. `cloudflared` nằm trong stack
 và nhận traffic Cloudflare Tunnel.
 
-## `create_chatbot_role.sh` — role DB hạn chế cho chatbot
+## Role DB cho chatbot/admin
 
-Tạo/cập nhật role `chatbot_reader` (đọc course/lesson/slide + ghi embedding,
-**không** đọc bảng quiz/users). Bình thường **không cần chạy tay**: service
-`migrate` tự gọi `db/chatbot_role.sql` sau mỗi lần áp migrations. Script này
-dùng khi muốn cấp lại quyền/đổi password ngay:
+`db/migrate.sh` tự tạo/cập nhật role `chatbot_reader` và `admin_reader` sau mỗi
+lần áp migrations khi `CHATBOT_DB_USER` + `CHATBOT_DB_PASSWORD` và
+`ADMIN_DB_USER` + `ADMIN_DB_PASSWORD` có trong môi trường. Bình thường không cần
+chạy tay. Khi muốn cấp lại quyền/đổi password ngay, chạy lại migration (idempotent):
 
 ```bash
-./scripts/create_chatbot_role.sh
+docker compose run --rm migrate
 ```
 
-Script đọc `POSTGRES_*`, `CHATBOT_DB_USER`, `CHATBOT_DB_PASSWORD` từ `.env` gốc
-repo và chạy `psql` trong container `postgres`; idempotent nên chạy lại để đổi
-password/grant cũng được.
+Role `chatbot_reader` chỉ đọc view outline + đọc/ghi cột index trên `slides`,
+không đọc bảng quiz/users. Role `admin_reader` chỉ đọc các bảng/cột an toàn cho
+trang Truy vấn CSDL.
 
 ## Retention gaze
 
@@ -79,15 +92,14 @@ Chỉ `docker image prune` và `docker builder prune` cho tài nguyên cũ hơn 
 ./scripts/docker_cleanup.sh
 ```
 
-`check.sh --full` chạy reset guard tests, backend/chatbot/gaze tests và frontend
-unit tests. Có thể override interpreter bằng `BACKEND_PYTHON`,
-`CHATBOT_PYTHON`, `GAZE_PYTHON` và `PYTEST_BIN`.
-
 ## Migration (schema DB)
 
 Schema do các file trong `db/migrations/` quyết định. Hiện có
-`001_baseline.sql` (generation 12, 24 bảng lõi), `002_email_otp.sql` và
-`003_aoi_single_label.sql` (generation 13); migration tiếp theo là `004_...sql`.
+`001_baseline.sql` (generation 12, 24 bảng lõi), `002_email_otp.sql`,
+`003_aoi_single_label.sql`, `004_content_view_aoi_stats.sql` và
+`005_current_viewport_only.sql` (generation 13). Migration tiếp theo là
+`006_...sql`.
+
 Runner `db/migrate.sh` (nằm trong image `eyelearning-migrations:local`, build từ
 `db/Dockerfile`, service một-lần `migrate`) là thứ duy nhất nên chạy migration —
 **không** `psql -f` tay từng file.
@@ -97,7 +109,7 @@ Cơ chế:
 - Bảng `schema_migrations` lưu `filename` + `checksum` sha256 của mọi file đã áp;
   lần chạy sau **chỉ chạy file chưa áp**.
 - File đã áp mà bị **sửa nội dung** → runner dừng ngay, in rõ checksum cũ/mới.
-  Muốn đổi schema thì **thêm file mới** (`004_…`) — không sửa file cũ.
+  Muốn đổi schema thì **thêm file mới** (`006_…`) — không sửa file cũ.
 - DB cũ có bảng public nhưng chưa có `schema_migrations` → runner **fail** và yêu
   cầu reset có guard (`./scripts/reset_db.sh`). Không tự đoán schema cũ.
 - Service `migrate` exit 1 ⇒ compose huỷ lần chạy đó. Xem log:

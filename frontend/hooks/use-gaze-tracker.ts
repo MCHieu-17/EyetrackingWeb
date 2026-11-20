@@ -43,7 +43,7 @@ const MAX_RECONNECTS = 5;
 const MAX_BUFFERED_BYTES = 1024 * 1024;
 
 /** Khoảng cách giữa 2 frame (ms). Clamp 1..60 để tránh chia 0 / giá trị lạ. */
-export function frameIntervalMs(fps: number): number {
+function frameIntervalMs(fps: number): number {
   const safe = Number.isFinite(fps) ? Math.min(60, Math.max(1, fps)) : DEFAULT_FPS;
   return 1000 / safe;
 }

@@ -1,6 +1,6 @@
 // lib/calibration-geometry.ts — hình học thuần cho calibration/gaze mapping.
 // Tách khỏi lib/api/calibration.ts để phần logic thuần (dễ test) không bị trộn
-// với tầng HTTP/localStorage. Test: frontend/tests/calibration-geometry.test.ts
+// với tầng HTTP/localStorage.
 
 export interface CalPoint {
   id: string;

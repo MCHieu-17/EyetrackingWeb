@@ -46,10 +46,10 @@ docker compose run --rm migrate
 Runner tự tạo/cập nhật role `chatbot_reader` sau migrations khi
 `CHATBOT_DB_USER` + `CHATBOT_DB_PASSWORD` có trong môi trường (service `migrate`
 trong compose luôn truyền hai biến này). Vì vậy reset DB xong không cần chạy
-tay. Nếu cần cấp lại quyền/đổi password ngay:
+tay. Khi cần cấp lại quyền/đổi password ngay, chạy lại migration (idempotent):
 
 ```bash
-./scripts/create_chatbot_role.sh
+docker compose run --rm migrate
 ```
 
 ## Reset development

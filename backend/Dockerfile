@@ -54,6 +54,15 @@ ENV FORWARDED_ALLOW_IPS=172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
 ENV WEB_CONCURRENCY=2
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers ${WEB_CONCURRENCY} --proxy-headers"]
 
+# ---- test: API + dev deps (không dùng cho production) ----
+FROM api AS test
+
+USER root
+COPY requirements-dev.txt .
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    env -u PIP_NO_CACHE_DIR pip install -r requirements-dev.txt
+USER appuser
+
 # ---- content-worker: thêm LibreOffice + font ----
 FROM base AS content-worker
 

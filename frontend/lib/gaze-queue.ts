@@ -25,7 +25,7 @@ const textEncoder =
   typeof TextEncoder === "undefined" ? null : new TextEncoder();
 
 /** Ước lượng byte UTF-8 thật của payload thay vì đếm ký tự UTF-16. */
-export function estimateGazeBatchBytes(batch: GazeBatchInput): number {
+function estimateGazeBatchBytes(batch: GazeBatchInput): number {
   const raw = JSON.stringify(batch);
   if (textEncoder) return textEncoder.encode(raw).length;
   // Fallback cho môi trường cũ: đếm code point và số byte UTF-8 tương ứng.
@@ -48,7 +48,7 @@ export function estimateGazeBatchBytes(batch: GazeBatchInput): number {
  *   không xóa batch mới chỉ vì batch cũ đã chiếm gần hết hạn mức.
  * - Một batch đơn lẻ lớn hơn maxBytes vẫn bị xóa vì không thể nằm trong hạn mức.
  */
-export function selectGazeQueueEvictions(
+function selectGazeQueueEvictions(
   items: readonly QueuedGazeBatch[],
   now = Date.now(),
   limits: { maxAgeMs?: number; maxBytes?: number } = {},

@@ -221,17 +221,22 @@ Số đo bằng `scripts/bench.py` trên RTX 3060 (container 2 CPU, ảnh 480px)
 Giảm `GAZE_FPS` xuống 10 sẽ tăng capacity ~1.5× (worker vẫn tính đúng gap
 threshold vì suy ra từ `GAZE_FPS`).
 
-## Test
+## Lint
 
 ```bash
 cd services/gaze
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check app tests
+.venv/bin/ruff check app
 ```
 
-Test hiện có bao phủ protocol v2/legacy, calibration `.ubj`, One-Euro filter,
-TTL/giới hạn session, runtime scheduler/deadline/overload và HTTP/WS với
-pipeline giả. Test inference đầy đủ cần image có MediaPipe/UniGaze/GPU.
+## Test
+
+```bash
+./scripts/test_gaze.sh fast    # HTTP/WS + Linear Regression, runtime giả
+./scripts/test_gaze.sh smoke   # MediaPipe + UniGaze thật trên ảnh mẫu
+```
+
+Smoke cần weights trong `gaze-weights`; chạy CPU được nhưng chậm hơn GPU.
+Ảnh mẫu và nguồn/license: `tests/fixtures/README.md`.
 
 ## Bench & validate fp16
 

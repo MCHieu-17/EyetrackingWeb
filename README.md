@@ -604,10 +604,10 @@ Các nguyên nhân thường gặp:
 - `CHATBOT_DB_PASSWORD` không khớp `CHATBOT_DATABASE_URL_DOCKER`.
 - Role `chatbot_reader` chưa được tạo/cấp lại quyền.
 
-Cấp lại role chatbot:
+Cấp lại role chatbot (migrate tự áp role, idempotent):
 
 ```bash
-./scripts/create_chatbot_role.sh
+docker compose run --rm migrate
 ```
 
 ### 7.5 Dùng R2 thay vì lưu local
@@ -640,24 +640,33 @@ Các lệnh này cần cài dependency trên host (Python venv, `npm install`):
 
 ```bash
 make check          # Ruff, ESLint, TypeScript, compose config
-make check-full     # thêm unit test, backend/chatbot/gaze test, frontend build
-make test-backend
-make test-frontend
+make check-full     # thêm knip + frontend build
 ```
 
-Test migration và e2e:
+Kiểm tra migration:
 
 ```bash
 ./scripts/test_migrations.sh
-./scripts/e2e.sh
 ```
 
-Test riêng từng service:
+Test tự động chia 2 nhóm:
 
 ```bash
-cd services/chatbot && .venv/bin/python -m pytest -q
-cd services/gaze && .venv/bin/python -m pytest -q
+make test-fast      # backend + gaze + chatbot, mock model/LLM, DB/Redis test
+make test-smoke     # model thật + chatbot RAG + E2E Playwright trước merge
 ```
+
+Chạy riêng:
+
+```bash
+./scripts/test_backend.sh
+./scripts/test_gaze.sh fast        # hoặc smoke
+./scripts/test_chatbot.sh fast     # hoặc smoke
+./scripts/e2e.sh                   # seed E2E + Playwright, cần stack
+E2E_CHAT=1 ./scripts/e2e.sh        # thêm luồng chat thật
+```
+
+Kế hoạch và phạm vi test: `TEST_PLAN.md`.
 
 ## 9. Xử lý sự cố nhanh
 
@@ -684,8 +693,7 @@ docker compose logs --tail=200
 ## 10. Tài liệu liên quan
 
 - [`README.md`](README.md) — tổng quan dự án, kiến trúc, lệnh thường dùng
-- [`AGENTS.md`](AGENTS.md) — quy tắc phát triển và mô hình dữ liệu hiện tại
-- [`DB.md`](DB.md) — từ điển cột, ERD, quan hệ dữ liệu
+- [`AGENTS.md`](AGENTS.md) — quy tắc phát triển, mô hình dữ liệu, từ điển bảng/ERD
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — backup, restore, bảo trì, logging
 - [`backend/README.md`](backend/README.md) — API, worker, luồng backend
 - [`frontend/README.md`](frontend/README.md) — cấu trúc frontend, route, gaze flow

@@ -1,14 +1,11 @@
 # Lệnh thường dùng cho repo EyeLearning.
 #
 #   make check        # gate nhanh (ruff, lint, typecheck, compose config)
-#   make check-full   # gate đầy đủ trước khi merge
-#   make test-frontend
-#   make test-backend
+#   make check-full   # thêm knip + frontend build
 #   make build
 #   make up / make down / make smoke
-#   make bundle-report / make loadtest / make e2e
 
-.PHONY: check check-full test-backend test-frontend build up down smoke bundle-report loadtest e2e clean
+.PHONY: check check-full test-fast test-smoke build up down smoke clean
 
 check:
 	./scripts/check.sh
@@ -16,11 +13,11 @@ check:
 check-full:
 	./scripts/check.sh --full
 
-test-backend:
-	./scripts/test_backend.sh
+test-fast:
+	./scripts/test_fast.sh
 
-test-frontend:
-	cd frontend && npm run test
+test-smoke:
+	./scripts/test_smoke.sh
 
 build:
 	cd frontend && npm run build
@@ -33,15 +30,6 @@ down:
 
 smoke:
 	./scripts/smoke.sh
-
-bundle-report:
-	node scripts/bundle-report.mjs
-
-loadtest:
-	./scripts/loadtest.sh
-
-e2e:
-	./scripts/e2e.sh
 
 # Chỉ xoá artifact tái tạo được. Không xoá .env, media, backups, weights,
 # node_modules hoặc .venv.

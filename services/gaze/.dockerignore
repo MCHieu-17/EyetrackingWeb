@@ -28,7 +28,6 @@ weights/
 README.md
 *.md
 docker-compose*.yml
-requirements-dev.txt
 
 # --- IDE / OS ---
 .idea/

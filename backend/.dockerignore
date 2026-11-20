@@ -10,6 +10,3 @@ media
 Dockerfile
 .dockerignore
 README.md
-requirements-dev.txt
-tests
-pytest.ini

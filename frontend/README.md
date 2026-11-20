@@ -44,9 +44,7 @@ FPS ghi gaze **không** phải biến môi trường frontend: backend cấu hì
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest |
 | `npm run knip` | File/export/dependency thừa |
-| `npm run test:e2e` | Playwright (stack phải chạy) |
 
 ## Cấu trúc
 
@@ -81,7 +79,7 @@ Quy ước:
 - Component không tự gọi `fetch` nếu đã có `lib/api` + hook TanStack Query.
 - Hook chỉ dùng một feature đặt cạnh feature; `hooks/` chỉ chứa hook dùng chung.
 - Query key lấy từ `lib/query-keys.ts`.
-- Pure helper có test đặt cạnh helper.
+- Pure helper tách riêng để dễ bổ sung test khi bộ test được viết lại.
 
 ## Routes chính
 
@@ -178,12 +176,8 @@ AOI editor:
 npm run lint
 npm run typecheck
 npm run knip
-npm run test
 npm run build
 ```
 
-E2E cần stack đang chạy:
-
-```bash
-./scripts/e2e.sh
-```
+Bộ test frontend (Vitest/Playwright) đang được viết lại; khi có test sẽ bổ sung
+lệnh chạy tại đây.

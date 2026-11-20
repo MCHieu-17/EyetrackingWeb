@@ -123,11 +123,11 @@ Chatbot dùng role `chatbot_reader` (xem `CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`
 - **không** có quyền đọc `quiz_attempts`, `users`, `chat_*`.
 
 Role được service `migrate` tự tạo/cập nhật sau mỗi lần áp migrations (đọc
-`CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`). Chỉ chạy tay khi muốn cấp lại quyền
-ngay:
+`CHATBOT_DB_USER`/`CHATBOT_DB_PASSWORD`). Khi muốn cấp lại quyền ngay, chạy lại
+migration (idempotent):
 
 ```bash
-./scripts/create_chatbot_role.sh
+docker compose run --rm migrate
 ```
 
 `GET /ready` trả `503` kèm `detail` nếu không kết nối được DB (sai role/password,
@@ -213,21 +213,21 @@ app/
   được ưu tiên; batch tối đa 8 input với cửa sổ gom 10 ms. Chỉ cache query
   vector (1.024 entry / 15 phút).
 
-## Test
+## Lint
 
 ```bash
 cd services/chatbot
-.venv/bin/python -m pytest -q
-ruff check app tests scripts
+.venv/bin/ruff check app scripts
 ```
 
-Bộ test hiện có:
-- `test_citations.py` — parse/validate/sanitize citation.
-- `test_retrieval.py` — RRF, citation building, format context.
-- `test_query.py` — trigger rewrite/HyDE, fallback khi provider lỗi.
-- `test_llm.py` — header auth LLM, tắt thinking, fallback VLM model.
-- `test_lms.py` — detect operation, pure LMS, render.
-- `test_pipeline.py` — greeting, LMS fast path, citation gate, no-docs.
-- `test_history.py` — chuẩn hoá lịch sử.
+## Test
 
-Script đánh giá: `scripts/eval_chatbot.py` (xem `tests/eval/README.md`).
+```bash
+./scripts/test_chatbot.sh fast    # ingest/retrieval/query, mock VLM/embedding/LLM
+./scripts/test_chatbot.sh smoke   # upload → ingest → chat → cleanup trên stack thật
+```
+
+Smoke cần backend/chatbot/worker đang chạy và `LLM_*`/`VLM_*` thật; dùng user
+seed `teacher@school.edu.vn` / `student@school.edu.vn`.
+
+Script đánh giá: `scripts/eval_chatbot.py` (xem `eval/README.md`).

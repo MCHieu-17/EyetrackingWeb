@@ -264,6 +264,61 @@ services:
     mem_limit: 3g
     cpus: 4.0
 
+  # Test hộp đen backend: image có dev deps, mount tests từ host.
+  # Chạy qua scripts/test_backend.sh (profile "test").
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: test
+    image: eyelearning-backend-test:local
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_test
+      REDIS_URL: redis://redis:6379/15
+      AI_HTTP_URL: http://gaze:8000
+      CHATBOT_URL: http://chatbot:8000
+      CHATBOT_INTERNAL_TOKEN: test-internal-token
+      CHATBOT_TIMEOUT_SECONDS: "5"
+      JWT_SECRET: test-secret-not-for-production-32-bytes-min
+      CORS_ORIGINS: http://testserver
+      DEBUG: "true"
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: lax
+      TRUSTED_PROXY_IPS: ""
+      MEDIA_DIR: /tmp/eyelearning-test-media
+      R2_ACCOUNT_ID: ""
+      R2_BUCKET_NAME: ""
+      R2_ACCESS_KEY_ID: ""
+      R2_SECRET_ACCESS_KEY: ""
+      R2_PUBLIC_URL: ""
+      SMTP_HOST: ""
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      SMTP_FROM: ""
+      OTP_DEV_ECHO: "true"
+      OTP_HASH_SECRET: test-otp-hash-secret
+      OTP_ALLOWED_DOMAINS: st.neu.edu.vn
+      OTP_STUDENT_ID_PATTERN: '^\d{8}$'
+      OTP_TTL_SECONDS: "600"
+      OTP_RESEND_SECONDS: "60"
+      OTP_MAX_ATTEMPTS: "5"
+      OTP_MAX_PER_EMAIL_PER_HOUR: "5"
+      OTP_MAX_PER_IP_PER_HOUR: "20"
+      CONTENT_VIEW_MIN_DWELL_MS: "1000"
+      GAZE_FPS: "15"
+      DB_POOL_MIN: "2"
+      DB_POOL_MAX: "6"
+      ADMIN_DB_URL: ""
+    volumes:
+      - ./backend/tests:/app/tests:ro
+      - ./backend/pytest.ini:/app/pytest.ini:ro
+
   # Worker chuyển đổi slide upload (LibreOffice) và tạo các row slides.
   # Image riêng có LibreOffice/fonts; API không cần và không cài.
   content-worker:
@@ -508,6 +563,71 @@ services:
       start_period: 180s
     mem_limit: 3g
     cpus: 2.0
+
+  # Test hộp đen chatbot: image có dev deps, mount tests từ host.
+  chatbot-test:
+    build:
+      context: ./services/chatbot
+      dockerfile: Dockerfile
+      target: test
+    image: eyelearning-chatbot-test:local
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CHATBOT_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_test
+      CHATBOT_INTERNAL_TOKEN: test-internal-token
+      DB_POOL_MIN: "1"
+      DB_POOL_MAX: "4"
+      DB_POOL_TIMEOUT: "5"
+      DB_POOL_RECONNECT_TIMEOUT: "2"
+      EMBEDDING_NAME: local
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MODEL_PATH: /app/weights/Qwen3-Embedding-0.6B
+      EMBEDDING_DEVICE: cpu
+      EMBEDDING_LOCAL_FILES_ONLY: "true"
+      EMBEDDING_HF_REPO: Qwen/Qwen3-Embedding-0.6B
+      LLM_BASE_URL: http://llm.invalid/v1
+      LLM_API_KEY: test
+      LLM_MODEL: test-model
+      VLM_MODEL: test-vlm
+      LLM_TIMEOUT: "5"
+      LLM_QUERY_TIMEOUT: "5"
+      LLM_ANSWER_TIMEOUT: "5"
+      VLM_TIMEOUT: "5"
+      LLM_MAX_RETRIES: "0"
+      CHATBOT_BACKEND_URL: http://backend:8001
+      LOCAL_MEDIA_DIR: /tmp/eyelearning-chatbot-media
+      STORAGE_PROVIDER: local
+    volumes:
+      - ./services/chatbot/tests:/app/tests:ro
+      - ./services/chatbot/pytest.ini:/app/pytest.ini:ro
+    command: ["-m", "fast"]
+
+  # Test hộp đen gaze: image có dev deps, mount tests từ host.
+  gaze-test:
+    build:
+      context: ./services/gaze
+      dockerfile: Dockerfile
+      target: test
+    image: eyelearning-gaze-test:local
+    profiles: ["test"]
+    environment:
+      DEVICE: ${DEVICE:-cpu}
+      UNIGAZE_MODEL: ${UNIGAZE_MODEL:-unigaze_b16_joint}
+      INFERENCE_PRECISION: fp32
+      MAX_POINTS: "64"
+      MAX_SESSIONS: "100"
+      SESSION_TTL_SECONDS: "1800"
+      GAZE_FPS: "15"
+      MAX_FRAME_BYTES: "1048576"
+      MAX_UPLOAD_BYTES: "5242880"
+    volumes:
+      - ./services/gaze/tests:/app/tests:ro
+      - ./services/gaze/pytest.ini:/app/pytest.ini:ro
+      - gaze-weights:/app/weights:ro
+    command: ["-m", "fast"]
 
   frontend:
     build:

@@ -437,12 +437,11 @@ END;
         print("  1. stop backend/chatbot/worker/db-maintenance (nếu có)", file=self.out)
         print("  2. kiểm tra không còn kết nối lạ tới database đích", file=self.out)
         print("  3. drop/recreate database đích (ngoài transaction)", file=self.out)
-        print("  4. chạy 001_baseline.sql (schema + reference seed)", file=self.out)
-        print("  5. chạy grants cho chatbot role", file=self.out)
-        print("  6. tạo app_metadata.db_instance_id mới", file=self.out)
-        print("  7. (tùy chọn) seed development", file=self.out)
-        print("  8. smoke test schema", file=self.out)
-        print("  9. start runtime", file=self.out)
+        print("  4. chạy migrations (bao gồm role grants nếu có cấu hình)", file=self.out)
+        print("  5. tạo app_metadata.db_instance_id mới", file=self.out)
+        print("  6. (tùy chọn) seed development", file=self.out)
+        print("  7. smoke test schema", file=self.out)
+        print("  8. start runtime", file=self.out)
         print("", file=self.out)
         print("Để áp dụng:", file=self.out)
         print(
@@ -509,11 +508,6 @@ CREATE DATABASE :"dbname";
 
     def _run_migrations(self) -> None:
         self.runner.run(self._compose("run", "--rm", "migrate"))
-
-    def _run_grants(self) -> None:
-        script = self.root / "scripts" / "create_chatbot_role.sh"
-        if script.is_file():
-            self.runner.run(["bash", str(script)])
 
     def _create_instance_id(self, database: str) -> str:
         instance_id = str(uuid.uuid4())
@@ -596,9 +590,6 @@ SELECT json_build_object(
 
         self._run_migrations()
         print("Đã chạy baseline (schema + reference seed).", file=self.out)
-
-        self._run_grants()
-        print("Đã chạy grants.", file=self.out)
 
         instance_id = self._create_instance_id(database)
         print(f"DB instance ID  : {instance_id}", file=self.out)

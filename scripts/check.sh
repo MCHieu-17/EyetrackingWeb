@@ -3,7 +3,7 @@
 #
 #   ./scripts/check.sh            # ruff + frontend lint/typecheck + compose config
 #   ./scripts/check.sh --build    # thêm npm run build (chậm)
-#   ./scripts/check.sh --full     # thêm knip + unit tests + backend tests + build
+#   ./scripts/check.sh --full     # thêm knip + build
 #
 # --full dùng cho gate trước khi merge; --build giữ lại cho tương thích.
 set -euo pipefail
@@ -20,7 +20,7 @@ Usage: ./scripts/check.sh [--build | --full]
 
   (không tham số)  ruff, frontend lint, typecheck, docker compose config
   --build          như trên + frontend build
-  --full           như trên + frontend/backend/chatbot/gaze tests, build
+  --full           như trên + knip, build
 EOF
 }
 
@@ -65,28 +65,6 @@ log "frontend typecheck"
 if [ "$RUN_FULL" -eq 1 ]; then
     log "frontend knip"
     (cd frontend && npm run knip)
-
-    log "frontend unit tests"
-    (cd frontend && npm run test)
-
-    log "backend tests"
-    ./scripts/test_backend.sh
-
-    CHATBOT_PYTHON="${CHATBOT_PYTHON:-services/chatbot/.venv/bin/python}"
-    GAZE_PYTHON="${GAZE_PYTHON:-services/gaze/.venv/bin/python}"
-    [[ "$CHATBOT_PYTHON" = /* ]] || CHATBOT_PYTHON="$ROOT_DIR/$CHATBOT_PYTHON"
-    [[ "$GAZE_PYTHON" = /* ]] || GAZE_PYTHON="$ROOT_DIR/$GAZE_PYTHON"
-
-    log "chatbot tests"
-    (cd services/chatbot && "$CHATBOT_PYTHON" -m pytest -q)
-
-    log "gaze tests"
-    (cd services/gaze && "$GAZE_PYTHON" -m pytest -q)
-
-    BACKEND_PYTHON="${BACKEND_PYTHON:-backend/.venv/bin/python}"
-    [[ "$BACKEND_PYTHON" = /* ]] || BACKEND_PYTHON="$ROOT_DIR/$BACKEND_PYTHON"
-    log "reset_db guard tests"
-    "$BACKEND_PYTHON" -m unittest discover -s scripts/tests -q
 fi
 
 if [ "$RUN_BUILD" -eq 1 ]; then

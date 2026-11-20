@@ -11,7 +11,7 @@ const STATUS_ORDER: Record<EnrollStatus, number> = {
 };
 
 /** Quy đổi chuỗi "5 phút trước"… thành số phút để sắp xếp. */
-export function relativeMinutes(value: string | null | undefined): number {
+function relativeMinutes(value: string | null | undefined): number {
   // Học viên chưa có phiên học có lastActive = null; xếp cuối thay vì crash.
   if (!value) return 999999;
   const text = value.toLowerCase();
@@ -25,7 +25,7 @@ export function relativeMinutes(value: string | null | undefined): number {
 }
 
 /** Lọc theo tên hoặc mã sinh viên (không phân biệt hoa thường). */
-export function filterStudents(students: StudentRow[], query: string): StudentRow[] {
+function filterStudents(students: StudentRow[], query: string): StudentRow[] {
   const q = query.trim().toLowerCase();
   return students.filter(
     (student) =>
@@ -36,7 +36,7 @@ export function filterStudents(students: StudentRow[], query: string): StudentRo
 }
 
 /** Sắp xếp bản sao danh sách học viên theo cột/chiều đang chọn. */
-export function sortStudents(students: StudentRow[], sort: SortState): StudentRow[] {
+function sortStudents(students: StudentRow[], sort: SortState): StudentRow[] {
   const factor = sort.dir === "asc" ? 1 : -1;
   return [...students].sort((a, b) => {
     if (sort.column === "name") return factor * a.name.localeCompare(b.name, "vi");

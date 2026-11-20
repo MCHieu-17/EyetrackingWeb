@@ -112,7 +112,7 @@ export interface QuizForm {
 }
 
 /** Chuyển ISO sang giá trị cho input datetime-local (giờ địa phương). */
-export function toLocalInput(iso: string | null | undefined): string {
+function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

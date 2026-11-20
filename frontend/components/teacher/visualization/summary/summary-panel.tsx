@@ -32,7 +32,7 @@ function localDateIso(value: string, endOfDay = false): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-export interface SummaryQueryInput {
+interface SummaryQueryInput {
   scope: SummaryScope;
   lessonId: string;
   from: string;
@@ -49,7 +49,7 @@ export interface SummaryQueryInput {
  * Mặc định tính cả lượt ngắn (`includeShort: true`). Chỉ khi người dùng bật
  * "Chỉ tính lượt >= ngưỡng" mới gửi `includeShort: false`.
  */
-export function buildSummaryQuery(input: SummaryQueryInput): AoiSummaryQuery {
+function buildSummaryQuery(input: SummaryQueryInput): AoiSummaryQuery {
   const common = {
     lessonIds: input.lessonId ? [input.lessonId] : [],
     from: localDateIso(input.from),

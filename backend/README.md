@@ -39,7 +39,6 @@ backend/app/
 │   ├── chat_transport.py# HTTP/SSE transport tới chatbot
 │   ├── study_chat.py    # authorization + persistence + stream lifecycle
 │   └── admin_db*.py     # read-only query, validation, serialization
-└── tests/               # integration tests + performance query counts
 ```
 
 Không còn bảng versioning nội dung. Sửa course/module/lesson/slide đã publish có
@@ -151,24 +150,32 @@ Frontend và backend dùng thống nhất `slideId`, `lessonId`, `presentationId
 - Không sửa migration đã áp; thay đổi mới phải là `006_...`.
 - Cascade/FK là cơ chế xoá dữ liệu liên quan. File media local/R2 được dọn sau
   transaction DB.
-- Từ điển cột/ERD: `DB.md`.
+- Từ điển bảng/ERD và quy ước schema: `AGENTS.md`.
 
-## Test và lint
+## Lint và kiểm tra schema
+
+```bash
+# Từ root
+./scripts/check.sh --full
+./scripts/test_migrations.sh
+
+# Trực tiếp
+cd backend
+.venv/bin/ruff check app
+```
+
+## Test
+
+Fast test dùng PostgreSQL/Redis test thật, mock chatbot/LLM; chạy trong image
+`backend-test` (dev deps), không cần venv host:
 
 ```bash
 # Từ root
 ./scripts/test_backend.sh
-./scripts/test_migrations.sh
-./scripts/check.sh --full
+make test-fast
 
-# Trực tiếp
-cd backend
-.venv/bin/ruff check app tests
-TEST_DATABASE_URL=... .venv/bin/pytest -q
+# Một file cụ thể
+./scripts/test_backend.sh tests/fast/test_quiz.py -q
 ```
 
-`test_backend.sh` tạo database `eyetracking_test`, chạy migration và pytest.
-Không trỏ `TEST_DB` vào database có dữ liệu thật.
-
-Performance budget nằm trong `tests/performance/test_query_counts.py`; budgets
-hiện tại: teacher courses 6, course students 9, gaze batch 5, media 4 query.
+`TEST_PLAN.md` mô tả phạm vi hộp đen và nhóm `fast`/`smoke`.
