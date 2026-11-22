@@ -1,0 +1,528 @@
+{
+  "nextDir": "/home/hieu/Documents/NCKH Eyetracking/EyeLearning/benchmarks/baseline/20261122T1640Z-after-10phase/frontend/.next",
+  "generatedAt": "2026-11-22T16:38:31.660Z",
+  "static": {
+    "files": 133,
+    "raw": 4149876,
+    "gzip": 2008426
+  },
+  "routes": {
+    "/_global-error": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js"
+      ],
+      "cssFiles": [],
+      "jsRaw": 14377,
+      "jsGzip": 3655,
+      "cssRaw": 0,
+      "cssGzip": 0
+    },
+    "/_not-found": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 152789,
+      "jsGzip": 45220,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/account/change-password": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/1l7tncpkxpp57.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/3fwc2e69z2sr_.js",
+        "static/chunks/3sj15trqdn9m7.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 208090,
+      "jsGzip": 64617,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/account/login": {
+      "jsFiles": [
+        "static/chunks/0edxnqxtzepah.js",
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2r9qvlob9ig0l.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 253315,
+      "jsGzip": 80651,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/account/register": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/1iamzt7et5exs.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2r9qvlob9ig0l.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 249728,
+      "jsGzip": 79465,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/admin/database": {
+      "jsFiles": [
+        "static/chunks/0cp4-94fjju6f.js",
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/1v1p8ps1h_aeb.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 358103,
+      "jsGzip": 112904,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/admin": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/14abmr9svhlr2.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 319633,
+      "jsGzip": 102671,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/admin/profile": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/27zkgra7yp21m.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js",
+        "static/chunks/3l2lcf6uivksu.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 308830,
+      "jsGzip": 99325,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0logf_d4yyv0v.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css",
+        "static/chunks/1kaysz1e3x6db.css"
+      ],
+      "jsRaw": 180952,
+      "jsGzip": 55371,
+      "cssRaw": 125506,
+      "cssGzip": 23156
+    },
+    "/student/courses/[courseId]/calibrate": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/1l9x643a4he-9.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2teuv5iigd05v.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 188884,
+      "jsGzip": 57702,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/student/courses/[courseId]": {
+      "jsFiles": [
+        "static/chunks/07gledsi6cc9g.js",
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/0i-yoqum9tp-p.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/3fwc2e69z2sr_.js",
+        "static/chunks/44ja80_e58q_-.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 260166,
+      "jsGzip": 81363,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/student/courses/[courseId]/prepare": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/14m806d1ur5h9.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2k4h3kc5txckr.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 329239,
+      "jsGzip": 105323,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/student": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/0yf5utwyoml7r.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 314690,
+      "jsGzip": 101232,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/student/profile": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/0u5hd_n6cc9i4.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 318476,
+      "jsGzip": 102181,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/teacher/courses/[courseId]": {
+      "jsFiles": [
+        "static/chunks/03_6l_lq--t74.js",
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2p8nwe3m49etn.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 245793,
+      "jsGzip": 76571,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/teacher": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js",
+        "static/chunks/41dqohjniu_ch.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 316843,
+      "jsGzip": 101427,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/teacher/profile": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0hrt5f33rzu1d.js",
+        "static/chunks/0u5hd_n6cc9i4.js",
+        "static/chunks/133f-tzqs5_hb.js",
+        "static/chunks/1_f52-r8am_0c.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/36ou6uiwi88q3.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 318476,
+      "jsGzip": 102181,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    },
+    "/try": {
+      "jsFiles": [
+        "static/chunks/0ehjiuuxbbhq9.js",
+        "static/chunks/0m9p74vkb7605.js",
+        "static/chunks/0sxml3hjvi93y.js",
+        "static/chunks/1ezb8gmqwd76o.js",
+        "static/chunks/1gwvpbqgh4pi3.js",
+        "static/chunks/1h_a1md0pt6iy.js",
+        "static/chunks/2gmhlpli9_q3u.js",
+        "static/chunks/2teuv5iigd05v.js",
+        "static/chunks/3fwc2e69z2sr_.js"
+      ],
+      "cssFiles": [
+        "static/chunks/0msi-bp7zi27h.css"
+      ],
+      "jsRaw": 225043,
+      "jsGzip": 69864,
+      "cssRaw": 101467,
+      "cssGzip": 17464
+    }
+  },
+  "topChunks": [
+    {
+      "file": "static/chunks/0msi-bp7zi27h.css",
+      "raw": 101467,
+      "gzip": 17464
+    },
+    {
+      "file": "static/chunks/36ou6uiwi88q3.js",
+      "raw": 53949,
+      "gzip": 18530
+    },
+    {
+      "file": "static/chunks/44ja80_e58q_-.js",
+      "raw": 52347,
+      "gzip": 16178
+    },
+    {
+      "file": "static/chunks/1ezb8gmqwd76o.js",
+      "raw": 49220,
+      "gzip": 11743
+    },
+    {
+      "file": "static/chunks/0cp4-94fjju6f.js",
+      "raw": 44447,
+      "gzip": 12263
+    },
+    {
+      "file": "static/chunks/0m9p74vkb7605.js",
+      "raw": 43735,
+      "gzip": 14257
+    },
+    {
+      "file": "static/chunks/1l9x643a4he-9.js",
+      "raw": 35925,
+      "gzip": 12322
+    },
+    {
+      "file": "static/chunks/1_f52-r8am_0c.js",
+      "raw": 35609,
+      "gzip": 11922
+    },
+    {
+      "file": "static/chunks/2gmhlpli9_q3u.js",
+      "raw": 33895,
+      "gzip": 10490
+    },
+    {
+      "file": "static/chunks/2k4h3kc5txckr.js",
+      "raw": 33452,
+      "gzip": 11554
+    },
+    {
+      "file": "static/chunks/27zkgra7yp21m.js",
+      "raw": 32406,
+      "gzip": 11295
+    },
+    {
+      "file": "static/chunks/2r9qvlob9ig0l.js",
+      "raw": 31939,
+      "gzip": 11376
+    },
+    {
+      "file": "static/chunks/133f-tzqs5_hb.js",
+      "raw": 29481,
+      "gzip": 10349
+    },
+    {
+      "file": "static/chunks/0hrt5f33rzu1d.js",
+      "raw": 28387,
+      "gzip": 10243
+    },
+    {
+      "file": "static/chunks/0sxml3hjvi93y.js",
+      "raw": 28349,
+      "gzip": 10227
+    },
+    {
+      "file": "static/chunks/3fwc2e69z2sr_.js",
+      "raw": 28329,
+      "gzip": 8937
+    },
+    {
+      "file": "static/chunks/2p8nwe3m49etn.js",
+      "raw": 28257,
+      "gzip": 8840
+    },
+    {
+      "file": "static/chunks/0logf_d4yyv0v.js",
+      "raw": 28163,
+      "gzip": 10151
+    },
+    {
+      "file": "static/chunks/3sj15trqdn9m7.js",
+      "raw": 27934,
+      "gzip": 9511
+    },
+    {
+      "file": "static/chunks/1l7tncpkxpp57.js",
+      "raw": 27367,
+      "gzip": 9886
+    },
+    {
+      "file": "static/chunks/07gledsi6cc9g.js",
+      "raw": 26005,
+      "gzip": 9395
+    },
+    {
+      "file": "static/chunks/14m806d1ur5h9.js",
+      "raw": 25053,
+      "gzip": 7854
+    },
+    {
+      "file": "static/chunks/1kaysz1e3x6db.css",
+      "raw": 24039,
+      "gzip": 5692
+    },
+    {
+      "file": "static/chunks/14abmr9svhlr2.js",
+      "raw": 19418,
+      "gzip": 6407
+    },
+    {
+      "file": "static/chunks/0u5hd_n6cc9i4.js",
+      "raw": 18261,
+      "gzip": 5917
+    },
+    {
+      "file": "static/chunks/1gwvpbqgh4pi3.js",
+      "raw": 17028,
+      "gzip": 6496
+    },
+    {
+      "file": "static/chunks/41dqohjniu_ch.js",
+      "raw": 16628,
+      "gzip": 5163
+    },
+    {
+      "file": "static/chunks/0yf5utwyoml7r.js",
+      "raw": 14475,
+      "gzip": 4968
+    },
+    {
+      "file": "static/chunks/0ehjiuuxbbhq9.js",
+      "raw": 14377,
+      "gzip": 3655
+    },
+    {
+      "file": "static/chunks/1v1p8ps1h_aeb.js",
+      "raw": 13441,
+      "gzip": 4377
+    }
+  ]
+}

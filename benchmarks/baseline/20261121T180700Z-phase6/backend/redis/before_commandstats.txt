@@ -1,6 +1,0 @@
-# Commandstats
-cmdstat_slowlog|get:calls=2,usec=2,usec_per_call=1.00,rejected_calls=0,failed_calls=0
-cmdstat_hello:calls=4,usec=21,usec_per_call=5.25,rejected_calls=0,failed_calls=0
-cmdstat_ping:calls=20788,usec=10579,usec_per_call=0.51,rejected_calls=0,failed_calls=0
-cmdstat_info:calls=7,usec=439,usec_per_call=62.71,rejected_calls=0,failed_calls=0
-cmdstat_client|setinfo:calls=8,usec=4,usec_per_call=0.50,rejected_calls=0,failed_calls=0

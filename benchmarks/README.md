@@ -72,29 +72,32 @@ BENCH_FIXTURE_PAGES=100 BENCH_INGEST_SLIDES=100 BENCH_INGEST_LIMIT=100 \
 ## Cấu trúc kết quả
 
 ```text
-benchmarks/baseline/20261121T140000Z-baseline/
+benchmarks/baseline/20261122T1640Z-after-10phase/
   meta.json
   env/
     cpu.txt  mem.txt  gpu.txt  docker.txt  git.txt  env.txt
   fixtures.json                  # ID + row counts, không chứa token
   .runtime/tokens.json           # gitignored, chứa access token benchmark
   backend/
-    endpoints.json  endpoints.md
     k6/*.json
     pg_stat_statements/*.csv
     explain/*.txt
     redis/*.txt
+    analysis_probe.json  export_probe_100k.json  export_probe_29k.json
+    maintenance_probe.json  auth_probe.json
   frontend/
     bundle-size.json  bundle-size.md
+    gaze-capture.json
     lighthouse/*.json
     lighthouse-summary.json
   gaze/
-    stage-latency.json
-    ws-load.json
+    stage-latency.json  ws-load.json  ws-load-client.json
+    capture-ab.json  capture-ab-calibrated.json
   chatbot/
-    ingest.json
-    query.json
-    components.json
+    ingest.json  retrieval.json
+    query-chatbot.json  query-backend.json
+    components.json  components-all.json
+  report/compare-baseline.md
   summary.json
   summary.md
 ```
@@ -106,10 +109,15 @@ phép tạo symlink).
 
 ```bash
 python benchmarks/report/compare.py \
-  --baseline benchmarks/baseline/20261121T140000Z-baseline \
-  --after    benchmarks/baseline/20261122T090000Z-after \
-  --out      benchmarks/baseline/compare.md
+  --baseline benchmarks/baseline/20261120T180000Z-baseline \
+  --after    benchmarks/baseline/20261122T1640Z-after-10phase \
+  --out      benchmarks/baseline/20261122T1640Z-after-10phase/report/compare-baseline.md
 ```
+
+Repo chỉ giữ **hai** run: baseline gốc `20261120T180000Z-baseline` và run final
+`20261122T1640Z-after-10phase`. Báo cáo so sánh baseline → sau 10 phase:
+`docs/perf-results.md`. Run trung gian đã xoá khỏi Git nhưng khôi phục được
+bằng `git checkout <commit> -- benchmarks/baseline/<run-id>`.
 
 Đo riêng worker phân tích gaze (gate Phase 5: view 54k sample):
 

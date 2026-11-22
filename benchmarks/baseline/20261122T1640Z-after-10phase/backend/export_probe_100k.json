@@ -1,0 +1,40 @@
+{
+  "database": "eyetracking_bench",
+  "samples": 100000,
+  "views": 20,
+  "single_export": {
+    "lines": 100002,
+    "bytes": 90062640,
+    "wall_ms": 1548.6,
+    "pages": 120,
+    "page_p50_ms": 2.18,
+    "page_p95_ms": 2.49,
+    "peak_rss_mib": 84.0,
+    "rss_delta_mib": 1.2
+  },
+  "concurrent_export": {
+    "exports": 5,
+    "wall_ms": 7721.0,
+    "min_lines": 100002,
+    "min_bytes": 90062640,
+    "page_p50_ms": 9.69,
+    "page_p95_ms": 34.76,
+    "idle_in_transaction_max": 0,
+    "idle_in_transaction_max_seconds": 0.0
+  },
+  "gaze_page": {
+    "p50_ms": 10.82,
+    "p95_ms": 11.52,
+    "seq_scan_gaze_samples": false
+  },
+  "legacy": {
+    "gaze_offset": 50000,
+    "gaze_offset_p50_ms": 32.33,
+    "gaze_offset_p95_ms": 32.82,
+    "export_first_p50_ms": 22.23,
+    "export_first_p95_ms": 22.82,
+    "export_after_p50_ms": 13.05,
+    "export_after_p95_ms": 13.27
+  },
+  "export_page_seq_scan": false
+}

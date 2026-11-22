@@ -1,2 +1,0 @@
-ERR unknown command 'timeout', with args beginning with: '10' 'redis-cli' '--latency-history' '-i' '1' 
-

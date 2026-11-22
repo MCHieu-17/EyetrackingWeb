@@ -1,0 +1,101 @@
+{
+  "mode": "all",
+  "retriever": {
+    "query": "Giải thích embedding và vector search trong bài giảng.",
+    "hyde": true,
+    "iterations": 3,
+    "embed_query_ms": {
+      "count": 3,
+      "p50": 0.06,
+      "p95": 0.07,
+      "p99": 0.07,
+      "mean": 0.06
+    },
+    "embed_hyde_ms": {
+      "count": 3,
+      "p50": 0.03,
+      "p95": 0.04,
+      "p99": 0.04,
+      "mean": 0.03
+    },
+    "bm25_ms": {
+      "count": 3,
+      "p50": 0.85,
+      "p95": 13.5,
+      "p99": 13.5,
+      "mean": 5.02
+    },
+    "dense_ms": {
+      "count": 3,
+      "p50": 1.42,
+      "p95": 3.53,
+      "p99": 3.53,
+      "mean": 2.08
+    },
+    "hyde_dense_ms": {
+      "count": 3,
+      "p50": 1.46,
+      "p95": 2.05,
+      "p99": 2.05,
+      "mean": 1.63
+    },
+    "rrf_fuse_ms": {
+      "count": 3,
+      "p50": 0.05,
+      "p95": 0.06,
+      "p99": 0.06,
+      "mean": 0.05
+    },
+    "asearch_total_ms": {
+      "count": 3,
+      "p50": 3.21,
+      "p95": 4.44,
+      "p99": 4.44,
+      "mean": 3.6
+    },
+    "query_dim": 1024,
+    "hyde_dim": 1024
+  },
+  "llm": {
+    "concurrency": 4,
+    "iterations": 3,
+    "ttft_ms": {
+      "count": 3,
+      "p50": 191.88,
+      "p95": 205.01,
+      "p99": 205.01,
+      "mean": 195.56
+    },
+    "total_ms": {
+      "count": 3,
+      "p50": 773.65,
+      "p95": 839.58,
+      "p99": 839.58,
+      "mean": 794.76
+    },
+    "chunks": {
+      "count": 3,
+      "p50": 58.0,
+      "p95": 63.0,
+      "p99": 63.0,
+      "mean": 59.33
+    }
+  },
+  "embedding": {
+    "batch_docs": 4,
+    "batch_ms": {
+      "count": 3,
+      "p50": 437.69,
+      "p95": 496.96,
+      "p99": 496.96,
+      "mean": 457.39
+    },
+    "query_ms": {
+      "count": 3,
+      "p50": 0.02,
+      "p95": 249.71,
+      "p99": 249.71,
+      "mean": 83.25
+    }
+  }
+}

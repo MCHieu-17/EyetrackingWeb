@@ -1,6 +1,9 @@
 # Perf roadmap — GazeEdu / EyeLearning
 
 > Nguồn: `docs/perf-audit.md`; baseline `benchmarks/baseline/20261120T180000Z-baseline` (quick, profile `single`).
+> Kết quả tổng hợp baseline → sau 10 phase và artifact còn giữ: `docs/perf-results.md`.
+> Run-id trong các mục **Kết quả benchmark** là artifact lịch sử đã dọn khỏi repo;
+> khôi phục bằng `git checkout <commit> -- benchmarks/baseline/<run-id>`.
 > Dataset baseline: 19.240 `content_views`, 3.445.200 `gaze_samples`, 540 `slides`.
 > Nhãn `[High]/[Med]/[Low]` giữ theo audit; tài liệu này chỉ chốt thứ tự đợt và gate, không chứa code.
 > Nguyên tắc: xếp theo nút thắt lớn nhất; gom thay đổi xuyên tầng vào cùng một đợt; mỗi đợt deploy/verify/rollback độc lập. Thứ tự dưới đây là thứ tự merge đề xuất.
@@ -294,7 +297,7 @@
 **Gate chốt:** PASS theo hướng accuracy-first; bandwidth ≤50% không đạt (xem Lưu ý).
 
 **Lưu ý:**
-- **Giữ 480px/q0,78**: A/B trên `face_sample` + model calibration thật cho 320/q0,7 Δpose **28,0%**, Δpx **16,2%**; 480/q0,7 Δpose **12,4%**, Δpx **6,9%** → cả hai fail gate. 480/q0,78 = **20.387 B** (≤25 KB) và giữ nguyên pixel path. Artifact: `benchmarks/baseline/20261122T062123Z-baseline/gaze/capture-ab-calibrated.json`.
+- **Giữ 480px/q0,78**: A/B trên `face_sample` + model calibration thật cho 320/q0,7 Δpose **28,0%**, Δpx **16,2%**; 480/q0,7 Δpose **12,4%**, Δpx **6,9%** → cả hai fail gate. 480/q0,78 = **20.387 B** (≤25 KB) và giữ nguyên pixel path. Artifact: `benchmarks/baseline/20261122T1640Z-after-10phase/gaze/capture-ab-calibrated.json` (chép từ run `20261122T062123Z-baseline`, xem `docs/perf-results.md` §12).
 - **Không dùng WebCodecs**: server chỉ decode JPEG/PNG; WebCodecs cần decoder video (PyAV/ffmpeg) + protocol v3, ngoài phạm vi.
 - **MediaPipe VIDEO bị loại**: đo trong gaze-test p50 **6,9 ms** vs IMAGE **4,1 ms**, landmark giống hệt trên fixture; giữ `RunningMode.IMAGE`.
 - **Bandwidth ≤50% không đạt**: 480/q0,78 là 20,4 KB so với baseline q0,90 33,2 KB (~61%); đây là trade-off accuracy-first đã chốt. Muốn giảm nữa phải mở đợt riêng cho 320px + calibration cùng format.

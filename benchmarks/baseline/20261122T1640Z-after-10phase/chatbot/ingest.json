@@ -1,0 +1,75 @@
+{
+  "lesson_id": "659b48bb-8100-5e00-b4c6-8751d4685a19",
+  "slide_count": 2,
+  "processed": 2,
+  "failed": 0,
+  "errors": [],
+  "wall_ms": 7413.05,
+  "slides_per_second": 0.27,
+  "stages_ms": {
+    "pdf_render": {
+      "count": 2,
+      "p50": 30.9,
+      "p95": 30.9,
+      "p99": 30.9,
+      "mean": 27.86,
+      "max": 30.9
+    },
+    "vlm": {
+      "count": 2,
+      "p50": 3284.65,
+      "p95": 3284.65,
+      "p99": 3284.65,
+      "mean": 3263.55,
+      "max": 3284.65
+    },
+    "embedding": {
+      "count": 2,
+      "p50": 2042.4,
+      "p95": 2042.4,
+      "p99": 2042.4,
+      "mean": 2042.4,
+      "max": 2042.4
+    },
+    "db_upsert": {
+      "count": 2,
+      "p50": 3.64,
+      "p95": 3.64,
+      "p99": 3.64,
+      "mean": 3.59,
+      "max": 3.64
+    },
+    "db_mark": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "mean": null,
+      "max": null
+    }
+  },
+  "embedding_batches": [
+    {
+      "size": 2,
+      "ms": 4084.8
+    }
+  ],
+  "slides": [
+    {
+      "slide_id": "286f3026-c011-5f0a-87b8-cee61d128cee",
+      "_load_image_ms": 30.9,
+      "_describe_image_ms": 3284.65,
+      "_upsert_ms": 3.64,
+      "embedding_ms": 2042.4,
+      "total_ms": 5361.59
+    },
+    {
+      "slide_id": "9cf00711-7634-5443-8b02-6128348adfad",
+      "_load_image_ms": 24.83,
+      "_describe_image_ms": 3242.45,
+      "_upsert_ms": 3.54,
+      "embedding_ms": 2042.4,
+      "total_ms": 5313.22
+    }
+  ]
+}
