@@ -1,0 +1,336 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"WITH inserted AS (
+        INSERT INTO gaze_samples (
+            content_view_id, layout_id, client_batch_id, sequence, event_time,
+            viewport_x, viewport_y, status, quality_flags
+        )
+        SELECT
+            CAST($1 AS u",290,139,506.9219459999999,1.7480067103448274,28.159485000000018,290,347662,239,0
+DELETE FROM courses WHERE title LIKE $1,1,1,76.868309,76.868309,0.169486,4,65881,2462,0
+UPDATE slides SET embedding = $1::vector WHERE id = $2,320,6,52.744761,0.16482737812500015,0.116697,320,66379,303,0
+ANALYZE,1,0,52.14494,52.14494,0,0,10879,1748,0
+"DELETE FROM ONLY ""public"".""gaze_samples"" WHERE $1 OPERATOR(pg_catalog.=) ""content_view_id""",168,169,46.95730900000005,0.2795077916666663,1.371907,14800,26172,1920,0
+"COPY ""gaze_samples""(""content_view_id"", ""layout_id"", ""client_batch_id"", ""sequence"", ""event_time"", ""viewport_x"", ""viewport_y"", ""slide_x"", ""slide_y"", ""aoi_label"", ""status"") FROM STDIN (FORMAT binary)",2,0,44.728345000000004,22.364172500000002,0,3200,73949,339,0
+"SELECT $2 FROM ONLY ""public"".""content_views"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",14818,366,40.50360700000039,0.0027334057902550775,4.9107119999999975,14818,70874,1,0
+"SELECT $2 FROM ONLY ""public"".""view_layouts"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",11800,360,39.79601900000011,0.0033725439830508508,3.448449999999999,11800,35202,1,0
+"WITH RECURSIVE typeinfo_tree(
+    oid, ns, name, kind, basetype, elemtype, elemdelim,
+    range_subtype, attrtypoids, attrnames, depth)
+AS (
+    SELECT
+        ti.oid, ti.ns, ti.name, ti.kind, ti.basetype,
+        ti.elemtype, ti.elemdelim,",60,60,25.011414000000013,0.41685690000000003,196.834926,473,23484,30,0
+"INSERT INTO slides
+              (id, lesson_id, position, page_number, title, transcript,
+               index_status, pipeline_version, model_version)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",340,6,19.63124599999998,0.05773895882352941,0.039570999999999995,340,5560,57,0
+"SELECT learning_sessions.id, learning_sessions.status, learning_sessions.ended_at, enrollments.student_id, content_views.id AS view_id, content_views.session_id AS view_session_id, view_layouts.id AS layout_id 
+FROM learning_sessions JOIN e",290,139,13.615936000000001,0.04695150344827585,130.43809800000002,290,28753,0,0
+"DELETE FROM ONLY ""public"".""slides"" WHERE $1 OPERATOR(pg_catalog.=) ""lesson_id""",65,6,10.396744000000002,0.1599499076923077,0.448462,340,3036,264,0
+"INSERT INTO content_views
+              (id, session_id, slide_id, surface, sequence_no, started_at, ended_at,
+               gaze_count, on_slide_gaze_count, tracked_duration_ms, fixation_count,
+               heatmap_grid, aoi_stats, anal",160,6,9.526001999999995,0.05953751249999997,0.041812,160,3607,126,0
+"INSERT INTO aois
+              (id, slide_id, ui_schema, code, name, label, parent_id, geometry,
+               is_container, kind, is_active)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)",243,6,6.05184,0.024904691358024696,0.04244799999999999,243,4010,11,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",196,12,5.712417000000001,0.029144984693877548,1.8173819999999998,0,830,12,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",196,12,4.976179999999999,0.025388673469387748,0.9485550000000003,0,257,5,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    gs.id, gs.event_time, gs.sequence, gs.viewport_x, gs.viewport_y,
+    gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags,
+    cv.id AS content_view_id, ls.id AS session_",1,0,4.798663,4.798663,0,0,2393,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH view_ids AS (
+    SELECT cv.id
+    FROM content_views cv
+    JOIN learning_sessions ls ON ls.id = cv.session_id
+    WHERE ls.course_visit_id = $1::uuid
+)
+SELECT
+    cv.id,
+    ls.started_at",1,0,4.48279,4.48279,0,0,2189,1,0
+"UPDATE ONLY ""public"".""gaze_samples"" SET ""layout_id"" = $2 WHERE $1 OPERATOR(pg_catalog.=) ""layout_id""",18,6,4.160465,0.23113694444444444,0.056026999999999993,0,27128,1,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",2,0,3.371528,1.685764,0,164,2124,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",2,0,3.329677,1.6648385,0,50,1856,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT d.slide_id, d.course_id, d.lesson_id, d.transcript,
+       ts_rank_cd(d.content_tsv, q) AS rank_score
+FROM v_chatbot_slide_documents d,
+     plainto_tsquery($1, immutable_unaccent($2)) q
+",1,0,3.060068,3.060068,0,0,1014,18,0
+"INSERT INTO lessons
+              (id, module_id, title, kind, position, pdf_asset_id, quiz_config,
+               created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$8)",65,6,3.0396289999999997,0.04676352307692306,0.049149,65,935,1,0
+"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ""chatbot_reader""",1,0,2.985933,2.985933,0,0,1798,32,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    grouping(views.lesson_id) AS g_lesson,
+    grouping(views.slide_id) AS g_slide,
+    grouping(views.student_id) AS g_student,
+    grouping(views.visit_key) AS g_visit,
+    kv.key AS la",1,0,2.709395,2.709395,0,0,334,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+WITH view_ids AS (
+    SELECT cv.id
+    FROM content_views cv
+    JOIN learning_sessions ls ON ls.id = cv.session_id
+    WHERE ls.course_visit_id = $1::uuid
+)
+SELECT
+    cv.id,
+    ls.started_at",1,1,2.654657,2.654657,1.411102,10,2150,1,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    count(*) AS content_view_count,
+    count(*) FILTER (WHERE views.dwell_ms < $1) AS short_view_count,
+    count(DISTINCT views.visit_key) AS visit_count,
+    count(DISTINCT views.stude",1,0,2.52625,2.52625,0,0,938,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    gs.id, gs.event_time, gs.sequence, gs.viewport_x, gs.viewport_y,
+    gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags,
+    cv.id AS content_view_id, ls.id AS session_",1,1,2.509496,2.509496,1.859639,200,2342,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, 160 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO",2,0,2.4825369999999998,1.2412684999999999,0,31,1004,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    grouping(views.lesson_id) AS g_lesson,
+    grouping(views.slide_id) AS g_slide,
+    grouping(views.student_id) AS g_student,
+    grouping(views.visit_key) AS g_visit,
+    views.lesson",1,0,2.393138,2.393138,0,0,299,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    s.id,
+    s.lesson_id,
+    $1 - (s.embedding <=> $2::vector) AS cosine
+FROM slides s
+WHERE s.embedding IS NOT NULL
+  AND s.lesson_id = ANY(
+      ARRAY(
+          SELECT DISTINCT less",1,0,2.25844,2.25844,0,0,1326,2,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    gs.id, gs.event_time, gs.sequence, gs.client_batch_id,
+    gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y,
+    gs.aoi_label, gs.status, gs.quality_flags,
+    cv.id AS content_vi",1,0,2.239212,2.239212,0,0,801,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( 'shared_buffers' , 'work_mem' , 'maintenance_work_mem' , 'effective_cache_size' , 'max_connections' , 'random_page_cost' , 'track_io_timing' , 'shared_preload_lib",2,0,2.053404,1.026702,0,20,342,0,0
+"INSERT INTO quiz_attempts
+              (id, enrollment_id, lesson_id, attempt_no, status, started_at,
+               expires_at, submitted_at, quiz_snapshot, answers, grading, score,
+               max_score)
+            VALUES ($1,$2,$3,$",40,6,2.047533,0.051188325,0.037061,40,716,20,0
+"INSERT INTO chat_messages
+              (id, session_id, role, content, citations, intent, created_at)
+            VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)",120,6,1.8189300000000004,0.015157749999999998,0.02936,120,1188,23,0
+DELETE FROM users WHERE email LIKE $1,1,1,1.60981,1.60981,0.13307,18,984,38,0
+"SELECT translate(unaccent($2, $1), $3, $4)",341,341,1.6095520000000023,0.004720093841642225,0.9687889999999992,341,14,10,0
+"INSERT INTO learning_sessions
+              (id, enrollment_id, lesson_id, course_visit_id, quiz_attempt_id,
+               calibration_id, pipeline_version, viewport_width_px, viewport_height_px,
+               calibration_width_px, calibr",32,6,1.596218,0.04988181250000001,0.036264000000000005,32,897,12,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    ls.course_visit_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_views cv
+JOIN learn",1,0,1.315,1.315,0,0,604,0,0
+BEGIN,972,0,1.1914269999999998,0.0012257479423868306,0,0,0,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    grouping(views.lesson_id) AS g_lesson,
+    grouping(views.slide_id) AS g_slide,
+    grouping(views.student_id) AS g_student,
+    grouping(views.visit_key) AS g_visit,
+    kv.key AS la",1,1,1.181484,1.181484,1.200889,117,323,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT cv.gaze_count, cv.heatmap_grid, cv.analysis_status,
+       cv.analysis_version,
+       exists (
+           SELECT $1 FROM gaze_samples gs WHERE gs.content_view_id = cv.id
+       ) AS has_",1,0,1.172877,1.172877,0,0,615,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( $1 , $2 , $3 , $4 , $5 , $6 , $7 , $8 , $9 , $10 ) ORDER BY name ) TO STDOUT WITH CSV HEADER",2,2,1.153832,0.576916,0.194281,20,52,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",20,0,1.1393870000000001,0.05696935,0,20,120,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cm.course_id,
+    sum(cv.on_slide_gaze_count),
+    sum(cv.gaze_count),
+    count(ls.id)
+FROM course_modules cm
+JOIN lessons l ON l.module_id = cm.id
+JOIN learning_sessions ls ON ls.le",1,0,1.138311,1.138311,0,0,583,0,0
+"DO $$
+DECLARE
+    old_count integer;
+BEGIN
+    IF to_regclass('public.schema_migrations') IS NULL THEN
+        IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public') THEN
+            RAISE EXCEPTION 'old schema detected: public tab",1,0,1.093002,1.093002,0,0,185,57,0
+"DELETE FROM ONLY ""public"".""content_views"" WHERE $1 OPERATOR(pg_catalog.=) ""session_id""",40,6,1.040228,0.026005700000000003,0.15113500000000002,168,502,57,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.slide_id,
+    ls.enrollment_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_view",1,0,0.978184,0.978184,0,0,490,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    s.id,
+    s.lesson_id,
+    $1 - (s.embedding <=> $2::vector) AS cosine
+FROM slides s
+WHERE s.embedding IS NOT NULL
+  AND s.lesson_id = ANY(
+      ARRAY(
+          SELECT DISTINCT less",1,1,0.7662450000000001,0.7662450000000001,0.540995,20,1096,2,0
+"SELECT $2 FROM ONLY ""public"".""lessons"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",442,30,0.7505410000000002,0.0016980565610859714,0.23344499999999993,442,1329,0,0
+SELECT count(*) FROM gaze_samples,1,1,0.7249329999999999,0.7249329999999999,0.068114,1,1549,0,0
+ROLLBACK,678,0,0.6925479999999997,0.0010214572271386425,0,0,0,0,0
+"DELETE FROM ONLY ""public"".""aois"" WHERE $1 OPERATOR(pg_catalog.=) ""slide_id""",340,6,0.6748839999999997,0.0019849529411764743,0.19523200000000002,240,1022,16,0
+"INSERT INTO course_visits
+              (id, enrollment_id, started_at, ended_at, last_seen_at, status, visit_key)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)
+            ON CONFLICT DO NOTHING",16,6,0.6460959999999999,0.040381,0.032984000000000006,16,330,16,0
+"SELECT slides.id, slides.position, slides.page_number, slides.title, slides.index_status, slides.index_error 
+FROM slides 
+WHERE slides.lesson_id = $1::UUID ORDER BY slides.position",20,0,0.640231,0.03201155,0,120,60,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",2,2,0.616735,0.3083675,1.378166,164,1240,0,0
+"SELECT $2 FROM ONLY ""public"".""slides"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",408,12,0.564182,0.0013827990196078428,0.116656,408,1634,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT d.slide_id, d.course_id, d.lesson_id, d.transcript,
+       ts_rank_cd(d.content_tsv, q) AS rank_score
+FROM v_chatbot_slide_documents d,
+     plainto_tsquery($1, immutable_unaccent($2)) q
+",1,1,0.563658,0.563658,1.851749,20,665,16,0
+"UPDATE ONLY ""public"".""lessons"" SET ""pdf_asset_id"" = $2 WHERE $1 OPERATOR(pg_catalog.=) ""pdf_asset_id""",4,4,0.5613180000000001,0.14032950000000002,0.098131,61,584,20,0
+"INSERT INTO content_views
+                  (id, session_id, slide_id, surface, sequence_no, started_at)
+                VALUES ($1,$2,$3,$5,$6,$4)",8,6,0.542214,0.06777675,0.060336,8,174,10,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at 
+FROM lessons 
+WHERE lessons.id = $1::UUID",20,0,0.535732,0.026786599999999997,0,20,40,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT id, event_time, sequence, status, viewport_x, viewport_y,
+       slide_x, slide_y, aoi_label, quality_flags
+FROM gaze_samples
+WHERE content_view_id = $1::uuid
+ORDER BY event_time, id
+LIMI",1,0,0.534296,0.534296,0,0,256,0,0
+"INSERT INTO enrollments (id, course_id, student_id, enrolled_at, status) VALUES ($1,$2,$3,$4,$5)",16,6,0.5267240000000001,0.03292025,0.025013,16,252,8,0
+"SELECT media_assets.id, media_assets.course_id, media_assets.storage_backend, media_assets.object_key, media_assets.sha256, media_assets.mime_type, media_assets.byte_size, media_assets.state, media_assets.page_count, media_assets.source_for",20,0,0.506709,0.02533545,0,20,20,0,0
+"INSERT INTO learning_sessions
+                  (id, enrollment_id, lesson_id, course_visit_id, pipeline_version,
+                   viewport_width_px, viewport_height_px, calibration_width_px,
+                   calibration_height_px, devi",8,6,0.5049889999999999,0.063123625,0.06587699999999999,8,223,1,0
+"INSERT INTO course_modules
+                      (id, course_id, title, position, created_at, updated_at)
+                    VALUES ($1,$2,$3,$4,$5,$5)",13,6,0.497701,0.038284692307692304,0.03938799999999999,13,114,6,0
+"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ""admin_reader""",1,0,0.48494,0.48494,0,0,407,0,0
+"INSERT INTO chat_sessions
+              (id, student_id, course_id, lesson_id, quiz_attempt_id, title,
+               context_key, created_at, updated_at, archived_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",12,6,0.481797,0.040149750000000005,0.030568,12,204,4,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",2,2,0.48023399999999994,0.24011699999999997,1.442729,50,958,0,0
+"INSERT INTO background_jobs
+              (id, lesson_id, kind, status, payload, attempts, max_attempts,
+               error, created_at, started_at, finished_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$1",10,6,0.39772399999999997,0.039772400000000006,0.031103,10,89,5,0
+"INSERT INTO media_assets
+              (id, course_id, storage_backend, object_key, sha256, mime_type,
+               byte_size, state, page_count, source_format)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",4,4,0.35265899999999994,0.08816475,0.024944,4,52,7,0
+"INSERT INTO gaze_calibrations
+              (id, user_id, device_fingerprint, model_ubj, model_hash,
+               model_version, viewport_width_px, viewport_height_px,
+               device_pixel_ratio, screen_x_px, screen_y_px, num_point",8,6,0.346013,0.043251624999999995,0.037427999999999996,8,63,5,0
+"INSERT INTO view_layouts
+              (id, content_view_id, layout_no, slide_rect, elements, captured_at)
+            VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6)",10,6,0.34542599999999996,0.03454259999999999,0.023276,10,116,10,0
+"INSERT INTO course_visits
+                  (id, enrollment_id, started_at, last_seen_at, status, visit_key)
+                VALUES ($1,$2,$3,$3,$5,$4)
+                ON CONFLICT DO NOTHING",8,6,0.344045,0.043005625,0.061573,8,168,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    grouping(views.lesson_id) AS g_lesson,
+    grouping(views.slide_id) AS g_slide,
+    grouping(views.student_id) AS g_student,
+    grouping(views.visit_key) AS g_visit,
+    views.lesson",1,1,0.34120100000000003,0.34120100000000003,1.613343,78,293,0,0
+"DELETE FROM ONLY ""public"".""content_views"" WHERE $1 OPERATOR(pg_catalog.=) ""slide_id""",340,6,0.3384470000000003,0.0009954323529411772,0.066058,0,745,22,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    count(*) AS content_view_count,
+    count(*) FILTER (WHERE views.dwell_ms < $1) AS short_view_count,
+    count(DISTINCT views.visit_key) AS visit_count,
+    count(DISTINCT views.stude",1,1,0.335619,0.335619,1.750678,1,890,0,0
+"SELECT
+                        current_setting($1) AS cur,
+                        set_config($2, $3, $4) AS new",60,60,0.325346,0.005422433333333333,0.7402760000000002,60,0,0,0
+"SELECT $2 FROM ONLY ""public"".""course_modules"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",65,6,0.3086320000000001,0.004748184615384613,0.113579,65,133,0,0
+"GRANT USAGE ON SCHEMA public TO ""chatbot_reader""",1,0,0.303657,0.303657,0,0,5,3,0
+"GRANT SELECT ON ALL TABLES IN SCHEMA public TO ""admin_reader""",1,0,0.286738,0.286738,0,0,292,0,0
+"DELETE FROM ONLY ""public"".""chat_messages"" WHERE $1 OPERATOR(pg_catalog.=) ""session_id""",12,6,0.27943599999999996,0.023286333333333332,0.07600000000000001,120,221,10,0
+"INSERT INTO student_profiles (user_id, student_code, program) VALUES ($1,$2,$3)",16,6,0.26059,0.016286875,0.017637,16,143,5,0
+"SELECT
+                    set_config($2, $1, $3)",60,60,0.25878899999999994,0.00431315,0.432397,60,0,0,0
+"INSERT INTO courses
+              (id, owner_id, created_by, title, description, status, published_at,
+               show_gaze_dot, require_calibration)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",4,4,0.24582099999999996,0.06145524999999999,0.031797000000000006,4,51,7,0
+"DELETE FROM ONLY ""public"".""quiz_attempts"" WHERE $1 OPERATOR(pg_catalog.=) ""enrollment_id""",32,6,0.24550299999999997,0.007671968749999999,0.13304600000000003,40,229,16,0
+"INSERT INTO view_layouts
+                  (id, content_view_id, layout_no, slide_rect, elements, captured_at)
+                VALUES ($1,$2,$6,$3::jsonb,$4::jsonb,$5)",8,6,0.24021899999999996,0.030027375,0.039518000000000005,8,96,0,0
+"SELECT $2 FROM ONLY ""public"".""learning_sessions"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",168,6,0.23733000000000007,0.0014126785714285719,0.06980299999999999,168,675,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, $1 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO ",2,2,0.22315000000000002,0.11157500000000001,0.610989,31,330,0,0
+"DELETE FROM ONLY ""public"".""view_layouts"" WHERE $1 OPERATOR(pg_catalog.=) ""content_view_id""",168,6,0.22071599999999994,0.0013137857142857144,0.11206100000000001,18,250,6,0
+COMMIT,294,0,0.20787599999999992,0.0007070612244897964,0,0,0,0,0
+"INSERT INTO course_teachers (course_id, teacher_id) VALUES ($1,$2)",4,4,0.20050999999999997,0.05012749999999999,0.008422,4,42,5,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cm.course_id,
+    sum(cv.on_slide_gaze_count),
+    sum(cv.gaze_count),
+    count(ls.id)
+FROM course_modules cm
+JOIN lessons l ON l.module_id = cm.id
+JOIN learning_sessions ls ON ls.le",1,1,0.194531,0.194531,0.717784,1,559,0,0
+"REVOKE ALL ON users, auth_sessions, email_otps, enrollments,
+    quiz_attempts, learning_sessions, chat_sessions, chat_messages
+    FROM ""chatbot_reader""",1,0,0.190831,0.190831,0,0,127,1,0
+"DELETE FROM ONLY ""public"".""learning_sessions"" WHERE $1 OPERATOR(pg_catalog.=) ""enrollment_id""",32,6,0.18839799999999998,0.005887437500000001,0.131662,40,231,18,0
+"SELECT $2 FROM ONLY ""public"".""enrollments"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",104,18,0.18830000000000005,0.0018105769230769226,0.16325699999999999,104,419,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    ls.course_visit_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_views cv
+JOIN learn",1,1,0.186656,0.186656,0.90669,16,574,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT
+    cv.slide_id,
+    ls.enrollment_id,
+    coalesce(sum(cv.gaze_count), $1),
+    coalesce(sum(cv.on_slide_gaze_count), $2),
+    coalesce(sum(cv.tracked_duration_ms), $3)
+FROM content_view",1,1,0.178038,0.178038,0.59191,48,469,0,0
+"EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
+SELECT gs.id, gs.event_time
+FROM gaze_samples gs
+WHERE gs.content_view_id = $1::uuid
+  AND (gs.event_time, gs.id) > ($2::timestamptz, $3)
+ORDER BY gs.event_time, gs.id
+LIMIT $4",1,0,0.177858,0.177858,0,0,23,0,0
+"DELETE FROM ONLY ""public"".""learning_sessions"" WHERE $1 OPERATOR(pg_catalog.=) ""quiz_attempt_id""",40,6,0.16539900000000002,0.004134975000000001,0.03630499999999999,0,901,22,0

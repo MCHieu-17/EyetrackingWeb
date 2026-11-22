@@ -1,0 +1,12 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_2.key AS label, anon_1.lesson_id, anon_1.slide_id, anon_1.student_id,",20,1,54.741426999999995,2.7370713499999995,0.864133,2340,7557,0,0
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_1.lesson_id, anon_1.lesson_title, anon_1.lesson_kind, anon_1.slide_id",20,1,21.233107,1.06165535,1.232427,1560,10685,0,0
+"SELECT count(*) FILTER (WHERE $17) AS content_view_count, count(*) FILTER (WHERE anon_1.dwell_ms < $1::INTEGER) AS short_view_count, count(DISTINCT anon_1.visit_key) FILTER (WHERE $18) AS visit_count, count(DISTINCT anon_1.student_id) FILTE",20,1,15.29775,0.7648874999999999,0.60437,20,4464,0,0
+"SELECT aois.label, aois.code, aois.name 
+FROM aois 
+WHERE aois.slide_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID, $8::UUID, $9::UUID, $10::UUID, $11::UUID, $12::UUID, $13::UUID, $14::UUID) AND aois.is_container IS fals",20,1,0.7952619999999999,0.039763099999999996,0.122828,520,301,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0,0.6757150000000001,0.03378575,0,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.3695399999999999,0.026395714285714283,0,0,28,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.32776700000000003,0.023411928571428566,0,0,14,0,0
+BEGIN,68,0,0.09965299999999999,0.0014654852941176468,0,0,0,0,0
+ROLLBACK,68,0,0.065959,0.0009699852941176467,0,0,0,0,0

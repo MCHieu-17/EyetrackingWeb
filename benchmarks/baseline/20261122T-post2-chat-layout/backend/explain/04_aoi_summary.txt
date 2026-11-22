@@ -1,0 +1,283 @@
+                                                                                                                                                                                                                                                                                                               QUERY PLAN                                                                                                                                                                                                                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=91.43..91.44 rows=1 width=88) (actual time=0.307..0.309 rows=1 loops=1)
+   Output: count(*), count(*) FILTER (WHERE ((EXTRACT(epoch FROM (COALESCE(cv.ended_at, ls.ended_at, v.ended_at, now()) - cv.started_at)) * '1000'::numeric) < '1000'::numeric)), count(DISTINCT (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))), count(DISTINCT u.id), COALESCE(sum(cv.tracked_duration_ms), '0'::numeric), COALESCE(sum(cv.gaze_count), '0'::bigint), COALESCE(sum(cv.on_slide_gaze_count), '0'::bigint), count(*) FILTER (WHERE (((cv.analysis_status)::text <> 'ready'::text) OR ((cv.analysis_version)::text <> 'gaze-metrics-v8'::text) OR ((cv.gaze_count > 0) AND (cv.aoi_stats = '{}'::jsonb))))
+   Buffers: shared hit=189
+   ->  Sort  (cost=89.02..89.12 rows=42 width=255) (actual time=0.244..0.248 rows=88 loops=1)
+         Output: cv.ended_at, ls.ended_at, v.ended_at, cv.started_at, v.id, ls.id, u.id, cv.tracked_duration_ms, cv.gaze_count, cv.on_slide_gaze_count, cv.analysis_status, cv.analysis_version, cv.aoi_stats, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))
+         Sort Key: (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))
+         Sort Method: quicksort  Memory: 57kB
+         Buffers: shared hit=186
+         ->  Nested Loop  (cost=9.16..87.88 rows=42 width=255) (actual time=0.076..0.189 rows=88 loops=1)
+               Output: cv.ended_at, ls.ended_at, v.ended_at, cv.started_at, v.id, ls.id, u.id, cv.tracked_duration_ms, cv.gaze_count, cv.on_slide_gaze_count, cv.analysis_status, cv.analysis_version, cv.aoi_stats, COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))
+               Buffers: shared hit=183
+               ->  Nested Loop Left Join  (cost=6.64..17.92 rows=10 width=64) (actual time=0.064..0.092 rows=24 loops=1)
+                     Output: ls.ended_at, ls.id, u.id, v.ended_at, v.id
+                     Inner Unique: true
+                     Buffers: shared hit=105
+                     ->  Hash Join  (cost=6.37..11.79 rows=10 width=56) (actual time=0.059..0.066 rows=24 loops=1)
+                           Output: ls.ended_at, ls.id, ls.course_visit_id, u.id
+                           Hash Cond: (u.id = e.student_id)
+                           Buffers: shared hit=33
+                           ->  Seq Scan on public.users u  (cost=0.00..5.18 rows=18 width=16) (actual time=0.002..0.005 rows=18 loops=1)
+                                 Output: u.id, u.email, u.password_hash, u.role, u.status, u.full_name, u.date_of_birth, u.gender, u.phone, u.avatar_url, u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.email_verified_at
+                                 Buffers: shared hit=5
+                           ->  Hash  (cost=6.25..6.25 rows=10 width=56) (actual time=0.050..0.051 rows=24 loops=1)
+                                 Output: ls.ended_at, ls.id, ls.course_visit_id, e.student_id
+                                 Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                 Buffers: shared hit=28
+                                 ->  Nested Loop  (cost=2.72..6.25 rows=10 width=56) (actual time=0.027..0.046 rows=24 loops=1)
+                                       Output: ls.ended_at, ls.id, ls.course_visit_id, e.student_id
+                                       Inner Unique: true
+                                       Buffers: shared hit=28
+                                       ->  Hash Join  (cost=2.58..4.10 rows=10 width=72) (actual time=0.021..0.028 rows=24 loops=1)
+                                             Output: ls.ended_at, ls.id, ls.lesson_id, ls.course_visit_id, e.student_id
+                                             Inner Unique: true
+                                             Hash Cond: (ls.enrollment_id = e.id)
+                                             Buffers: shared hit=3
+                                             ->  Seq Scan on public.learning_sessions ls  (cost=0.00..1.40 rows=40 width=72) (actual time=0.001..0.003 rows=40 loops=1)
+                                                   Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                                                   Buffers: shared hit=1
+                                             ->  Hash  (cost=2.48..2.48 rows=8 width=32) (actual time=0.009..0.009 rows=8 loops=1)
+                                                   Output: e.id, e.student_id
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=2
+                                                   ->  Seq Scan on public.enrollments e  (cost=0.00..2.48 rows=8 width=32) (actual time=0.004..0.006 rows=8 loops=1)
+                                                         Output: e.id, e.student_id
+                                                         Filter: (((e.status)::text <> 'dropped'::text) AND (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid))
+                                                         Rows Removed by Filter: 24
+                                                         Buffers: shared hit=2
+                                       ->  Index Only Scan using lessons_pkey on public.lessons l  (cost=0.14..0.22 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=24)
+                                             Output: l.id
+                                             Index Cond: (l.id = ls.lesson_id)
+                                             Heap Fetches: 0
+                                             Buffers: shared hit=25
+                     ->  Index Scan using course_visits_pkey on public.course_visits v  (cost=0.26..0.61 rows=1 width=24) (actual time=0.001..0.001 rows=1 loops=24)
+                           Output: v.id, v.enrollment_id, v.started_at, v.ended_at, v.last_seen_at, v.status, v.visit_key, v.created_at, v.updated_at
+                           Index Cond: (v.id = ls.course_visit_id)
+                           Buffers: shared hit=72
+               ->  Bitmap Heap Scan on public.content_views cv  (cost=2.53..6.96 rows=4 width=223) (actual time=0.002..0.003 rows=4 loops=24)
+                     Output: cv.ended_at, cv.started_at, cv.tracked_duration_ms, cv.gaze_count, cv.on_slide_gaze_count, cv.analysis_status, cv.analysis_version, cv.aoi_stats, cv.session_id, cv.slide_id
+                     Recheck Cond: (cv.session_id = ls.id)
+                     Heap Blocks: exact=30
+                     Buffers: shared hit=78
+                     ->  Bitmap Index Scan on content_views_session_id_sequence_no_key  (cost=0.00..2.53 rows=4 width=0) (actual time=0.001..0.001 rows=4 loops=24)
+                           Index Cond: (cv.session_id = ls.id)
+                           Buffers: shared hit=48
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: 4329864573829761060
+ Planning:
+   Buffers: shared hit=739
+ Planning Time: 1.738 ms
+ Execution Time: 0.396 ms
+(70 rows)
+
+                                                                                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=107.75..113.42 rows=168 width=259) (actual time=0.324..0.339 rows=78 loops=1)
+   Output: GROUPING(l.id), GROUPING(s.id), GROUPING(u.id), GROUPING((COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))), l.id, l.title, l.kind, s.id, (COALESCE(NULLIF((s.title)::text, ''::text), concat('Slide ', (s."position" + 1)))), s.page_number, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying)), e.status, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), min(COALESCE(v.started_at, ls.started_at)), COALESCE(sum(cv.tracked_duration_ms), '0'::numeric)
+   Hash Key: l.id, l.title, l.kind
+   Hash Key: (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text))
+   Hash Key: u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying)), e.status
+   Hash Key: s.id, COALESCE(NULLIF((s.title)::text, ''::text), concat('Slide ', (s."position" + 1))), s.page_number, l.id, l.title
+   Batches: 1  Memory Usage: 96kB
+   Buffers: shared hit=248
+   ->  Nested Loop Left Join  (cost=10.80..107.22 rows=42 width=227) (actual time=0.082..0.245 rows=88 loops=1)
+         Output: l.id, l.title, l.kind, s.id, COALESCE(NULLIF((s.title)::text, ''::text), concat('Slide ', (s."position" + 1))), s.page_number, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying)), e.status, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), v.started_at, ls.started_at, cv.tracked_duration_ms
+         Inner Unique: true
+         Buffers: shared hit=248
+         ->  Nested Loop  (cost=10.51..92.82 rows=42 width=191) (actual time=0.077..0.196 rows=88 loops=1)
+               Output: cv.tracked_duration_ms, cv.slide_id, ls.started_at, l.id, l.title, l.kind, e.status, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying)), v.started_at, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))
+               Buffers: shared hit=209
+               ->  Nested Loop Left Join  (cost=7.99..22.33 rows=10 width=183) (actual time=0.073..0.123 rows=24 loops=1)
+                     Output: ls.started_at, ls.id, l.id, l.title, l.kind, e.status, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying)), v.started_at, COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))
+                     Inner Unique: true
+                     Buffers: shared hit=131
+                     ->  Nested Loop  (cost=7.72..16.08 rows=10 width=159) (actual time=0.068..0.096 rows=24 loops=1)
+                           Output: ls.started_at, ls.id, ls.course_visit_id, l.id, l.title, l.kind, e.status, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying))
+                           Inner Unique: true
+                           Buffers: shared hit=59
+                           ->  Hash Join  (cost=7.58..13.10 rows=10 width=143) (actual time=0.063..0.073 rows=24 loops=1)
+                                 Output: ls.started_at, ls.id, ls.lesson_id, ls.course_visit_id, e.status, u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), (COALESCE(sp.student_code, ''::character varying))
+                                 Hash Cond: (u.id = e.student_id)
+                                 Buffers: shared hit=11
+                                 ->  Hash Left Join  (cost=3.36..8.64 rows=18 width=80) (actual time=0.018..0.025 rows=18 loops=1)
+                                       Output: u.id, (COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)), COALESCE(sp.student_code, ''::character varying)
+                                       Inner Unique: true
+                                       Hash Cond: (u.id = sp.user_id)
+                                       Buffers: shared hit=8
+                                       ->  Seq Scan on public.users u  (cost=0.00..5.22 rows=18 width=48) (actual time=0.003..0.006 rows=18 loops=1)
+                                             Output: u.id, COALESCE(NULLIF((u.full_name)::text, ''::text), (u.email)::text)
+                                             Buffers: shared hit=5
+                                       ->  Hash  (cost=3.16..3.16 rows=16 width=29) (actual time=0.007..0.008 rows=16 loops=1)
+                                             Output: sp.user_id, sp.student_code
+                                             Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                             Buffers: shared hit=3
+                                             ->  Seq Scan on public.student_profiles sp  (cost=0.00..3.16 rows=16 width=29) (actual time=0.001..0.004 rows=16 loops=1)
+                                                   Output: sp.user_id, sp.student_code
+                                                   Buffers: shared hit=3
+                                 ->  Hash  (cost=4.10..4.10 rows=10 width=79) (actual time=0.027..0.027 rows=24 loops=1)
+                                       Output: ls.started_at, ls.id, ls.lesson_id, ls.course_visit_id, e.status, e.student_id
+                                       Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                       Buffers: shared hit=3
+                                       ->  Hash Join  (cost=2.58..4.10 rows=10 width=79) (actual time=0.015..0.022 rows=24 loops=1)
+                                             Output: ls.started_at, ls.id, ls.lesson_id, ls.course_visit_id, e.status, e.student_id
+                                             Inner Unique: true
+                                             Hash Cond: (ls.enrollment_id = e.id)
+                                             Buffers: shared hit=3
+                                             ->  Seq Scan on public.learning_sessions ls  (cost=0.00..1.40 rows=40 width=72) (actual time=0.001..0.002 rows=40 loops=1)
+                                                   Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                                                   Buffers: shared hit=1
+                                             ->  Hash  (cost=2.48..2.48 rows=8 width=39) (actual time=0.006..0.007 rows=8 loops=1)
+                                                   Output: e.status, e.id, e.student_id
+                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                   Buffers: shared hit=2
+                                                   ->  Seq Scan on public.enrollments e  (cost=0.00..2.48 rows=8 width=39) (actual time=0.003..0.004 rows=8 loops=1)
+                                                         Output: e.status, e.id, e.student_id
+                                                         Filter: (((e.status)::text <> 'dropped'::text) AND (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid))
+                                                         Rows Removed by Filter: 24
+                                                         Buffers: shared hit=2
+                           ->  Index Scan using lessons_pkey on public.lessons l  (cost=0.14..0.30 rows=1 width=32) (actual time=0.001..0.001 rows=1 loops=24)
+                                 Output: l.id, l.module_id, l.title, l.kind, l."position", l.pdf_asset_id, l.quiz_config, l.created_at, l.updated_at
+                                 Index Cond: (l.id = ls.lesson_id)
+                                 Buffers: shared hit=48
+                     ->  Index Scan using course_visits_pkey on public.course_visits v  (cost=0.26..0.61 rows=1 width=24) (actual time=0.001..0.001 rows=1 loops=24)
+                           Output: v.id, v.enrollment_id, v.started_at, v.ended_at, v.last_seen_at, v.status, v.visit_key, v.created_at, v.updated_at
+                           Index Cond: (v.id = ls.course_visit_id)
+                           Buffers: shared hit=72
+               ->  Bitmap Heap Scan on public.content_views cv  (cost=2.53..6.96 rows=4 width=40) (actual time=0.002..0.002 rows=4 loops=24)
+                     Output: cv.tracked_duration_ms, cv.session_id, cv.slide_id
+                     Recheck Cond: (cv.session_id = ls.id)
+                     Heap Blocks: exact=30
+                     Buffers: shared hit=78
+                     ->  Bitmap Index Scan on content_views_session_id_sequence_no_key  (cost=0.00..2.53 rows=4 width=0) (actual time=0.001..0.001 rows=4 loops=24)
+                           Index Cond: (cv.session_id = ls.id)
+                           Buffers: shared hit=48
+         ->  Memoize  (cost=0.28..0.52 rows=1 width=45) (actual time=0.000..0.000 rows=1 loops=88)
+               Output: s.id, s.page_number, s.title, s."position"
+               Cache Key: cv.slide_id
+               Cache Mode: logical
+               Hits: 75  Misses: 13  Evictions: 0  Overflows: 0  Memory Usage: 3kB
+               Buffers: shared hit=39
+               ->  Index Scan using slides_pkey on public.slides s  (cost=0.27..0.51 rows=1 width=45) (actual time=0.001..0.001 rows=1 loops=13)
+                     Output: s.id, s.page_number, s.title, s."position"
+                     Index Cond: (s.id = cv.slide_id)
+                     Buffers: shared hit=39
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: -7466725295272433640
+ Planning:
+   Buffers: shared hit=121
+ Planning Time: 1.300 ms
+ Execution Time: 0.430 ms
+(95 rows)
+
+                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=112.99..125.11 rows=145 width=184) (actual time=0.404..1.270 rows=117 loops=1)
+   Output: GROUPING(l.id), GROUPING(s.id), GROUPING(u.id), GROUPING((COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))), kv.key, l.id, s.id, u.id, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), COALESCE(sum(((kv.value ->> 'ms'::text))::bigint), '0'::numeric), COALESCE(sum(((kv.value ->> 'samples'::text))::integer), '0'::bigint), count(DISTINCT u.id), count(DISTINCT s.id)
+   Group Key: kv.key, l.id
+   Group Key: kv.key
+   Sort Key: s.id, kv.key
+     Group Key: s.id, kv.key
+   Sort Key: u.id, kv.key
+     Group Key: u.id, kv.key
+   Sort Key: (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), kv.key
+     Group Key: (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), kv.key
+   Buffers: shared hit=211
+   ->  Sort  (cost=112.99..113.09 rows=42 width=144) (actual time=0.368..0.377 rows=240 loops=1)
+         Output: kv.key, l.id, s.id, u.id, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), kv.value
+         Sort Key: kv.key, l.id
+         Sort Method: quicksort  Memory: 66kB
+         Buffers: shared hit=211
+         ->  Nested Loop Left Join  (cost=9.46..111.86 rows=42 width=144) (actual time=0.068..0.263 rows=240 loops=1)
+               Output: kv.key, l.id, s.id, u.id, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), kv.value
+               Inner Unique: true
+               Buffers: shared hit=211
+               ->  Nested Loop  (cost=9.18..101.95 rows=42 width=144) (actual time=0.063..0.195 rows=240 loops=1)
+                     Output: cv.slide_id, l.id, u.id, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))), kv.key, kv.value
+                     Buffers: shared hit=184
+                     ->  Nested Loop  (cost=9.16..87.15 rows=42 width=217) (actual time=0.048..0.141 rows=88 loops=1)
+                           Output: cv.aoi_stats, cv.slide_id, l.id, u.id, (COALESCE((v.id)::text, ('session:'::text || (ls.id)::text)))
+                           Buffers: shared hit=184
+                           ->  Nested Loop Left Join  (cost=6.64..16.66 rows=10 width=80) (actual time=0.040..0.071 rows=24 loops=1)
+                                 Output: ls.id, l.id, u.id, COALESCE((v.id)::text, ('session:'::text || (ls.id)::text))
+                                 Inner Unique: true
+                                 Buffers: shared hit=106
+                                 ->  Hash Join  (cost=6.37..11.79 rows=10 width=64) (actual time=0.038..0.044 rows=24 loops=1)
+                                       Output: ls.id, ls.course_visit_id, l.id, u.id
+                                       Hash Cond: (u.id = e.student_id)
+                                       Buffers: shared hit=33
+                                       ->  Seq Scan on public.users u  (cost=0.00..5.18 rows=18 width=16) (actual time=0.002..0.004 rows=18 loops=1)
+                                             Output: u.id, u.email, u.password_hash, u.role, u.status, u.full_name, u.date_of_birth, u.gender, u.phone, u.avatar_url, u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.email_verified_at
+                                             Buffers: shared hit=5
+                                       ->  Hash  (cost=6.25..6.25 rows=10 width=64) (actual time=0.033..0.034 rows=24 loops=1)
+                                             Output: ls.id, ls.course_visit_id, l.id, e.student_id
+                                             Buckets: 1024  Batches: 1  Memory Usage: 11kB
+                                             Buffers: shared hit=28
+                                             ->  Nested Loop  (cost=2.72..6.25 rows=10 width=64) (actual time=0.011..0.029 rows=24 loops=1)
+                                                   Output: ls.id, ls.course_visit_id, l.id, e.student_id
+                                                   Inner Unique: true
+                                                   Buffers: shared hit=28
+                                                   ->  Hash Join  (cost=2.58..4.10 rows=10 width=64) (actual time=0.009..0.015 rows=24 loops=1)
+                                                         Output: ls.id, ls.lesson_id, ls.course_visit_id, e.student_id
+                                                         Inner Unique: true
+                                                         Hash Cond: (ls.enrollment_id = e.id)
+                                                         Buffers: shared hit=3
+                                                         ->  Seq Scan on public.learning_sessions ls  (cost=0.00..1.40 rows=40 width=64) (actual time=0.001..0.002 rows=40 loops=1)
+                                                               Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                                                               Buffers: shared hit=1
+                                                         ->  Hash  (cost=2.48..2.48 rows=8 width=32) (actual time=0.006..0.006 rows=8 loops=1)
+                                                               Output: e.id, e.student_id
+                                                               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                                               Buffers: shared hit=2
+                                                               ->  Seq Scan on public.enrollments e  (cost=0.00..2.48 rows=8 width=32) (actual time=0.003..0.004 rows=8 loops=1)
+                                                                     Output: e.id, e.student_id
+                                                                     Filter: (((e.status)::text <> 'dropped'::text) AND (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid))
+                                                                     Rows Removed by Filter: 24
+                                                                     Buffers: shared hit=2
+                                                   ->  Index Only Scan using lessons_pkey on public.lessons l  (cost=0.14..0.22 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=24)
+                                                         Output: l.id
+                                                         Index Cond: (l.id = ls.lesson_id)
+                                                         Heap Fetches: 0
+                                                         Buffers: shared hit=25
+                                 ->  Index Only Scan using course_visits_pkey on public.course_visits v  (cost=0.26..0.47 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=24)
+                                       Output: v.id
+                                       Index Cond: (v.id = ls.course_visit_id)
+                                       Heap Fetches: 24
+                                       Buffers: shared hit=73
+                           ->  Bitmap Heap Scan on public.content_views cv  (cost=2.53..6.96 rows=4 width=169) (actual time=0.002..0.002 rows=4 loops=24)
+                                 Output: cv.aoi_stats, cv.session_id, cv.slide_id
+                                 Recheck Cond: (cv.session_id = ls.id)
+                                 Heap Blocks: exact=30
+                                 Buffers: shared hit=78
+                                 ->  Bitmap Index Scan on content_views_session_id_sequence_no_key  (cost=0.00..2.53 rows=4 width=0) (actual time=0.001..0.001 rows=4 loops=24)
+                                       Index Cond: (cv.session_id = ls.id)
+                                       Buffers: shared hit=48
+                     ->  Memoize  (cost=0.01..3.51 rows=1 width=64) (actual time=0.000..0.000 rows=3 loops=88)
+                           Output: kv.key, kv.value
+                           Cache Key: cv.aoi_stats
+                           Cache Mode: binary
+                           Hits: 86  Misses: 2  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                           ->  Function Scan on pg_catalog.jsonb_each kv  (cost=0.00..3.50 rows=1 width=64) (actual time=0.004..0.004 rows=2 loops=2)
+                                 Output: kv.key, kv.value
+                                 Function Call: jsonb_each(cv.aoi_stats)
+                                 Filter: ((jsonb_typeof(kv.value) = 'object'::text) AND ((((kv.value ->> 'ms'::text))::bigint <> 0) OR (((kv.value ->> 'samples'::text))::integer <> 0)))
+               ->  Memoize  (cost=0.28..0.35 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=240)
+                     Output: s.id
+                     Cache Key: cv.slide_id
+                     Cache Mode: logical
+                     Hits: 227  Misses: 13  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+                     Buffers: shared hit=27
+                     ->  Index Only Scan using slides_pkey on public.slides s  (cost=0.27..0.34 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=13)
+                           Output: s.id
+                           Index Cond: (s.id = cv.slide_id)
+                           Heap Fetches: 0
+                           Buffers: shared hit=27
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: 3422809599896669610
+ Planning:
+   Buffers: shared hit=153
+ Planning Time: 1.205 ms
+ Execution Time: 1.327 ms
+(106 rows)
+

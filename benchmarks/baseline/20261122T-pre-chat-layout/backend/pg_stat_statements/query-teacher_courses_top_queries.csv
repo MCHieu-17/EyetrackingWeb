@@ -1,0 +1,8 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0,2.4937509999999996,0.12468754999999998,0,80,140,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",12,0,0.37781700000000007,0.031484750000000006,0,0,24,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",12,0,0.314592,0.026216000000000003,0,0,12,0,0
+"SELECT courses.id, coalesce(anon_1.students, $1::INTEGER) AS coalesce_1, coalesce(anon_2.sessions, $2::INTEGER) AS coalesce_3, anon_3.on_slide, anon_3.gaze 
+FROM courses LEFT OUTER JOIN (SELECT enrollments.course_id AS course_id, count(enro",1,1,0.25890100000000005,0.25890100000000005,0.447638,4,228,0,0
+BEGIN,64,0,0.086795,0.0013561718749999997,0,0,0,0,0
+ROLLBACK,64,0,0.06042199999999998,0.0009440937500000002,0,0,0,0,0

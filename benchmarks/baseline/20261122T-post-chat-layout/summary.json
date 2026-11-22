@@ -1,0 +1,832 @@
+{
+  "run": "20261122T-post-chat-layout",
+  "fixtures": {
+    "scale": "tiny",
+    "counts": {
+      "users": 18,
+      "courses": 4,
+      "course_modules": 13,
+      "lessons": 65,
+      "slides": 340,
+      "aois": 243,
+      "enrollments": 16,
+      "course_visits": 24,
+      "learning_sessions": 40,
+      "content_views": 168,
+      "view_layouts": 18,
+      "gaze_samples": 3200,
+      "chat_sessions": 12,
+      "chat_messages": 120,
+      "quiz_attempts": 40,
+      "gaze_calibrations": 8,
+      "background_jobs": 10
+    },
+    "pdf_sha256": "bf4dab9a094d5494ea09fee883e69e6d66e1d29ae8be59f3e558bf59f78f8cd9"
+  },
+  "backend": {
+    "k6": [
+      {
+        "file": "add-students.summary.json",
+        "scenario": "add-students",
+        "p50": 8.768663499999999,
+        "p95": 17.2427368,
+        "p99": 17.32482976,
+        "avg": 10.033379,
+        "rps": 4.737823593546875,
+        "error_rate": 0,
+        "count": 10
+      },
+      {
+        "file": "aoi_summary.summary.json",
+        "scenario": "aoi_summary",
+        "p50": 19.207922,
+        "p95": 35.558203,
+        "p99": 51.99432306,
+        "avg": 21.97280314444445,
+        "rps": 8.972633359684101,
+        "error_rate": 0,
+        "count": 90
+      },
+      {
+        "file": "auth-me.summary.json",
+        "scenario": "auth-me",
+        "p50": 8.2624755,
+        "p95": 9.9604994,
+        "p99": 10.348216520000001,
+        "avg": 7.382472041666667,
+        "rps": 4.797934599507408,
+        "error_rate": 0,
+        "count": 48
+      },
+      {
+        "file": "course_students.summary.json",
+        "scenario": "course_students",
+        "p50": 7.028786,
+        "p95": 13.320397,
+        "p99": 15.815567599999998,
+        "avg": 7.792173539419089,
+        "rps": 23.607633970975,
+        "error_rate": 0,
+        "count": 241
+      },
+      {
+        "file": "course_visits.summary.json",
+        "scenario": "course_visits",
+        "p50": 8.184644,
+        "p95": 14.374281,
+        "p99": 17.847150469999995,
+        "avg": 8.792585275000006,
+        "rps": 23.648935135990115,
+        "error_rate": 0,
+        "count": 240
+      },
+      {
+        "file": "enrollments.summary.json",
+        "scenario": "enrollments",
+        "p50": 4.455196,
+        "p95": 7.162146,
+        "p99": 70.57548934,
+        "avg": 6.225376185185187,
+        "rps": 24.005774717731885,
+        "error_rate": 0,
+        "count": 243
+      },
+      {
+        "file": "gaze_batch.summary.json",
+        "scenario": "gaze_batch",
+        "p50": 18.734154,
+        "p95": 36.47236905,
+        "p99": 38.14502776999998,
+        "avg": 20.088005749999997,
+        "rps": 7.821480756344686,
+        "error_rate": 0,
+        "count": 80
+      },
+      {
+        "file": "gaze_batch_nginx.summary.json",
+        "scenario": "gaze_batch_nginx",
+        "p50": 36.246355,
+        "p95": 69.20630105,
+        "p99": 77.07612191,
+        "avg": 36.182787457142865,
+        "rps": 19.405474485577912,
+        "error_rate": 0,
+        "count": 210
+      },
+      {
+        "file": "lesson_contents.summary.json",
+        "scenario": "lesson_contents",
+        "p50": 13.063862,
+        "p95": 19.2653254,
+        "p99": 21.110022679999997,
+        "avg": 12.819318350210967,
+        "rps": 23.341170460915237,
+        "error_rate": 0,
+        "count": 237
+      },
+      {
+        "file": "outline.summary.json",
+        "scenario": "outline",
+        "p50": 8.637404,
+        "p95": 13.618511699999999,
+        "p99": 16.12397134999998,
+        "avg": 9.242010266666659,
+        "rps": 23.5135881295958,
+        "error_rate": 0,
+        "count": 240
+      },
+      {
+        "file": "replay.summary.json",
+        "scenario": "replay",
+        "p50": 10.100307,
+        "p95": 14.0589935,
+        "p99": 36.431919300000004,
+        "avg": 10.027085822916668,
+        "rps": 9.476335044431588,
+        "error_rate": 0,
+        "count": 96
+      },
+      {
+        "file": "samples.summary.json",
+        "scenario": "samples",
+        "p50": 13.9726945,
+        "p95": 21.11085425,
+        "p99": 26.232179200000004,
+        "avg": 13.891127822033903,
+        "rps": 23.130608441813486,
+        "error_rate": 0,
+        "count": 236
+      },
+      {
+        "file": "session_contents.summary.json",
+        "scenario": "session_contents",
+        "p50": 12.038307,
+        "p95": 18.78787644999999,
+        "p99": 24.004299729999996,
+        "avg": 12.165440071428566,
+        "rps": 23.445166711891225,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "teacher_courses.summary.json",
+        "scenario": "teacher_courses",
+        "p50": 7.9600845,
+        "p95": 13.08262375,
+        "p99": 14.1062836,
+        "avg": 8.716305083333332,
+        "rps": 9.5383772508178,
+        "error_rate": 0,
+        "count": 96
+      }
+    ],
+    "query_counts": {
+      "aoi_summary": {
+        "queries_total": 259,
+        "iterations": 20,
+        "queries_per_request": 12.95
+      },
+      "course_students": {
+        "queries_total": 175,
+        "iterations": 20,
+        "queries_per_request": 8.75
+      },
+      "course_visits": {
+        "queries_total": 173,
+        "iterations": 20,
+        "queries_per_request": 8.65
+      },
+      "enrollments": {
+        "queries_total": 65,
+        "iterations": 20,
+        "queries_per_request": 3.25
+      },
+      "outline": {
+        "queries_total": 169,
+        "iterations": 20,
+        "queries_per_request": 8.45
+      },
+      "replay": {
+        "queries_total": 155,
+        "iterations": 20,
+        "queries_per_request": 7.75
+      },
+      "samples": {
+        "queries_total": 212,
+        "iterations": 20,
+        "queries_per_request": 10.6
+      },
+      "session_contents": {
+        "queries_total": 223,
+        "iterations": 20,
+        "queries_per_request": 11.15
+      },
+      "teacher_courses": {
+        "queries_total": 179,
+        "iterations": 20,
+        "queries_per_request": 8.95
+      }
+    },
+    "auth": {
+      "user_id": "c0c55fb5-22f0-5440-af80-303648a9187b",
+      "iterations": 500,
+      "p50_ms": 0.0011789998097810894,
+      "p95_ms": 0.0012740019883494824,
+      "p99_ms": 0.0022519998310599476,
+      "redis_get_calls": 0,
+      "redis_get_per_call": 0.0,
+      "memory_entries": 1
+    }
+  },
+  "gaze": {
+    "device": null,
+    "precision": null,
+    "model": null,
+    "vram_allocated_mib": null,
+    "rss_kib": null,
+    "stage_total": {},
+    "ws": []
+  },
+  "chatbot": {
+    "query_chatbot": [],
+    "query_backend": [],
+    "components": {},
+    "components_all": {},
+    "ingest": {}
+  },
+  "frontend": {
+    "bundle": {
+      "nextDir": "/home/hieu/Documents/NCKH Eyetracking/EyeLearning/benchmarks/baseline/20261122T-post-chat-layout/frontend/.next",
+      "generatedAt": "2026-11-22T07:39:00.626Z",
+      "static": {
+        "files": 133,
+        "raw": 4149876,
+        "gzip": 2008426
+      },
+      "routes": {
+        "/_global-error": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js"
+          ],
+          "cssFiles": [],
+          "jsRaw": 14377,
+          "jsGzip": 3655,
+          "cssRaw": 0,
+          "cssGzip": 0
+        },
+        "/_not-found": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 152789,
+          "jsGzip": 45220,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/change-password": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1l7tncpkxpp57.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/3sj15trqdn9m7.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 208090,
+          "jsGzip": 64617,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/login": {
+          "jsFiles": [
+            "static/chunks/0edxnqxtzepah.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2r9qvlob9ig0l.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 253315,
+          "jsGzip": 80651,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/account/register": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1iamzt7et5exs.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2r9qvlob9ig0l.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 249728,
+          "jsGzip": 79465,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin/database": {
+          "jsFiles": [
+            "static/chunks/0cp4-94fjju6f.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1v1p8ps1h_aeb.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 358103,
+          "jsGzip": 112904,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/14abmr9svhlr2.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 319633,
+          "jsGzip": 102671,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/admin/profile": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/27zkgra7yp21m.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/3l2lcf6uivksu.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 308830,
+          "jsGzip": 99325,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0logf_d4yyv0v.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css",
+            "static/chunks/1kaysz1e3x6db.css"
+          ],
+          "jsRaw": 180952,
+          "jsGzip": 55371,
+          "cssRaw": 125506,
+          "cssGzip": 23156
+        },
+        "/student/courses/[courseId]/calibrate": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/1l9x643a4he-9.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2teuv5iigd05v.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 188884,
+          "jsGzip": 57702,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/courses/[courseId]": {
+          "jsFiles": [
+            "static/chunks/07gledsi6cc9g.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/0i-yoqum9tp-p.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/44ja80_e58q_-.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 260166,
+          "jsGzip": 81363,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/courses/[courseId]/prepare": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/14m806d1ur5h9.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2k4h3kc5txckr.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 329239,
+          "jsGzip": 105323,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/0yf5utwyoml7r.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 314690,
+          "jsGzip": 101232,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/student/profile": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/0u5hd_n6cc9i4.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 318476,
+          "jsGzip": 102181,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher/courses/[courseId]": {
+          "jsFiles": [
+            "static/chunks/03_6l_lq--t74.js",
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2p8nwe3m49etn.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 245793,
+          "jsGzip": 76571,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js",
+            "static/chunks/41dqohjniu_ch.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 316843,
+          "jsGzip": 101427,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/teacher/profile": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0hrt5f33rzu1d.js",
+            "static/chunks/0u5hd_n6cc9i4.js",
+            "static/chunks/133f-tzqs5_hb.js",
+            "static/chunks/1_f52-r8am_0c.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/36ou6uiwi88q3.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 318476,
+          "jsGzip": 102181,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        },
+        "/try": {
+          "jsFiles": [
+            "static/chunks/0ehjiuuxbbhq9.js",
+            "static/chunks/0m9p74vkb7605.js",
+            "static/chunks/0sxml3hjvi93y.js",
+            "static/chunks/1ezb8gmqwd76o.js",
+            "static/chunks/1gwvpbqgh4pi3.js",
+            "static/chunks/1h_a1md0pt6iy.js",
+            "static/chunks/2gmhlpli9_q3u.js",
+            "static/chunks/2teuv5iigd05v.js",
+            "static/chunks/3fwc2e69z2sr_.js"
+          ],
+          "cssFiles": [
+            "static/chunks/0msi-bp7zi27h.css"
+          ],
+          "jsRaw": 225043,
+          "jsGzip": 69864,
+          "cssRaw": 101467,
+          "cssGzip": 17464
+        }
+      },
+      "topChunks": [
+        {
+          "file": "static/chunks/0msi-bp7zi27h.css",
+          "raw": 101467,
+          "gzip": 17464
+        },
+        {
+          "file": "static/chunks/36ou6uiwi88q3.js",
+          "raw": 53949,
+          "gzip": 18530
+        },
+        {
+          "file": "static/chunks/44ja80_e58q_-.js",
+          "raw": 52347,
+          "gzip": 16178
+        },
+        {
+          "file": "static/chunks/1ezb8gmqwd76o.js",
+          "raw": 49220,
+          "gzip": 11743
+        },
+        {
+          "file": "static/chunks/0cp4-94fjju6f.js",
+          "raw": 44447,
+          "gzip": 12263
+        },
+        {
+          "file": "static/chunks/0m9p74vkb7605.js",
+          "raw": 43735,
+          "gzip": 14257
+        },
+        {
+          "file": "static/chunks/1l9x643a4he-9.js",
+          "raw": 35925,
+          "gzip": 12322
+        },
+        {
+          "file": "static/chunks/1_f52-r8am_0c.js",
+          "raw": 35609,
+          "gzip": 11922
+        },
+        {
+          "file": "static/chunks/2gmhlpli9_q3u.js",
+          "raw": 33895,
+          "gzip": 10490
+        },
+        {
+          "file": "static/chunks/2k4h3kc5txckr.js",
+          "raw": 33452,
+          "gzip": 11554
+        },
+        {
+          "file": "static/chunks/27zkgra7yp21m.js",
+          "raw": 32406,
+          "gzip": 11295
+        },
+        {
+          "file": "static/chunks/2r9qvlob9ig0l.js",
+          "raw": 31939,
+          "gzip": 11376
+        },
+        {
+          "file": "static/chunks/133f-tzqs5_hb.js",
+          "raw": 29481,
+          "gzip": 10349
+        },
+        {
+          "file": "static/chunks/0hrt5f33rzu1d.js",
+          "raw": 28387,
+          "gzip": 10243
+        },
+        {
+          "file": "static/chunks/0sxml3hjvi93y.js",
+          "raw": 28349,
+          "gzip": 10227
+        },
+        {
+          "file": "static/chunks/3fwc2e69z2sr_.js",
+          "raw": 28329,
+          "gzip": 8937
+        },
+        {
+          "file": "static/chunks/2p8nwe3m49etn.js",
+          "raw": 28257,
+          "gzip": 8840
+        },
+        {
+          "file": "static/chunks/0logf_d4yyv0v.js",
+          "raw": 28163,
+          "gzip": 10151
+        },
+        {
+          "file": "static/chunks/3sj15trqdn9m7.js",
+          "raw": 27934,
+          "gzip": 9511
+        },
+        {
+          "file": "static/chunks/1l7tncpkxpp57.js",
+          "raw": 27367,
+          "gzip": 9886
+        },
+        {
+          "file": "static/chunks/07gledsi6cc9g.js",
+          "raw": 26005,
+          "gzip": 9395
+        },
+        {
+          "file": "static/chunks/14m806d1ur5h9.js",
+          "raw": 25053,
+          "gzip": 7854
+        },
+        {
+          "file": "static/chunks/1kaysz1e3x6db.css",
+          "raw": 24039,
+          "gzip": 5692
+        },
+        {
+          "file": "static/chunks/14abmr9svhlr2.js",
+          "raw": 19418,
+          "gzip": 6407
+        },
+        {
+          "file": "static/chunks/0u5hd_n6cc9i4.js",
+          "raw": 18261,
+          "gzip": 5917
+        },
+        {
+          "file": "static/chunks/1gwvpbqgh4pi3.js",
+          "raw": 17028,
+          "gzip": 6496
+        },
+        {
+          "file": "static/chunks/41dqohjniu_ch.js",
+          "raw": 16628,
+          "gzip": 5163
+        },
+        {
+          "file": "static/chunks/0yf5utwyoml7r.js",
+          "raw": 14475,
+          "gzip": 4968
+        },
+        {
+          "file": "static/chunks/0ehjiuuxbbhq9.js",
+          "raw": 14377,
+          "gzip": 3655
+        },
+        {
+          "file": "static/chunks/1v1p8ps1h_aeb.js",
+          "raw": 13441,
+          "gzip": 4377
+        }
+      ]
+    },
+    "lighthouse": {}
+  },
+  "redis": {
+    "before": {
+      "keyspace_hits": 0,
+      "keyspace_misses": 0,
+      "hit_rate": null,
+      "used_memory_human": "1.02M",
+      "used_memory_peak_human": "1.09M",
+      "evicted_keys": 0,
+      "expired_keys": 0,
+      "total_commands_processed": 794,
+      "instantaneous_ops_per_sec": 0,
+      "commandstats": {
+        "client|setinfo": "calls=8,usec=2,usec_per_call=0.25,rejected_calls=0,failed_calls=0",
+        "ping": "calls=11,usec=7,usec_per_call=0.64,rejected_calls=0,failed_calls=0",
+        "hello": "calls=4,usec=19,usec_per_call=4.75,rejected_calls=0,failed_calls=0",
+        "info": "calls=1,usec=98,usec_per_call=98.00,rejected_calls=0,failed_calls=0"
+      }
+    },
+    "after": {
+      "keyspace_hits": 1882,
+      "keyspace_misses": 74,
+      "hit_rate": 0.962168,
+      "used_memory_human": "1.37M",
+      "used_memory_peak_human": "1.53M",
+      "evicted_keys": 0,
+      "expired_keys": 46,
+      "total_commands_processed": 3225,
+      "instantaneous_ops_per_sec": 0,
+      "commandstats": {
+        "incrby": "calls=290,usec=1454,usec_per_call=5.01,rejected_calls=0,failed_calls=0",
+        "mget": "calls=116,usec=867,usec_per_call=7.47,rejected_calls=0,failed_calls=0",
+        "client|setinfo": "calls=34,usec=12,usec_per_call=0.35,rejected_calls=0,failed_calls=0",
+        "ping": "calls=77,usec=57,usec_per_call=0.74,rejected_calls=0,failed_calls=0",
+        "expire": "calls=8,usec=51,usec_per_call=6.38,rejected_calls=0,failed_calls=0",
+        "slowlog|get": "calls=1,usec=2,usec_per_call=2.00,rejected_calls=0,failed_calls=0",
+        "hello": "calls=17,usec=73,usec_per_call=4.29,rejected_calls=0,failed_calls=0",
+        "set": "calls=74,usec=363,usec_per_call=4.91,rejected_calls=0,failed_calls=0",
+        "get": "calls=1492,usec=8534,usec_per_call=5.72,rejected_calls=0,failed_calls=0",
+        "unlink": "calls=330,usec=162,usec_per_call=0.49,rejected_calls=0,failed_calls=0",
+        "info": "calls=6,usec=387,usec_per_call=64.50,rejected_calls=0,failed_calls=0",
+        "del": "calls=10,usec=14,usec_per_call=1.40,rejected_calls=0,failed_calls=0"
+      }
+    }
+  }
+}

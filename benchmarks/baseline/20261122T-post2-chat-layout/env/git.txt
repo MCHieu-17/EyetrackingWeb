@@ -1,0 +1,12 @@
+9e60f53a1571b3b0f56d44cc782e42e20af1d935
+improve_perform
+ M benchmarks/baseline/latest
+ M frontend/README.md
+ M frontend/components/assistant/lazy-study-assistant-chat.tsx
+ M frontend/components/student/learning-reader/reader-content.tsx
+ M frontend/components/student/learning-reader/use-reader-chat.ts
+ M frontend/hooks/use-aoi-snapshot.ts
+?? benchmarks/baseline/20261122T-post-chat-layout/
+?? benchmarks/baseline/20261122T-post2-chat-layout/
+?? benchmarks/baseline/20261122T-pre-chat-layout/
+?? benchmarks/baseline/compare-pre-post-chat-layout.md

@@ -1,0 +1,13 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_2.key AS label, anon_1.lesson_id, anon_1.slide_id, anon_1.student_id,",20,6,54.783057,2.73915285,14.297245,2340,6656,0,0
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_1.lesson_id, anon_1.lesson_title, anon_1.lesson_kind, anon_1.slide_id",20,6,23.169411,1.15847055,24.211566,1560,8583,0,0
+"SELECT count(*) FILTER (WHERE $17) AS content_view_count, count(*) FILTER (WHERE anon_1.dwell_ms < $1::INTEGER) AS short_view_count, count(DISTINCT anon_1.visit_key) FILTER (WHERE $18) AS visit_count, count(DISTINCT anon_1.student_id) FILTE",20,6,15.537182,0.7768591000000001,9.865889,20,3832,0,0
+"SELECT aois.label, aois.code, aois.name 
+FROM aois 
+WHERE aois.slide_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID, $8::UUID, $9::UUID, $10::UUID, $11::UUID, $12::UUID, $13::UUID, $14::UUID) AND aois.is_container IS fals",20,6,0.9779170000000001,0.04889585,1.004538,520,355,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0,0.702028,0.0351014,0,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.435665,0.03111892857142857,0,0,28,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.32328999999999997,0.02309214285714286,0,0,14,0,0
+BEGIN,68,0,0.10205900000000001,0.0015008676470588235,0,0,0,0,0
+ROLLBACK,68,0,0.06956799999999999,0.0010230588235294112,0,0,0,0,0
+SELECT 1,1,0,0.003555,0.003555,0,1,0,0,0

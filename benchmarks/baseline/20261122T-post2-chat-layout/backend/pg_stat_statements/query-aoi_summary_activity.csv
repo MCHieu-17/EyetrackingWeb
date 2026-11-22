@@ -1,0 +1,12 @@
+pid,state,wait_event_type,wait_event,query,age
+103,idle,Client,ClientRead,ROLLBACK;,00:01:52.826532
+195,idle,Client,ClientRead,ROLLBACK;,00:01:20.847424
+262,idle,Client,ClientRead,ROLLBACK;,00:00:48.928996
+48,idle,Client,ClientRead,ROLLBACK;,00:00:33.679789
+50,idle,Client,ClientRead,ROLLBACK;,00:00:13.087405
+49,idle,Client,ClientRead,ROLLBACK;,00:00:07.544144
+59,idle,Client,ClientRead,SELECT 1,00:00:02.986757
+46,idle,Client,ClientRead,ROLLBACK;,00:00:02.739207
+45,idle,Client,ClientRead,ROLLBACK;,00:00:02.250392
+47,idle,Client,ClientRead,ROLLBACK;,00:00:01.224777
+44,idle,Client,ClientRead,ROLLBACK;,00:00:00.474355
