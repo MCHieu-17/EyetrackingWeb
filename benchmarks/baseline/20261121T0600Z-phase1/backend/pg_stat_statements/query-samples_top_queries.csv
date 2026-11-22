@@ -1,0 +1,17 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT gaze_samples.id, gaze_samples.content_view_id, gaze_samples.layout_id, gaze_samples.client_batch_id, gaze_samples.sequence, gaze_samples.event_time, gaze_samples.viewport_x, gaze_samples.viewport_y, gaze_samples.slide_x, gaze_samples",20,12.574425,0.62872125,3600,160,0,0
+"SELECT content_views.id, content_views.session_id, content_views.slide_id, content_views.surface, content_views.sequence_no, content_views.started_at, content_views.ended_at, content_views.gaze_count, content_views.on_slide_gaze_count, cont",20,2.397905,0.11989524999999998,20,120,0,0
+"SELECT min(gaze_samples.event_time) AS min_1 
+FROM gaze_samples 
+WHERE gaze_samples.content_view_id = $1::UUID",20,0.7516450000000001,0.03758225,20,80,0,0
+"SELECT course_visits.id, course_visits.enrollment_id, course_visits.started_at, course_visits.ended_at, course_visits.last_seen_at, course_visits.status, course_visits.visit_key, course_visits.created_at, course_visits.updated_at 
+FROM cour",20,0.503388,0.0251694,20,60,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.395505,0.01977525,20,20,0,0
+"SELECT enrollments.id, enrollments.course_id, enrollments.student_id, enrollments.enrolled_at, enrollments.status 
+FROM enrollments 
+WHERE enrollments.id = $1::UUID",20,0.312759,0.01563795,20,60,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",5,0.16338999999999998,0.032678,0,5,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",5,0.09216099999999999,0.0184322,0,5,0,0
+BEGIN,50,0.07055500000000002,0.0014111000000000002,0,0,0,0
+ROLLBACK,50,0.04983599999999999,0.00099672,0,0,0,0
+SELECT 1,1,0.002915,0.002915,1,0,0,0

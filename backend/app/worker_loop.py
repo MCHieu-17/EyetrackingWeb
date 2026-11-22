@@ -31,6 +31,7 @@ async def run_worker_loop(
     iterations = 0
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
+        processed = None
         try:
             processed = await step(limit=limit) if limit is not None else await step()
             if processed:
@@ -39,4 +40,6 @@ async def run_worker_loop(
             logger.exception("%s worker iteration failed", name)
         if max_iterations is not None and iterations >= max_iterations:
             break
-        await asyncio.sleep(poll_seconds)
+        # Vừa có việc thì quay lại hàng đợi ngay; chỉ poll dài khi idle để
+        # không cộng dead time sau mỗi job.
+        await asyncio.sleep(0.2 if processed else poll_seconds)

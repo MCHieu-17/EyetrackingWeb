@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -97,6 +98,12 @@ async def process_job(job_id: str) -> None:
         job = await db.get(BackgroundJob, job_id)
         if job is None:
             return
+        if job.started_at is not None:
+            logger.info(
+                "index job %s start wait=%.2fs",
+                job.id,
+                (job.started_at - job.created_at).total_seconds(),
+            )
         try:
             force = bool((job.payload or {}).get("force"))
             await embedding.sync_lesson(job.lesson_id, only_pending=not force)
@@ -151,6 +158,7 @@ async def process_pending_jobs(limit: int = 1) -> int:
                 break
             job_ids.append(job.id)
 
-    for job_id in job_ids:
-        await process_job(job_id)
+    if not job_ids:
+        return 0
+    await asyncio.gather(*(process_job(job_id) for job_id in job_ids))
     return len(job_ids)

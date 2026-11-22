@@ -35,7 +35,10 @@ from app.services.content.slides import (
     process_pending_slide_imports,
     process_slide_import,
 )
-from app.services.content.students import get_course_students
+from app.services.content.students import (
+    get_course_student_lessons,
+    get_course_students,
+)
 
 __all__ = [
     "course_of_lesson",
@@ -50,6 +53,7 @@ __all__ = [
     "delete_media_objects",
     "delete_module",
     "get_course_or_404",
+    "get_course_student_lessons",
     "get_course_students",
     "get_course_tree",
     "get_lesson_contents",

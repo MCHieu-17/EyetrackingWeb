@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import (
+    REAL,
+    BigInteger,
+    Text,
+    bindparam,
+    func,
+    select,
+    text,
+    tuple_,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -22,6 +33,58 @@ GRID_SIZE = 24
 FIXATION_RADIUS = 0.03
 MIN_FIXATION_POINTS = 2
 ANALYSIS_VERSION = "gaze-metrics-v8"
+# Mỗi lô sample được đọc/ghi/commit riêng để transaction của worker bị chặn
+# trên vài nghìn row thay vì toàn bộ lượt xem.
+SAMPLE_CHUNK_SIZE = 3000
+
+_SAMPLE_UPDATE_SQL = text(
+    """
+    UPDATE gaze_samples AS gs
+    SET slide_x = v.slide_x,
+        slide_y = v.slide_y,
+        aoi_label = v.aoi_label,
+        quality_flags = v.quality_flags
+    FROM unnest(
+        CAST(:ids AS BIGINT[]),
+        CAST(:slide_xs AS REAL[]),
+        CAST(:slide_ys AS REAL[]),
+        CAST(:labels AS TEXT[]),
+        CAST(:flags AS JSONB[])
+    ) AS v(id, slide_x, slide_y, aoi_label, quality_flags)
+    WHERE gs.id = v.id
+    """
+).bindparams(
+    bindparam("ids", type_=ARRAY(BigInteger)),
+    bindparam("slide_xs", type_=ARRAY(REAL)),
+    bindparam("slide_ys", type_=ARRAY(REAL)),
+    bindparam("labels", type_=ARRAY(Text)),
+    bindparam("flags", type_=ARRAY(JSONB)),
+)
+
+# Ghi metrics một lần, chỉ khi không có sample mới hơn snapshot. Điều kiện
+# NOT EXISTS chạy trong cùng statement nên không đè `pending` do batch gaze
+# vừa commit trong lúc worker đang phân tích.
+_VIEW_UPDATE_SQL = text(
+    """
+    UPDATE content_views
+    SET gaze_count = :gaze_count,
+        on_slide_gaze_count = :on_slide_gaze_count,
+        tracked_duration_ms = :tracked_duration_ms,
+        fixation_count = :fixation_count,
+        heatmap_grid = CAST(:heatmap_grid AS JSONB),
+        aoi_stats = CAST(:aoi_stats AS JSONB),
+        analysis_status = 'ready',
+        analysis_version = :analysis_version,
+        analyzed_at = :analyzed_at
+    WHERE id = :view_id
+      AND NOT EXISTS (
+          SELECT 1
+          FROM gaze_samples
+          WHERE content_view_id = :view_id
+            AND id > CAST(:max_id AS BIGINT)
+      )
+    """
+)
 
 SLIDE_LABEL_PREFIX = "SLIDE_"
 SLIDE_NO_LABEL = "SLIDE_NO_LABEL"
@@ -160,13 +223,13 @@ async def analyze_content_view(db: AsyncSession, view_id: str) -> ContentView:
         await db.execute(select(Aoi).where(Aoi.ui_schema == "reader-v1"))
     ).scalars().all()
 
-    samples = (
+    max_id = (
         await db.execute(
-            select(GazeSample)
-            .where(GazeSample.content_view_id == view.id)
-            .order_by(GazeSample.event_time, GazeSample.sequence)
+            select(func.max(GazeSample.id)).where(
+                GazeSample.content_view_id == view.id
+            )
         )
-    ).scalars().all()
+    ).scalar_one_or_none()
 
     grid = _empty_grid()
     points: list[tuple[float, float]] = []
@@ -179,87 +242,147 @@ async def analyze_content_view(db: AsyncSession, view_id: str) -> ContentView:
     aoi_stats: dict[str, dict[str, int]] = {}
     previous_time: datetime | None = None
     previous_ok = False
+    last_time: datetime | None = None
+    last_sequence = 0
+    last_id = 0
 
-    for sample in samples:
-        gaze_count += 1
-        is_ok = sample.status == "ok"
-        layout = layout_by_id.get(sample.layout_id) if sample.layout_id else None
-        layout = layout or default_layout
-        has_layout = layout is not None and bool(layout.slide_rect)
-        coords = (
-            (float(sample.viewport_x), float(sample.viewport_y))
-            if is_ok
-            and sample.viewport_x is not None
-            and sample.viewport_y is not None
-            else None
+    while max_id is not None:
+        stmt = select(
+            GazeSample.id,
+            GazeSample.layout_id,
+            GazeSample.event_time,
+            GazeSample.sequence,
+            GazeSample.viewport_x,
+            GazeSample.viewport_y,
+            GazeSample.status,
+            GazeSample.quality_flags,
+        ).where(
+            GazeSample.content_view_id == view.id,
+            GazeSample.id <= max_id,
         )
-        mapped: tuple[float, float] | None = None
-
-        if is_ok and coords is not None and not is_quiz:
-            if has_layout:
-                mapped = map_viewport_to_slide(
-                    coords[0], coords[1], layout.slide_rect
+        if last_time is not None:
+            stmt = stmt.where(
+                tuple_(
+                    GazeSample.event_time,
+                    GazeSample.sequence,
+                    GazeSample.id,
                 )
-            else:
-                quality = dict(sample.quality_flags or {})
-                quality["layout_missing"] = True
-                sample.quality_flags = quality
+                > (last_time, last_sequence, last_id)
+            )
+        rows = (
+            await db.execute(
+                stmt.order_by(
+                    GazeSample.event_time, GazeSample.sequence, GazeSample.id
+                ).limit(SAMPLE_CHUNK_SIZE)
+            )
+        ).all()
+        if not rows:
+            break
 
-        elements = layout.elements if layout else []
-        label: str | None = None
-        if mapped is not None:
-            x, y = mapped
-            sample.slide_x = x
-            sample.slide_y = y
-            if _is_inside_slide(x, y):
-                cell = _grid_cell(x, y)
-                if cell is not None:
-                    on_slide_count += 1
-                    # cell = (row, col) nên `heatmap_grid[row][col]` là row-major `grid[y][x]`.
-                    grid[cell[0]][cell[1]] += 1
-                    points.append((x, y))
-                label = _slide_aoi_label(x, y, slide_aois)
-            else:
+        updates: list[tuple[int, float | None, float | None, str | None, dict]] = []
+        for sample in rows:
+            gaze_count += 1
+            is_ok = sample.status == "ok"
+            layout = layout_by_id.get(sample.layout_id) if sample.layout_id else None
+            layout = layout or default_layout
+            has_layout = layout is not None and bool(layout.slide_rect)
+            coords = (
+                (float(sample.viewport_x), float(sample.viewport_y))
+                if is_ok
+                and sample.viewport_x is not None
+                and sample.viewport_y is not None
+                else None
+            )
+            mapped: tuple[float, float] | None = None
+            quality = sample.quality_flags or {}
+
+            if is_ok and coords is not None and not is_quiz:
+                if has_layout:
+                    mapped = map_viewport_to_slide(
+                        coords[0], coords[1], layout.slide_rect
+                    )
+                else:
+                    quality = dict(quality)
+                    quality["layout_missing"] = True
+
+            elements = layout.elements if layout else []
+            label: str | None = None
+            slide_x: float | None = None
+            slide_y: float | None = None
+            if mapped is not None:
+                slide_x, slide_y = mapped
+                if _is_inside_slide(slide_x, slide_y):
+                    cell = _grid_cell(slide_x, slide_y)
+                    if cell is not None:
+                        on_slide_count += 1
+                        # cell = (row, col) nên `heatmap_grid[row][col]` là row-major `grid[y][x]`.
+                        grid[cell[0]][cell[1]] += 1
+                        points.append((slide_x, slide_y))
+                    label = _slide_aoi_label(slide_x, slide_y, slide_aois)
+                else:
+                    label = _ui_aoi_label(
+                        coords[0], coords[1], ui_aois, elements
+                    )
+            elif is_ok and coords is not None:
                 label = _ui_aoi_label(
                     coords[0], coords[1], ui_aois, elements
                 )
-        elif is_ok:
-            sample.slide_x = None
-            sample.slide_y = None
-            if coords is not None:
-                label = _ui_aoi_label(
-                    coords[0], coords[1], ui_aois, elements
-                )
-        else:
-            sample.slide_x = None
-            sample.slide_y = None
 
-        # Một nhãn duy nhất mỗi sample: slide (SLIDE_*) hoặc UI (tên AOI).
-        sample.aoi_label = label
+            # Một nhãn duy nhất mỗi sample: slide (SLIDE_*) hoặc UI (tên AOI).
+            updates.append((sample.id, slide_x, slide_y, label, quality))
 
-        if is_ok and label is not None:
-            stats = aoi_stats.setdefault(label, {"ms": 0, "samples": 0})
-            stats["samples"] += 1
+            if is_ok and label is not None:
+                stats = aoi_stats.setdefault(label, {"ms": 0, "samples": 0})
+                stats["samples"] += 1
 
-        if is_ok and previous_ok and previous_time is not None:
-            delta = (sample.event_time - previous_time).total_seconds() * 1000
-            if 0 <= delta <= max_gap_ms:
-                elapsed = int(delta)
-                dwell_ms += elapsed
-                if label is not None:
-                    stats = aoi_stats.setdefault(label, {"ms": 0, "samples": 0})
-                    stats["ms"] += elapsed
-        previous_time = sample.event_time
-        previous_ok = is_ok
+            if is_ok and previous_ok and previous_time is not None:
+                delta = (sample.event_time - previous_time).total_seconds() * 1000
+                if 0 <= delta <= max_gap_ms:
+                    elapsed = int(delta)
+                    dwell_ms += elapsed
+                    if label is not None:
+                        stats = aoi_stats.setdefault(
+                            label, {"ms": 0, "samples": 0}
+                        )
+                        stats["ms"] += elapsed
+            previous_time = sample.event_time
+            previous_ok = is_ok
 
-    view.gaze_count = gaze_count
-    view.on_slide_gaze_count = on_slide_count
-    view.tracked_duration_ms = dwell_ms
-    view.fixation_count = _count_fixations(points)
-    view.heatmap_grid = grid
-    view.aoi_stats = aoi_stats
-    view.analysis_status = "ready"
-    view.analysis_version = ANALYSIS_VERSION
-    view.analyzed_at = _now()
-    await db.flush()
+        await db.execute(
+            _SAMPLE_UPDATE_SQL,
+            {
+                "ids": [row[0] for row in updates],
+                "slide_xs": [row[1] for row in updates],
+                "slide_ys": [row[2] for row in updates],
+                "labels": [row[3] for row in updates],
+                "flags": [row[4] or {} for row in updates],
+            },
+        )
+        await db.commit()
+
+        last_time = rows[-1].event_time
+        last_sequence = rows[-1].sequence
+        last_id = rows[-1].id
+        if len(rows) < SAMPLE_CHUNK_SIZE:
+            break
+
+    # Câu UPDATE tự bỏ qua nếu có sample mới hơn snapshot, nên view giữ
+    # `pending` và job kế tiếp sẽ phân tích lại.
+    await db.execute(
+        _VIEW_UPDATE_SQL,
+        {
+            "gaze_count": gaze_count,
+            "on_slide_gaze_count": on_slide_count,
+            "tracked_duration_ms": dwell_ms,
+            "fixation_count": _count_fixations(points),
+            "heatmap_grid": json.dumps(grid),
+            "aoi_stats": json.dumps(aoi_stats, ensure_ascii=False),
+            "analysis_version": ANALYSIS_VERSION,
+            "analyzed_at": _now(),
+            "view_id": view.id,
+            "max_id": max_id,
+        },
+    )
+    await db.commit()
+    await db.refresh(view)
     return view

@@ -105,6 +105,10 @@ def collect_frontend(run: Path) -> dict:
     }
 
 
+def collect_auth(run: Path) -> dict:
+    return read_json(run / "backend/auth_probe.json") or {}
+
+
 def collect_redis(run: Path) -> dict:
     base = run / "backend/redis"
     return {
@@ -141,6 +145,7 @@ def main() -> int:
         "backend": {
             "k6": collect_k6(run),
             "query_counts": collect_query_counts(run),
+            "auth": collect_auth(run),
         },
         "gaze": collect_gaze(run),
         "chatbot": collect_chatbot(run),
@@ -171,6 +176,17 @@ def main() -> int:
             ["endpoint", "queries_total", "iterations", "queries_per_request"],
         )
         lines.append("")
+    auth = summary["backend"].get("auth") or {}
+    if auth:
+        lines += [
+            "### Auth memory-hit",
+            "",
+            f"- p50/p95/p99: {auth.get('p50_ms')} / {auth.get('p95_ms')} / "
+            f"{auth.get('p99_ms')} ms",
+            f"- Redis GET/call: {auth.get('redis_get_per_call')} "
+            f"({auth.get('redis_get_calls')} / {auth.get('iterations')})",
+            "",
+        ]
     gaze = summary["gaze"]
     if gaze.get("stage_total"):
         lines += [

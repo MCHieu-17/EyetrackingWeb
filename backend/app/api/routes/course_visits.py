@@ -22,6 +22,7 @@ from app.schemas.visit import (
     CourseVisitHeartbeatOut,
     CourseVisitOut,
 )
+from app.services import course_stats
 from app.services.gaze_views import close_open_views_for_visit
 
 router = APIRouter(tags=["course-visits"])
@@ -62,16 +63,22 @@ async def _enrollment_for_user(
 
 async def _visit_for_user(
     db: AsyncSession, visit_id: str, user: User
-) -> CourseVisit:
-    visit = await db.get(CourseVisit, visit_id)
-    if visit is None:
+) -> tuple[CourseVisit, str]:
+    row = (
+        await db.execute(
+            select(CourseVisit, Enrollment.course_id, Enrollment.student_id)
+            .join(Enrollment, Enrollment.id == CourseVisit.enrollment_id)
+            .where(CourseVisit.id == visit_id)
+        )
+    ).one_or_none()
+    if row is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy ca học"
         )
-    enrollment = await db.get(Enrollment, visit.enrollment_id)
-    if enrollment is None or enrollment.student_id != user.id:
+    visit, course_id, student_id = row
+    if student_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
-    return visit
+    return visit, course_id
 
 
 async def get_or_create_visit(
@@ -171,7 +178,7 @@ async def end_course_visit(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit = await _visit_for_user(db, visit_id, user)
+    visit, course_id = await _visit_for_user(db, visit_id, user)
     if visit.status == "active":
         now = _now()
         visit.status = body.status
@@ -182,6 +189,7 @@ async def end_course_visit(
         await close_open_views_for_visit(db, visit.id, now)
         await db.commit()
         await db.refresh(visit)
+        await course_stats.invalidate_course_stats(course_id)
     return _visit_out(visit)
 
 
@@ -194,7 +202,7 @@ async def heartbeat_course_visit(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit = await _visit_for_user(db, visit_id, user)
+    visit, _course_id = await _visit_for_user(db, visit_id, user)
     if visit.status != "active":
         raise HTTPException(
             status.HTTP_409_CONFLICT,

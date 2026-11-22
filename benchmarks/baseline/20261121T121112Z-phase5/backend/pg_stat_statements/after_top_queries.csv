@@ -1,0 +1,43 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"INSERT INTO gaze_samples (
+        content_view_id, layout_id, client_batch_id, sequence, event_time,
+        viewport_x, viewport_y, status, quality_flags
+    )
+    SELECT
+        CAST($1 AS uuid),
+        CAST(v.layout_id AS uuid),
+      ",80,212.41553000000005,2.6551941250000004,3200,90588,0,0
+"SELECT $2 FROM ONLY ""public"".""content_views"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,15.310242999999991,0.004784450937500006,3200,12800,0,0
+"SELECT $2 FROM ONLY ""public"".""view_layouts"" x WHERE ""id"" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",3200,13.095658999999998,0.0040923934374999995,3200,12800,0,0
+"SELECT slides.id, slides.lesson_id, slides.position, slides.page_number, slides.title, slides.transcript, slides.embedding, slides.content_tsv, slides.index_status, slides.index_error, slides.pipeline_version, slides.model_version, slides.c",20,11.807445,0.5903722499999999,120,480,0,0
+"SELECT content_views.id, content_views.session_id, view_layouts.id AS layout_id 
+FROM content_views LEFT OUTER JOIN view_layouts ON view_layouts.id = $1::UUID AND view_layouts.content_view_id = content_views.id 
+WHERE content_views.id = $2:",80,2.7820860000000005,0.034776075000000004,80,400,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",80,2.7691390000000005,0.034614237500000006,80,480,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",1,1.920071,1.920071,25,928,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",1,1.810103,1.810103,82,1062,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",68,1.7444210000000002,0.025653250000000002,0,68,0,0
+UPDATE content_views SET analysis_status=$1::VARCHAR WHERE content_views.id = $2::UUID AND content_views.analysis_status != $3::VARCHAR,80,1.3607000000000002,0.017008749999999993,0,240,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, 160 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO",1,1.33808,1.33808,19,502,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",68,1.201379,0.01766733823529412,0,68,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( 'shared_buffers' , 'work_mem' , 'maintenance_work_mem' , 'effective_cache_size' , 'max_connections' , 'random_page_cost' , 'track_io_timing' , 'shared_preload_lib",1,1.106796,1.106796,10,171,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at 
+FROM lessons 
+WHERE lessons.id = $1::UUID",40,0.898269,0.022456724999999997,40,80,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",20,0.740851,0.03704255,20,60,0,0
+"COPY  ( SELECT name, setting, unit, category FROM pg_settings WHERE name IN ( $1 , $2 , $3 , $4 , $5 , $6 , $7 , $8 , $9 , $10 ) ORDER BY name ) TO STDOUT WITH CSV HEADER",1,0.5747420000000001,0.5747420000000001,10,3,0,0
+"SELECT course_modules.id, course_modules.course_id, course_modules.title, course_modules.position, course_modules.created_at, course_modules.updated_at 
+FROM course_modules 
+WHERE course_modules.id = $1::UUID",20,0.470561,0.023528049999999995,20,20,0,0
+"SELECT enrollments.student_id 
+FROM enrollments 
+WHERE enrollments.id = $1::UUID",20,0.41096600000000005,0.0205483,20,60,0,0
+BEGIN,336,0.3827249999999999,0.001139062500000001,0,0,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.3822,0.019109999999999995,20,20,0,0
+"COPY  ( SELECT relname, indexrelname, idx_scan, idx_tup_read, idx_tup_fetch FROM pg_stat_user_indexes ORDER BY idx_scan ASC, relname ) TO STDOUT WITH CSV HEADER",1,0.338348,0.338348,82,276,0,0
+"SELECT media_assets.id, media_assets.course_id, media_assets.storage_backend, media_assets.object_key, media_assets.sha256, media_assets.mime_type, media_assets.byte_size, media_assets.state, media_assets.page_count, media_assets.source_for",20,0.30734800000000007,0.0153674,20,20,0,0
+ROLLBACK,256,0.2733049999999999,0.0010675976562499999,0,0,0,0
+"COPY  ( SELECT relname, seq_scan, idx_scan, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup FROM pg_stat_user_tables ORDER BY seq_scan DESC, relname ) TO STDOUT WITH CSV HEADER",1,0.24717800000000004,0.24717800000000004,25,30,0,0
+"COPY  ( SELECT pid, state, wait_event_type, wait_event, left ( query, $1 ) AS query, now ( ) - query_start AS age FROM pg_stat_activity WHERE datname = current_database ( ) AND pid <> pg_backend_pid ( ) ORDER BY query_start NULLS LAST ) TO ",1,0.120649,0.120649,19,4,0,0
+COMMIT,80,0.07749800000000003,0.0009687250000000001,0,0,0,0
+SELECT 1,1,0.003364,0.003364,1,0,0,0

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+from contextlib import contextmanager
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +24,12 @@ router = APIRouter(
 
 _ingestion: Ingestion | None = None
 _init_lock = threading.Lock()
-_job_lock = threading.Lock()
+# Single-flight theo lesson + trần số job ingest chạy song song. Hai lesson
+# khác nhau vẫn ingest đồng thời; request trùng lesson xếp hàng rồi thấy slide
+# đã ready và bỏ qua.
+_job_locks: dict[tuple[str, ...], threading.Lock] = {}
+_job_locks_guard = threading.Lock()
+_job_capacity = threading.BoundedSemaphore(2)
 
 
 def get_ingestion() -> Ingestion:
@@ -42,13 +48,31 @@ def close_ingestion() -> None:
         _ingestion = None
 
 
-def _run(func, *args) -> tuple[int, int, list[str]]:
-    with _job_lock:
-        return func(*args)
+@contextmanager
+def _job_slot(keys: tuple[str, ...]):
+    with _job_locks_guard:
+        lock = _job_locks.setdefault(keys, threading.Lock())
+    lock.acquire()
+    _job_capacity.acquire()
+    try:
+        yield
+    finally:
+        _job_capacity.release()
+        lock.release()
+
+
+def _run_ingest(ingestion: Ingestion, slide_ids: list[str]):
+    with _job_slot(ingestion.job_keys(slide_ids)):
+        return ingestion.embed_slides(slide_ids)
+
+
+def _run_reindex_all(ingestion: Ingestion):
+    with _job_slot(("reindex-all",)):
+        return ingestion.reindex_all()
 
 
 async def _run_async(func, *args) -> tuple[int, int, list[str]]:
-    return await asyncio.to_thread(_run, func, *args)
+    return await asyncio.to_thread(func, *args)
 
 
 def _result(stats: tuple[int, int, list[str]]) -> IngestResult:
@@ -75,7 +99,8 @@ def _ingest_failed(exc: Exception) -> HTTPException:
 async def embed_slides(payload: IngestSlidesRequest):
     try:
         stats = await _run_async(
-            get_ingestion().embed_slides,
+            _run_ingest,
+            get_ingestion(),
             payload.slide_ids,
         )
     except LookupError:
@@ -92,7 +117,7 @@ async def embed_slides(payload: IngestSlidesRequest):
 @router.post("/reindex-all", response_model=IngestResult)
 async def reindex_all():
     try:
-        stats = await _run_async(get_ingestion().reindex_all)
+        stats = await _run_async(_run_reindex_all, get_ingestion())
     except VLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except DB_ERRORS as exc:

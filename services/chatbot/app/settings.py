@@ -195,7 +195,7 @@ def llm_max_retries() -> int:
 
 
 def llm_query_timeout() -> float:
-    return float(_env("LLM_QUERY_TIMEOUT", "30"))
+    return float(_env("LLM_QUERY_TIMEOUT", "3"))
 
 
 def llm_answer_timeout() -> float:
@@ -219,7 +219,7 @@ def llm_requests_per_second() -> float:
 
 
 def llm_queue_timeout() -> float:
-    return float(_env("LLM_QUEUE_TIMEOUT", "30"))
+    return float(_env("LLM_QUEUE_TIMEOUT", "5"))
 
 
 def rag_top_k() -> int:
@@ -265,11 +265,12 @@ def hyde_min_query_words() -> int:
 
 
 def citation_gate_tokens() -> int:
-    """Số token (xấp xỉ theo từ) buffer trước khi kiểm tra citation."""
+    """Deprecated: pipeline stream ngay, không còn buffer theo ngưỡng này."""
     return int(_env("CITATION_GATE_TOKENS", "200"))
 
 
 def citation_retry_max() -> int:
+    """Deprecated: pipeline không còn retry toàn bộ câu trả lời."""
     return int(_env("CITATION_RETRY_MAX", "1"))
 
 

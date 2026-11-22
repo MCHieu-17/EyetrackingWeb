@@ -1,0 +1,59 @@
+{
+  "mode": "retriever",
+  "retriever": {
+    "query": "Giải thích embedding và vector search trong bài giảng.",
+    "hyde": true,
+    "iterations": 5,
+    "embed_query_ms": {
+      "count": 5,
+      "p50": 0.07,
+      "p95": 0.07,
+      "p99": 0.07,
+      "mean": 0.07
+    },
+    "embed_hyde_ms": {
+      "count": 5,
+      "p50": 0.03,
+      "p95": 0.05,
+      "p99": 0.05,
+      "mean": 0.04
+    },
+    "bm25_ms": {
+      "count": 5,
+      "p50": 0.84,
+      "p95": 14.66,
+      "p99": 14.66,
+      "mean": 3.46
+    },
+    "dense_ms": {
+      "count": 5,
+      "p50": 1.75,
+      "p95": 3.99,
+      "p99": 3.99,
+      "mean": 1.95
+    },
+    "hyde_dense_ms": {
+      "count": 5,
+      "p50": 1.7,
+      "p95": 2.28,
+      "p99": 2.28,
+      "mean": 1.92
+    },
+    "rrf_fuse_ms": {
+      "count": 5,
+      "p50": 0.06,
+      "p95": 0.08,
+      "p99": 0.08,
+      "mean": 0.07
+    },
+    "asearch_total_ms": {
+      "count": 5,
+      "p50": 2.54,
+      "p95": 4.3,
+      "p99": 4.3,
+      "mean": 2.93
+    },
+    "query_dim": 1024,
+    "hyde_dim": 1024
+  }
+}

@@ -99,7 +99,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/eyetracking_bench
       CORS_ORIGINS: http://127.0.0.1:3100,http://localhost:3100
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       ADMIN_DB_URL: ""
       # Media local trong bench; không dùng credential R2 của .env dev.
       R2_ACCOUNT_ID: ""

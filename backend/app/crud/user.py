@@ -78,13 +78,16 @@ async def get_user_for_auth_cached(
     db: AsyncSession, user_id: str
 ) -> User | AuthUser | None:
     cache_key = f"auth:user:{user_id}"
-    cached = await cache_get_json(cache_key)
-    if isinstance(cached, dict) and cached.get("id") == user_id:
-        return _auth_user_from_dict(cached)
-
+    # Memory hit trước: tránh 1 Redis GET cho mỗi request đã xác thực.
     memory = _memory_get(cache_key)
     if memory is not None and memory.get("id") == user_id:
         return _auth_user_from_dict(memory)
+
+    cached = await cache_get_json(cache_key)
+    if isinstance(cached, dict) and cached.get("id") == user_id:
+        # Nạp lại memory để request sau không phải Redis GET lần nữa.
+        _memory_set(cache_key, cached)
+        return _auth_user_from_dict(cached)
 
     user = await get_user_for_auth(db, user_id)
     if user is not None:

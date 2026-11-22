@@ -1,0 +1,123 @@
+7029b9770353f7ca1f785bac3ffe57b7eeb8bf67
+improve_perform
+ M .env.example
+ M AGENTS.md
+ M README.md
+ M backend/Dockerfile
+ M backend/app/api/access.py
+ M backend/app/api/routes/analytics.py
+ M backend/app/api/routes/course_visits.py
+ M backend/app/api/routes/courses.py
+ M backend/app/api/routes/gaze_ingest.py
+ M backend/app/api/routes/learning_sessions.py
+ M backend/app/api/routes/lessons.py
+ M backend/app/core/config.py
+ M backend/app/core/rediscache.py
+ M backend/app/crud/user.py
+ M backend/app/embedding_worker.py
+ M backend/app/maintenance.py
+ M backend/app/models/gaze.py
+ M backend/app/services/access.py
+ M backend/app/services/analysis/__init__.py
+ M backend/app/services/analysis/export.py
+ M backend/app/services/analytics/replay.py
+ M backend/app/services/analytics/summary.py
+ M backend/app/services/chat_transport.py
+ M backend/app/services/content/__init__.py
+ M backend/app/services/content/courses.py
+ M backend/app/services/content/slide_reads.py
+ M backend/app/services/content/students.py
+ M backend/app/services/course_stats.py
+ M backend/app/services/course_students.py
+ M backend/app/services/embedding.py
+ M backend/app/services/embedding_jobs.py
+ M backend/app/services/metrics.py
+ M backend/app/worker_loop.py
+ M backend/tests/fast/test_analytics.py
+ M backend/tests/fast/test_chat.py
+ M backend/tests/fast/test_courses_content.py
+ M backend/tests/fast/test_maintenance.py
+ M backend/tests/fast/test_metrics.py
+ M backend/tests/fast/test_presentations.py
+ M benchmarks/README.md
+ M benchmarks/backend/collect_pg.sh
+ M benchmarks/backend/k6/api.js
+ M benchmarks/backend/k6/gaze_batch.js
+ M benchmarks/backend/redis_snapshot.sh
+ M benchmarks/backend/sql/explain/04_aoi_summary.sql
+ M benchmarks/backend/sql/explain/07_heatmap.sql
+ M benchmarks/backend/sql/explain/09_dense_hnsw_retrieval.sql
+ M benchmarks/baseline/latest
+ M benchmarks/chatbot/ingest_probe.py
+ M benchmarks/chatbot/query_probe.py
+ M benchmarks/chatbot/run.sh
+ M benchmarks/gaze/stage_latency.py
+ M benchmarks/lib/seed_bench.py
+ M benchmarks/report/summarize.py
+ M benchmarks/run_all.sh
+ M benchmarks/stack/docker-compose.bench.yml
+ M deploy/portainer/docker-compose.yml
+ M deploy/portainer/stack.env.example
+ M docker-compose.yml
+ M frontend/components/teacher/students-tab/index.tsx
+ M frontend/components/teacher/visualization/summary/summary-filters.tsx
+ M frontend/components/teacher/visualization/summary/summary-panel.tsx
+ M frontend/hooks/use-teacher.ts
+ M frontend/lib/api/teacher.ts
+ M frontend/lib/query-keys.ts
+ M nginx/default.conf
+ M nginx/nginx.conf
+ M services/chatbot/README.md
+ M services/chatbot/app/api/chat.py
+ M services/chatbot/app/api/ingest.py
+ M services/chatbot/app/services/ingest.py
+ M services/chatbot/app/settings.py
+ M services/chatbot/app/workflow/embedding_queue.py
+ M services/chatbot/app/workflow/generation.py
+ M services/chatbot/app/workflow/lms.py
+ M services/chatbot/app/workflow/pipeline.py
+ M services/chatbot/app/workflow/providers.py
+ M services/chatbot/app/workflow/query.py
+ M services/chatbot/app/workflow/retrieval.py
+ M services/chatbot/app/workflow/workload.py
+ M services/chatbot/tests/conftest.py
+ M services/chatbot/tests/fast/test_ingest_api.py
+ M services/chatbot/tests/fast/test_query.py
+ M services/gaze/README.md
+ M services/gaze/app/api/session.py
+ M services/gaze/app/services/pipeline.py
+ M services/gaze/app/services/runtime.py
+ M services/gaze/app/services/sessions.py
+ M services/gaze/app/settings.py
+ M services/gaze/tests/fast/test_stream_ws.py
+ M services/gaze/tests/smoke/test_model_smoke.py
+?? backend/tests/fast/test_worker_loop.py
+?? benchmarks/backend/analysis_probe.py
+?? benchmarks/backend/auth_probe.py
+?? benchmarks/backend/export_probe.py
+?? benchmarks/backend/maintenance_probe.py
+?? benchmarks/backend/sql/explain/10_export_keyset.sql
+?? benchmarks/backend/sql/explain/11_visit_gaze_keyset.sql
+?? benchmarks/baseline/20261121T0600Z-phase1/
+?? benchmarks/baseline/20261121T0818Z-phase2/
+?? benchmarks/baseline/20261121T1100Z-phase3-quick/
+?? benchmarks/baseline/20261121T1106Z-phase4/
+?? benchmarks/baseline/20261121T1110Z-phase4-100/
+?? benchmarks/baseline/20261121T1120Z-phase3-full/
+?? benchmarks/baseline/20261121T1135Z-phase4-final/
+?? benchmarks/baseline/20261121T1150Z-phase3-final-quick/
+?? benchmarks/baseline/20261121T121112Z-phase5/
+?? benchmarks/baseline/20261121T125103Z-phase51/
+?? benchmarks/baseline/20261121T180700Z-phase6/
+?? benchmarks/baseline/20261122T032544Z-phase7/
+?? benchmarks/baseline/20261122T033439Z-phase7-final/
+?? benchmarks/baseline/20261122T045443Z-baseline/
+?? benchmarks/baseline/20261122T0500Z-phase9/
+?? benchmarks/baseline/20261122T0520Z-phase8/
+?? benchmarks/baseline/20261122T0530Z-phase9/
+?? benchmarks/chatbot/retrieval_probe.py
+?? db/migrations/006_gaze_sample_indexes.sql
+?? docs/
+?? services/chatbot/tests/fast/test_embedding_queue.py
+?? services/chatbot/tests/fast/test_retrieval.py
+?? services/gaze/tests/fast/test_runtime_batch.py

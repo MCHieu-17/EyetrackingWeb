@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 
@@ -11,8 +12,11 @@ import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 AccessCheck = Callable[[], Awaitable[None]]
 
+_ACCESS_RECHECK_SECONDS = 30
 _client_instance: httpx.AsyncClient | None = None
 
 
@@ -51,11 +55,18 @@ async def _guarded_lines(
     """Đọc SSE, gửi heartbeat và kiểm tra lại quyền khi stream im lặng."""
     lines = response.aiter_lines().__aiter__()
     pending = asyncio.create_task(anext(lines))
+    loop = asyncio.get_running_loop()
+    # Route đã kiểm tra quyền trước khi mở stream; chỉ check lại mỗi 30 s.
+    last_check = loop.time()
     try:
         while True:
             done, _ = await asyncio.wait({pending}, timeout=5)
             if not done:
-                await ensure_access()
+                now = loop.time()
+                if now - last_check >= _ACCESS_RECHECK_SECONDS:
+                    await ensure_access()
+                    logger.info("chat access rechecked after %.1fs", now - last_check)
+                    last_check = now
                 yield ": heartbeat"
                 continue
             try:

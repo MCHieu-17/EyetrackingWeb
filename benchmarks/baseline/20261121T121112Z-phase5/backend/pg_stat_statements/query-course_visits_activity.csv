@@ -1,0 +1,20 @@
+pid,state,wait_event_type,wait_event,query,age
+1865,idle,Client,ClientRead,COMMIT;,00:04:07.205778
+1898,idle,Client,ClientRead,COMMIT;,00:04:07.204874
+1902,idle,Client,ClientRead,COMMIT;,00:04:07.189728
+1909,idle,Client,ClientRead,COMMIT;,00:04:07.189091
+1878,idle,Client,ClientRead,COMMIT;,00:03:03.818789
+2266,idle,Client,ClientRead,COMMIT;,00:03:03.818142
+1903,idle,Client,ClientRead,COMMIT;,00:03:03.815742
+1876,idle,Client,ClientRead,COMMIT;,00:03:03.814195
+1879,idle,Client,ClientRead,ROLLBACK;,00:02:04.963169
+1877,idle,Client,ClientRead,ROLLBACK;,00:01:01.851938
+1864,idle,Client,ClientRead,ROLLBACK;,00:00:29.975437
+1906,idle,Client,ClientRead,ROLLBACK;,00:00:29.975406
+1899,idle,Client,ClientRead,ROLLBACK;,00:00:29.835774
+59,idle,Client,ClientRead,SELECT 1,00:00:29.022934
+1867,idle,Client,ClientRead,ROLLBACK;,00:00:19.600628
+2437,idle,Client,ClientRead,ROLLBACK;,00:00:04.737987
+2036,idle,Client,ClientRead,ROLLBACK;,00:00:01.152772
+46,idle,Client,ClientRead,ROLLBACK;,00:00:00.592661
+2436,idle,Client,ClientRead,ROLLBACK;,00:00:00.121753

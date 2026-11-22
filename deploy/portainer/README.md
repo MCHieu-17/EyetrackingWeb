@@ -63,16 +63,16 @@ Workflow `.github/workflows/release.yml` build 7 image:
 ### Cách 1 — GitHub Actions (khuyến nghị)
 
 ```bash
-git tag v1.1.1
-git push origin v1.1.1
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
-- Tag `v*` build **toàn bộ** image và gắn tag `v1.1.1`.
+- Tag `v*` build **toàn bộ** image và gắn tag `v1.3.0`.
 - Push `main` chỉ build image có path thay đổi, gắn `sha-...` + `latest`.
 - Có thể chạy tay workflow `Release` (build toàn bộ).
 
-Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.1.1`, phải push tag
-`v1.1.1` và chờ workflow build xong **trước khi** deploy stack.
+Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.3.0`, phải push tag
+`v1.3.0` và chờ workflow build xong **trước khi** deploy stack.
 
 Sau lần push đầu, vào GitHub → Packages:
 
@@ -86,13 +86,13 @@ Sau lần push đầu, vào GitHub → Packages:
 
 ```bash
 docker login ghcr.io
-IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.1 ./scripts/publish_images.sh
+IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.0 ./scripts/publish_images.sh
 ```
 
 Bỏ qua gaze nếu chỉ muốn build phần còn lại:
 
 ```bash
-SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.1.1 ./scripts/publish_images.sh
+SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.0 ./scripts/publish_images.sh
 ```
 
 ---

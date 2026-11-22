@@ -7,7 +7,21 @@ dashboard chỉ đọc một hàng cho mỗi lượt xem, không quét toàn b�
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, func, select
+from sqlalchemy import (
+    BigInteger,
+    Integer,
+    String,
+    and_,
+    cast,
+    distinct,
+    exists,
+    func,
+    literal_column,
+    or_,
+    select,
+    true,
+    tuple_,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -60,34 +74,25 @@ def _display_name(label: str, slide_names: dict[str, str]) -> str:
     return label
 
 
-def _add_aoi(
-    bucket: dict[str, dict],
+def _new_aoi(
     label: str,
     *,
     duration_ms: int,
     sample_count: int,
-    student_id: str,
-    slide_id: str | None,
+    student_count: int,
+    slide_count: int,
     slide_names: dict[str, str],
-) -> None:
-    entry = bucket.setdefault(
-        label,
-        {
-            "label": label,
-            "name": _display_name(label, slide_names),
-            "domain": _domain(label),
-            "duration_ms": 0,
-            "sample_count": 0,
-            "students": set(),
-            "slides": set(),
-            "is_unlabeled": _is_unlabeled(label),
-        },
-    )
-    entry["duration_ms"] += duration_ms
-    entry["sample_count"] += sample_count
-    entry["students"].add(student_id)
-    if slide_id:
-        entry["slides"].add(slide_id)
+) -> dict:
+    return {
+        "label": label,
+        "name": _display_name(label, slide_names),
+        "domain": _domain(label),
+        "duration_ms": duration_ms,
+        "sample_count": sample_count,
+        "student_count": student_count,
+        "slide_count": slide_count,
+        "is_unlabeled": _is_unlabeled(label),
+    }
 
 
 def _aoi_rows(bucket: dict[str, dict], *, total_ms: int = 0) -> list[AoiSummaryAoiOut]:
@@ -99,11 +104,11 @@ def _aoi_rows(bucket: dict[str, dict], *, total_ms: int = 0) -> list[AoiSummaryA
             duration_ms=entry["duration_ms"],
             sample_count=entry["sample_count"],
             share=round(entry["duration_ms"] / total_ms, 6) if total_ms else 0.0,
-            student_count=len(entry["students"]),
-            slide_count=len(entry["slides"]),
+            student_count=entry["student_count"],
+            slide_count=entry["slide_count"],
             mixed_slides=(
                 entry["label"].startswith(metrics.SLIDE_LABEL_PREFIX)
-                and len(entry["slides"]) > 1
+                and entry["slide_count"] > 1
             ),
             is_unlabeled=entry["is_unlabeled"],
         )
@@ -129,17 +134,39 @@ def view_dwell_ms_expr(visit_entity=CourseVisit):
     return func.extract("epoch", ended_at - ContentView.started_at) * 1000
 
 
-def _views_base(course: Course, body: AoiSummaryIn):
+def _views_scope(course: Course, body: AoiSummaryIn):
+    """Query nền chỉ đọc cột cần; tên hiển thị tính sẵn để aggregate cột phẳng."""
     stmt = (
         select(
-            ContentView,
-            LearningSession,
-            Lesson,
-            Slide,
-            Enrollment,
-            User,
-            StudentProfile,
-            CourseVisit,
+            ContentView.id.label("view_id"),
+            Lesson.id.label("lesson_id"),
+            Lesson.title.label("lesson_title"),
+            Lesson.kind.label("lesson_kind"),
+            Slide.id.label("slide_id"),
+            func.coalesce(
+                func.nullif(Slide.title, ""),
+                func.concat("Slide ", Slide.position + 1),
+            ).label("slide_title"),
+            Slide.page_number.label("page_number"),
+            Enrollment.status.label("enrollment_status"),
+            User.id.label("student_id"),
+            func.coalesce(func.nullif(User.full_name, ""), User.email).label(
+                "student_name"
+            ),
+            func.coalesce(StudentProfile.student_code, "").label("student_code"),
+            CourseVisit.started_at.label("visit_started_at"),
+            LearningSession.started_at.label("session_started_at"),
+            func.coalesce(
+                cast(CourseVisit.id, String),
+                func.concat("session:", cast(LearningSession.id, String)),
+            ).label("visit_key"),
+            ContentView.tracked_duration_ms,
+            ContentView.gaze_count,
+            ContentView.on_slide_gaze_count,
+            ContentView.aoi_stats,
+            ContentView.analysis_status,
+            ContentView.analysis_version,
+            ContentView.heatmap_grid,
             view_dwell_ms_expr().label("dwell_ms"),
         )
         .join(LearningSession, LearningSession.id == ContentView.session_id)
@@ -168,25 +195,134 @@ def _views_base(course: Course, body: AoiSummaryIn):
     return stmt
 
 
-def _views_stmt(
-    course: Course,
-    body: AoiSummaryIn,
-    *,
-    ignore_short_filter: bool = False,
-    include_sample_flag: bool = False,
-):
-    stmt = _views_base(course, body)
-    if include_sample_flag:
-        stmt = stmt.add_columns(
-            exists()
-            .where(GazeSample.content_view_id == ContentView.id)
-            .label("has_samples")
+def _included(views, body: AoiSummaryIn):
+    """Điều kiện "lượt >= ngưỡng"; true() khi bao gồm cả lượt ngắn."""
+    if body.include_short:
+        return true()
+    return views.c.dwell_ms >= settings.content_view_min_dwell_ms
+
+
+def _totals_stmt(views, included):
+    stale = or_(
+        views.c.analysis_status != "ready",
+        views.c.analysis_version != metrics.ANALYSIS_VERSION,
+        and_(
+            views.c.gaze_count > 0,
+            views.c.aoi_stats == literal_column("'{}'::jsonb"),
+        ),
+    )
+    return select(
+        func.count().filter(included).label("content_view_count"),
+        func.count()
+        .filter(views.c.dwell_ms < settings.content_view_min_dwell_ms)
+        .label("short_view_count"),
+        func.count(distinct(views.c.visit_key)).filter(included).label("visit_count"),
+        func.count(distinct(views.c.student_id))
+        .filter(included)
+        .label("student_count"),
+        cast(
+            func.coalesce(func.sum(views.c.tracked_duration_ms).filter(included), 0),
+            BigInteger,
+        ).label("tracked_ms"),
+        cast(
+            func.coalesce(func.sum(views.c.gaze_count).filter(included), 0),
+            BigInteger,
+        ).label("gaze_count"),
+        cast(
+            func.coalesce(func.sum(views.c.on_slide_gaze_count).filter(included), 0),
+            BigInteger,
+        ).label("on_slide_count"),
+        func.count().filter(and_(included, stale)).label("stale_view_count"),
+    ).select_from(views)
+
+
+def _label_rows_stmt(views, included):
+    """Một hàng cho mỗi (nhãn, nhóm) với tổng ms/samples và distinct count."""
+    kv = func.jsonb_each(views.c.aoi_stats).table_valued("key", "value")
+    ms = cast(kv.c.value.op("->>")(literal_column("'ms'")), BigInteger)
+    samples = cast(kv.c.value.op("->>")(literal_column("'samples'")), Integer)
+    return (
+        select(
+            func.grouping(views.c.lesson_id).label("g_lesson"),
+            func.grouping(views.c.slide_id).label("g_slide"),
+            func.grouping(views.c.student_id).label("g_student"),
+            func.grouping(views.c.visit_key).label("g_visit"),
+            kv.c.key.label("label"),
+            views.c.lesson_id,
+            views.c.slide_id,
+            views.c.student_id,
+            views.c.visit_key,
+            cast(func.coalesce(func.sum(ms), 0), BigInteger).label("duration_ms"),
+            cast(func.coalesce(func.sum(samples), 0), BigInteger).label("sample_count"),
+            func.count(distinct(views.c.student_id)).label("student_count"),
+            func.count(distinct(views.c.slide_id)).label("slide_count"),
         )
-    if not ignore_short_filter and not body.include_short:
-        stmt = stmt.where(
-            view_dwell_ms_expr() >= settings.content_view_min_dwell_ms
+        .select_from(views)
+        .join(kv, true())
+        .where(
+            included,
+            func.jsonb_typeof(kv.c.value) == "object",
+            or_(ms != 0, samples != 0),
         )
-    return stmt
+        .group_by(
+            func.grouping_sets(
+                kv.c.key,
+                tuple_(views.c.lesson_id, kv.c.key),
+                tuple_(views.c.slide_id, kv.c.key),
+                tuple_(views.c.student_id, kv.c.key),
+                tuple_(views.c.visit_key, kv.c.key),
+            )
+        )
+    )
+
+
+def _base_rows_stmt(views, included):
+    """Hàng nền theo từng nhóm để view không có AOI vẫn xuất hiện trong response."""
+    return (
+        select(
+            func.grouping(views.c.lesson_id).label("g_lesson"),
+            func.grouping(views.c.slide_id).label("g_slide"),
+            func.grouping(views.c.student_id).label("g_student"),
+            func.grouping(views.c.visit_key).label("g_visit"),
+            views.c.lesson_id,
+            views.c.lesson_title,
+            views.c.lesson_kind,
+            views.c.slide_id,
+            views.c.slide_title,
+            views.c.page_number,
+            views.c.student_id,
+            views.c.student_name,
+            views.c.student_code,
+            views.c.enrollment_status,
+            views.c.visit_key,
+            func.min(
+                func.coalesce(views.c.visit_started_at, views.c.session_started_at)
+            ).label("started_at"),
+            cast(
+                func.coalesce(func.sum(views.c.tracked_duration_ms), 0), BigInteger
+            ).label("tracked_ms"),
+        )
+        .where(included)
+        .group_by(
+            func.grouping_sets(
+                tuple_(views.c.lesson_id, views.c.lesson_title, views.c.lesson_kind),
+                tuple_(
+                    views.c.slide_id,
+                    views.c.slide_title,
+                    views.c.page_number,
+                    views.c.lesson_id,
+                    views.c.lesson_title,
+                ),
+                tuple_(
+                    views.c.student_id,
+                    views.c.student_name,
+                    views.c.student_code,
+                    views.c.enrollment_status,
+                ),
+                tuple_(views.c.visit_key, views.c.student_id, views.c.student_name),
+            )
+        )
+    )
 
 
 def _validate_time_range(body: AoiSummaryIn) -> None:
@@ -208,13 +344,15 @@ async def _slide_names(
         return {}
     rows = (
         await db.execute(
-            select(Aoi).where(Aoi.slide_id.in_(slide_ids))
+            select(Aoi.label, Aoi.code, Aoi.name).where(
+                Aoi.slide_id.in_(slide_ids),
+                Aoi.is_container.is_(False),
+                Aoi.code != metrics.NO_LABEL_CODE,
+            )
         )
-    ).scalars().all()
+    ).all()
     names: dict[str, str] = {}
     for row in rows:
-        if row.is_container or row.code == metrics.NO_LABEL_CODE:
-            continue
         text = metrics._slide_label_text(row.label, row.code)
         names[f"{metrics.SLIDE_LABEL_PREFIX}{text}"] = row.name
     return names
@@ -224,20 +362,12 @@ async def aoi_summary(
     db: AsyncSession, course: Course, body: AoiSummaryIn
 ) -> AoiSummaryOut:
     _validate_time_range(body)
-    # Một query duy nhất: giữ mọi view để đếm lượt ngắn, rồi lọc trong Python.
-    all_rows = (await db.execute(_views_stmt(course, body, ignore_short_filter=True))).all()
-    min_dwell_ms = settings.content_view_min_dwell_ms
-    short_view_count = sum(
-        1 for row in all_rows if int(row[-1] or 0) < min_dwell_ms
-    )
-    rows = (
-        all_rows
-        if body.include_short
-        else [row for row in all_rows if int(row[-1] or 0) >= min_dwell_ms]
-    )
+    views = _views_scope(course, body).subquery()
+    included = _included(views, body)
 
-    slide_ids = sorted({row[3].id for row in rows if row[3] is not None})
-    slide_names = await _slide_names(db, slide_ids)
+    totals = (await db.execute(_totals_stmt(views, included))).one()
+    base_rows = (await db.execute(_base_rows_stmt(views, included))).all()
+    label_rows = (await db.execute(_label_rows_stmt(views, included))).all()
 
     by_aoi: dict[str, dict] = {}
     by_lesson: dict[str, dict] = {}
@@ -245,184 +375,140 @@ async def aoi_summary(
     by_student: dict[str, dict] = {}
     by_visit: dict[str, dict] = {}
 
-    totals = {
-        "tracked": 0,
-        "labeled": 0,
-        "slide": 0,
-        "ui": 0,
-        "unmapped": 0,
-        "unlabeled": 0,
-        "gaze": 0,
-        "on_slide": 0,
-    }
-    visit_ids: set[str] = set()
-    student_ids: set[str] = set()
-    stale_views = 0
-
-    for view, session, lesson, slide, enrollment, student, profile, visit, _dwell in rows:
-        visit_key = (
-            visit.id
-            if visit is not None
-            else f"session:{session.id}"
-        )
-        visit_ids.add(visit_key)
-        student_ids.add(student.id)
-
-        lesson_entry = by_lesson.setdefault(
-            lesson.id,
-            {
-                "lesson_id": lesson.id,
-                "lesson_title": lesson.title,
-                "lesson_kind": lesson.kind,
-                "duration_ms": 0,
-                "sample_count": 0,
-                "aois": {},
-            },
-        )
-        student_entry = by_student.setdefault(
-            student.id,
-            {
-                "student_id": student.id,
-                "student_name": student.full_name or student.email,
-                "student_code": profile.student_code if profile else "",
-                "enrollment_status": enrollment.status,
-                "duration_ms": 0,
-                "sample_count": 0,
-                "aois": {},
-            },
-        )
-        visit_entry = by_visit.setdefault(
-            visit_key,
-            {
-                "visit_id": visit_key,
-                "student_id": student.id,
-                "student_name": student.full_name or student.email,
-                "started_at": (
-                    visit.started_at if visit is not None else session.started_at
-                ).isoformat(),
-                "duration_ms": 0,
-                "tracked_duration_ms": 0,
-                "slide_duration_ms": 0,
-                "ui_duration_ms": 0,
-                "unlabeled_duration_ms": 0,
-                "sample_count": 0,
-            },
-        )
-        slide_entry = None
-        if slide is not None:
-            slide_entry = by_slide.setdefault(
-                slide.id,
+    # Hàng nền: mọi view trong phạm vi đều xuất hiện, kể cả view không có AOI.
+    for row in base_rows:
+        grouping = (row.g_lesson, row.g_slide, row.g_student, row.g_visit)
+        if grouping == (1, 1, 0, 0):
+            by_visit.setdefault(
+                row.visit_key,
                 {
-                    "slide_id": slide.id,
-                    "slide_title": slide.title or f"Slide {slide.position + 1}",
-                    "lesson_id": lesson.id,
-                    "lesson_title": lesson.title,
-                    "page_number": slide.page_number,
+                    "visit_id": row.visit_key,
+                    "student_id": row.student_id,
+                    "student_name": row.student_name,
+                    "started_at": row.started_at.isoformat(),
+                    "duration_ms": 0,
+                    "tracked_duration_ms": int(row.tracked_ms or 0),
+                    "slide_duration_ms": 0,
+                    "ui_duration_ms": 0,
+                    "unlabeled_duration_ms": 0,
+                    "sample_count": 0,
+                },
+            )
+        elif grouping == (1, 1, 0, 1):
+            by_student.setdefault(
+                row.student_id,
+                {
+                    "student_id": row.student_id,
+                    "student_name": row.student_name,
+                    "student_code": row.student_code or "",
+                    "enrollment_status": row.enrollment_status,
+                    "duration_ms": 0,
+                    "sample_count": 0,
+                    "aois": {},
+                },
+            )
+        elif grouping == (0, 0, 1, 1):
+            if row.slide_id is None:
+                continue
+            by_slide.setdefault(
+                row.slide_id,
+                {
+                    "slide_id": row.slide_id,
+                    "slide_title": row.slide_title,
+                    "lesson_id": row.lesson_id,
+                    "lesson_title": row.lesson_title,
+                    "page_number": row.page_number,
+                    "duration_ms": 0,
+                    "sample_count": 0,
+                    "aois": {},
+                },
+            )
+        elif grouping == (0, 1, 1, 1):
+            by_lesson.setdefault(
+                row.lesson_id,
+                {
+                    "lesson_id": row.lesson_id,
+                    "lesson_title": row.lesson_title,
+                    "lesson_kind": row.lesson_kind,
                     "duration_ms": 0,
                     "sample_count": 0,
                     "aois": {},
                 },
             )
 
-        visit_entry["tracked_duration_ms"] += view.tracked_duration_ms
-        totals["tracked"] += view.tracked_duration_ms
-        totals["gaze"] += view.gaze_count
-        totals["on_slide"] += view.on_slide_gaze_count
+    slide_names = await _slide_names(db, sorted(by_slide))
 
-        if (
-            view.analysis_status != "ready"
-            or view.analysis_version != metrics.ANALYSIS_VERSION
-            or (not (view.aoi_stats or {}) and view.gaze_count > 0)
-        ):
-            stale_views += 1
-
-        for label, value in (view.aoi_stats or {}).items():
-            if not isinstance(value, dict):
-                continue
-            label = str(label)
-            duration_ms = int(value.get("ms", 0) or 0)
-            sample_count = int(value.get("samples", 0) or 0)
-            if duration_ms == 0 and sample_count == 0:
-                continue
-
-            _add_aoi(
-                by_aoi,
-                label,
-                duration_ms=duration_ms,
-                sample_count=sample_count,
-                student_id=student.id,
-                slide_id=slide.id if slide else None,
-                slide_names=slide_names,
-            )
-            _add_aoi(
-                lesson_entry["aois"],
-                label,
-                duration_ms=duration_ms,
-                sample_count=sample_count,
-                student_id=student.id,
-                slide_id=slide.id if slide else None,
-                slide_names=slide_names,
-            )
-            _add_aoi(
-                student_entry["aois"],
-                label,
-                duration_ms=duration_ms,
-                sample_count=sample_count,
-                student_id=student.id,
-                slide_id=slide.id if slide else None,
-                slide_names=slide_names,
-            )
-            if slide_entry is not None:
-                _add_aoi(
-                    slide_entry["aois"],
-                    label,
-                    duration_ms=duration_ms,
-                    sample_count=sample_count,
-                    student_id=student.id,
-                    slide_id=slide.id,
-                    slide_names=slide_names,
-                )
-
-            lesson_entry["duration_ms"] += duration_ms
-            lesson_entry["sample_count"] += sample_count
-            student_entry["duration_ms"] += duration_ms
-            student_entry["sample_count"] += sample_count
-            if slide_entry is not None:
-                slide_entry["duration_ms"] += duration_ms
-                slide_entry["sample_count"] += sample_count
-            visit_entry["duration_ms"] += duration_ms
-            visit_entry["sample_count"] += sample_count
-
-            totals["labeled"] += duration_ms
-            if _is_unlabeled(label):
-                totals["unlabeled"] += duration_ms
-            if label.startswith(metrics.SLIDE_LABEL_PREFIX):
-                totals["slide"] += duration_ms
-                visit_entry["slide_duration_ms"] += duration_ms
+    totals_by_label = {"labeled": 0, "slide": 0, "ui": 0, "unlabeled": 0}
+    for row in label_rows:
+        label = str(row.label)
+        duration_ms = int(row.duration_ms or 0)
+        sample_count = int(row.sample_count or 0)
+        entry = _new_aoi(
+            label,
+            duration_ms=duration_ms,
+            sample_count=sample_count,
+            student_count=int(row.student_count or 0),
+            slide_count=int(row.slide_count or 0),
+            slide_names=slide_names,
+        )
+        grouping = (row.g_lesson, row.g_slide, row.g_student, row.g_visit)
+        if grouping == (1, 1, 1, 1):
+            by_aoi[label] = entry
+            totals_by_label["labeled"] += duration_ms
+            if entry["is_unlabeled"]:
+                totals_by_label["unlabeled"] += duration_ms
+            if entry["domain"] == "slide":
+                totals_by_label["slide"] += duration_ms
             else:
-                totals["ui"] += duration_ms
-                visit_entry["ui_duration_ms"] += duration_ms
-            if _is_unlabeled(label):
-                visit_entry["unlabeled_duration_ms"] += duration_ms
+                totals_by_label["ui"] += duration_ms
+            continue
+        if grouping == (1, 1, 1, 0):
+            visit = by_visit.get(row.visit_key)
+            if visit is None:
+                continue
+            visit["duration_ms"] += duration_ms
+            visit["sample_count"] += sample_count
+            if entry["is_unlabeled"]:
+                visit["unlabeled_duration_ms"] += duration_ms
+            if entry["domain"] == "slide":
+                visit["slide_duration_ms"] += duration_ms
+            else:
+                visit["ui_duration_ms"] += duration_ms
+            continue
+        if grouping == (1, 1, 0, 1):
+            bucket = by_student.get(row.student_id)
+        elif grouping == (1, 0, 1, 1):
+            if row.slide_id is None:
+                continue
+            bucket = by_slide.get(row.slide_id)
+        elif grouping == (0, 1, 1, 1):
+            bucket = by_lesson.get(row.lesson_id)
+        else:
+            continue
+        if bucket is None:
+            continue
+        bucket["aois"][label] = entry
+        bucket["duration_ms"] += duration_ms
+        bucket["sample_count"] += sample_count
 
-    # `unmapped` được tính sau khi biết tổng tracked: tracked - mapped.
-    totals["unmapped"] = max(0, totals["tracked"] - (totals["labeled"] - totals["unlabeled"]))
-
+    tracked_ms = int(totals.tracked_ms or 0)
+    labeled_ms = totals_by_label["labeled"]
+    unlabeled_ms = totals_by_label["unlabeled"]
     return AoiSummaryOut(
         totals=AoiSummaryTotalsOut(
-            visit_count=len(visit_ids),
-            student_count=len(student_ids),
-            content_view_count=len(rows),
-            gaze_sample_count=totals["gaze"],
-            on_slide_gaze_count=totals["on_slide"],
-            tracked_duration_ms=totals["tracked"],
-            labeled_duration_ms=totals["labeled"],
-            slide_duration_ms=totals["slide"],
-            ui_duration_ms=totals["ui"],
-            unmapped_duration_ms=totals["unmapped"],
-            unlabeled_duration_ms=totals["unlabeled"],
+            visit_count=int(totals.visit_count or 0),
+            student_count=int(totals.student_count or 0),
+            content_view_count=int(totals.content_view_count or 0),
+            gaze_sample_count=int(totals.gaze_count or 0),
+            on_slide_gaze_count=int(totals.on_slide_count or 0),
+            tracked_duration_ms=tracked_ms,
+            labeled_duration_ms=labeled_ms,
+            slide_duration_ms=totals_by_label["slide"],
+            ui_duration_ms=totals_by_label["ui"],
+            unmapped_duration_ms=max(0, tracked_ms - (labeled_ms - unlabeled_ms)),
+            unlabeled_duration_ms=unlabeled_ms,
         ),
-        by_aoi=_aoi_rows(by_aoi, total_ms=totals["tracked"]),
+        by_aoi=_aoi_rows(by_aoi, total_ms=tracked_ms),
         by_lesson=[
             AoiSummaryLessonOut(
                 lesson_id=entry["lesson_id"],
@@ -433,7 +519,8 @@ async def aoi_summary(
                 aois=_aoi_rows(entry["aois"], total_ms=entry["duration_ms"]),
             )
             for entry in sorted(
-                by_lesson.values(), key=lambda item: item["lesson_title"]
+                by_lesson.values(),
+                key=lambda item: (item["lesson_title"], item["lesson_id"]),
             )
         ],
         by_slide=[
@@ -448,7 +535,8 @@ async def aoi_summary(
                 aois=_aoi_rows(entry["aois"], total_ms=entry["duration_ms"]),
             )
             for entry in sorted(
-                by_slide.values(), key=lambda item: item["slide_title"]
+                by_slide.values(),
+                key=lambda item: (item["slide_title"], item["slide_id"]),
             )
         ],
         by_student=[
@@ -462,7 +550,8 @@ async def aoi_summary(
                 aois=_aoi_rows(entry["aois"], total_ms=entry["duration_ms"]),
             )
             for entry in sorted(
-                by_student.values(), key=lambda item: -item["duration_ms"]
+                by_student.values(),
+                key=lambda item: (-item["duration_ms"], item["student_id"]),
             )
         ],
         by_visit=[
@@ -479,15 +568,17 @@ async def aoi_summary(
                 sample_count=entry["sample_count"],
             )
             for entry in sorted(
-                by_visit.values(), key=lambda item: item["started_at"], reverse=True
+                by_visit.values(),
+                key=lambda item: (item["started_at"], item["visit_id"]),
+                reverse=True,
             )
         ],
         meta=AoiSummaryMetaOut(
-            stale_view_count=stale_views,
+            stale_view_count=int(totals.stale_view_count or 0),
             analysis_version=metrics.ANALYSIS_VERSION,
             include_dropped=body.include_dropped,
             include_short=body.include_short,
-            short_view_count=short_view_count,
+            short_view_count=int(totals.short_view_count or 0),
             min_dwell_ms=settings.content_view_min_dwell_ms,
             max_gap_ms=settings.gaze_max_gap_ms,
         ),
@@ -528,11 +619,18 @@ async def aoi_heatmap(
     # Heatmap luôn là phạm vi một slide. Bỏ filter surface/lessonIds toàn cục
     # để client cũ hoặc request tay không thể vô tình làm heatmap về 0.
     scoped = body.model_copy(update={"surface": "all", "lesson_ids": []})
+    views = _views_scope(course, scoped).subquery()
     rows = (
         await db.execute(
-            _views_stmt(
-                course, scoped, include_sample_flag=True
-            ).where(ContentView.slide_id == slide.id)
+            select(
+                views.c.gaze_count,
+                views.c.analysis_status,
+                views.c.analysis_version,
+                views.c.heatmap_grid,
+                exists()
+                .where(GazeSample.content_view_id == views.c.view_id)
+                .label("has_samples"),
+            ).where(views.c.slide_id == slide.id, _included(views, scoped))
         )
     ).all()
 
@@ -540,21 +638,20 @@ async def aoi_heatmap(
     analyzed_view_count = 0
     stale_view_count = 0
     for row in rows:
-        view = row[0]
         # View chưa phân tích có gaze_count=0 dù đã có gaze thô; cờ EXISTS
         # trong cùng query tránh thêm một lượt quét GazeSample riêng.
-        if view.gaze_count <= 0 and not bool(row[-1]):
+        if row.gaze_count <= 0 and not bool(row.has_samples):
             continue
         current = (
-            view.analysis_status == "ready"
-            and view.analysis_version == metrics.ANALYSIS_VERSION
-            and _is_complete_grid(view.heatmap_grid)
+            row.analysis_status == "ready"
+            and row.analysis_version == metrics.ANALYSIS_VERSION
+            and _is_complete_grid(row.heatmap_grid)
         )
         if not current:
             stale_view_count += 1
             continue
         analyzed_view_count += 1
-        source = view.heatmap_grid or []
+        source = row.heatmap_grid or []
         for y, row in enumerate(source[: metrics.GRID_SIZE]):
             if not isinstance(row, list):
                 continue

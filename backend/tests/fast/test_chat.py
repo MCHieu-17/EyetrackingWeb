@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -148,6 +149,41 @@ async def test_chat_stream_error_is_sse_event(client):
     assert response.status_code == 200
     events = _events(response.text)
     assert any(name == "error" for name, _ in events)
+
+
+async def test_guarded_lines_throttles_access_recheck(monkeypatch):
+    from app.services import chat_transport
+
+    calls = 0
+
+    async def ensure_access() -> None:
+        nonlocal calls
+        calls += 1
+
+    class SlowResponse:
+        def aiter_lines(self):
+            async def lines():
+                await asyncio.sleep(0.2)
+                yield "data: {}"
+
+            return lines()
+
+    real_wait = asyncio.wait
+
+    async def fast_wait(tasks, timeout=None):
+        return await real_wait(tasks, timeout=0.01)
+
+    monkeypatch.setattr(chat_transport.asyncio, "wait", fast_wait)
+    monkeypatch.setattr(chat_transport, "_ACCESS_RECHECK_SECONDS", 0.05)
+
+    output = [
+        line
+        async for line in chat_transport._guarded_lines(
+            SlowResponse(), ensure_access
+        )
+    ]
+    assert ": heartbeat" in output
+    assert 1 <= calls < len(output)
 
 
 async def test_chat_without_configuration_returns_error_stream(client):

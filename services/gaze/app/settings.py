@@ -71,6 +71,8 @@ class Settings:
 
     gaze_fps: int = 15
     max_queue: int = 8
+    gpu_queue: int = 12
+    gpu_batch: int = 8
     frame_max_age_ms: int = 200
     inference_timeout_s: float = 5.0
 
@@ -94,6 +96,8 @@ class Settings:
             max_sessions=_env_int("MAX_SESSIONS", 100),
             gaze_fps=_env_int("GAZE_FPS", 15),
             max_queue=_env_int("MAX_QUEUE", 8),
+            gpu_queue=_env_int("GPU_QUEUE", 12),
+            gpu_batch=_env_int("GPU_BATCH", 8),
             frame_max_age_ms=_env_int("FRAME_MAX_AGE_MS", 200),
             inference_timeout_s=_env_float("INFERENCE_TIMEOUT_S", 5.0),
             oneeuro_beta=_env_float("ONEEURO_BETA", 0.5),
@@ -160,6 +164,10 @@ class Settings:
             raise RuntimeError("MAX_UPLOAD_BYTES/MAX_FRAME_BYTES phải > 0")
         if self.max_queue < 1:
             raise RuntimeError("MAX_QUEUE phải >= 1")
+        if not 1 <= self.gpu_queue <= 64:
+            raise RuntimeError("GPU_QUEUE phải nằm trong khoảng 1..64")
+        if not 1 <= self.gpu_batch <= 16:
+            raise RuntimeError("GPU_BATCH phải nằm trong khoảng 1..16")
         if self.frame_max_age_ms < 1:
             raise RuntimeError("FRAME_MAX_AGE_MS phải >= 1")
         if self.inference_timeout_s <= 0:

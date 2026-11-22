@@ -1,0 +1,339 @@
+{
+  "url": "http://backend:8001",
+  "mode": "backend",
+  "question_count": 8,
+  "results": [
+    {
+      "concurrency": 1,
+      "requests": 8,
+      "repeats": 1,
+      "wall_s": 61.999,
+      "rps": 0.129,
+      "error_rate": 0.0,
+      "verified_counts": {
+        "true": 8,
+        "false": 0
+      },
+      "finish_reason_counts": {
+        "stop": 8
+      },
+      "ttft_total_ms": {
+        "count": 8,
+        "p50": 136.42,
+        "p95": 205.32,
+        "p99": 205.32,
+        "mean": 139.24,
+        "max": 205.32
+      },
+      "t_prep_ms": {
+        "count": 8,
+        "p50": 16.53,
+        "p95": 90.08,
+        "p99": 90.08,
+        "mean": 26.32,
+        "max": 90.08
+      },
+      "t_retrieve_ms": {
+        "count": 8,
+        "p50": 1.62,
+        "p95": 4.64,
+        "p99": 4.64,
+        "mean": 2.06,
+        "max": 4.64
+      },
+      "t_llm_ttft_ms": {
+        "count": 8,
+        "p50": 111.3,
+        "p95": 121.66,
+        "p99": 121.66,
+        "mean": 110.72,
+        "max": 121.66
+      },
+      "t_total_ms": {
+        "count": 8,
+        "p50": 8053.72,
+        "p95": 11916.79,
+        "p99": 11916.79,
+        "mean": 7730.48,
+        "max": 11916.79
+      },
+      "t_conn_close_ms": {
+        "count": 8,
+        "p50": 8080.69,
+        "p95": 11943.61,
+        "p99": 11943.61,
+        "mean": 7749.73,
+        "max": 11943.61
+      },
+      "by_kind": {
+        "course_qa": {
+          "ttft_total_ms": {
+            "count": 8,
+            "p50": 136.42,
+            "p95": 205.32,
+            "p99": 205.32,
+            "mean": 139.24,
+            "max": 205.32
+          },
+          "t_total_ms": {
+            "count": 8,
+            "p50": 8053.72,
+            "p95": 11916.79,
+            "p99": 11916.79,
+            "mean": 7730.48,
+            "max": 11916.79
+          }
+        }
+      },
+      "errors": [],
+      "records_sample": [
+        {
+          "id": "qa-01",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 205.32,
+          "t_prep_ms": 90.08,
+          "t_retrieve_ms": 1.31,
+          "t_llm_ttft_ms": 113.82,
+          "t_total_ms": 6201.69,
+          "t_conn_close_ms": 6208.7,
+          "answer_chars": 1560,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-02",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 117.07,
+          "t_prep_ms": 10.06,
+          "t_retrieve_ms": 2.47,
+          "t_llm_ttft_ms": 104.43,
+          "t_total_ms": 8053.72,
+          "t_conn_close_ms": 8080.69,
+          "answer_chars": 1876,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-03",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 122.04,
+          "t_prep_ms": 13.79,
+          "t_retrieve_ms": 1.44,
+          "t_llm_ttft_ms": 106.69,
+          "t_total_ms": 10519.35,
+          "t_conn_close_ms": 10542.54,
+          "answer_chars": 1963,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-04",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 125.0,
+          "t_prep_ms": 15.99,
+          "t_retrieve_ms": 1.59,
+          "t_llm_ttft_ms": 107.32,
+          "t_total_ms": 8118.35,
+          "t_conn_close_ms": 8123.56,
+          "answer_chars": 1809,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-05",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 136.42,
+          "t_prep_ms": 17.71,
+          "t_retrieve_ms": 1.78,
+          "t_llm_ttft_ms": 116.83,
+          "t_total_ms": 7386.7,
+          "t_conn_close_ms": 7404.47,
+          "answer_chars": 1647,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        }
+      ]
+    },
+    {
+      "concurrency": 5,
+      "requests": 8,
+      "repeats": 1,
+      "wall_s": 17.971,
+      "rps": 0.445,
+      "error_rate": 0.0,
+      "verified_counts": {
+        "true": 8,
+        "false": 0
+      },
+      "finish_reason_counts": {
+        "stop": 8
+      },
+      "ttft_total_ms": {
+        "count": 8,
+        "p50": 319.04,
+        "p95": 403.05,
+        "p99": 403.05,
+        "mean": 254.06,
+        "max": 403.05
+      },
+      "t_prep_ms": {
+        "count": 8,
+        "p50": 37.49,
+        "p95": 84.82,
+        "p99": 84.82,
+        "mean": 34.52,
+        "max": 84.82
+      },
+      "t_retrieve_ms": {
+        "count": 8,
+        "p50": 2.67,
+        "p95": 6.46,
+        "p99": 6.46,
+        "mean": 2.99,
+        "max": 6.46
+      },
+      "t_llm_ttft_ms": {
+        "count": 8,
+        "p50": 275.0,
+        "p95": 352.05,
+        "p99": 352.05,
+        "mean": 216.3,
+        "max": 352.05
+      },
+      "t_total_ms": {
+        "count": 8,
+        "p50": 9427.99,
+        "p95": 12456.08,
+        "p99": 12456.08,
+        "mean": 9363.49,
+        "max": 12456.08
+      },
+      "t_conn_close_ms": {
+        "count": 8,
+        "p50": 9450.28,
+        "p95": 12461.18,
+        "p99": 12461.18,
+        "mean": 9386.68,
+        "max": 12461.18
+      },
+      "by_kind": {
+        "course_qa": {
+          "ttft_total_ms": {
+            "count": 8,
+            "p50": 319.04,
+            "p95": 403.05,
+            "p99": 403.05,
+            "mean": 254.06,
+            "max": 403.05
+          },
+          "t_total_ms": {
+            "count": 8,
+            "p50": 9427.99,
+            "p95": 12456.08,
+            "p99": 12456.08,
+            "mean": 9363.49,
+            "max": 12456.08
+          }
+        }
+      },
+      "errors": [],
+      "records_sample": [
+        {
+          "id": "qa-01",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 203.69,
+          "t_prep_ms": 33.35,
+          "t_retrieve_ms": 2.67,
+          "t_llm_ttft_ms": 166.42,
+          "t_total_ms": 9427.99,
+          "t_conn_close_ms": 9450.28,
+          "answer_chars": 1580,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-02",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 403.05,
+          "t_prep_ms": 84.82,
+          "t_retrieve_ms": 3.79,
+          "t_llm_ttft_ms": 314.35,
+          "t_total_ms": 7897.16,
+          "t_conn_close_ms": 7926.97,
+          "answer_chars": 1382,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-03",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 319.26,
+          "t_prep_ms": 38.77,
+          "t_retrieve_ms": 4.14,
+          "t_llm_ttft_ms": 276.23,
+          "t_total_ms": 11900.49,
+          "t_conn_close_ms": 11918.88,
+          "answer_chars": 2027,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-04",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 319.04,
+          "t_prep_ms": 37.49,
+          "t_retrieve_ms": 6.46,
+          "t_llm_ttft_ms": 275.0,
+          "t_total_ms": 12257.47,
+          "t_conn_close_ms": 12288.55,
+          "answer_chars": 2013,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-05",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 401.81,
+          "t_prep_ms": 47.9,
+          "t_retrieve_ms": 1.75,
+          "t_llm_ttft_ms": 352.05,
+          "t_total_ms": 12456.08,
+          "t_conn_close_ms": 12461.18,
+          "answer_chars": 2161,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        }
+      ]
+    }
+  ]
+}

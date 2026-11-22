@@ -1,0 +1,10 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT gaze_samples.id, gaze_samples.content_view_id, gaze_samples.layout_id, gaze_samples.client_batch_id, gaze_samples.sequence, gaze_samples.event_time, gaze_samples.viewport_x, gaze_samples.viewport_y, gaze_samples.slide_x, gaze_samples",20,13.167131000000001,0.6583565499999999,3600,160,0,0
+"SELECT content_views.id, content_views.session_id, content_views.slide_id, content_views.surface, content_views.sequence_no, content_views.started_at, content_views.ended_at, content_views.gaze_count, content_views.on_slide_gaze_count, cont",20,2.5192059999999996,0.1259603,20,120,0,0
+"SELECT min(gaze_samples.event_time) AS min_1 
+FROM gaze_samples 
+WHERE gaze_samples.content_view_id = $1::UUID",20,0.74396,0.03719800000000001,20,80,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",13,0.691874,0.05322107692307692,0,26,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",13,0.346238,0.026633692307692306,0,13,0,0
+BEGIN,66,0.092155,0.0013962878787878784,0,0,0,0
+ROLLBACK,66,0.056318999999999994,0.0008533181818181821,0,0,0,0

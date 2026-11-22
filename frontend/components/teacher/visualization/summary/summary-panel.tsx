@@ -32,6 +32,22 @@ function localDateIso(value: string, endOfDay = false): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+// Cửa sổ mặc định của tab Tổng hợp: chặn scan toàn bộ lịch sử ở production
+// nhưng vẫn cho người dùng xoá ngày để xem all-time.
+const DEFAULT_WINDOW_DAYS = 90;
+
+function dateInputValue(date: Date): string {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function defaultDateRange(): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - DEFAULT_WINDOW_DAYS);
+  return { from: dateInputValue(from), to: dateInputValue(to) };
+}
+
 interface SummaryQueryInput {
   scope: SummaryScope;
   lessonId: string;
@@ -116,12 +132,13 @@ export function SummaryPanel({
   const [scope, setScope] = useState<SummaryScope>(
     initialStudentId ? "student" : initialScope,
   );
+  const [initialRange] = useState(defaultDateRange);
   const [studentId, setStudentId] = useState(initialStudentId ?? "");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [visitId, setVisitId] = useState("");
   const [lessonId, setLessonId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(initialRange.from);
+  const [to, setTo] = useState(initialRange.to);
   const [surface, setSurface] = useState<SummarySurface>("all");
   const [includeDropped, setIncludeDropped] = useState(false);
   const [onlyCounted, setOnlyCounted] = useState(false);
@@ -199,12 +216,13 @@ export function SummaryPanel({
   const summary = useAoiSummary(courseId, query, enabled);
 
   const resetFilters = () => {
+    const range = defaultDateRange();
     setStudentId("");
     setSelectedStudentIds([]);
     setVisitId("");
     setLessonId("");
-    setFrom("");
-    setTo("");
+    setFrom(range.from);
+    setTo(range.to);
     setSurface("all");
     setIncludeDropped(false);
     setOnlyCounted(false);

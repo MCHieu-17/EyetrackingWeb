@@ -92,11 +92,6 @@ def _ws_payload(job: FrameJob, result: GazeFrame) -> dict:
     return apply_header_echo(payload, job.header)
 
 
-async def _send_json(ws: WebSocket, payload: dict) -> None:
-    with suppress(Exception):
-        await ws.send_json(payload)
-
-
 @router.get("/session/{sid}", response_model=SessionStatus)
 def session_status(sid: str):
     session = _get_or_404(sid)
@@ -217,6 +212,7 @@ async def stream(ws: WebSocket, sid: str):
         return
 
     mailbox: asyncio.Queue[FrameJob | None] = asyncio.Queue(maxsize=1)
+    send_q: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=8)
 
     async def receive_loop() -> None:
         while True:
@@ -230,15 +226,18 @@ async def stream(ws: WebSocket, sid: str):
 
             runtime.stats.count_in()
             now = time.monotonic()
-            if now - session.last_frame_at < settings.min_frame_interval_s:
-                runtime.stats.count_drop("throttle")
-                continue
-            session.last_frame_at = now
+            sessions.touch(sid)
 
+            # Chỉ frame parse hợp lệ mới được tính vào cửa sổ throttle; frame
+            # hỏng không được "ăn" slot của frame kế tiếp.
             header, jpeg = parse_frame(data)
             if not jpeg or len(jpeg) > settings.max_frame_bytes:
                 runtime.stats.count_drop("invalid_image")
                 continue
+            if now - session.last_frame_at < settings.min_frame_interval_s:
+                runtime.stats.count_drop("throttle")
+                continue
+            session.last_frame_at = now
             _put_latest(
                 mailbox,
                 runtime.new_job(jpeg=jpeg, session=session, header=header),
@@ -248,10 +247,11 @@ async def stream(ws: WebSocket, sid: str):
         while True:
             job = await mailbox.get()
             if job is None:
+                await send_q.put(None)
                 return
             if time.monotonic() - job.received_at > settings.frame_max_age_s:
                 runtime.stats.count_drop("stale")
-                await _send_json(ws, _ws_payload(job, GazeFrame("stale")))
+                await send_q.put(_ws_payload(job, GazeFrame("stale")))
                 continue
             try:
                 result = await runtime.submit(job)
@@ -260,13 +260,25 @@ async def stream(ws: WebSocket, sid: str):
             except ModelNotReady:
                 await ws.close(code=1013, reason="pipeline_not_ready")
                 return
-            await _send_json(ws, _ws_payload(job, result))
+            await send_q.put(_ws_payload(job, result))
+
+    async def send_loop() -> None:
+        """Gửi response riêng task để client chậm không chặn pipeline."""
+        while True:
+            payload = await send_q.get()
+            if payload is None:
+                return
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                return
 
     recv_task = asyncio.create_task(receive_loop())
     proc_task = asyncio.create_task(process_loop())
+    send_task = asyncio.create_task(send_loop())
     try:
         done, pending = await asyncio.wait(
-            {recv_task, proc_task}, return_when=asyncio.FIRST_COMPLETED
+            {recv_task, proc_task, send_task}, return_when=asyncio.FIRST_COMPLETED
         )
         for task in pending:
             task.cancel()
@@ -275,7 +287,7 @@ async def stream(ws: WebSocket, sid: str):
             with suppress(asyncio.CancelledError, Exception):
                 task.result()
     finally:
-        for task in (recv_task, proc_task):
+        for task in (recv_task, proc_task, send_task):
             if not task.done():
                 task.cancel()
-        await asyncio.gather(recv_task, proc_task, return_exceptions=True)
+        await asyncio.gather(recv_task, proc_task, send_task, return_exceptions=True)

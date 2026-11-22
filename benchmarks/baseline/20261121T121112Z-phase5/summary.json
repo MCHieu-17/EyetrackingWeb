@@ -1,0 +1,253 @@
+{
+  "run": "20261121T121112Z-phase5",
+  "fixtures": {
+    "scale": "baseline",
+    "counts": {
+      "users": 202,
+      "courses": 6,
+      "course_modules": 21,
+      "lessons": 105,
+      "slides": 540,
+      "aois": 243,
+      "enrollments": 400,
+      "course_visits": 419,
+      "learning_sessions": 1057,
+      "content_views": 19240,
+      "view_layouts": 160,
+      "gaze_samples": 3445200,
+      "chat_sessions": 200,
+      "chat_messages": 2000,
+      "quiz_attempts": 1000,
+      "gaze_calibrations": 100,
+      "background_jobs": 100
+    },
+    "pdf_sha256": "bf4dab9a094d5494ea09fee883e69e6d66e1d29ae8be59f3e558bf59f78f8cd9"
+  },
+  "backend": {
+    "k6": [
+      {
+        "file": "aoi_summary.summary.json",
+        "scenario": "aoi_summary",
+        "p50": 183.968603,
+        "p95": 230.57866939999997,
+        "p99": 245.11093792000003,
+        "avg": 188.27659096153846,
+        "rps": 5.132543290966175,
+        "error_rate": 0,
+        "count": 52
+      },
+      {
+        "file": "course_visits.summary.json",
+        "scenario": "course_visits",
+        "p50": 42.039237,
+        "p95": 75.0550014,
+        "p99": 79.66293852000003,
+        "avg": 43.90679611707318,
+        "rps": 20.379938229628035,
+        "error_rate": 0,
+        "count": 205
+      },
+      {
+        "file": "enrollments.summary.json",
+        "scenario": "enrollments",
+        "p50": 5.109758,
+        "p95": 8.650888199999999,
+        "p99": 22.52614668,
+        "avg": 5.7415056489795875,
+        "rps": 24.106251833323498,
+        "error_rate": 0,
+        "count": 245
+      },
+      {
+        "file": "gaze_batch.summary.json",
+        "scenario": "gaze_batch",
+        "p50": 22.535698500000002,
+        "p95": 38.70208435,
+        "p99": 40.84933573999999,
+        "avg": 24.658350512500007,
+        "rps": 7.786671604205513,
+        "error_rate": 0,
+        "count": 80
+      },
+      {
+        "file": "lesson_contents.summary.json",
+        "scenario": "lesson_contents",
+        "p50": 18.4359605,
+        "p95": 27.676307799999996,
+        "p99": 30.65644508,
+        "avg": 17.62854543913042,
+        "rps": 22.763416745804957,
+        "error_rate": 0,
+        "count": 230
+      },
+      {
+        "file": "outline.summary.json",
+        "scenario": "outline",
+        "p50": 11.1322085,
+        "p95": 18.063892799999998,
+        "p99": 24.976603739999995,
+        "avg": 10.991862600840342,
+        "rps": 23.55060101459342,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "replay.summary.json",
+        "scenario": "replay",
+        "p50": 45.255388499999995,
+        "p95": 59.4977557,
+        "p99": 81.71637760000002,
+        "avg": 42.708104785714276,
+        "rps": 8.196742121666327,
+        "error_rate": 0,
+        "count": 84
+      },
+      {
+        "file": "samples.summary.json",
+        "scenario": "samples",
+        "p50": 24.799996,
+        "p95": 40.181644399999996,
+        "p99": 54.94416188000002,
+        "avg": 25.22911929147981,
+        "rps": 21.970480491770914,
+        "error_rate": 0,
+        "count": 223
+      },
+      {
+        "file": "session_contents.summary.json",
+        "scenario": "session_contents",
+        "p50": 22.016455999999998,
+        "p95": 29.206421699999996,
+        "p99": 39.07326486,
+        "avg": 20.39746822173915,
+        "rps": 22.57129395872686,
+        "error_rate": 0,
+        "count": 230
+      },
+      {
+        "file": "teacher_courses.summary.json",
+        "scenario": "teacher_courses",
+        "p50": 36.2516085,
+        "p95": 49.609663999999995,
+        "p99": 51.85768875,
+        "avg": 36.77607347674419,
+        "rps": 8.416591379098683,
+        "error_rate": 0,
+        "count": 86
+      }
+    ],
+    "query_counts": {
+      "aoi_summary": {
+        "queries_total": 313,
+        "iterations": 20,
+        "queries_per_request": 15.65
+      },
+      "course_students": {
+        "queries_total": 290,
+        "iterations": 20,
+        "queries_per_request": 14.5
+      },
+      "course_visits": {
+        "queries_total": 244,
+        "iterations": 20,
+        "queries_per_request": 12.2
+      },
+      "enrollments": {
+        "queries_total": 84,
+        "iterations": 20,
+        "queries_per_request": 4.2
+      },
+      "outline": {
+        "queries_total": 194,
+        "iterations": 20,
+        "queries_per_request": 9.7
+      },
+      "replay": {
+        "queries_total": 344,
+        "iterations": 20,
+        "queries_per_request": 17.2
+      },
+      "samples": {
+        "queries_total": 278,
+        "iterations": 20,
+        "queries_per_request": 13.9
+      },
+      "session_contents": {
+        "queries_total": 318,
+        "iterations": 20,
+        "queries_per_request": 15.9
+      },
+      "teacher_courses": {
+        "queries_total": 232,
+        "iterations": 20,
+        "queries_per_request": 11.6
+      }
+    }
+  },
+  "gaze": {
+    "device": null,
+    "precision": null,
+    "model": null,
+    "vram_allocated_mib": null,
+    "rss_kib": null,
+    "stage_total": {},
+    "ws": []
+  },
+  "chatbot": {
+    "query_chatbot": [],
+    "query_backend": [],
+    "components": {},
+    "components_all": {},
+    "ingest": {}
+  },
+  "frontend": {
+    "bundle": {},
+    "lighthouse": {}
+  },
+  "redis": {
+    "before": {
+      "keyspace_hits": 4905,
+      "keyspace_misses": 143,
+      "hit_rate": 0.971672,
+      "used_memory_human": "1.25M",
+      "used_memory_peak_human": "1.97M",
+      "evicted_keys": 0,
+      "expired_keys": 239,
+      "total_commands_processed": 119256,
+      "instantaneous_ops_per_sec": 196,
+      "commandstats": {
+        "slowlog|get": "calls=2,usec=2,usec_per_call=1.00,rejected_calls=0,failed_calls=0",
+        "info": "calls=7,usec=460,usec_per_call=65.71,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=3087,usec=10374,usec_per_call=3.36,rejected_calls=0,failed_calls=0",
+        "get": "calls=5048,usec=21272,usec_per_call=4.21,rejected_calls=0,failed_calls=0",
+        "ping": "calls=110044,usec=134153,usec_per_call=1.22,rejected_calls=0,failed_calls=0",
+        "expire": "calls=100,usec=314,usec_per_call=3.14,rejected_calls=0,failed_calls=0",
+        "set": "calls=143,usec=692,usec_per_call=4.84,rejected_calls=0,failed_calls=0",
+        "hello": "calls=81,usec=356,usec_per_call=4.40,rejected_calls=0,failed_calls=0",
+        "client|setinfo": "calls=162,usec=64,usec_per_call=0.40,rejected_calls=0,failed_calls=0"
+      }
+    },
+    "after": {
+      "keyspace_hits": 7244,
+      "keyspace_misses": 180,
+      "hit_rate": 0.975754,
+      "used_memory_human": "1.43M",
+      "used_memory_peak_human": "1.97M",
+      "evicted_keys": 0,
+      "expired_keys": 261,
+      "total_commands_processed": 172599,
+      "instantaneous_ops_per_sec": 297,
+      "commandstats": {
+        "slowlog|get": "calls=3,usec=3,usec_per_call=1.00,rejected_calls=0,failed_calls=0",
+        "info": "calls=10,usec=637,usec_per_call=63.70,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=3167,usec=10768,usec_per_call=3.40,rejected_calls=0,failed_calls=0",
+        "get": "calls=7424,usec=33364,usec_per_call=4.49,rejected_calls=0,failed_calls=0",
+        "ping": "calls=160894,usec=177476,usec_per_call=1.10,rejected_calls=0,failed_calls=0",
+        "expire": "calls=108,usec=356,usec_per_call=3.30,rejected_calls=0,failed_calls=0",
+        "set": "calls=180,usec=914,usec_per_call=5.08,rejected_calls=0,failed_calls=0",
+        "hello": "calls=81,usec=356,usec_per_call=4.40,rejected_calls=0,failed_calls=0",
+        "client|setinfo": "calls=162,usec=64,usec_per_call=0.40,rejected_calls=0,failed_calls=0"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "keyspace_hits": 3046,
+  "keyspace_misses": 98,
+  "hit_rate": 0.96883,
+  "used_memory_human": "1.53M",
+  "used_memory_peak_human": "1.95M",
+  "evicted_keys": 0,
+  "expired_keys": 50,
+  "total_commands_processed": 56288,
+  "instantaneous_ops_per_sec": 95,
+  "commandstats": {
+    "client|setinfo": "calls=44,usec=15,usec_per_call=0.34,rejected_calls=0,failed_calls=0",
+    "set": "calls=98,usec=440,usec_per_call=4.49,rejected_calls=0,failed_calls=0",
+    "slowlog|get": "calls=1,usec=1,usec_per_call=1.00,rejected_calls=0,failed_calls=0",
+    "del": "calls=81,usec=59,usec_per_call=0.73,rejected_calls=0,failed_calls=0",
+    "incrby": "calls=290,usec=1092,usec_per_call=3.77,rejected_calls=0,failed_calls=0",
+    "hello": "calls=22,usec=97,usec_per_call=4.41,rejected_calls=0,failed_calls=0",
+    "info": "calls=4,usec=272,usec_per_call=68.00,rejected_calls=0,failed_calls=0",
+    "expire": "calls=30,usec=114,usec_per_call=3.80,rejected_calls=0,failed_calls=0",
+    "unlink": "calls=32481,usec=7868,usec_per_call=0.24,rejected_calls=0,failed_calls=0",
+    "ping": "calls=19909,usec=30486,usec_per_call=1.53,rejected_calls=0,failed_calls=0",
+    "mget": "calls=116,usec=1335,usec_per_call=11.51,rejected_calls=0,failed_calls=0",
+    "get": "calls=2448,usec=21257,usec_per_call=8.68,rejected_calls=0,failed_calls=0"
+  }
+}

@@ -309,12 +309,73 @@ async def test_gaze_batch_insert_and_duplicate(client):
     )
     assert view["analysis_status"] == "pending"
 
+    # Duplicate batch không được đổi trạng thái đã phân tích xong.
+    await execute(
+        "UPDATE content_views SET analysis_status = 'ready' WHERE id = :id",
+        {"id": presentation_id},
+    )
+    before = await fetch_one(
+        "SELECT analysis_status, xmin::text AS xmin "
+        "FROM content_views WHERE id = :id",
+        {"id": presentation_id},
+    )
     duplicate = await _batch(
         client, session_id, presentation_id, batch_id=batch_id, samples=samples
     )
     assert duplicate.status_code == 200
     assert duplicate.json()["stored"] == 0
     assert duplicate.json()["duplicate"] == 2
+    after = await fetch_one(
+        "SELECT analysis_status, xmin::text AS xmin "
+        "FROM content_views WHERE id = :id",
+        {"id": presentation_id},
+    )
+    assert after == before
+
+    # Batch mới có sample thật phải chuyển pending; batch kế tiếp lúc đã
+    # pending không tạo thêm UPDATE.
+    new_samples = [
+        {
+            "sequence": 2,
+            "eventTime": datetime.now(UTC).isoformat(),
+            "viewportX": 0.4,
+            "viewportY": 0.4,
+            "status": "ok",
+            "qualityFlags": {},
+        },
+        {
+            "sequence": 3,
+            "eventTime": datetime.now(UTC).isoformat(),
+            "viewportX": 0.5,
+            "viewportY": 0.5,
+            "status": "ok",
+            "qualityFlags": {},
+        },
+    ]
+    third = await _batch(client, session_id, presentation_id, samples=new_samples)
+    assert third.status_code == 200, third.text
+    assert third.json()["stored"] == 2
+    before = await fetch_one(
+        "SELECT analysis_status, xmin::text AS xmin "
+        "FROM content_views WHERE id = :id",
+        {"id": presentation_id},
+    )
+    assert before["analysis_status"] == "pending"
+
+    more_samples = [
+        {**sample, "sequence": sample["sequence"] + 2} for sample in new_samples
+    ]
+    fourth = await _batch(
+        client, session_id, presentation_id, samples=more_samples
+    )
+    assert fourth.status_code == 200, fourth.text
+    assert fourth.json()["stored"] == 2
+    after = await fetch_one(
+        "SELECT analysis_status, xmin::text AS xmin "
+        "FROM content_views WHERE id = :id",
+        {"id": presentation_id},
+    )
+    assert after == before
 
 
 @pytest.mark.parametrize(

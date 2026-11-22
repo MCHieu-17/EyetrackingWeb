@@ -53,7 +53,7 @@ Cổng local (chỉ bind loopback):
 | `6379` | Redis 7 |
 | `6432` | PgBouncer (chỉ bật với profile `pgbouncer`) |
 
-Gaze không publish cổng host vì chạy nhiều replica; truy cập qua nginx
+Gaze không publish cổng host vì có thể chạy nhiều replica; truy cập qua nginx
 `/gaze/...` hoặc `docker compose exec gaze ...`.
 
 Luồng request local:
@@ -101,10 +101,10 @@ case khi hành vi cố ý thay đổi.
 
 | Khu vực | Vị trí | Số case | Lệnh |
 |---|---|---|---|
-| Backend | `backend/tests/fast/` | 79 fast | `./scripts/test_backend.sh` |
-| Gaze | `services/gaze/tests/fast/` | 22 fast | `./scripts/test_gaze.sh fast` |
+| Backend | `backend/tests/fast/` | 84 fast | `./scripts/test_backend.sh` |
+| Gaze | `services/gaze/tests/fast/` | 27 fast | `./scripts/test_gaze.sh fast` |
 | Gaze smoke | `services/gaze/tests/smoke/` | 1 | `./scripts/test_gaze.sh smoke` |
-| Chatbot | `services/chatbot/tests/fast/` | 22 fast | `./scripts/test_chatbot.sh fast` |
+| Chatbot | `services/chatbot/tests/fast/` | 31 fast | `./scripts/test_chatbot.sh fast` |
 | Chatbot RAG smoke | `services/chatbot/tests/smoke/` | 1 | `./scripts/test_chatbot.sh smoke` |
 | Frontend E2E | `frontend/e2e/` (Playwright) | 5 flow / 9 test | `./scripts/e2e.sh` |
 
@@ -113,8 +113,8 @@ case khi hành vi cố ý thay đổi.
   `test_metrics`, `test_analytics`, `test_chat`, `test_maintenance`,
   `test_schema_contract`; helper ở `conftest.py` + `support/`.
 - Gaze: `test_health_ready`, `test_session_api`, `test_calibration_regression`,
-  `test_stream_ws`; chatbot: `test_ingest_api`, `test_ingest_failures`,
-  `test_query`.
+  `test_stream_ws`, `test_runtime_batch`; chatbot: `test_ingest_api`,
+  `test_ingest_failures`, `test_query`, `test_embedding_queue`.
 - `fast` mock model/LLM/VLM/embedding nhưng dùng PostgreSQL + Redis thật;
   `smoke` chạy model/LLM thật trên stack thật. Flow chat E2E chỉ bật khi
   `E2E_CHAT=1`.
@@ -277,6 +277,9 @@ nhất khi thêm tính năng; đọc migration tương ứng trước khi sửa 
   status='in_progress'`; `aois(slide_id, code)`, `aois(ui_schema, code)`,
   `aois(slide_id, label)`.
 - `schema_migrations` lưu filename + checksum SHA-256; không sửa file đã áp.
+- `gaze_samples.event_time` dùng BRIN `idx_gaze_samples_event_time_brin`
+  (append-only/retention); `idx_gaze_samples_view_time` phục vụ analysis,
+  replay và export theo từng lượt xem.
 - `slides.embedding` là `vector(1024)`; `EMBEDDING_DIM` hiện phải là `1024`.
   Đổi model/chiều embedding cần migration + reindex toàn bộ slide, không chỉ
   đổi biến môi trường.
@@ -418,7 +421,9 @@ toàn bộ sample của content_view
 7. Đóng session: `PATCH /api/learning-sessions/{id}`, đóng mọi view mở, enqueue
    `analyze_lesson`. Đóng ca: `PATCH /api/course-visits/{id}`.
 8. Tab Trực quan hoá hiển thị **tất cả** lượt xem; `includeShort=true` mặc
-   định, chỉ bật `false` khi người dùng chọn lọc “Chỉ lượt >= ngưỡng”.
+   định, chỉ bật `false` khi người dùng chọn lọc “Chỉ lượt >= ngưỡng”. FE mặc
+   định gửi `from` = hôm nay-90 ngày (hiện trong ô ngày, xoá được để xem
+   all-time); backend vẫn nhận `from`/`to` rỗng nghĩa là toàn bộ lịch sử.
 
 ## 7. API contract và quy ước
 
@@ -495,8 +500,9 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 - Baseline `001_baseline.sql` là generation 12 (24 bảng); `002_email_otp.sql`
   nâng generation 13; `003_aoi_single_label.sql` bỏ `aoi_codes` /
   `aoi_suggestions`; `004_content_view_aoi_stats.sql` thêm `aoi_stats`;
-  `005_current_viewport_only.sql` bỏ hệ toạ độ cũ.
-- Thay đổi schema mới phải là `006_...sql`; không sửa migration đã áp.
+  `005_current_viewport_only.sql` bỏ hệ toạ độ cũ;
+  `006_gaze_sample_indexes.sql` thay btree `event_time` bằng BRIN.
+- Thay đổi schema mới phải là `007_...sql`; không sửa migration đã áp.
   `db/migrate.sh` giữ advisory lock, ghi checksum, fail nếu file đã áp bị đổi
   hoặc DB có bảng public mà chưa có `schema_migrations`.
 - Không chạy `psql -f` từng file migration; dùng `docker compose run --rm migrate`
@@ -525,6 +531,9 @@ resend 60 giây; email khớp domain + pattern cấu hình.
   runtime nên không rebuild.
 - `CONTENT_VIEW_MIN_DWELL_MS` chỉ ảnh hưởng phân loại/lọc; đổi cần recreate
   backend.
+- `DB_PREPARED_STATEMENT_CACHE_SIZE` mặc định `64` khi nối trực tiếp
+  PostgreSQL; profile `pgbouncer` (transaction pooling) phải đặt `0` trong
+  `.env`.
 - Local: `docker compose up -d --build`; `migrate` exit 0 là bình thường.
   `docker compose down -v` xoá DB/media/weights/Redis — chỉ dùng khi thật sự
   muốn reset sạch.

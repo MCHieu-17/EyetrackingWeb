@@ -1,0 +1,22 @@
+{
+  "database": "eyetracking_bench",
+  "old_samples": 1000000,
+  "batch_size": 10000,
+  "deleted": 4445200,
+  "expected_batches": 100,
+  "delete_wall_ms": 20166.1,
+  "max_transaction_ms": 91.3,
+  "commits": 459,
+  "lock_wait_max_ms": 0.0,
+  "insert_baseline": {
+    "count": 5,
+    "p50_ms": 10.19,
+    "p95_ms": 16.22
+  },
+  "insert_during_delete": {
+    "count": 14,
+    "p50_ms": 2.98,
+    "p95_ms": 5.16
+  },
+  "insert_p95_increase_pct": -68.2
+}

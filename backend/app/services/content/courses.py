@@ -74,9 +74,7 @@ async def list_teacher_courses(
     from app.services import course_stats
 
     course_ids = [row[0].id for row in rows]
-    enroll_counts = await course_stats.enrollment_counts(db, course_ids)
-    attention = await course_stats.attention_avg_by_course(db, course_ids)
-    sessions = await course_stats.session_counts_by_course(db, course_ids)
+    stats = await course_stats.course_rollup_cached(db, course_ids)
 
     return [
         TeacherCourseOut(
@@ -85,9 +83,9 @@ async def list_teacher_courses(
             description=course.description or "",
             gradient="",
             status=course.status,
-            students=enroll_counts.get(course.id, 0),
-            attention=attention.get(course.id),
-            sessions=sessions.get(course.id, 0),
+            students=stats.get(course.id, {}).get("students", 0),
+            attention=stats.get(course.id, {}).get("attention"),
+            sessions=stats.get(course.id, {}).get("sessions", 0),
             updated_at=course.updated_at,
             is_owner=user.role == "admin" or course.owner_id == user.id,
             lesson_count=int(lesson_count),

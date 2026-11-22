@@ -1,0 +1,13 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT slides.id, slides.position, slides.page_number, slides.title, slides.index_status, slides.index_error 
+FROM slides 
+WHERE slides.lesson_id = $1::UUID ORDER BY slides.position",20,0,1.053006,0.052650300000000004,0,120,60,0,0
+"SELECT learning_sessions.id, learning_sessions.enrollment_id, learning_sessions.lesson_id, learning_sessions.course_visit_id, learning_sessions.quiz_attempt_id, learning_sessions.calibration_id, learning_sessions.pipeline_version, learning_",20,0,0.931748,0.0465874,0,20,120,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",13,0,0.743718,0.05720907692307693,0,0,26,0,0
+"SELECT media_assets.id, media_assets.course_id, media_assets.storage_backend, media_assets.object_key, media_assets.sha256, media_assets.mime_type, media_assets.byte_size, media_assets.state, media_assets.page_count, media_assets.source_for",20,0,0.538918,0.026945899999999995,0,20,20,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at 
+FROM lessons 
+WHERE lessons.id = $1::UUID",20,0,0.43446700000000005,0.021723350000000002,0,20,40,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",13,0,0.314747,0.024211307692307695,0,0,13,0,0
+BEGIN,66,0,0.09736400000000002,0.0014752121212121213,0,0,0,0,0
+ROLLBACK,66,0,0.08578699999999999,0.0012998030303030298,0,0,0,0,0

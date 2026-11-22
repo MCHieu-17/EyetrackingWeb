@@ -56,6 +56,30 @@ async def get_json(key: str) -> Any | None:
         return None
 
 
+async def get_many_json(keys: list[str]) -> list[Any | None]:
+    """Đọc nhiều JSON cache trong một MGET; miss/lỗi đều trả None từng key."""
+    if not keys:
+        return []
+    client = await get_redis()
+    if client is None:
+        return [None] * len(keys)
+    try:
+        raws = await client.mget([_key(key) for key in keys])
+    except Exception:  # noqa: BLE001
+        report_failure()
+        return [None] * len(keys)
+    out: list[Any | None] = []
+    for raw in raws:
+        if raw is None:
+            out.append(None)
+            continue
+        try:
+            out.append(json.loads(raw))
+        except (TypeError, ValueError):
+            out.append(None)
+    return out
+
+
 async def set_json(key: str, value: Any, ttl: int) -> None:
     """Ghi JSON cache với TTL giây; lỗi thì bỏ qua (fail-open)."""
     client = await get_redis()
@@ -73,5 +97,23 @@ async def delete(key: str) -> None:
         return
     try:
         await client.delete(_key(key))
+    except Exception:  # noqa: BLE001
+        report_failure()
+
+
+async def delete_many(keys: list[str], chunk_size: int = 500) -> None:
+    """Xoá nhiều key trong ít RTT: UNLINK theo pipeline, chia lô theo `chunk_size`."""
+    if not keys:
+        return
+    client = await get_redis()
+    if client is None:
+        return
+    try:
+        for index in range(0, len(keys), chunk_size):
+            chunk = keys[index : index + chunk_size]
+            pipe = client.pipeline(transaction=False)
+            for key in chunk:
+                pipe.unlink(_key(key))
+            await pipe.execute()
     except Exception:  # noqa: BLE001
         report_failure()

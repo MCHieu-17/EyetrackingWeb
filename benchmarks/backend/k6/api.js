@@ -78,6 +78,9 @@ export default function () {
     case 'enrollments':
       get('/api/me/enrollments', student, 'GET /api/me/enrollments');
       break;
+    case 'me':
+      get('/api/me/profile', student, 'GET /api/me/profile');
+      break;
     case 'outline':
       get(`/api/courses/${core}`, student, 'GET /api/courses/:id');
       break;
@@ -99,6 +102,11 @@ export default function () {
     case 'course_students':
       get(`/teacher/courses/${core}/students`, teacher,
         'GET /teacher/courses/:id/students');
+      break;
+    case 'add_students':
+      post(`/teacher/courses/${ids.draft_course_id}/students`, teacher,
+        { studentIds: fixtures.student_ids || [] },
+        'POST /teacher/courses/:id/students', [201]);
       break;
     case 'course_visits':
       get(`/teacher/courses/${core}/visits?limit=200&includeShort=true`, teacher,

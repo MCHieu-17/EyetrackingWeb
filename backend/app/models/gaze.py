@@ -281,7 +281,12 @@ class GazeSample(Base):
             name="gaze_samples_viewport_y_check",
         ),
         Index("idx_gaze_samples_view_time", "content_view_id", "event_time"),
-        Index("idx_gaze_samples_event_time", "event_time"),
+        Index(
+            "idx_gaze_samples_event_time_brin",
+            "event_time",
+            postgresql_using="brin",
+            postgresql_with={"pages_per_range": 32, "autosummarize": True},
+        ),
         Index(
             "idx_gaze_samples_aoi_label",
             "aoi_label",

@@ -1,4 +1,8 @@
-"""Protocol v2 cho frame gaze: 4-byte header length + JSON header + JPEG."""
+"""Protocol v2 cho frame gaze: 4-byte header length + JSON header + JPEG.
+
+JPEG được trả dưới dạng `memoryview` để không copy toàn bộ payload mỗi frame;
+`cv2.imdecode`/`np.frombuffer` đọc trực tiếp view này.
+"""
 
 from __future__ import annotations
 
@@ -6,20 +10,23 @@ import json
 import struct
 
 
-def parse_frame(data: bytes) -> tuple[dict | None, bytes]:
+def parse_frame(
+    data: bytes | bytearray | memoryview,
+) -> tuple[dict | None, memoryview]:
     """Trả (header, jpeg). Header None = JPEG legacy (client cũ)."""
-    if len(data) < 4:
-        return None, data
-    header_len = struct.unpack(">I", data[:4])[0]
-    if header_len <= 0 or header_len > 64 * 1024 or len(data) < 4 + header_len:
-        return None, data
+    view = memoryview(data)
+    if len(view) < 4:
+        return None, view
+    header_len = struct.unpack_from(">I", view, 0)[0]
+    if header_len <= 0 or header_len > 64 * 1024 or len(view) < 4 + header_len:
+        return None, view
     try:
-        header = json.loads(data[4 : 4 + header_len])
+        header = json.loads(bytes(view[4 : 4 + header_len]))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return None, data
+        return None, view
     if not isinstance(header, dict) or header.get("v") != 2:
-        return None, data
-    return header, data[4 + header_len :]
+        return None, view
+    return header, view[4 + header_len :]
 
 
 _ECHO_FIELDS = (

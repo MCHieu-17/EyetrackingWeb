@@ -98,7 +98,8 @@ if want fixtures; then
   log "sinh fixture PDF"
   compose exec -T --user root chatbot python /bench/lib/gen_fixtures.py \
     --out /bench/fixtures/lecture_20p.pdf \
-    --meta /bench/fixtures/lecture_20p.meta.json
+    --meta /bench/fixtures/lecture_20p.meta.json \
+    --pages "${BENCH_FIXTURE_PAGES:-20}"
 fi
 
 if want seed && [ "$SKIP_SEED" -eq 0 ]; then
@@ -106,6 +107,7 @@ if want seed && [ "$SKIP_SEED" -eq 0 ]; then
   compose exec -T --user root backend python /bench/lib/seed_bench.py \
     --scale "$SCALE" \
     --fixtures-dir /bench/fixtures \
+    --ingest-slides "${BENCH_INGEST_SLIDES:-20}" \
     --out "$(bench_path "$RUN_DIR/fixtures.json")"
 fi
 
@@ -119,11 +121,12 @@ fi
 run_k6() {
   local scenario="$1" vus="$2" duration="$3" iterations="${4:-0}"
   local label="${5:-$scenario}"
+  local base_url="${6:-http://127.0.0.1:8101}"
   local slug="${label//\//_}"
   local prefix="/bench/baseline/$RUN_ID/backend/k6/$slug"
   local args=(
     --rm --network host --user 0:0 -v "$BENCH_DIR:/bench"
-    -e "BASE_URL=http://127.0.0.1:8101"
+    -e "BASE_URL=$base_url"
     -e "TOKEN_FILE=/bench/baseline/$RUN_ID/.runtime/tokens.json"
     -e "FIXTURES=/bench/baseline/$RUN_ID/fixtures.json"
     -e "SCENARIO=$scenario"
@@ -151,7 +154,7 @@ run_backend() {
   fi
 
   if [ "$QUICK" -eq 1 ]; then
-    local scenarios="enrollments outline lesson_contents session_contents teacher_courses course_visits aoi_summary replay samples"
+    local scenarios="enrollments outline lesson_contents session_contents teacher_courses course_students course_visits aoi_summary replay samples"
   else
     local scenarios="enrollments outline lesson_contents session_contents teacher_courses teacher_tree course_students course_visits visit_summary replay samples aoi_summary heatmap export_visit export_lesson publish quiz login health"
   fi
@@ -169,6 +172,15 @@ run_backend() {
         run_k6 "$scenario" "$read_vus" "$duration" 0 ;;
     esac
   done
+
+  # Auth memory-hit: 1 VU để đo p95 end-to-end; probe riêng đo dependency auth.
+  run_k6 me 1 "10s" 0 "auth-me"
+  compose exec -T --user root backend python /bench/backend/auth_probe.py \
+    --fixtures "$(bench_path "$RUN_DIR/fixtures.json")" \
+    --iterations 500 \
+    --out "$(bench_path "$RUN_DIR/backend/auth_probe.json")"
+  # Add 200 học viên: request đầu là cold batch (INSERT + một pipeline UNLINK).
+  run_k6 add_students 1 "10s" 10 "add-students"
 
   # Query-count probe: 1 VU, 20 iteration, reset stats từng scenario.
   for scenario in enrollments outline teacher_courses course_students course_visits aoi_summary replay samples session_contents; do
@@ -188,6 +200,18 @@ run_backend() {
     -e "VUS=$gaze_vus" -e "DURATION=$duration" -e "SAMPLES=40" \
     -e "OUT_PREFIX=/bench/baseline/$RUN_ID/backend/k6/gaze_batch" \
     "$K6_IMAGE" run --quiet --no-color /bench/backend/k6/gaze_batch.js || warn "k6 gaze batch lỗi"
+
+  # Gate Phase 9: 30 HS sau NAT, 1 batch/1,5 s, qua nginx :3100.
+  log "k6 gaze batch qua nginx vus=30 batch/1.5s"
+  docker run --rm --network host --user 0:0 -v "$BENCH_DIR:/bench" \
+    -e "BASE_URL=http://127.0.0.1:3100" \
+    -e "TOKEN_FILE=/bench/baseline/$RUN_ID/.runtime/tokens.json" \
+    -e "FIXTURES=/bench/baseline/$RUN_ID/fixtures.json" \
+    -e "VUS=30" -e "DURATION=$duration" -e "SAMPLES=40" \
+    -e "BATCH_PER_SECOND=0.666" -e "AFFINITY=1" \
+    -e "OUT_PREFIX=/bench/baseline/$RUN_ID/backend/k6/gaze_batch_nginx" \
+    "$K6_IMAGE" run --quiet --no-color /bench/backend/k6/gaze_batch.js \
+    || warn "k6 gaze batch qua nginx lỗi"
 
   "$ROOT_DIR/benchmarks/backend/redis_snapshot.sh" "$RUN_DIR" after >/dev/null || true
   "$ROOT_DIR/benchmarks/backend/collect_pg.sh" "$RUN_DIR" after >/dev/null || true

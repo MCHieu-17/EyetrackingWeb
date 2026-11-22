@@ -29,6 +29,13 @@ node "$ROOT_DIR/benchmarks/frontend/bundle-size.mjs" \
   --out "$OUT/bundle-size.json" \
   --md "$OUT/bundle-size.md"
 
+log "Gaze capture client (worker vs main thread)"
+(
+  cd "$ROOT_DIR/frontend"
+  node "$ROOT_DIR/benchmarks/frontend/gaze-capture.mjs" \
+    --out "$OUT/gaze-capture.json"
+) || warn "gaze capture benchmark fail — xem gaze-capture.json"
+
 if command -v lighthouse >/dev/null 2>&1; then
   "$ROOT_DIR/benchmarks/frontend/lighthouse.sh" "$RUN_DIR" "$FIXTURES" "$TOKENS"
 else

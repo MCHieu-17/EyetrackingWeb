@@ -25,12 +25,13 @@ class FakePrepared:
 
 
 class FakeCpu:
-    def prepare(self, data: bytes):
-        if data == b"bad":
+    def prepare(self, data: bytes | memoryview):
+        payload = bytes(data)
+        if payload == b"bad":
             raise InvalidImage("bad image")
-        if data == b"noface":
+        if payload == b"noface":
             return None
-        return FakePrepared(data)
+        return FakePrepared(payload)
 
     def warmup(self):
         return None

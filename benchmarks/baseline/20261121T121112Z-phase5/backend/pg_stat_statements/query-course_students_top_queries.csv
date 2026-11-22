@@ -1,0 +1,19 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT content_views.slide_id, learning_sessions.enrollment_id, coalesce(sum(content_views.gaze_count), $1::INTEGER) AS coalesce_1, coalesce(sum(content_views.on_slide_gaze_count), $2::INTEGER) AS coalesce_3, coalesce(sum(content_views.trac",20,283.59222,14.179610999999998,68000,49240,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at 
+FROM lessons 
+WHERE lessons.module_id IN ($1::UUID, $2::UUID, $3::UUID, ",20,7.064009999999999,0.3532005,480,80,0,0
+"SELECT learning_sessions.enrollment_id, max(learning_sessions.started_at) AS max_1 
+FROM learning_sessions 
+WHERE learning_sessions.enrollment_id IN ($1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID, $8::UUID, $9::UUID, ",20,6.512309,0.32561545000000003,2000,440,0,0
+"SELECT slides.lesson_id, slides.id 
+FROM slides 
+WHERE slides.lesson_id IN ($1::UUID, $2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID, $8::UUID, $9::UUID, $10::UUID, $11::UUID, $12::UUID, $13::UUID, $14::UUID, $15::UUID, $16::UUI",20,3.404938,0.17024690000000003,2400,1020,0,0
+"SELECT course_modules.id 
+FROM course_modules 
+WHERE course_modules.course_id = $1::UUID ORDER BY course_modules.position",20,0.7551289999999999,0.03775645,80,20,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.601167,0.030058349999999998,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",15,0.34328000000000003,0.02288533333333333,0,15,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",15,0.22800500000000004,0.015200333333333333,0,15,0,0
+BEGIN,70,0.10493400000000003,0.0014990571428571428,0,0,0,0
+ROLLBACK,70,0.07346300000000001,0.0010494714285714292,0,0,0,0

@@ -15,6 +15,10 @@ from app.models.email_otp import EmailOtp
 from app.models.gaze import ContentView, CourseVisit, GazeSample, LearningSession
 from app.services.embedding_jobs import enqueue_analysis_lesson
 
+# Xoá retention theo batch để transaction ngắn, không giữ lock/WAL trên toàn
+# bảng gaze_samples.
+GAZE_DELETE_BATCH_SIZE = 10_000
+
 
 def _utc_now(now: datetime | None) -> datetime:
     if now is None:
@@ -143,16 +147,35 @@ async def expire_stale_course_visits(
 
 
 async def delete_old_gaze_samples(
-    db: AsyncSession, *, keep_days: int | None = None
+    db: AsyncSession,
+    *,
+    keep_days: int | None = None,
+    batch_size: int = GAZE_DELETE_BATCH_SIZE,
 ) -> int:
     days = settings.gaze_retention_days if keep_days is None else keep_days
     if days <= 0:
         return 0
+    batch_size = max(1, batch_size)
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    result = await db.execute(
-        delete(GazeSample).where(GazeSample.event_time < cutoff)
-    )
-    return result.rowcount or 0
+    total = 0
+    while True:
+        result = await db.execute(
+            delete(GazeSample)
+            .where(
+                GazeSample.id.in_(
+                    select(GazeSample.id)
+                    .where(GazeSample.event_time < cutoff)
+                    .limit(batch_size)
+                )
+            )
+            .execution_options(synchronize_session=False)
+        )
+        deleted = result.rowcount or 0
+        await db.commit()
+        total += deleted
+        if deleted < batch_size:
+            break
+    return total
 
 
 async def delete_expired_email_otps(
@@ -173,6 +196,8 @@ async def run_maintenance() -> dict[str, int]:
         otps_deleted = await delete_expired_email_otps(db, now=now)
         expired = await expire_stale_learning_sessions(db, now=now)
         visits_expired = await expire_stale_course_visits(db, now=now)
+        # Chốt các tác vụ nhẹ trước; retention gaze commit từng batch riêng.
+        await db.commit()
         gaze_deleted = await delete_old_gaze_samples(db)
         await db.commit()
     return {

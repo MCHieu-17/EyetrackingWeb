@@ -37,13 +37,16 @@ def clean_db(request):
 
     from app.api.ingest import close_ingestion
     from app.workflow.lms import backend_client
+    from app.workflow.query import clear_query_cache
     from app.workflow.retrieval import close_retriever
 
     backend_client.cache_clear()
+    clear_query_cache()
     close_ingestion()
     close_retriever()
     truncate_all()
     yield
+    clear_query_cache()
     close_ingestion()
     close_retriever()
     truncate_all()

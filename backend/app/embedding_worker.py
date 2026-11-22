@@ -21,7 +21,7 @@ async def main() -> None:
         "embedding",
         settings.embedding_worker_poll_seconds,
         process_pending_jobs,
-        limit=1,
+        limit=max(1, settings.embedding_worker_concurrency),
         unit="embedding job(s)",
     )
 

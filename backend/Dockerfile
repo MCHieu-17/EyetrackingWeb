@@ -51,8 +51,8 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
 ENV FORWARDED_ALLOW_IPS=172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
 # Số process API. Mỗi process có pool DB riêng; giữ DB_POOL_MAX nhỏ (4-10)
 # để tổng connection không vượt max_connections của Postgres.
-ENV WEB_CONCURRENCY=2
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers ${WEB_CONCURRENCY} --proxy-headers"]
+ENV WEB_CONCURRENCY=4
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers ${WEB_CONCURRENCY} --proxy-headers --no-access-log"]
 
 # ---- test: API + dev deps (không dùng cho production) ----
 FROM api AS test

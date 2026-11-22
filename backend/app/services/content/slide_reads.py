@@ -5,6 +5,7 @@ Tách khỏi import/convert để route và worker không phải import toàn b�
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.models.auth import User
 from app.models.course import Course, Lesson, Slide
@@ -15,9 +16,10 @@ from app.services.content.common import _not_found, course_of_lesson
 
 
 async def _lesson_and_asset(
-    db: AsyncSession, lesson_id: str
+    db: AsyncSession, lesson_id: str, lesson: Lesson | None = None
 ) -> tuple[Lesson, MediaAsset | None]:
-    _, lesson = await course_of_lesson(db, lesson_id)
+    if lesson is None:
+        _, lesson = await course_of_lesson(db, lesson_id)
     if lesson.id != lesson_id:
         raise _not_found("Không tìm thấy bài học")
     asset = await db.get(MediaAsset, lesson.pdf_asset_id) if lesson.pdf_asset_id else None
@@ -29,6 +31,16 @@ async def _slides(db: AsyncSession, lesson_id: str) -> list[Slide]:
         (
             await db.execute(
                 select(Slide)
+                .options(
+                    load_only(
+                        Slide.id,
+                        Slide.title,
+                        Slide.position,
+                        Slide.page_number,
+                        Slide.index_status,
+                        Slide.index_error,
+                    )
+                )
                 .where(Slide.lesson_id == lesson_id)
                 .order_by(Slide.position)
             )
@@ -41,9 +53,11 @@ async def list_lesson_slides_admin(
     course: Course,
     user: User,
     lesson_id: str,
+    *,
+    lesson: Lesson | None = None,
 ) -> list[SlideAdminOut]:
     del course, user
-    lesson, asset = await _lesson_and_asset(db, lesson_id)
+    lesson, asset = await _lesson_and_asset(db, lesson_id, lesson)
     rows = await _slides(db, lesson.id)
     return [
         SlideAdminOut(
@@ -62,10 +76,14 @@ async def list_lesson_slides_admin(
 
 
 async def get_lesson_contents(
-    db: AsyncSession, course: Course, lesson_id: str
+    db: AsyncSession,
+    course: Course | None,
+    lesson_id: str,
+    *,
+    lesson: Lesson | None = None,
 ) -> list[SlideOut]:
     del course
-    lesson, asset = await _lesson_and_asset(db, lesson_id)
+    lesson, asset = await _lesson_and_asset(db, lesson_id, lesson)
     rows = await _slides(db, lesson.id)
     return [
         SlideOut(

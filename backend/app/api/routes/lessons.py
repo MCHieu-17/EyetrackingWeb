@@ -151,7 +151,9 @@ async def list_lesson_slides(
     db: AsyncSession = Depends(get_db),
 ):
     lesson, course = await get_viewable_lesson(db, lesson_id, user)
-    return await content.list_lesson_slides_admin(db, course, user, lesson.id)
+    return await content.list_lesson_slides_admin(
+        db, course, user, lesson.id, lesson=lesson
+    )
 
 
 @router.post("/teacher/lessons/{lesson_id}/slides/reindex")
@@ -162,7 +164,9 @@ async def reindex_lesson_slides(
 ):
     """Index lại các slide chưa sẵn sàng của bài giảng đang soạn."""
     lesson, course = await get_managed_lesson(db, lesson_id, user)
-    slides = await content.list_lesson_slides_admin(db, course, user, lesson.id)
+    slides = await content.list_lesson_slides_admin(
+        db, course, user, lesson.id, lesson=lesson
+    )
     if not slides:
         return {"ok": True, "queued": 0}
     queued = await embedding.mark_lesson_pending(lesson.id)
@@ -189,4 +193,6 @@ async def get_lesson_contents(
     ).scalar_one_or_none()
     if not await can_access_course(db, course, user) and enrolled is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chưa đăng ký khóa học")
-    return await content.get_lesson_contents(db, course, lesson.id)
+    return await content.get_lesson_contents(
+        db, course, lesson.id, lesson=lesson
+    )

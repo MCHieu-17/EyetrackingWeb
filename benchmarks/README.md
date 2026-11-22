@@ -14,6 +14,9 @@ trước/sau khi tối ưu.
   rõ và không so sánh trực tiếp.
 - Nginx giới hạn `20 r/s/IP` (`api_rl`). Đo capacity trực tiếp backend
   (`:8101`), đo user-facing qua nginx (`:3100`) ở mức dưới ngưỡng.
+- `/api/learning-sessions/*/gaze-batches` có zone riêng: `4 r/s` theo cookie
+  `gaze_affinity` + trần `60 r/s/IP`. Lượt đo qua nginx dùng `AFFINITY=1` để
+  mô phỏng mỗi browser một bucket (30 HS sau NAT).
 
 ## Cổng của stack benchmark
 
@@ -58,6 +61,14 @@ sinh token, chạy các nhóm đo và tổng hợp báo cáo. Cờ hữu ích:
 | `--run-id <id>` | Tên thư mục kết quả |
 | `--keep` | Không dừng stack sau khi chạy |
 
+Đo ingest quy mô lớn (mặc định 20 trang / 20 slide / limit 2–4):
+
+```bash
+BENCH_FIXTURE_PAGES=100 BENCH_INGEST_SLIDES=100 BENCH_INGEST_LIMIT=100 \
+  ./benchmarks/run_all.sh --quick --scale baseline \
+  --only fixtures,seed,tokens,chatbot,report --run-id <id>-100 --keep
+```
+
 ## Cấu trúc kết quả
 
 ```text
@@ -99,6 +110,46 @@ python benchmarks/report/compare.py \
   --after    benchmarks/baseline/20261122T090000Z-after \
   --out      benchmarks/baseline/compare.md
 ```
+
+Đo riêng worker phân tích gaze (gate Phase 5: view 54k sample):
+
+```bash
+docker compose -p eyelearning-bench --env-file .env \
+  -f docker-compose.yml -f benchmarks/stack/docker-compose.bench.yml \
+  exec -T backend python /bench/backend/analysis_probe.py \
+  --samples 54000 --chunk-size 3000 \
+  --out /bench/baseline/<run-id>/backend/analysis_probe.json
+```
+
+Probe chỉ ghi vào database `*_bench`, tạo view tạm rồi xoá sau khi đo; output
+gồm wall, transaction lớn nhất, RSS đỉnh và checksum metrics.
+
+Đo export JSONL + page gaze (gate Đợt 6):
+
+```bash
+docker compose -p eyelearning-bench --env-file .env \
+  -f docker-compose.yml -f benchmarks/stack/docker-compose.bench.yml \
+  exec -T backend python /bench/backend/export_probe.py \
+  --samples 100000 --concurrency 5 \
+  --out /bench/baseline/<run-id>/backend/export_probe_100k.json
+```
+
+Chạy thêm `--samples 29377 --concurrency 1` để tái lập visit 29.377 sample.
+Probe ghi page p50/p95, total, RSS, 5 export đồng thời, `idle in transaction`
+và plan của `/teacher/visits/{id}/gaze`.
+
+Đo retention maintenance (gate Đợt 6):
+
+```bash
+docker compose -p eyelearning-bench --env-file .env \
+  -f docker-compose.yml -f benchmarks/stack/docker-compose.bench.yml \
+  exec -T backend python /bench/backend/maintenance_probe.py \
+  --old-samples 1000000 --batch-size 10000 \
+  --out /bench/baseline/<run-id>/backend/maintenance_probe.json
+```
+
+Probe ghi số batch, max transaction, lock wait và p95 insert gaze trước/trong
+lúc xoá.
 
 ## Công cụ host
 

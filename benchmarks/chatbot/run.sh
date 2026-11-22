@@ -18,12 +18,12 @@ core_course_id="$(json_get "$FIXTURES" 'd["ids"]["core_course_id"]')"
 ingest_lesson_id="$(json_get "$FIXTURES" 'd["ids"]["ingest_lesson_id"]')"
 concurrency="1,5,10,20"
 repeats=3
-ingest_limit=4
+ingest_limit="${BENCH_INGEST_LIMIT:-4}"
 question_limit=0
 if [ "$QUICK" = "quick" ]; then
   concurrency="1,5"
   repeats=1
-  ingest_limit=2
+  ingest_limit="${BENCH_INGEST_LIMIT:-2}"
   question_limit=8
 fi
 
@@ -56,6 +56,13 @@ compose exec -T --user root chatbot python /bench/chatbot/component_bench.py \
   --iterations "$([ "$QUICK" = quick ] && echo 3 || echo 10)" \
   --concurrency 4 \
   --out "$(bench_path "$OUT/components-all.json")"
+
+log "Chatbot retrieval recall (ANN vs exact)"
+compose exec -T --user root chatbot python /bench/chatbot/retrieval_probe.py \
+  --course-id "$core_course_id" \
+  --questions /bench/fixtures/chat_questions.template.jsonl \
+  --limit 8 \
+  --out "$(bench_path "$OUT/retrieval.json")"
 
 log "Chatbot ingest (limit=$ingest_limit)"
 compose exec -T --user root chatbot python /bench/chatbot/ingest_probe.py \

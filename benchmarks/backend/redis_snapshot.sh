@@ -17,15 +17,20 @@ redis() {
   compose exec -T redis redis-cli "$@"
 }
 
+if [ "$LABEL" = "reset" ]; then
+  redis CONFIG RESETSTAT >/dev/null
+  echo "reset redis stats"
+  exit 0
+fi
+
 redis INFO > "$OUT/${LABEL}_info.txt"
 redis INFO commandstats > "$OUT/${LABEL}_commandstats.txt"
 redis INFO memory > "$OUT/${LABEL}_memory.txt"
 redis SLOWLOG GET 25 > "$OUT/${LABEL}_slowlog.txt" || true
-redis --latency-history -i 1 > "$OUT/${LABEL}_latency.txt" &
-PID=$!
-sleep 10
-kill "$PID" 2>/dev/null || true
-wait "$PID" 2>/dev/null || true
+# timeout bên trong container để redis-cli tự thoát; nếu chỉ kill process
+# compose exec ở host thì redis-cli con vẫn giữ stdout và treo pipeline.
+redis timeout 10 redis-cli --latency-history -i 1 \
+  > "$OUT/${LABEL}_latency.txt" 2>/dev/null || true
 
 python3 - "$OUT/${LABEL}_info.txt" "$OUT/${LABEL}_commandstats.txt" \
   "$OUT/${LABEL}_summary.json" <<'PY'

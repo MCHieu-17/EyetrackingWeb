@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Load
 
 from app.core.config import settings
 from app.models.aoi import Aoi
@@ -142,14 +143,74 @@ def _stats_out(
     return out
 
 
-def _view_rows_query(view_ids: list[str]):
+def _view_rows_query(visit_id: str):
+    sample_stats = (
+        select(
+            GazeSample.content_view_id.label("view_id"),
+            func.min(GazeSample.event_time).label("first_sample"),
+            func.max(GazeSample.event_time).label("last_sample"),
+            func.count(GazeSample.id).label("sample_count"),
+            func.count(GazeSample.id)
+            .filter(GazeSample.status == "ok")
+            .label("ok_count"),
+        )
+        .join(ContentView, ContentView.id == GazeSample.content_view_id)
+        .join(LearningSession, LearningSession.id == ContentView.session_id)
+        .where(LearningSession.course_visit_id == visit_id)
+        .group_by(GazeSample.content_view_id)
+        .subquery()
+    )
     return (
-        select(ContentView, LearningSession, Lesson, Slide)
+        select(
+            ContentView,
+            LearningSession,
+            Lesson,
+            Slide,
+            sample_stats.c.first_sample,
+            sample_stats.c.last_sample,
+            sample_stats.c.sample_count,
+            sample_stats.c.ok_count,
+        )
         .join(LearningSession, LearningSession.id == ContentView.session_id)
         .join(Lesson, Lesson.id == LearningSession.lesson_id)
         .outerjoin(Slide, Slide.id == ContentView.slide_id)
-        .where(ContentView.id.in_(view_ids))
+        .outerjoin(sample_stats, sample_stats.c.view_id == ContentView.id)
+        .where(LearningSession.course_visit_id == visit_id)
         .order_by(LearningSession.started_at, ContentView.sequence_no)
+        .options(
+            Load(ContentView).load_only(
+                ContentView.id,
+                ContentView.sequence_no,
+                ContentView.surface,
+                ContentView.started_at,
+                ContentView.ended_at,
+                ContentView.gaze_count,
+                ContentView.on_slide_gaze_count,
+                ContentView.tracked_duration_ms,
+                ContentView.fixation_count,
+                ContentView.analysis_status,
+                ContentView.analysis_version,
+                ContentView.aoi_stats,
+            ),
+            Load(LearningSession).load_only(
+                LearningSession.id,
+                LearningSession.started_at,
+                LearningSession.ended_at,
+                LearningSession.viewport_width_px,
+                LearningSession.viewport_height_px,
+            ),
+            Load(Lesson).load_only(
+                Lesson.id,
+                Lesson.title,
+                Lesson.kind,
+                Lesson.pdf_asset_id,
+            ),
+            Load(Slide).load_only(
+                Slide.id,
+                Slide.title,
+                Slide.page_number,
+            ),
+        )
     )
 
 
@@ -178,6 +239,10 @@ async def visit_replay(
     db: AsyncSession,
     visit: CourseVisit,
     course,
+    *,
+    enrollment: Enrollment,
+    student: User,
+    profile: StudentProfile | None,
     include_short: bool = True,
 ) -> VisitReplayOut:
     """Dựng overview replay của một ca học.
@@ -187,31 +252,10 @@ async def visit_replay(
     tổng, nhưng vẫn báo `short_view_count`.
     """
     min_dwell_ms = settings.content_view_min_dwell_ms
-    participant = (
-        await db.execute(
-            select(Enrollment, User, StudentProfile)
-            .join(User, User.id == Enrollment.student_id)
-            .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-            .where(Enrollment.id == visit.enrollment_id)
-        )
-    ).one_or_none()
 
-    if participant is None:
-        raise ValueError("enrollment not found")
-    enrollment, student, profile = participant
+    rows = (await db.execute(_view_rows_query(visit.id))).all()
 
-    view_ids = list(
-        (
-            await db.execute(
-                select(ContentView.id)
-                .join(LearningSession, LearningSession.id == ContentView.session_id)
-                .where(LearningSession.course_visit_id == visit.id)
-                .order_by(LearningSession.started_at, ContentView.sequence_no)
-            )
-        ).scalars()
-    )
-
-    if not view_ids:
+    if not rows:
         return VisitReplayOut(
             visit=VisitSummaryOut(
                 visit_id=visit.id,
@@ -235,24 +279,7 @@ async def visit_replay(
             ui_aois=[],
         )
 
-    rows = (await db.execute(_view_rows_query(view_ids))).all()
-
-    sample_stats = {
-        content_view_id: (first, last, count, ok_count)
-        for content_view_id, first, last, count, ok_count in (
-            await db.execute(
-                select(
-                    GazeSample.content_view_id,
-                    func.min(GazeSample.event_time),
-                    func.max(GazeSample.event_time),
-                    func.count(GazeSample.id),
-                    func.count(GazeSample.id).filter(GazeSample.status == "ok"),
-                )
-                .where(GazeSample.content_view_id.in_(view_ids))
-                .group_by(GazeSample.content_view_id)
-            )
-        ).all()
-    }
+    view_ids = [row[0].id for row in rows]
 
     layouts = (
         await db.execute(
@@ -266,29 +293,24 @@ async def visit_replay(
         layouts_by_view.setdefault(layout.content_view_id, []).append(layout)
 
     slide_ids = [row[3].id for row in rows if row[3] is not None]
-    slide_aois = (
+    aoi_filters = [Aoi.ui_schema == "reader-v1"]
+    if slide_ids:
+        aoi_filters.append(Aoi.slide_id.in_(slide_ids))
+    all_aois = (
         (
             await db.execute(
                 select(Aoi)
-                .where(Aoi.slide_id.in_(slide_ids))
-                .order_by(Aoi.slide_id, Aoi.code)
+                .where(or_(*aoi_filters))
+                .order_by(Aoi.code)
             )
         ).scalars().all()
-        if slide_ids
-        else []
     )
+    slide_aois = [row for row in all_aois if row.slide_id is not None]
+    ui_aois = [row for row in all_aois if row.ui_schema == "reader-v1"]
     aois_by_slide: dict[str, list[Aoi]] = {}
     for row in slide_aois:
         if row.slide_id:
             aois_by_slide.setdefault(row.slide_id, []).append(row)
-
-    ui_aois = (
-        await db.execute(
-            select(Aoi)
-            .where(Aoi.ui_schema == "reader-v1")
-            .order_by(Aoi.code)
-        )
-    ).scalars().all()
 
     views: list[ReplayViewOut] = []
     total_gaze = total_on_slide = total_dwell = total_fixations = 0
@@ -302,8 +324,18 @@ async def visit_replay(
     short_view_count = sum(
         1 for dwell_ms in dwell_by_view.values() if dwell_ms < min_dwell_ms
     )
+    slide_aoi_cache: dict[str, tuple[list[ReplaySlideAoiOut], dict[str, str]]] = {}
 
-    for content_view, session, lesson, slide in rows:
+    for (
+        content_view,
+        session,
+        lesson,
+        slide,
+        first,
+        last,
+        count,
+        ok_count,
+    ) in rows:
         session_ids.add(session.id)
         dwell_ms = dwell_by_view[content_view.id]
         counted = dwell_ms >= min_dwell_ms
@@ -315,16 +347,22 @@ async def visit_replay(
         total_dwell += content_view.tracked_duration_ms
         total_fixations += content_view.fixation_count
 
-        first, last, count, ok_count = sample_stats.get(
-            content_view.id, (None, None, 0, 0)
-        )
-        slide_rows = aois_by_slide.get(slide.id, []) if slide else []
-        slide_out = _slide_aois_out(slide_rows)
-        slide_names = {
-            item.analysis_label: item.name
-            for item in slide_out
-            if item.analysis_label
-        }
+        if slide is None:
+            slide_out: list[ReplaySlideAoiOut] = []
+            slide_names: dict[str, str] = {}
+        else:
+            cached = slide_aoi_cache.get(slide.id)
+            if cached is None:
+                slide_out = _slide_aois_out(aois_by_slide.get(slide.id, []))
+                slide_names = {
+                    item.analysis_label: item.name
+                    for item in slide_out
+                    if item.analysis_label
+                }
+                cached = (slide_out, slide_names)
+                slide_aoi_cache[slide.id] = cached
+            else:
+                slide_out, slide_names = cached
 
         layout_out: list[ReplayLayoutOut] = []
         for layout in layouts_by_view.get(content_view.id, []):

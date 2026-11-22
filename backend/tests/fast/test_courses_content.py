@@ -199,6 +199,7 @@ async def test_students_add_and_remove(client):
     student = await create_user(email="s-students@example.com")
     student_two = await create_user(email="s-students-2@example.com")
     ids = await create_course(teacher_id=teacher["id"])
+    await create_lesson(module_id=ids["module_id"])
     await login(client, teacher["email"])
 
     directory = await client.get("/teacher/students?q=SV")
@@ -212,6 +213,18 @@ async def test_students_add_and_remove(client):
     )
     assert added.status_code == 201, added.text
     assert added.json()["added"] == 2
+    roster = await client.get(f"/teacher/courses/{ids['course_id']}/students")
+    assert roster.status_code == 200
+    assert {row["id"] for row in roster.json()} == {
+        student["id"],
+        student_two["id"],
+    }
+    courses = await client.get("/teacher/courses")
+    course_row = next(
+        item for item in courses.json() if item["id"] == ids["course_id"]
+    )
+    assert course_row["students"] == 2
+    assert course_row["attention"] is None
     enrollment = await fetch_one(
         "SELECT id, status FROM enrollments WHERE course_id = :c AND student_id = :s",
         {"c": ids["course_id"], "s": student["id"]},
@@ -222,6 +235,13 @@ async def test_students_add_and_remove(client):
         f"/teacher/courses/{ids['course_id']}/students/{student['id']}"
     )
     assert removed.status_code == 200
+    roster = await client.get(f"/teacher/courses/{ids['course_id']}/students")
+    assert [row["id"] for row in roster.json()] == [student_two["id"]]
+    courses = await client.get("/teacher/courses")
+    course_row = next(
+        item for item in courses.json() if item["id"] == ids["course_id"]
+    )
+    assert course_row["students"] == 1
     assert (
         await fetch_one(
             "SELECT status FROM enrollments WHERE id = :id",
@@ -233,6 +253,36 @@ async def test_students_add_and_remove(client):
         f"/teacher/courses/{ids['course_id']}/students/{student['id']}"
     )
     assert again.status_code == 200
+
+
+async def test_course_student_lessons_lazy(client):
+    teacher = await create_user(role="teacher", email="t-lazy@example.com")
+    student = await create_user(email="s-lazy@example.com")
+    other = await create_user(email="s-lazy-other@example.com")
+    ids = await create_course(
+        teacher_id=teacher["id"], student_id=student["id"]
+    )
+    lesson_id = await create_lesson(module_id=ids["module_id"])
+    await login(client, teacher["email"])
+
+    students = await client.get(f"/teacher/courses/{ids['course_id']}/students")
+    assert students.status_code == 200, students.text
+    [row] = students.json()
+    assert row["lessons"] == []
+
+    lessons = await client.get(
+        f"/teacher/courses/{ids['course_id']}/students/{student['id']}/lessons"
+    )
+    assert lessons.status_code == 200, lessons.text
+    [item] = lessons.json()
+    assert item["lessonId"] == lesson_id
+    assert item["attention"] is None
+    assert item["mastery"] is None
+
+    missing = await client.get(
+        f"/teacher/courses/{ids['course_id']}/students/{other['id']}/lessons"
+    )
+    assert missing.status_code == 404
 
 
 async def test_course_delete_cascades_content(client):
@@ -278,3 +328,15 @@ async def test_outline_visibility_and_enrollment_cache(client_factory):
     assert (
         await other_client.get(f"/api/courses/{draft_ids['course_id']}")
     ).status_code == 403
+
+    # Access cache phải bị xoá khi thêm SV: draft đang 403 (đã cache
+    # enrolled=false), thêm enrollment xong phải thành 404 ngay, không chờ TTL.
+    draft_url = f"/api/courses/{draft_ids['course_id']}"
+    teacher_client = await client_factory()
+    await login(teacher_client, teacher["email"])
+    added = await teacher_client.post(
+        f"/teacher/courses/{draft_ids['course_id']}/students",
+        json={"studentIds": [other_student["id"]]},
+    )
+    assert added.status_code == 201
+    assert (await other_client.get(draft_url)).status_code == 404

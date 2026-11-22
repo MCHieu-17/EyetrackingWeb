@@ -3,13 +3,20 @@
 Backend chỉ gửi danh sách slide ID. Chatbot đọc nội dung hiện hành qua
 `v_course_outline` (kể cả khóa còn nháp) và cập nhật trực tiếp transcript,
 embedding, index_status trên cùng row.
+
+Pipeline trong một request: gom slide theo PDF, mở/parse PDF một lần cho mỗi
+nhóm, chạy render + VLM song song theo `VLM_INGEST_CONCURRENCY`, rồi gom
+transcript thành batch để embedding. Embedding chạy nền trong lúc các slide
+kế tiếp đang được VLM xử lý nên không chặn toàn bộ request.
 """
 
 import base64
 import logging
+import os
 import threading
-from collections import OrderedDict
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from queue import Empty, Queue
 
 import openai
 import psycopg
@@ -25,7 +32,6 @@ from app.services.storage import FileStorage
 from app.settings import (
     embedding_dim,
     embedding_model_version,
-    embedding_name,
     llm_base_url,
 )
 from app.workflow.prompts import SLIDE_VLM_PROMPT
@@ -59,9 +65,13 @@ def _error_text(exc: Exception) -> str:
 
 
 class Ingestion:
-    MAX_WORKERS = 4
+    # Số thread render + VLM mỗi request; dùng chung biến với slot VLM để
+    # không có thread nào ngồi chờ semaphore vô ích.
+    MAX_WORKERS = max(1, int(os.getenv("VLM_INGEST_CONCURRENCY", "4")))
+    EMBED_BATCH = 8
+    # Chờ ngắn để gom thêm transcript vừa xong trong cùng wave VLM.
+    EMBED_BATCH_WINDOW_SECONDS = 0.2
     PDF_RENDER_DPI = 150
-    PDF_CACHE_SIZE = 3
 
     SLIDE_QUERY = """
         SELECT
@@ -88,12 +98,9 @@ class Ingestion:
         self.slide_to_text_chain = self._create_chat_messages() | vlm.with_structured_output(
             VLMOutput, method="function_calling"
         )
-        self.embedding = get_embedding(embedding_name())
+        self.embedding = get_embedding()
         self.storage = FileStorage()
         self._pool = None
-        self._embed_lock = threading.Lock()
-        self._pdf_lock = threading.Lock()
-        self._pdf_cache: OrderedDict[str, bytes] = OrderedDict()
         try:
             self._verify_vector_dim()
         except (PoolTimeout, psycopg.Error) as exc:
@@ -130,6 +137,23 @@ class Ingestion:
                 "slides.embedding."
             )
         logger.info("Embedding dimension khớp DB: vector(%s)", column_dim)
+
+    def job_keys(self, slide_ids: list[str]) -> tuple[str, ...]:
+        """Khoá single-flight theo lesson cho một loạt slide cần ingest."""
+        if not slide_ids:
+            return ("empty",)
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT DISTINCT lesson_id::text AS lesson_id
+                    FROM slides
+                    WHERE id = ANY(%s::uuid[])
+                    """,
+                    (slide_ids,),
+                )
+                rows = cur.fetchall()
+        return tuple(sorted(row["lesson_id"] for row in rows)) or ("unknown",)
 
     def _load_slides(self, slide_ids: list[str]) -> list[dict]:
         if not slide_ids:
@@ -174,32 +198,27 @@ class Ingestion:
             ]
         )
 
-    def _pdf_bytes(self, key: str) -> bytes:
-        with self._pdf_lock:
-            cached = self._pdf_cache.get(key)
-            if cached is not None:
-                self._pdf_cache.move_to_end(key)
-                return cached
+    def _open_document(self, key: str) -> tuple[pymupdf.Document, bytes]:
+        """Mở PDF một lần; giữ bytes sống cùng Document trong suốt nhóm."""
         data = self.storage.load(key)
-        with self._pdf_lock:
-            self._pdf_cache[key] = data
-            self._pdf_cache.move_to_end(key)
-            while len(self._pdf_cache) > self.PDF_CACHE_SIZE:
-                self._pdf_cache.popitem(last=False)
-        return data
+        return pymupdf.open(stream=data, filetype="pdf"), data
 
-    def _load_image(self, slide: dict) -> str:
-        key = slide["pdf_object_key"]
+    def _load_image(
+        self,
+        slide: dict,
+        document: pymupdf.Document,
+        render_lock: threading.Lock,
+    ) -> str:
         page_no = int(slide["source_page"])
-        pdf_bytes = self._pdf_bytes(key)
-        with pymupdf.open(stream=pdf_bytes) as doc:
-            if page_no < 1 or page_no > doc.page_count:
+        with render_lock:
+            if page_no < 1 or page_no > document.page_count:
                 raise ValueError(
-                    f"Trang {page_no} nằm ngoài PDF {doc.page_count} trang"
+                    f"Trang {page_no} nằm ngoài PDF {document.page_count} trang"
                 )
-            page = doc[page_no - 1]
+            page = document[page_no - 1]
             pix = page.get_pixmap(dpi=self.PDF_RENDER_DPI, alpha=False)
-            return base64.b64encode(pix.tobytes("png")).decode("ascii")
+            png = pix.tobytes("png")
+        return base64.b64encode(png).decode("ascii")
 
     def _describe_image(self, b64: str) -> str:
         try:
@@ -222,6 +241,14 @@ class Ingestion:
             raise
 
     def _mark(self, slide_id: str, status: str, error: str | None = None) -> None:
+        self._mark_many([slide_id], status, error)
+
+    def _mark_many(
+        self, slide_ids: list[str], status: str, error: str | None = None
+    ) -> None:
+        unique_ids = list(dict.fromkeys(slide_ids))
+        if not unique_ids:
+            return
         with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -230,9 +257,9 @@ class Ingestion:
                     SET index_status = %s,
                         index_error = %s,
                         updated_at = now()
-                    WHERE id = %s
+                    WHERE id = ANY(%s::uuid[])
                     """,
-                    (status, error, slide_id),
+                    (status, error, unique_ids),
                 )
 
     def _upsert(self, slide: dict, transcript: str, vector: list[float]) -> None:
@@ -258,51 +285,209 @@ class Ingestion:
                     ),
                 )
 
-    def _embed_slide(self, slide: dict) -> None:
-        slide_id = slide["slide_id"]
-        self._mark(slide_id, "pending")
+    def _prepare_slide(
+        self,
+        slide: dict,
+        document: pymupdf.Document,
+        render_lock: threading.Lock,
+    ) -> dict:
+        """Render + VLM một slide; trả transcript kèm timing cho embedder."""
+        render_started = time.perf_counter()
+        b64 = self._load_image(slide, document, render_lock)
+        render_ms = (time.perf_counter() - render_started) * 1000
+
+        vlm_started = time.perf_counter()
+        transcript = self._describe_image(b64)
+        return {
+            "slide": slide,
+            "transcript": transcript,
+            "render_ms": render_ms,
+            "vlm_ms": (time.perf_counter() - vlm_started) * 1000,
+        }
+
+    @staticmethod
+    def _failed(
+        result: dict,
+        result_lock: threading.Lock,
+        slides: list[dict],
+        exc: Exception,
+        *,
+        vlm_down: bool = False,
+    ) -> None:
+        with result_lock:
+            result["failed"] += len(slides)
+            if vlm_down:
+                result["vlm_down"] += len(slides)
+            for slide in slides:
+                result["errors"].append(
+                    f"{slide['slide_id']}: {_error_text(exc)}"
+                )
+
+    def _embed_batch(
+        self,
+        batch: list[dict],
+        result: dict,
+        result_lock: threading.Lock,
+    ) -> None:
+        texts = [item["transcript"] for item in batch]
+        slides = [item["slide"] for item in batch]
+        started = time.perf_counter()
         try:
-            b64 = self._load_image(slide)
-            transcript = self._describe_image(b64)
-            with self._embed_lock:
-                vector = self.embedding.embed_documents([transcript])[0]
-            self._upsert(slide, transcript, vector)
-        except VLMUnavailableError as exc:
-            self._mark(slide_id, "failed", _error_text(exc))
-            raise
+            vectors = self.embedding.embed_documents(texts)
+            if len(vectors) != len(batch):
+                raise RuntimeError(
+                    f"Embedding trả {len(vectors)} vector cho {len(batch)} slide"
+                )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Bỏ qua slide %s do lỗi xử lý", slide_id)
-            self._mark(slide_id, "failed", _error_text(exc))
-            raise
+            logger.exception(
+                "Embedding batch lỗi (%s slide): %s", len(batch), _error_text(exc)
+            )
+            self._mark_many(
+                [slide["slide_id"] for slide in slides], "failed", _error_text(exc)
+            )
+            self._failed(result, result_lock, slides, exc)
+            return
+        embed_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "ingest embed batch=%s embed_ms=%.0f", len(batch), embed_ms
+        )
+
+        for item, vector in zip(batch, vectors, strict=True):
+            slide = item["slide"]
+            db_started = time.perf_counter()
+            try:
+                self._upsert(slide, item["transcript"], vector)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Upsert slide %s lỗi", slide["slide_id"])
+                self._mark(slide["slide_id"], "failed", _error_text(exc))
+                self._failed(result, result_lock, [slide], exc)
+                continue
+            db_ms = (time.perf_counter() - db_started) * 1000
+            with result_lock:
+                result["processed"] += 1
+            logger.info(
+                "ingest slide=%s render_ms=%.0f vlm_ms=%.0f embed_ms=%.0f db_ms=%.0f",
+                slide["slide_id"],
+                item["render_ms"],
+                item["vlm_ms"],
+                embed_ms / len(batch),
+                db_ms,
+            )
 
     def _process_slides(self, slides: list[dict]) -> tuple[int, int, list[str]]:
-        processed = failed = 0
-        errors: list[str] = []
-        vlm_down = 0
+        started = time.perf_counter()
+        groups: dict[str, list[dict]] = {}
+        for slide in slides:
+            groups.setdefault(slide["pdf_object_key"], []).append(slide)
 
-        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as pool:
-            futures = {pool.submit(self._embed_slide, slide): slide for slide in slides}
-            for future in as_completed(futures):
-                slide = futures[future]
+        queue: Queue = Queue()
+        result = {"processed": 0, "failed": 0, "vlm_down": 0, "errors": []}
+        result_lock = threading.Lock()
+        embedder_error: list[BaseException] = []
+
+        def embed_loop() -> None:
+            try:
+                while True:
+                    item = queue.get()
+                    if item is None:
+                        return
+                    batch = [item]
+                    deadline = (
+                        time.monotonic() + self.EMBED_BATCH_WINDOW_SECONDS
+                    )
+                    stop = False
+                    while len(batch) < self.EMBED_BATCH:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        try:
+                            nxt = queue.get(timeout=remaining)
+                        except Empty:
+                            break
+                        if nxt is None:
+                            stop = True
+                            break
+                        batch.append(nxt)
+                    self._embed_batch(batch, result, result_lock)
+                    if stop:
+                        return
+            except BaseException as exc:  # noqa: BLE001
+                logger.exception("Embedding worker dừng bất thường")
+                embedder_error.append(exc)
+
+        embedder = threading.Thread(
+            target=embed_loop, daemon=True, name="ingest-embed"
+        )
+        embedder.start()
+        try:
+            for key, group in groups.items():
+                slide_ids = [slide["slide_id"] for slide in group]
+                self._mark_many(slide_ids, "pending")
                 try:
-                    future.result()
-                    processed += 1
-                except VLMUnavailableError as exc:
-                    failed += 1
-                    vlm_down += 1
-                    errors.append(f"{slide['slide_id']}: {_error_text(exc)}")
+                    document, _data = self._open_document(key)
                 except Exception as exc:  # noqa: BLE001
-                    failed += 1
-                    errors.append(f"{slide['slide_id']}: {_error_text(exc)}")
+                    logger.exception("Không mở được PDF %s", key)
+                    self._mark_many(slide_ids, "failed", _error_text(exc))
+                    self._failed(result, result_lock, group, exc)
+                    continue
 
+                render_lock = threading.Lock()
+                try:
+                    with ThreadPoolExecutor(
+                        max_workers=self.MAX_WORKERS
+                    ) as pool:
+                        futures = {
+                            pool.submit(
+                                self._prepare_slide, slide, document, render_lock
+                            ): slide
+                            for slide in group
+                        }
+                        for future in as_completed(futures):
+                            slide = futures[future]
+                            try:
+                                queue.put(future.result())
+                            except VLMUnavailableError as exc:
+                                self._mark(
+                                    slide["slide_id"], "failed", _error_text(exc)
+                                )
+                                self._failed(
+                                    result, result_lock, [slide], exc, vlm_down=True
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                logger.exception(
+                                    "Bỏ qua slide %s do lỗi xử lý",
+                                    slide["slide_id"],
+                                )
+                                self._mark(
+                                    slide["slide_id"], "failed", _error_text(exc)
+                                )
+                                self._failed(result, result_lock, [slide], exc)
+                finally:
+                    document.close()
+        finally:
+            queue.put(None)
+            embedder.join()
+
+        if embedder_error:
+            raise RuntimeError(
+                "Embedding worker dừng bất thường"
+            ) from embedder_error[0]
+
+        logger.info(
+            "ingest done slides=%s processed=%s failed=%s wall_ms=%.0f",
+            len(slides),
+            result["processed"],
+            result["failed"],
+            (time.perf_counter() - started) * 1000,
+        )
         # Chỉ báo lỗi transport khi không có slide nào thành công. Nếu đã có
         # slide ready, trả counts để backend giữ nguyên kết quả thành công và
         # chỉ retry các slide còn failed/pending.
-        if vlm_down and processed == 0:
+        if result["vlm_down"] and result["processed"] == 0:
             raise VLMUnavailableError(
                 "VLM tạm thời không khả dụng cho một hoặc nhiều slide."
             )
-        return processed, failed, errors
+        return result["processed"], result["failed"], result["errors"]
 
     def embed_slides(self, slide_ids: list[str]) -> tuple[int, int, list[str]]:
         slides = self._load_slides(slide_ids)

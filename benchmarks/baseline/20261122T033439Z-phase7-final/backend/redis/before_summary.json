@@ -1,0 +1,17 @@
+{
+  "keyspace_hits": 0,
+  "keyspace_misses": 0,
+  "hit_rate": null,
+  "used_memory_human": "1.02M",
+  "used_memory_peak_human": "1.10M",
+  "evicted_keys": 0,
+  "expired_keys": 0,
+  "total_commands_processed": 741,
+  "instantaneous_ops_per_sec": 0,
+  "commandstats": {
+    "ping": "calls=23,usec=22,usec_per_call=0.96,rejected_calls=0,failed_calls=0",
+    "info": "calls=1,usec=106,usec_per_call=106.00,rejected_calls=0,failed_calls=0",
+    "client|setinfo": "calls=8,usec=1,usec_per_call=0.12,rejected_calls=0,failed_calls=0",
+    "hello": "calls=4,usec=22,usec_per_call=5.50,rejected_calls=0,failed_calls=0"
+  }
+}

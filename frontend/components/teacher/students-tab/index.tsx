@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCourseStudents, useCourseTree } from "@/hooks/use-teacher";
+import { useCourseStudents, useCourseTree, useStudentLessons } from "@/hooks/use-teacher";
 import { removeCourseStudent } from "@/lib/api/teacher";
 import type { StudentRow } from "@/lib/types/domain";
 import {
@@ -34,6 +34,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const { data: studentLessons = [] } = useStudentLessons(courseId, openId ?? "");
 
   const rows = useMemo(
     () => sortAndFilterStudents(students, query, sort),
@@ -56,7 +57,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
   const openStudentLessons = openStudent
     ? courseLessons.map((lesson) => ({
         lessonId: lesson.id,
-        attention: openStudent.lessons.find((item) => item.lessonId === lesson.id)?.attention ?? null,
+        attention: studentLessons.find((item) => item.lessonId === lesson.id)?.attention ?? null,
       }))
     : [];
   const removeStudent = async (id: string) => {

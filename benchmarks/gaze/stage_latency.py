@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import resource
 import statistics
 import sys
@@ -68,7 +69,6 @@ def run_image(
     warmup: int,
     iterations: int,
 ) -> dict:
-    frame = decode_image(image_bytes)
     for _ in range(warmup):
         prepared = cpu.prepare(image_bytes)
         if prepared is None:
@@ -78,7 +78,6 @@ def run_image(
 
     stages = {
         "decode": [],
-        "cvt_color": [],
         "mediapipe_detect": [],
         "warp_preprocess": [],
         "tensor_prep": [],
@@ -92,46 +91,43 @@ def run_image(
         total_start = time.perf_counter()
 
         t0 = time.perf_counter()
-        frame = decode_image(image_bytes)
+        rgb = decode_image(image_bytes)
         t1 = time.perf_counter()
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        t2 = time.perf_counter()
         detection = cpu.detector.detect(rgb)
-        t3 = time.perf_counter()
+        t2 = time.perf_counter()
         if detection is None:
             raise RuntimeError("MediaPipe không detect được mặt ở iteration")
         (xmin, ymin, xmax, ymax), landmarks = detection
         face = np.ascontiguousarray(rgb[ymin:ymax, xmin:xmax])
         landmarks_crop = landmarks - np.array([xmin, ymin], dtype=np.float32)
         warped = cpu.preprocessor.process(face, landmarks_crop)
-        t4 = time.perf_counter()
+        t3 = time.perf_counter()
         if warped is None:
             raise RuntimeError("Preprocessor trả None (head pose?)")
         prepared = PreparedFace(warped)
 
-        t5 = time.perf_counter()
+        t4 = time.perf_counter()
         tensor = gpu._to_tensor(prepared)
         maybe_sync(str(gpu.device))
-        t6 = time.perf_counter()
+        t5 = time.perf_counter()
         with torch.inference_mode():
             pred = gpu.model(tensor)["pred_gaze"]
             maybe_sync(str(gpu.device))
             pitch, yaw = pred[0].tolist()
-        t7 = time.perf_counter()
+        t6 = time.perf_counter()
         x, y = calib.predict(float(pitch), float(yaw))
-        t8 = time.perf_counter()
+        t7 = time.perf_counter()
         x, y = smoother.process([x, y], timestamp=time.perf_counter())
-        t9 = time.perf_counter()
+        t8 = time.perf_counter()
 
         stages["decode"].append((t1 - t0) * 1000)
-        stages["cvt_color"].append((t2 - t1) * 1000)
-        stages["mediapipe_detect"].append((t3 - t2) * 1000)
-        stages["warp_preprocess"].append((t4 - t3) * 1000)
-        stages["tensor_prep"].append((t6 - t5) * 1000)
-        stages["unigaze_forward"].append((t7 - t6) * 1000)
-        stages["calibration"].append((t8 - t7) * 1000)
-        stages["smoothing"].append((t9 - t8) * 1000)
-        stages["total"].append((t9 - total_start) * 1000)
+        stages["mediapipe_detect"].append((t2 - t1) * 1000)
+        stages["warp_preprocess"].append((t3 - t2) * 1000)
+        stages["tensor_prep"].append((t5 - t4) * 1000)
+        stages["unigaze_forward"].append((t6 - t5) * 1000)
+        stages["calibration"].append((t7 - t6) * 1000)
+        stages["smoothing"].append((t8 - t7) * 1000)
+        stages["total"].append((t8 - total_start) * 1000)
         last_pitch, last_yaw = float(pitch), float(yaw)
 
     return {
@@ -140,10 +136,66 @@ def run_image(
     }
 
 
+def run_batches(
+    image_bytes: bytes,
+    *,
+    cpu: CpuStage,
+    gpu: GpuStage,
+    batch_sizes: list[int],
+    warmup: int,
+) -> dict:
+    """Đo forward theo batch + delta so với single (cùng một ảnh)."""
+    prepared = cpu.prepare(image_bytes)
+    if prepared is None:
+        return {}
+    single = gpu.predict(prepared)
+    results: dict[str, dict] = {}
+    for size in batch_sizes:
+        batch = [prepared] * size
+        for _ in range(min(warmup, 5)):
+            gpu.predict_batch(batch)
+        maybe_sync(str(gpu.device))
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+        times: list[float] = []
+        predictions = []
+        for _ in range(20):
+            started = time.perf_counter()
+            predictions = gpu.predict_batch(batch)
+            maybe_sync(str(gpu.device))
+            times.append((time.perf_counter() - started) * 1000.0)
+        p50 = pct(times, 0.50)
+        results[str(size)] = {
+            "batch": size,
+            "p50_ms": p50,
+            "p95_ms": pct(times, 0.95),
+            "per_item_ms": round(p50 / size, 3) if p50 else None,
+            "fps": round(1000.0 / (p50 / size), 1) if p50 else None,
+            "max_delta_rad": max(
+                math.hypot(pitch - single[0], yaw - single[1])
+                for pitch, yaw in predictions
+            ),
+            "cuda_allocated_mib": (
+                round(torch.cuda.max_memory_allocated() / 1024**2, 1)
+                if torch.cuda.is_available()
+                else None
+            ),
+            "cuda_reserved_mib": (
+                round(torch.cuda.max_memory_reserved() / 1024**2, 1)
+                if torch.cuda.is_available()
+                else None
+            ),
+        }
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--widths", default="480,720,1080")
+    parser.add_argument("--qualities", default="0.78")
+    parser.add_argument("--batch-sizes", default="1,2,4,8")
     parser.add_argument("--iterations", type=int, default=200)
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--out", required=True)
@@ -171,6 +223,12 @@ def main() -> int:
     if original is None:
         raise SystemExit(f"Không đọc được ảnh {args.image}")
     widths = [int(item) for item in args.widths.split(",") if item.strip()]
+    qualities = [
+        float(item) for item in args.qualities.split(",") if item.strip()
+    ]
+    batch_sizes = [
+        int(item) for item in args.batch_sizes.split(",") if item.strip()
+    ]
     results = {}
     for width in widths:
         scale = width / original.shape[1]
@@ -179,26 +237,42 @@ def main() -> int:
             (width, max(1, int(round(original.shape[0] * scale)))),
             interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
         )
-        ok, encoded = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-        if not ok:
-            raise RuntimeError("JPEG encode failed")
-        data = encoded.tobytes()
-        results[f"{width}px"] = {
-            "width": resized.shape[1],
-            "height": resized.shape[0],
-            "jpeg_bytes": len(data),
-            "jpeg_sha256": hashlib.sha256(data).hexdigest(),
-            **run_image(
-                data,
-                cpu=cpu,
-                gpu=gpu,
-                settings=settings,
-                calib=calib,
-                smoother=smoother,
-                warmup=args.warmup,
-                iterations=args.iterations,
-            ),
-        }
+        for quality in qualities:
+            ok, encoded = cv2.imencode(
+                ".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality * 100)]
+            )
+            if not ok:
+                raise RuntimeError("JPEG encode failed")
+            data = encoded.tobytes()
+            key = (
+                f"{width}px"
+                if len(qualities) == 1
+                else f"{width}px_q{int(round(quality * 100))}"
+            )
+            results[key] = {
+                "width": resized.shape[1],
+                "height": resized.shape[0],
+                "jpeg_quality": quality,
+                "jpeg_bytes": len(data),
+                "jpeg_sha256": hashlib.sha256(data).hexdigest(),
+                **run_image(
+                    data,
+                    cpu=cpu,
+                    gpu=gpu,
+                    settings=settings,
+                    calib=calib,
+                    smoother=smoother,
+                    warmup=args.warmup,
+                    iterations=args.iterations,
+                ),
+                "batch": run_batches(
+                    data,
+                    cpu=cpu,
+                    gpu=gpu,
+                    batch_sizes=batch_sizes,
+                    warmup=args.warmup,
+                ),
+            }
 
     payload = {
         "device": str(gpu.device),

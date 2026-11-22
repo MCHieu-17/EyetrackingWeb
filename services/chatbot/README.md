@@ -34,17 +34,17 @@ POST /chat/stream
   │    └─ dense: pgvector với HyDE text (nếu có)
   │         └─ RRF fusion → top-k docs
   ├─ generation: một LLM call streaming
-  └─ citation gate: code check + retry 1 lần + fallback source list
+  └─ citation: hậu kiểm + chèn "Nguồn tham khảo" nếu model không cite
 ```
 
 - **Không còn router LLM, verifier LLM, NDJSON block hay LangGraph.** Mỗi
-  request tối đa 2 LLM call (1 query prep nhỏ + 1 answer streaming), cộng tối đa
-  1 retry streaming nếu citation gate thất bại.
+  request tối đa 2 LLM call (1 query prep nhỏ + 1 answer streaming), không retry
+  toàn bộ câu trả lời.
 - **Một chatbot duy nhất** cho bài giảng và bài tập. Không còn prompt/verifier
   riêng cho exercise.
-- **Citation**: mỗi claim về môn học phải có `[n]`. Code kiểm tra `[n]` nằm
-  trong khoảng hợp lệ; nếu model không cite, pipeline retry một lần với prompt
-  chặt hơn, sau đó chèn "Nguồn tham khảo" để vẫn có nguồn.
+- **Citation**: mỗi claim về môn học phải có `[n]`. Code hậu kiểm `[n]` nằm
+  trong khoảng hợp lệ; nếu model không cite, pipeline chèn "Nguồn tham khảo" và
+  đặt `finish_reason="citation_fallback"` để vẫn có nguồn.
 - **Bài tập chưa nộp**: prompt-level không lộ đáp án/lời giải; chỉ gợi ý phương
   pháp và câu hỏi dẫn dắt. Không còn leakage verifier.
 - **Bài tập đã nộp**: được giải thích đáp án đúng/lỗi sai từ ngữ cảnh bài tập
@@ -54,13 +54,15 @@ POST /chat/stream
 - **LMS**: deadline/điểm/cấu trúc khóa được nhận diện bằng regex, gọi
   `/internal/chat/lms-query`; câu hỏi thuần LMS được render trực tiếp, câu hỏi
   mixed được inject context vào prompt.
-- **Streaming**: token được stream trực tiếp. Citation gate buffer tối đa
-  `CITATION_GATE_TOKENS` từ trước khi kiểm tra, nên first token có thể chậm hơn
-  một chút nhưng không phải chờ verify từng block.
+- **Streaming**: token được phát ngay khi LLM trả về; citation được kiểm tra
+  sau khi stream xong, không buffer và không retry.
 - **HyDE trên CPU**: embedding local chạy CPU nên HyDE text càng dài càng tốn
   thời gian. Pipeline chỉ dùng HyDE cho câu ngắn/mơ hồ, không dùng cho follow-up
   (rewrite xử lý) và câu đã có chủ thể cụ thể. Nếu ưu tiên latency tuyệt đối, đặt
-  `HYDE_ENABLED=false`; retrieval vẫn chạy BM25 + dense query gốc.
+  `HYDE_ENABLED=false`; retrieval vẫn chạy BM25 + dense query gốc. Kết quả
+  rewrite/HyDE được cache TTL 300 s theo câu hỏi + hash history.
+- **Embedding**: một instance model dùng chung cho query và ingest, với hai lane
+  worker riêng để query không xếp sau batch ingest.
 
 ## Cấu hình (biến môi trường)
 
@@ -89,10 +91,17 @@ POST /chat/stream
 | `ANSWER_MAX_TOKENS` | `2048` | Max output cho answer |
 | `ANSWER_TEMPERATURE` | `0.2` | Nhiệt độ sinh answer |
 | `LLM_QUERY_MAX_TOKENS` | `400` | Max output cho query rewrite/HyDE |
-| `LLM_QUERY_TIMEOUT` | `30` | Timeout cho query prep |
+| `LLM_QUERY_TIMEOUT` | `3` | Timeout cho query prep (fallback câu gốc) |
 | `LLM_ANSWER_TIMEOUT` | `120` | Timeout cho answer streaming |
+| `LLM_QUEUE_TIMEOUT` | `5` | Chờ slot generation/total trước khi bỏ |
+| `LLM_GENERATION_CONCURRENCY` | `6` | Slot gọi LLM generation đồng thời |
+| `LLM_TOTAL_CONCURRENCY` | `6` | Slot LLM tổng (query + answer) |
+| `CHATBOT_MAX_CONCURRENT` | `6` | Slot chat đồng thời; vượt → 429 sớm |
 | `VLM_MAX_TOKENS` | `8192` | Max output cho VLM |
 | `VLM_TIMEOUT` | `300` | Timeout cho VLM ingest |
+| `VLM_INGEST_CONCURRENCY` | `4` | Slot VLM + số thread render/VLM mỗi request |
+| `VLM_INGEST_QUEUE_TIMEOUT` | `900` | Chờ slot VLM tối đa (giây) |
+| `EMBEDDING_NUM_THREADS` | `4` | Torch intra-op, khớp CPU quota container |
 | `RAG_TOP_K` | `8` | Số slide trả về sau RRF |
 | `RAG_BM25_CANDIDATES` | `20` | Candidate nhánh BM25-like |
 | `RAG_DENSE_CANDIDATES` | `20` | Candidate nhánh dense |
@@ -103,8 +112,8 @@ POST /chat/stream
 | `QUERY_REWRITE_ENABLED` | `true` | Bật rewrite theo history |
 | `HYDE_ENABLED` | `true` | Bật HyDE |
 | `HYDE_MIN_QUERY_WORDS` | `8` | Câu ngắn hơn + mơ hồ/không có chủ thể → HyDE |
-| `CITATION_GATE_TOKENS` | `200` | Số từ buffer trước khi kiểm tra citation |
-| `CITATION_RETRY_MAX` | `1` | Số lần retry citation |
+| `CITATION_GATE_TOKENS` | `200` | Deprecated, không còn được pipeline đọc |
+| `CITATION_RETRY_MAX` | `1` | Deprecated, không còn retry câu trả lời |
 | `LMS_DETECTION_ENABLED` | `true` | Bật regex LMS |
 | `LOCAL_MEDIA_DIR` | `/app/media` | Thư mục slide local |
 | `STORAGE_HTTP_ALLOWED_HOSTS` | – | Host HTTP được phép fetch slide |
@@ -192,7 +201,7 @@ app/
     ├── history.py          chuẩn hoá lịch sử
     ├── llm.py              AsyncOpenAI transport + concurrency
     ├── providers.py        embedding/VLM factories
-    ├── embedding_queue.py  một worker embedding cho chat + ingest
+    ├── embedding_queue.py  hai lane query/ingest dùng chung một model
     └── workload.py         ingest nhường ưu tiên cho chat
 ```
 
@@ -209,9 +218,12 @@ app/
   `http://backend:8001`). Các operation `/internal/chat/lms-query` xác định
   student/course từ session đã lưu và kiểm tra lại enrollment, teacher lock,
   assignment/attempt context hiện hành.
-- Một embedding worker sở hữu model Qwen và phục vụ cả chat lẫn ingest. Chat
-  được ưu tiên; batch tối đa 8 input với cửa sổ gom 10 ms. Chỉ cache query
-  vector (1.024 entry / 15 phút).
+- Một model Qwen dùng chung cho cả chat lẫn ingest nhưng có hai lane worker
+  riêng: query luôn được ưu tiên, ingest gom transcript thành batch tối đa 8
+  (cửa sổ 10 ms) và chạy nền trong lúc VLM xử lý các slide kế tiếp.
+- Ingest mở/parse PDF một lần cho mỗi lesson, render + VLM song song theo
+  `VLM_INGEST_CONCURRENCY` (mặc định 4, cũng là số thread của `Ingestion`).
+  `EMBEDDING_NUM_THREADS` (mặc định 4) phải khớp CPU quota container.
 
 ## Lint
 

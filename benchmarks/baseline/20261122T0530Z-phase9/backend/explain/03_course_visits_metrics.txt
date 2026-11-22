@@ -1,0 +1,45 @@
+                                                                                                                                                                     QUERY PLAN                                                                                                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=499.00..504.24 rows=419 width=64) (actual time=4.234..4.270 rows=260 loops=1)
+   Output: ls.course_visit_id, COALESCE(sum(cv.gaze_count), '0'::bigint), COALESCE(sum(cv.on_slide_gaze_count), '0'::bigint), COALESCE(sum(cv.tracked_duration_ms), '0'::numeric)
+   Group Key: ls.course_visit_id
+   Batches: 1  Memory Usage: 93kB
+   Buffers: shared hit=3201
+   ->  Nested Loop  (cost=16.80..466.93 rows=3207 width=32) (actual time=0.075..3.278 rows=9700 loops=1)
+         Output: ls.course_visit_id, cv.gaze_count, cv.on_slide_gaze_count, cv.tracked_duration_ms
+         Buffers: shared hit=3201
+         ->  Nested Loop  (cost=16.52..59.80 rows=176 width=32) (actual time=0.060..0.472 rows=580 loops=1)
+               Output: ls.course_visit_id, ls.id
+               Buffers: shared hit=821
+               ->  Hash Join  (cost=16.24..28.54 rows=70 width=16) (actual time=0.050..0.130 rows=260 loops=1)
+                     Output: v.id
+                     Inner Unique: true
+                     Hash Cond: (v.enrollment_id = enrollments.id)
+                     Buffers: shared hit=35
+                     ->  Seq Scan on public.course_visits v  (cost=0.00..11.19 rows=419 width=32) (actual time=0.004..0.031 rows=419 loops=1)
+                           Output: v.id, v.enrollment_id, v.started_at, v.ended_at, v.last_seen_at, v.status, v.visit_key, v.created_at, v.updated_at
+                           Buffers: shared hit=7
+                     ->  Hash  (cost=14.99..14.99 rows=100 width=16) (actual time=0.037..0.037 rows=100 loops=1)
+                           Output: enrollments.id
+                           Buckets: 1024  Batches: 1  Memory Usage: 13kB
+                           Buffers: shared hit=28
+                           ->  Index Scan using enrollments_course_id_student_id_key on public.enrollments  (cost=0.28..14.99 rows=100 width=16) (actual time=0.013..0.027 rows=100 loops=1)
+                                 Output: enrollments.id
+                                 Index Cond: (enrollments.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid)
+                                 Buffers: shared hit=28
+               ->  Index Scan using idx_learning_sessions_visit on public.learning_sessions ls  (cost=0.28..0.42 rows=3 width=32) (actual time=0.001..0.001 rows=2 loops=260)
+                     Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                     Index Cond: (ls.course_visit_id = v.id)
+                     Buffers: shared hit=786
+         ->  Index Scan using content_views_session_id_sequence_no_key on public.content_views cv  (cost=0.29..2.13 rows=18 width=32) (actual time=0.001..0.004 rows=17 loops=580)
+               Output: cv.gaze_count, cv.on_slide_gaze_count, cv.tracked_duration_ms, cv.session_id
+               Index Cond: (cv.session_id = ls.id)
+               Buffers: shared hit=2380
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: 748620922427487958
+ Planning:
+   Buffers: shared hit=480
+ Planning Time: 0.914 ms
+ Execution Time: 4.346 ms
+(41 rows)
+

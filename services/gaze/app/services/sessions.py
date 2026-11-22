@@ -82,6 +82,13 @@ class SessionManager:
                 session.last_active = time.monotonic()
             return session
 
+    def touch(self, sid: str) -> None:
+        """Gia hạn TTL khi WS còn gửi frame (không tạo session mới)."""
+        with self._lock:
+            session = self._sessions.get(sid)
+            if session is not None:
+                session.last_active = time.monotonic()
+
     def delete(self, sid: str) -> Session | None:
         with self._lock:
             return self._sessions.pop(sid, None)

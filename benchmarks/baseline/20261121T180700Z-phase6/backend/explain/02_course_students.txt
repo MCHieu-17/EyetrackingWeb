@@ -1,0 +1,44 @@
+                                                                                                                                                                     QUERY PLAN                                                                                                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=929.30..1004.40 rows=6008 width=80) (actual time=5.085..5.556 rows=3400 loops=1)
+   Output: cv.slide_id, ls.enrollment_id, COALESCE(sum(cv.gaze_count), '0'::bigint), COALESCE(sum(cv.on_slide_gaze_count), '0'::bigint), COALESCE(sum(cv.tracked_duration_ms), '0'::numeric)
+   Group Key: cv.slide_id, ls.enrollment_id
+   Batches: 1  Memory Usage: 1233kB
+   Buffers: shared hit=2450
+   ->  Nested Loop  (cost=11.04..854.20 rows=6008 width=48) (actual time=0.061..3.557 rows=9600 loops=1)
+         Output: cv.slide_id, ls.enrollment_id, cv.gaze_count, cv.on_slide_gaze_count, cv.tracked_duration_ms
+         Buffers: shared hit=2450
+         ->  Hash Join  (cost=10.75..46.13 rows=264 width=32) (actual time=0.048..0.235 rows=580 loops=1)
+               Output: ls.enrollment_id, ls.id
+               Inner Unique: true
+               Hash Cond: (ls.enrollment_id = e.id)
+               Buffers: shared hit=27
+               ->  Seq Scan on public.learning_sessions ls  (cost=0.00..32.57 rows=1057 width=32) (actual time=0.002..0.073 rows=1057 loops=1)
+                     Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                     Buffers: shared hit=22
+               ->  Hash  (cost=9.50..9.50 rows=100 width=16) (actual time=0.036..0.036 rows=100 loops=1)
+                     Output: e.id
+                     Buckets: 1024  Batches: 1  Memory Usage: 13kB
+                     Buffers: shared hit=5
+                     ->  Bitmap Heap Scan on public.enrollments e  (cost=3.25..9.50 rows=100 width=16) (actual time=0.020..0.026 rows=100 loops=1)
+                           Output: e.id
+                           Recheck Cond: (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid)
+                           Heap Blocks: exact=2
+                           Buffers: shared hit=5
+                           ->  Bitmap Index Scan on enrollments_course_id_student_id_key  (cost=0.00..3.22 rows=100 width=0) (actual time=0.015..0.015 rows=100 loops=1)
+                                 Index Cond: (e.course_id = '4b4754b8-cc90-5b29-b207-6ff2208928db'::uuid)
+                                 Buffers: shared hit=3
+         ->  Index Scan using content_views_session_id_sequence_no_key on public.content_views cv  (cost=0.29..2.83 rows=23 width=48) (actual time=0.001..0.005 rows=17 loops=580)
+               Output: cv.slide_id, cv.gaze_count, cv.on_slide_gaze_count, cv.tracked_duration_ms, cv.session_id
+               Index Cond: (cv.session_id = ls.id)
+               Filter: ((cv.slide_id IS NOT NULL) AND ((cv.analysis_version)::text = 'gaze-metrics-v8'::text))
+               Rows Removed by Filter: 0
+               Buffers: shared hit=2423
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: -2496819523825381377
+ Planning:
+   Buffers: shared hit=400
+ Planning Time: 0.729 ms
+ Execution Time: 5.782 ms
+(40 rows)
+

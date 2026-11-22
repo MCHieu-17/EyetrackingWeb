@@ -25,15 +25,19 @@ from app.settings import Settings
 logger = logging.getLogger("app.gaze")
 
 
-def decode_image(data: bytes) -> np.ndarray:
-    """bytes ảnh (JPEG/PNG) -> ảnh BGR; raise InvalidImage nếu hỏng."""
+def decode_image(data: bytes | bytearray | memoryview) -> np.ndarray:
+    """bytes/view ảnh (JPEG/PNG) -> ảnh RGB; raise InvalidImage nếu hỏng.
+
+    Giữ `imdecode` + `cvtColor`: opencv 4.10 trong image không có
+    `IMREAD_COLOR_RGB`; đổi decoder (Pillow) sẽ đổi pixel và ảnh hưởng gaze.
+    """
     if not data:
         raise InvalidImage("ảnh rỗng")
     buf = np.frombuffer(data, dtype=np.uint8)
     frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     if frame is None:
         raise InvalidImage("không decode được ảnh")
-    return frame
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 
 @dataclass(frozen=True)
@@ -97,9 +101,8 @@ class CpuStage:
         self.detector = FaceDetector(settings.mediapipe_weights_path())
         self.preprocessor = Preprocessor()
 
-    def prepare(self, image_bytes: bytes) -> PreparedFace | None:
-        frame = decode_image(image_bytes)
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    def prepare(self, image_bytes: bytes | memoryview) -> PreparedFace | None:
+        rgb = decode_image(image_bytes)
 
         detection = self.detector.detect(rgb)
         if detection is None:
@@ -154,6 +157,8 @@ class GpuStage:
         self.model_name = settings.unigaze_model
         self.precision = settings.precision
         self.is_cuda = self.device.type == "cuda"
+        self.batch_hint = settings.gpu_batch
+        self._host_buf: torch.Tensor | None = None
 
         self.model = loader.build_unigaze_model(weights.stem)
         self.model.load_unigaze_weights(str(weights))
@@ -169,31 +174,73 @@ class GpuStage:
         self._std = torch.tensor(
             [0.229, 0.224, 0.225], device=self.device, dtype=torch.float32
         ).view(1, 3, 1, 1)
+        # Fuse /255 vào mean/std: (x/255 - mean)/std == (x - mean*255)/(std*255).
+        self._norm_mean = self._mean * 255.0
+        self._norm_std = self._std * 255.0
+
+    def _to_batch_tensor(self, prepareds: list[PreparedFace]) -> torch.Tensor:
+        """Ghép N mặt thành tensor [N, 3, H, W] đã normalize.
+
+        Khi CUDA, copy từng ROI thẳng vào buffer pinned NCHW rồi H2D
+        non_blocking một lần; normalize fuse bằng sub_/div_ để không tạo thêm
+        temporary float32 trên GPU.
+        """
+        if not prepareds:
+            raise ValueError("batch rỗng")
+        count = len(prepareds)
+        if self.is_cuda:
+            if self._host_buf is None or self._host_buf.shape[0] < count:
+                capacity = max(count, self.batch_hint)
+                # Buffer phải là normal tensor: nếu tạo trong inference_mode,
+                # các lần copy_ sau (vd stage_latency) sẽ bị PyTorch chặn.
+                with torch.inference_mode(False):
+                    self._host_buf = torch.empty(
+                        (capacity, 3, ROI_SIZE[1], ROI_SIZE[0]),
+                        dtype=torch.uint8,
+                        pin_memory=True,
+                    )
+            for index, item in enumerate(prepareds):
+                self._host_buf[index].copy_(
+                    torch.from_numpy(item.rgb).permute(2, 0, 1)
+                )
+            tensor = self._host_buf[:count].to(
+                self.device, dtype=torch.float32, non_blocking=True
+            )
+        else:
+            stacked = np.stack([item.rgb for item in prepareds])
+            tensor = (
+                torch.from_numpy(stacked)
+                .permute(0, 3, 1, 2)
+                .contiguous()
+                .to(self.device, dtype=torch.float32)
+            )
+        tensor.sub_(self._norm_mean).div_(self._norm_std)
+        return tensor.to(self.dtype)
 
     def _to_tensor(self, prepared: PreparedFace) -> torch.Tensor:
-        rgb = np.ascontiguousarray(prepared.rgb)
-        tensor = (
-            torch.from_numpy(rgb)
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-            .to(self.device)
-        )
-        tensor = tensor.to(torch.float32).div_(255.0)
-        tensor = (tensor - self._mean) / self._std
-        return tensor.to(self.dtype)
+        return self._to_batch_tensor([prepared])
+
+    @torch.inference_mode()
+    def predict_batch(
+        self, prepareds: list[PreparedFace]
+    ) -> list[tuple[float, float]]:
+        if not prepareds:
+            return []
+        pred = self.model(self._to_batch_tensor(prepareds))["pred_gaze"]
+        # Một lần D2H + synchronize cho cả batch.
+        return [(float(pitch), float(yaw)) for pitch, yaw in pred.tolist()]
 
     @torch.inference_mode()
     def predict(self, prepared: PreparedFace) -> tuple[float, float]:
-        pred = self.model(self._to_tensor(prepared))["pred_gaze"]
-        pitch, yaw = pred[0].tolist()
-        return float(pitch), float(yaw)
+        return self.predict_batch([prepared])[0]
 
     def warmup(self) -> None:
         """Chạy forward vài lần để CUDA autotune/kernel sẵn sàng."""
         dummy = PreparedFace(
             rgb=np.zeros((ROI_SIZE[1], ROI_SIZE[0], 3), dtype=np.uint8)
         )
+        reps = min(self.batch_hint, 8) if self.is_cuda else 1
         for _ in range(3):
-            self.predict(dummy)
+            self.predict_batch([dummy] * reps)
         if self.is_cuda:
             torch.cuda.synchronize()

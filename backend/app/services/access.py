@@ -5,9 +5,12 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rediscache import get_json, set_json
 from app.models.auth import User
 from app.models.calibration import GazeCalibration
-from app.models.course import Course, CourseTeacher
+from app.models.course import Course, CourseTeacher, Enrollment
+
+COURSE_ACCESS_TTL_SECONDS = 30
 
 
 def validate_uuid(value: str, detail: str = "Không tìm thấy bài học") -> None:
@@ -42,6 +45,40 @@ async def can_access_course(
         CourseTeacher.teacher_id == user.id,
     )
     return (await db.execute(stmt)).scalar_one_or_none() is not None
+
+
+def course_access_key(user_id: str, course_id: str) -> str:
+    return f"course:access:{user_id}:{course_id}"
+
+
+async def course_access_cached(
+    db: AsyncSession, course: Course, user: User
+) -> dict[str, bool]:
+    """Quyết định access/enrollment cache 30 s.
+
+    Không cache status/title của khóa: route outline vẫn đọc course row để giữ
+    đúng 403/404 và cache payload. Redis lỗi → tính lại như trước.
+    """
+    cache_key = course_access_key(user.id, course.id)
+    cached = await get_json(cache_key)
+    if isinstance(cached, dict) and isinstance(cached.get("allowed"), bool):
+        return {
+            "allowed": cached["allowed"],
+            "enrolled": bool(cached.get("enrolled")),
+        }
+
+    enrolled = (
+        await db.execute(
+            select(Enrollment.id).where(
+                Enrollment.course_id == course.id,
+                Enrollment.student_id == user.id,
+            )
+        )
+    ).scalar_one_or_none() is not None
+    allowed = await can_access_course(db, course, user)
+    value = {"allowed": allowed, "enrolled": enrolled}
+    await set_json(cache_key, value, COURSE_ACCESS_TTL_SECONDS)
+    return value
 
 
 async def current_calibration(

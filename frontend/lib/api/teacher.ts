@@ -29,6 +29,15 @@ export function fetchCourseStudents(courseId: string): Promise<StudentRow[]> {
   return apiFetch<StudentRow[]>(`/api/teacher/courses/${courseId}/students`);
 }
 
+export function fetchStudentLessons(
+  courseId: string,
+  studentId: string,
+): Promise<StudentRow["lessons"]> {
+  return apiFetch<StudentRow["lessons"]>(
+    `/api/teacher/courses/${courseId}/students/${studentId}/lessons`,
+  );
+}
+
 interface StudentDirectoryEntry {
   id: string;
   name: string;

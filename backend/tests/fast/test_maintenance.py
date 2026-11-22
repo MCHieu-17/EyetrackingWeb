@@ -7,13 +7,15 @@ from datetime import timedelta
 
 import pytest
 
-from app.maintenance import run_maintenance
+from app.db.session import SessionLocal
+from app.maintenance import delete_old_gaze_samples, run_maintenance
 from tests.conftest import (
     create_course,
     create_lesson,
     create_slide,
     create_user,
     execute,
+    fetch_all,
     fetch_one,
     now,
 )
@@ -165,3 +167,66 @@ async def test_maintenance_deletes_expired_otp_and_old_gaze():
         "SELECT id FROM gaze_samples WHERE content_view_id = :id",
         {"id": view_id},
     ) is None
+
+
+async def test_delete_old_gaze_samples_batches():
+    student = await create_user(email="s-maint-batch@example.com")
+    teacher = await create_user(role="teacher", email="t-maint-batch@example.com")
+    ids = await create_course(
+        teacher_id=teacher["id"], student_id=student["id"]
+    )
+    lesson_id = await create_lesson(module_id=ids["module_id"])
+    slide_id = await create_slide(lesson_id=lesson_id)
+    session_id = str(uuid.uuid4())
+    view_id = str(uuid.uuid4())
+    await execute(
+        "INSERT INTO learning_sessions "
+        "(id, enrollment_id, lesson_id, status, started_at, expires_at) "
+        "VALUES (:id, :enrollment, :lesson, 'completed', :started, :expires)",
+        {
+            "id": session_id,
+            "enrollment": ids["enrollment_id"],
+            "lesson": lesson_id,
+            "started": now() - timedelta(days=400),
+            "expires": now() + timedelta(hours=1),
+        },
+    )
+    await execute(
+        "INSERT INTO content_views "
+        "(id, session_id, slide_id, surface, sequence_no, started_at) "
+        "VALUES (:id, :session, :slide, 'lesson', 0, :started)",
+        {
+            "id": view_id,
+            "session": session_id,
+            "slide": slide_id,
+            "started": now() - timedelta(days=400),
+        },
+    )
+    batch_id = str(uuid.uuid4())
+    for sequence, event_time in (
+        (0, now() - timedelta(days=400)),
+        (1, now() - timedelta(days=399)),
+        (2, now()),
+    ):
+        await execute(
+            "INSERT INTO gaze_samples "
+            "(content_view_id, client_batch_id, sequence, event_time, "
+            " viewport_x, viewport_y, status) "
+            "VALUES (:view, :batch, :sequence, :event_time, 0.5, 0.5, 'ok')",
+            {
+                "view": view_id,
+                "batch": batch_id,
+                "sequence": sequence,
+                "event_time": event_time,
+            },
+        )
+
+    async with SessionLocal() as db:
+        deleted = await delete_old_gaze_samples(db, batch_size=1)
+
+    assert deleted == 2
+    remaining = await fetch_all(
+        "SELECT sequence FROM gaze_samples WHERE content_view_id = :id",
+        {"id": view_id},
+    )
+    assert [row["sequence"] for row in remaining] == [2]

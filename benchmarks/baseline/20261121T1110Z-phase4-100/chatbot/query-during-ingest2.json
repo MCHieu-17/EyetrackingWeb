@@ -1,0 +1,245 @@
+{
+  "url": "http://127.0.0.1:8000",
+  "mode": "chatbot",
+  "question_count": 19,
+  "results": [
+    {
+      "concurrency": 5,
+      "requests": 38,
+      "repeats": 2,
+      "wall_s": 33.997,
+      "rps": 1.118,
+      "error_rate": 0.0,
+      "verified_counts": {
+        "true": 38,
+        "false": 0
+      },
+      "finish_reason_counts": {
+        "stop": 38
+      },
+      "ttft_total_ms": {
+        "count": 38,
+        "p50": 127.64,
+        "p95": 293.3,
+        "p99": 392.43,
+        "mean": 129.7,
+        "max": 392.43
+      },
+      "t_prep_ms": {
+        "count": 32,
+        "p50": 5.32,
+        "p95": 23.84,
+        "p99": 26.87,
+        "mean": 6.84,
+        "max": 26.87
+      },
+      "t_retrieve_ms": {
+        "count": 32,
+        "p50": 5.09,
+        "p95": 11.12,
+        "p99": 11.65,
+        "mean": 5.34,
+        "max": 11.65
+      },
+      "t_llm_ttft_ms": {
+        "count": 38,
+        "p50": 116.86,
+        "p95": 281.22,
+        "p99": 361.93,
+        "mean": 118.73,
+        "max": 361.93
+      },
+      "t_total_ms": {
+        "count": 38,
+        "p50": 4951.46,
+        "p95": 6773.43,
+        "p99": 6883.3,
+        "mean": 4235.8,
+        "max": 6883.3
+      },
+      "t_conn_close_ms": {
+        "count": 38,
+        "p50": 4952.12,
+        "p95": 6774.0,
+        "p99": 6883.96,
+        "mean": 4236.43,
+        "max": 6883.96
+      },
+      "by_kind": {
+        "course_qa": {
+          "ttft_total_ms": {
+            "count": 16,
+            "p50": 129.74,
+            "p95": 392.43,
+            "p99": 392.43,
+            "mean": 179.29,
+            "max": 392.43
+          },
+          "t_total_ms": {
+            "count": 16,
+            "p50": 5306.72,
+            "p95": 6883.3,
+            "p99": 6883.3,
+            "mean": 5231.02,
+            "max": 6883.3
+          }
+        },
+        "fast": {
+          "ttft_total_ms": {
+            "count": 6,
+            "p50": 3.49,
+            "p95": 6.67,
+            "p99": 6.67,
+            "mean": 3.92,
+            "max": 6.67
+          },
+          "t_total_ms": {
+            "count": 6,
+            "p50": 3.54,
+            "p95": 6.72,
+            "p99": 6.72,
+            "mean": 3.99,
+            "max": 6.72
+          }
+        },
+        "followup": {
+          "ttft_total_ms": {
+            "count": 6,
+            "p50": 129.34,
+            "p95": 146.97,
+            "p99": 146.97,
+            "mean": 129.98,
+            "max": 146.97
+          },
+          "t_total_ms": {
+            "count": 6,
+            "p50": 4999.63,
+            "p95": 5491.86,
+            "p99": 5491.86,
+            "mean": 4857.66,
+            "max": 5491.86
+          }
+        },
+        "hyde": {
+          "ttft_total_ms": {
+            "count": 8,
+            "p50": 128.04,
+            "p95": 130.98,
+            "p99": 130.98,
+            "mean": 127.82,
+            "max": 130.98
+          },
+          "t_total_ms": {
+            "count": 8,
+            "p50": 5023.81,
+            "p95": 5745.7,
+            "p99": 5745.7,
+            "mean": 5096.42,
+            "max": 5745.7
+          }
+        },
+        "no_answer": {
+          "ttft_total_ms": {
+            "count": 2,
+            "p50": 118.67,
+            "p95": 118.67,
+            "p99": 118.67,
+            "mean": 117.0,
+            "max": 118.67
+          },
+          "t_total_ms": {
+            "count": 2,
+            "p50": 4013.31,
+            "p95": 4013.31,
+            "p99": 4013.31,
+            "mean": 3661.32,
+            "max": 4013.31
+          }
+        }
+      },
+      "errors": [],
+      "records_sample": [
+        {
+          "id": "qa-01",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 392.43,
+          "t_prep_ms": 23.84,
+          "t_retrieve_ms": 6.62,
+          "t_llm_ttft_ms": 361.93,
+          "t_total_ms": 5306.72,
+          "t_conn_close_ms": 5307.31,
+          "answer_chars": 1451,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-02",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 215.55,
+          "t_prep_ms": 6.33,
+          "t_retrieve_ms": 3.96,
+          "t_llm_ttft_ms": 205.21,
+          "t_total_ms": 6408.34,
+          "t_conn_close_ms": 6409.11,
+          "answer_chars": 1754,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-03",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 293.24,
+          "t_prep_ms": 6.54,
+          "t_retrieve_ms": 5.38,
+          "t_llm_ttft_ms": 281.22,
+          "t_total_ms": 5542.05,
+          "t_conn_close_ms": 5542.94,
+          "answer_chars": 1552,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-04",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 293.26,
+          "t_prep_ms": 6.73,
+          "t_retrieve_ms": 8.46,
+          "t_llm_ttft_ms": 277.98,
+          "t_total_ms": 4709.2,
+          "t_conn_close_ms": 4709.72,
+          "answer_chars": 1317,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        },
+        {
+          "id": "qa-05",
+          "kind": "course_qa",
+          "status_code": 200,
+          "error": null,
+          "ttft_total_ms": 293.3,
+          "t_prep_ms": 16.91,
+          "t_retrieve_ms": 2.38,
+          "t_llm_ttft_ms": 273.98,
+          "t_total_ms": 6883.3,
+          "t_conn_close_ms": 6883.96,
+          "answer_chars": 1908,
+          "finish_reason": "stop",
+          "verified": true,
+          "intent": "course_qa"
+        }
+      ]
+    }
+  ]
+}

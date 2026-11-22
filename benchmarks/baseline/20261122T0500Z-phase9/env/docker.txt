@@ -1,0 +1,59 @@
+Client: Docker Engine - Community
+ Version:           29.9.3
+ API version:       1.56
+ Go version:        go1.26.10
+ Git commit:        5457199
+ Built:             Tue Nov  3 21:42:07 2026
+ OS/Arch:           linux/amd64
+ Context:           default
+
+Server: Docker Engine - Community
+ Engine:
+  Version:          29.9.3
+  API version:      1.56 (minimum version 1.40)
+  Go version:       go1.26.10
+  Git commit:       70efc0e
+  Built:            Tue Nov  3 21:42:07 2026
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ containerd:
+  Version:          v2.4.2
+  GitCommit:        b7a25261e029d68978bbf290df0a62fc819b3c51
+ runc:
+  Version:          1.5.3
+  GitCommit:        v1.5.3-0-g46365c62
+ docker-init:
+  Version:          0.19.0
+  GitCommit:        de40ad0
+
+--- compose ---
+Docker Compose version v5.7.1
+
+--- images ---
+CONTAINER                      REPOSITORY                           TAG                 PLATFORM            IMAGE ID            SIZE                CREATED
+bench-backend                  eyelearning-backend                  local               linux/amd64         a49aeeac61cc        381MB               4 minutes ago
+bench-chatbot                  eyelearning-chatbot                  local               linux/amd64         ae6695b0aa9d        2.36GB              About an hour ago
+bench-content-worker           eyelearning-backend-content-worker   local               linux/amd64         fcd303806838        1.48GB              47 seconds ago
+bench-embedding-worker         eyelearning-backend                  local               linux/amd64         a49aeeac61cc        381MB               4 minutes ago
+bench-migrate                  eyelearning-migrations               local               linux/amd64         d0d5c595ef25        611MB               17 hours ago
+bench-nginx                    eyelearning-nginx                    local               linux/amd64         0854143902ce        72MB                About a minute ago
+bench-postgres                 pgvector/pgvector                    0.8.7-pg16          linux/amd64         0dd3149a06e4        621MB               3 weeks ago
+bench-redis                    redis                                7.4.11-alpine3.21   linux/amd64         d9436322172a        57.3MB              4 weeks ago
+eyelearning-bench-frontend-1   eyelearning-frontend                 local               linux/amd64         8f5603f8a49a        333MB               36 seconds ago
+eyelearning-bench-gaze-1       eyelearning-gaze                     local               linux/amd64         dd2e2b1b8135        10.2GB              19 hours ago
+eyelearning-bench-worker-1     eyelearning-backend                  local               linux/amd64         a49aeeac61cc        381MB               4 minutes ago
+
+--- disk ---
+Filesystem                         Size  Used Avail Use% Mounted on
+tmpfs                              6.2G  4.2M  6.2G   1% /run
+/dev/mapper/ubuntu--vg-ubuntu--lv  455G  172G  264G  40% /
+tmpfs                               16G     0   16G   0% /dev/shm
+efivarfs                           192K  157K   31K  84% /sys/firmware/efi/efivars
+none                               1.0M     0  1.0M   0% /run/credentials/systemd-journald.service
+none                               1.0M     0  1.0M   0% /run/credentials/systemd-resolved.service
+tmpfs                               16G   42M   16G   1% /tmp
+/dev/nvme1n1p2                     2.0G  185M  1.7G  11% /boot
+/dev/nvme1n1p1                     1.1G   39M  1.1G   4% /boot/efi
+none                               1.0M     0  1.0M   0% /run/credentials/systemd-networkd.service
+none                               1.0M     0  1.0M   0% /run/credentials/getty@tty1.service
+tmpfs                              3.1G   12K  3.1G   1% /run/user/1000

@@ -64,3 +64,13 @@ def test_model_smoke_on_sample_image():
         assert math.isfinite(result["y"])
         assert 0.0 <= result["x"] <= 1.0
         assert 0.0 <= result["y"] <= 1.0
+
+        # Batch phải cho cùng output với single (sai khác chỉ ở mức nhiễu số).
+        prepared = session_api.runtime._cpu_stage.prepare(payload)
+        assert prepared is not None
+        single = session_api.runtime._gpu_stage.predict(prepared)
+        batched = session_api.runtime._gpu_stage.predict_batch([prepared] * 4)
+        assert len(batched) == 4
+        for pitch, yaw in batched:
+            assert abs(pitch - single[0]) < 1e-3
+            assert abs(yaw - single[1]) < 1e-3

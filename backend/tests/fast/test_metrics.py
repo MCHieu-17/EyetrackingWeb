@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import pytest
 
+from app.services import metrics
 from tests.conftest import fetch_all, fetch_one
 from tests.support.scenario import build_lesson_gaze
 
 pytestmark = pytest.mark.fast
 
 
+@pytest.mark.parametrize("chunk_size", [metrics.SAMPLE_CHUNK_SIZE, 1])
 async def test_metrics_slide_mapping_labels_heatmap_and_dwell(
     client_factory,
+    monkeypatch,
+    chunk_size,
 ):
+    monkeypatch.setattr(metrics, "SAMPLE_CHUNK_SIZE", chunk_size)
     teacher_client = await client_factory()
     student_client = await client_factory()
     data = await build_lesson_gaze(

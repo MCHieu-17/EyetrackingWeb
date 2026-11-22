@@ -13,11 +13,7 @@ import unicodedata
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 
-from app.settings import (
-    citation_gate_tokens,
-    citation_retry_max,
-    lms_detection_enabled,
-)
+from app.settings import lms_detection_enabled
 from app.workflow import lms
 from app.workflow.citations import has_valid_citation, strip_invalid_citations
 from app.workflow.generation import stream_answer
@@ -103,58 +99,56 @@ def _allows_no_citation(text: str) -> bool:
 
 
 async def _stream_with_citation_gate(state: ChatState) -> AsyncIterator[dict]:
-    """Stream câu trả lời, đảm bảo có citation hoặc fallback source list."""
+    """Phát token ngay khi có; hậu kiểm citation, không retry toàn câu.
+
+    Nếu model không tự cite, chèn danh sách nguồn để câu trả lời cuối vẫn có
+    citation hợp lệ. `verified` phản ánh câu trả lời cuối, không phải việc model
+    có tự sinh citation hay không.
+    """
     count = len(state.citations)
-    attempts = citation_retry_max() + 1
-    last_buffer = ""
+    text = ""
+    cited = False
+    started = time.perf_counter()
+    first_chunk_at: float | None = None
+    first_citation_at: float | None = None
 
-    for attempt in range(attempts):
-        strict = attempt > 0
-        buffer = ""
-        gate_passed = False
-        async with aclosing(stream_answer(state, strict=strict)) as source:
-            async for chunk in source:
-                buffer += chunk
-                if not gate_passed:
-                    if has_valid_citation(buffer, count):
-                        gate_passed = True
-                        yield _token(state, buffer)
-                        buffer = ""
-                    elif len(buffer.split()) >= citation_gate_tokens():
-                        # Hết gate mà chưa có citation: hủy stream để retry.
-                        break
-                    continue
-                yield _token(state, chunk)
+    async with aclosing(stream_answer(state)) as source:
+        async for chunk in source:
+            if first_chunk_at is None:
+                first_chunk_at = time.perf_counter()
+            text += chunk
+            if not cited and has_valid_citation(text, count):
+                cited = True
+                first_citation_at = time.perf_counter()
+            yield _token(state, chunk)
 
-        if gate_passed:
-            state.verified = True
-            state.finish_reason = "stop"
-            return
-
-        last_buffer = buffer
-        if _allows_no_citation(buffer):
-            yield _token(state, buffer)
-            state.verified = False
-            state.finish_reason = "insufficient_evidence"
-            return
-
+    if cited:
+        state.verified = True
+        state.finish_reason = "stop"
+    elif _allows_no_citation(text):
+        state.verified = False
+        state.finish_reason = "insufficient_evidence"
+    else:
+        sources = _source_list(state.citations)
+        if sources:
+            text += "\n\n" + sources
+            yield _token(state, "\n\n" + sources)
+            cited = has_valid_citation(text, count)
+        state.verified = cited
+        state.finish_reason = "citation_fallback" if cited else "citation_failed"
         logger.info(
-            "citation_gate_failed attempt=%s chars=%s", attempt, len(buffer)
+            "citation_fallback citations=%s chars=%s", count, len(text)
         )
 
-    # Fallback: phát phần cuối + danh sách nguồn để vẫn có trích dẫn.
-    if last_buffer:
-        yield _token(state, last_buffer)
-    sources = _source_list(state.citations)
-    if sources:
-        yield _token(state, "\n\n" + sources)
-    state.verified = False
-    state.finish_reason = "citation_failed"
+    logger.info(
+        "chat_stream_ttft first_chunk_ms=%s first_citation_ms=%s",
+        round((first_chunk_at - started) * 1000) if first_chunk_at else None,
+        round((first_citation_at - started) * 1000) if first_citation_at else None,
+    )
 
 
 async def _run_chat(state: ChatState) -> AsyncIterator[dict]:
     started = time.perf_counter()
-    await lms.check_access(state)
 
     # 1. Fast path cho lời chào/cảm ơn.
     reply = greeting_reply(state.question)

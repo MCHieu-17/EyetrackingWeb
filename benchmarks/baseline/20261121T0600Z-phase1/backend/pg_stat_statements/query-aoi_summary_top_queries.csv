@@ -1,0 +1,12 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_2.key AS label, anon_1.lesson_id, anon_1.slide_id, anon_1.student_id,",20,1838.1184389999999,91.90592194999999,24060,48660,0,0
+"SELECT count(*) FILTER (WHERE $17) AS content_view_count, count(*) FILTER (WHERE anon_1.dwell_ms < $1::INTEGER) AS short_view_count, count(DISTINCT anon_1.visit_key) FILTER (WHERE $18) AS visit_count, count(DISTINCT anon_1.student_id) FILTE",20,308.3375970000001,15.41687985,20,48700,0,0
+"SELECT grouping(anon_1.lesson_id) AS g_lesson, grouping(anon_1.slide_id) AS g_slide, grouping(anon_1.student_id) AS g_student, grouping(anon_1.visit_key) AS g_visit, anon_1.lesson_id, anon_1.lesson_title, anon_1.lesson_kind, anon_1.slide_id",20,286.52281400000004,14.3261407,55600,49980,0,0
+"SELECT aois.label, aois.code, aois.name 
+FROM aois 
+WHERE aois.slide_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID, $8::UUID, $9::UUID, $10::UUID, $11::UUID, $12::UUID, $13::UUID, $14::UUID, $15::UUID, $16::UUID, $17::UU",20,1.501395,0.07506975000000002,4800,140,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,0.544554,0.027227699999999997,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",7,0.110338,0.015762571428571428,0,7,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",7,0.07379999999999999,0.010542857142857142,0,7,0,0
+BEGIN,54,0.06254899999999998,0.001158314814814815,0,0,0,0
+ROLLBACK,54,0.04569900000000002,0.0008462777777777779,0,0,0,0

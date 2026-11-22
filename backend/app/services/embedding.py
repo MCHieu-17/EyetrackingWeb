@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -206,13 +207,24 @@ async def _sync(
     await _mark_many(session, target_ids, PENDING)
     batch_size = max(1, settings.chatbot_ingest_batch_size)
     for batch in _chunks(target_ids, batch_size):
+        started = time.perf_counter()
         try:
             await _call({"slide_ids": batch})
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "Ingest lesson %s batch thất bại: %s", lesson_id, exc
+                "Ingest lesson %s batch thất bại sau %.1fs: %s",
+                lesson_id,
+                time.perf_counter() - started,
+                exc,
             )
             await _mark_failed_unready(session, batch, str(exc)[:500])
+        else:
+            logger.info(
+                "Ingest lesson %s batch=%s wall=%.1fs",
+                lesson_id,
+                len(batch),
+                time.perf_counter() - started,
+            )
     return await _status_counts(session, lesson_id)
 
 

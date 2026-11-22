@@ -6,6 +6,7 @@ import {
   fetchTeacherCourses,
   fetchCourseTree,
   fetchCourseStudents,
+  fetchStudentLessons,
   fetchLessonSlidesAdmin,
   fetchStudentDirectory,
   type CourseListQuery,
@@ -61,8 +62,15 @@ export function useLessonSlidesAdmin(lessonId: string) {
   });
 }
 
-export function useStudentVisits(courseId: string, studentId: string) {
+export function useStudentLessons(courseId: string, studentId: string) {
   return useQuery({
+    queryKey: queryKeys.teacher.studentLessons(courseId, studentId),
+    queryFn: () => fetchStudentLessons(courseId, studentId),
+    enabled: Boolean(courseId && studentId),
+  });
+}
+
+export function useStudentVisits(courseId: string, studentId: string) {  return useQuery({
     queryKey: queryKeys.teacher.studentVisits(courseId, studentId),
     queryFn: () => fetchStudentVisits(studentId, courseId),
     enabled: Boolean(courseId && studentId),

@@ -11,10 +11,9 @@ from app.api.access import (
     get_owned_course,
     get_viewable_course,
 )
-from app.api.deps import can_access_course, get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles
 from app.core.helpers import color_for
-from app.core.rediscache import delete as cache_delete
-from app.core.rediscache import get_json, set_json
+from app.core.rediscache import delete_many, get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import Enrollment
@@ -27,11 +26,13 @@ from app.schemas.course import (
     CourseUpdateIn,
     ModuleNodeOut,
     StudentDirectoryOut,
+    StudentLessonOut,
     StudentRowOut,
     StudentsAddIn,
     TeacherCourseOut,
 )
-from app.services import content, embedding, embedding_jobs
+from app.services import content, course_stats, embedding, embedding_jobs
+from app.services.access import course_access_cached, course_access_key
 
 router = APIRouter(tags=["courses"])
 
@@ -40,19 +41,32 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def _invalidate_enrollment_cache(db: AsyncSession, course_id: str) -> None:
-    """Xóa cache danh sách khóa học của sinh viên trong khóa.
+async def _invalidate_enrollment_cache(
+    db: AsyncSession, course_id: str, student_ids: list[str] | None = None
+) -> None:
+    """Xóa cache enrollment/access/roster liên quan trong một pipeline.
 
     `/api/me/enrollments` cache 30s và trả kèm `requireCalibration`; không xóa
     thì sinh viên còn thấy link cũ (prepare vs vào thẳng) sau khi giáo viên đổi.
+    `student_ids=None` → lấy toàn bộ enrollment của khóa.
     """
-    student_ids = (
-        await db.execute(
-            select(Enrollment.student_id).where(Enrollment.course_id == course_id)
+    if student_ids is None:
+        student_ids = list(
+            (
+                await db.execute(
+                    select(Enrollment.student_id).where(
+                        Enrollment.course_id == course_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-    ).scalars().all()
+    keys = [f"course:students:{course_id}"]
     for student_id in student_ids:
-        await cache_delete(f"student:enrollments:{student_id}")
+        keys.append(f"student:enrollments:{student_id}")
+        keys.append(course_access_key(student_id, course_id))
+    await delete_many(keys)
 
 
 @router.get("/teacher/courses", response_model=list[TeacherCourseOut])
@@ -235,6 +249,7 @@ async def publish_course(
 
     await content.publish_course(db, course, user)
     await db.commit()
+    await course_stats.invalidate_course_stats(course.id)
     return {"ok": True}
 
 
@@ -246,6 +261,25 @@ async def get_course_students(
 ):
     course = await get_viewable_course(db, course_id, user)
     return await content.get_course_students(db, course)
+
+
+@router.get(
+    "/teacher/courses/{course_id}/students/{student_id}/lessons",
+    response_model=list[StudentLessonOut],
+)
+async def get_course_student_lessons(
+    course_id: str,
+    student_id: str,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_viewable_course(db, course_id, user)
+    lessons = await content.get_course_student_lessons(db, course, student_id)
+    if lessons is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Học viên chưa đăng ký khóa học này"
+        )
+    return lessons
 
 
 @router.get("/teacher/students", response_model=list[StudentDirectoryOut])
@@ -324,8 +358,8 @@ async def add_course_students(
         db.add(Enrollment(course_id=course.id, student_id=sid))
         added += 1
     await db.commit()
-    for sid in valid_ids:
-        await cache_delete(f"student:enrollments:{sid}")
+    await _invalidate_enrollment_cache(db, course.id, student_ids=list(valid_ids))
+    await course_stats.invalidate_course_stats(course.id)
     return {"ok": True, "added": added}
 
 
@@ -350,7 +384,8 @@ async def remove_course_student(
         )
     enrollment.status = "dropped"
     await db.commit()
-    await cache_delete(f"student:enrollments:{student_id}")
+    await _invalidate_enrollment_cache(db, course.id, student_ids=[student_id])
+    await course_stats.invalidate_course_stats(course.id)
     return {"ok": True}
 
 
@@ -361,15 +396,8 @@ async def get_course_outline(
     db: AsyncSession = Depends(get_db),
 ):
     course = await get_course_or_404(db, course_id)
-    enrolled = (
-        await db.execute(
-            select(Enrollment).where(
-                Enrollment.course_id == course.id, Enrollment.student_id == user.id
-            )
-        )
-    ).scalar_one_or_none()
-    is_owner = await can_access_course(db, course, user)
-    if not is_owner and enrolled is None:
+    access = await course_access_cached(db, course, user)
+    if not access["allowed"] and not access["enrolled"]:
         # Khóa đã publish được phép xem outline để sinh viên quyết định đăng ký.
         if course.status != "published":
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")

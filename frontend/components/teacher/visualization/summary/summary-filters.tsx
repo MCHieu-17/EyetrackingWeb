@@ -277,6 +277,10 @@ export function SummaryFilters({
             />
           </label>
         </div>
+        <p className="mt-2 text-[11px] text-black/40">
+          Mặc định 90 ngày gần nhất. Xoá “Từ ngày” và “Đến ngày” để xem toàn bộ
+          lịch sử.
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 text-xs text-black/55">
             <Switch

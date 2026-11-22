@@ -9,6 +9,7 @@ ChatOpenAI vì có structured output + prompt template, trỏ cùng endpoint
 LLM/VLM OpenAI-compatible. Embedding chạy local (Qwen3-Embedding-0.6B trên CPU).
 """
 
+import os
 from functools import lru_cache
 
 from langchain_core.embeddings import Embeddings
@@ -52,7 +53,13 @@ def _build_embedding(name: str) -> Embeddings:
     if name == "local":
         # Import muộn để đường không cần embedding local khỏi kéo torch/
         # sentence-transformers.
+        import torch
         from langchain_huggingface import HuggingFaceEmbeddings
+
+        # Container bị giới hạn CPU quota (compose cpus: 4) nhưng torch mặc
+        # định lấy os.cpu_count() của host; đặt đúng quota để tránh tranh
+        # thread giữa query lane, ingest lane và FastAPI.
+        torch.set_num_threads(max(1, int(os.getenv("EMBEDDING_NUM_THREADS", "4"))))
 
         return HuggingFaceEmbeddings(
             model_name=embedding_model_path(),
@@ -72,14 +79,16 @@ def _build_embedding(name: str) -> Embeddings:
     raise ValueError(f"Embedding không được hỗ trợ: {name!r}")
 
 
-@lru_cache(maxsize=None)
 def get_embedding(name: str | None = None) -> Embeddings:
-    """Embedding dùng chung (cache theo tên). Mặc định từ EMBEDDING_NAME."""
+    """Embedding dùng chung; resolve default trước khi cache để chỉ có một instance."""
+    return _get_embedding(name or embedding_name())
+
+
+@lru_cache(maxsize=None)
+def _get_embedding(name: str) -> Embeddings:
     from app.workflow.embedding_queue import ManagedEmbedding
 
-    return ManagedEmbedding(
-        _build_embedding(name or embedding_name()), embedding_model_path()
-    )
+    return ManagedEmbedding(_build_embedding(name), embedding_model_path())
 
 
 def _build_vlm() -> BaseChatModel:

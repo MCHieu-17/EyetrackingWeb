@@ -20,7 +20,7 @@ x-backend-env: &backend-env
   CHATBOT_INGEST_TIMEOUT_SECONDS: ${CHATBOT_INGEST_TIMEOUT_SECONDS:-900}
   CHATBOT_INGEST_ATTEMPTS: ${CHATBOT_INGEST_ATTEMPTS:-4}
   CHATBOT_INGEST_BACKOFF_SECONDS: ${CHATBOT_INGEST_BACKOFF_SECONDS:-10}
-  CHATBOT_INGEST_BATCH_SIZE: ${CHATBOT_INGEST_BATCH_SIZE:-4}
+  CHATBOT_INGEST_BATCH_SIZE: ${CHATBOT_INGEST_BATCH_SIZE:-8}
   JWT_SECRET: ${JWT_SECRET}
   CORS_ORIGINS: ${CORS_ORIGINS}
   R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
@@ -71,7 +71,8 @@ x-backend-env: &backend-env
   DB_POOL_MAX: ${DB_POOL_MAX:-10}
   DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-5}
   DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
-  DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-0}
+  # Profile `pgbouncer` (transaction pooling): đặt biến này =0 trong .env.
+  DB_PREPARED_STATEMENT_CACHE_SIZE: ${DB_PREPARED_STATEMENT_CACHE_SIZE:-64}
   GAZE_RETENTION_DAYS: ${GAZE_RETENTION_DAYS:-180}
   # Ngưỡng dwell tối thiểu để một lượt xem được xếp loại "đủ ngưỡng".
   # Mặc định vẫn hiển thị mọi lượt; UI dùng giá trị này cho badge/filter.
@@ -250,7 +251,7 @@ services:
         condition: service_healthy
     environment:
       <<: *backend-env
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
     ports:
       - "127.0.0.1:8001:8001"
     volumes:
@@ -396,7 +397,8 @@ services:
         condition: service_healthy
     environment:
       <<: *backend-env
-      EMBEDDING_WORKER_POLL_SECONDS: ${EMBEDDING_WORKER_POLL_SECONDS:-5}
+      EMBEDDING_WORKER_POLL_SECONDS: ${EMBEDDING_WORKER_POLL_SECONDS:-0.5}
+      EMBEDDING_WORKER_CONCURRENCY: ${EMBEDDING_WORKER_CONCURRENCY:-2}
       EMBEDDING_WORKER_STALE_SECONDS: ${EMBEDDING_WORKER_STALE_SECONDS:-600}
     # Worker không mở HTTP; image API có healthcheck /health nên phải tắt.
     healthcheck:
@@ -411,6 +413,7 @@ services:
     build:
       context: ./services/chatbot
       dockerfile: Dockerfile
+      target: runtime
     image: eyelearning-chatbot:local
     container_name: eyetracking-chatbot
     restart: unless-stopped
@@ -450,14 +453,14 @@ services:
       VLM_TIMEOUT: ${VLM_TIMEOUT:-300}
       # Query rewrite + HyDE: tối đa 1 structured call nhỏ mỗi request.
       LLM_QUERY_MAX_TOKENS: ${LLM_QUERY_MAX_TOKENS:-400}
-      LLM_QUERY_TIMEOUT: ${LLM_QUERY_TIMEOUT:-30}
+      LLM_QUERY_TIMEOUT: ${LLM_QUERY_TIMEOUT:-3}
       QUERY_REWRITE_ENABLED: ${QUERY_REWRITE_ENABLED:-true}
       HYDE_ENABLED: ${HYDE_ENABLED:-true}
       HYDE_MIN_QUERY_WORDS: ${HYDE_MIN_QUERY_WORDS:-8}
       # Answer: một LLM call streaming.
       ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-2048}
       ANSWER_TEMPERATURE: ${ANSWER_TEMPERATURE:-0.2}
-      # Citation gate bằng code; retry tối đa 1 lần.
+      # Deprecated: pipeline stream ngay và không retry toàn bộ câu trả lời.
       CITATION_GATE_TOKENS: ${CITATION_GATE_TOKENS:-200}
       CITATION_RETRY_MAX: ${CITATION_RETRY_MAX:-1}
       # Hybrid retrieval: BM25 (Postgres FTS) + dense pgvector + HyDE, fuse RRF.
@@ -471,15 +474,17 @@ services:
       # LMS: regex detection + backend /internal/chat/lms-query.
       LMS_DETECTION_ENABLED: ${LMS_DETECTION_ENABLED:-true}
       CHATBOT_BACKEND_URL: http://backend:8001
-      CHATBOT_MAX_CONCURRENT: ${CHATBOT_MAX_CONCURRENT:-20}
+      CHATBOT_MAX_CONCURRENT: ${CHATBOT_MAX_CONCURRENT:-6}
       CHATBOT_QUEUE_TIMEOUT: ${CHATBOT_QUEUE_TIMEOUT:-2}
-      LLM_GENERATION_CONCURRENCY: ${LLM_GENERATION_CONCURRENCY:-4}
+      LLM_GENERATION_CONCURRENCY: ${LLM_GENERATION_CONCURRENCY:-6}
       LLM_TOTAL_CONCURRENCY: ${LLM_TOTAL_CONCURRENCY:-6}
       LLM_REQUESTS_PER_SECOND: ${LLM_REQUESTS_PER_SECOND:-0}
       LLM_ANSWER_TIMEOUT: ${LLM_ANSWER_TIMEOUT:-120}
-      VLM_INGEST_CONCURRENCY: ${VLM_INGEST_CONCURRENCY:-2}
+      VLM_INGEST_CONCURRENCY: ${VLM_INGEST_CONCURRENCY:-4}
       VLM_INGEST_QUEUE_TIMEOUT: ${VLM_INGEST_QUEUE_TIMEOUT:-900}
-      LLM_QUEUE_TIMEOUT: ${LLM_QUEUE_TIMEOUT:-30}
+      # Torch intra-op khớp CPU quota của container (compose cpus: 4).
+      EMBEDDING_NUM_THREADS: ${EMBEDDING_NUM_THREADS:-4}
+      LLM_QUEUE_TIMEOUT: ${LLM_QUEUE_TIMEOUT:-5}
       LOCAL_MEDIA_DIR: /app/media
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_HTTP_ALLOWED_HOSTS: ${STORAGE_HTTP_ALLOWED_HOSTS:-}
@@ -508,13 +513,14 @@ services:
     build:
       context: ./services/gaze
       dockerfile: Dockerfile
+      target: runtime
     image: eyelearning-gaze:local
     restart: unless-stopped
     logging: *default-logging
-    # Các replica chia sẻ GPU; nginx dùng cookie gaze_affinity để sticky session.
-    # Số replica cấu hình qua GAZE_REPLICAS (mặc định 2).
+    # Mặc định 1 replica/GPU + batch nội bộ. Chạy nhiều replica chỉ khi mỗi
+    # replica có GPU riêng; nginx dùng cookie gaze_affinity để sticky session.
     deploy:
-      replicas: ${GAZE_REPLICAS:-2}
+      replicas: ${GAZE_REPLICAS:-1}
     environment:
       # Quyết định model local: bắt buộc đặt trong .env, không dùng default.
       - DEVICE=${DEVICE:?Đặt DEVICE=cpu|cuda trong .env}
@@ -535,9 +541,12 @@ services:
       - OPENBLAS_NUM_THREADS=${GAZE_OMP_NUM_THREADS:-1}
       - NUMEXPR_NUM_THREADS=${GAZE_OMP_NUM_THREADS:-1}
       - HF_HUB_OFFLINE=1
-      # fp32 | fp16 (fp16 chỉ bật sau khi validate accuracy).
-      - INFERENCE_PRECISION=${INFERENCE_PRECISION:-fp32}
+      # fp16 mặc định cho model đã qua A/B; đặt fp32 để fallback.
+      - INFERENCE_PRECISION=${INFERENCE_PRECISION:-fp16}
       - MAX_QUEUE=${GAZE_MAX_QUEUE:-8}
+      # Queue GPU đủ sâu để gom batch xuyên session; batch 8 cần queue >= 8.
+      - GPU_QUEUE=${GAZE_GPU_QUEUE:-12}
+      - GPU_BATCH=${GAZE_GPU_BATCH:-8}
       - FRAME_MAX_AGE_MS=${GAZE_FRAME_MAX_AGE_MS:-200}
       - INFERENCE_TIMEOUT_S=${GAZE_INFERENCE_TIMEOUT_S:-5}
       - MAX_FRAME_BYTES=${GAZE_MAX_FRAME_BYTES:-1048576}

@@ -71,7 +71,7 @@ Các cổng debug chỉ bind loopback (`127.0.0.1`), tức là chỉ truy cập 
 | `5435` | PostgreSQL |
 | `6379` | Redis |
 
-Gaze không publish cổng ra host vì chạy nhiều replica. Truy cập qua nginx tại
+Gaze không publish cổng ra host vì có thể chạy nhiều replica. Truy cập qua nginx tại
 `/gaze/...` hoặc debug bằng `docker compose exec gaze ...`.
 
 ## 2. Chuẩn bị môi trường
@@ -242,6 +242,10 @@ CONTENT_VIEW_MIN_DWELL_MS=1000
 Giá trị này chỉ dùng để gắn nhãn “Ngắn <1s” và bật bộ lọc “Chỉ lượt >= ngưỡng”
 trong tab Trực quan hoá; không ẩn dữ liệu mặc định. Đổi giá trị cần recreate
 backend: `docker compose up -d backend`.
+
+Tab Tổng hợp mặc định lọc **90 ngày gần nhất** (hiện trong ô “Từ ngày”/“Đến
+ngày”); xoá cả hai ô để xem toàn bộ lịch sử. Heatmap theo slide dùng cùng cửa
+sổ thời gian này.
 
 **Lưu trữ slide** — mặc định dùng volume local:
 
@@ -519,6 +523,8 @@ Mặc định gaze yêu cầu NVIDIA GPU. Nếu máy không có GPU:
 
    ```env
    DEVICE=cpu
+   INFERENCE_PRECISION=fp32
+   GAZE_GPU_BATCH=1
    FRONTEND_REPLICAS=1
    GAZE_REPLICAS=1
    WORKER_REPLICAS=1

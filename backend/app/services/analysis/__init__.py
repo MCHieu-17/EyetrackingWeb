@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -30,7 +30,7 @@ def _now() -> datetime:
 
 
 async def analyze_lesson(lesson_id: str) -> tuple[int, int]:
-    """Tính lại toàn bộ lượt xem của một lesson; trả (completed, failed)."""
+    """Tính lại view pending/hết hạn version của lesson; trả (completed, failed)."""
     completed = failed = 0
     async with SessionLocal() as db:
         view_ids = list(
@@ -41,7 +41,13 @@ async def analyze_lesson(lesson_id: str) -> tuple[int, int]:
                         LearningSession,
                         LearningSession.id == ContentView.session_id,
                     )
-                    .where(LearningSession.lesson_id == lesson_id)
+                    .where(
+                        LearningSession.lesson_id == lesson_id,
+                        or_(
+                            ContentView.analysis_status != "ready",
+                            ContentView.analysis_version != metrics.ANALYSIS_VERSION,
+                        ),
+                    )
                     .order_by(ContentView.started_at)
                 )
             ).scalars()
@@ -176,21 +182,17 @@ async def rebuild_course(
     if not lesson_ids:
         return 0, 0, 0
 
-    views = list(
-        (
-            await db.execute(
-                select(ContentView.id)
-                .join(LearningSession, LearningSession.id == ContentView.session_id)
-                .where(LearningSession.lesson_id.in_(lesson_ids))
-            )
-        ).scalars()
+    session_ids = select(LearningSession.id).where(
+        LearningSession.lesson_id.in_(lesson_ids)
     )
-    if views:
-        await db.execute(
-            ContentView.__table__.update()
-            .where(ContentView.id.in_(views))
-            .values(analysis_status="pending")
+    await db.execute(
+        ContentView.__table__.update()
+        .where(
+            ContentView.session_id.in_(session_ids),
+            ContentView.analysis_status != "pending",
         )
+        .values(analysis_status="pending")
+    )
     for target in lesson_ids:
         await enqueue_analysis_lesson(db, target)
     await db.flush()
@@ -203,7 +205,10 @@ async def enqueue_lesson_views(db: AsyncSession, lesson_id: str) -> None:
     )
     await db.execute(
         ContentView.__table__.update()
-        .where(ContentView.session_id.in_(session_ids))
+        .where(
+            ContentView.session_id.in_(session_ids),
+            ContentView.analysis_status != "pending",
+        )
         .values(analysis_status="pending")
     )
     await enqueue_analysis_lesson(db, lesson_id)
@@ -225,7 +230,10 @@ async def mark_ui_changed(db: AsyncSession) -> int:
     )
     await db.execute(
         ContentView.__table__.update()
-        .where(has_samples)
+        .where(
+            has_samples,
+            ContentView.analysis_status != "pending",
+        )
         .values(analysis_status="pending")
     )
     for lesson_id in lesson_ids:

@@ -8,17 +8,21 @@ GPU** trong stack mặc định; chatbot embedding chạy CPU.
 ```text
 WebSocket (per session)
   receiver task: đọc frame, throttle GAZE_FPS, mailbox maxsize=1
-  processor task: lấy frame mới nhất -> pipeline -> response
+  processor task: lấy frame mới nhất -> pipeline -> send queue
+  sender task: gửi response (client chậm không chặn pipeline)
 
 Pipeline 2 tầng (2 thread riêng)
   CPU: decode JPEG -> MediaPipe detect -> warp 224x224
-       -> queue 1 slot ->
-  GPU: normalize -> UniGaze -> calibration -> One-Euro -> (x, y)
+       -> queue GPU_QUEUE slot ->
+  GPU: gom tối đa GPU_BATCH frame/forward -> normalize -> UniGaze
+       -> calibration -> One-Euro -> (x, y)
 ```
 
 - Mỗi session chỉ có tối đa 1 frame trong pipeline → không lệch thứ tự.
 - Frame cũ hơn `FRAME_MAX_AGE_MS` bị bỏ (`stale`) thay vì inference.
 - Queue đầy → trả `overloaded` ngay, kèm `suggestedFps`.
+- GPU gom frame của nhiều session vào một forward; `GPU_QUEUE` phải ≥
+  `GPU_BATCH` để batch lớn có thể hình thành.
 - Calibration nằm trong RAM và mất khi container restart. Backend lưu model
   `.ubj` trong `gaze_calibrations` để frontend import lại.
 
@@ -35,7 +39,7 @@ và stall ~80 ms/frame. Service cap `cv2`/`torch` về 1 thread trong code và
 |---|---:|---:|
 | Không cap thread | 55–85 ms | 100–200 ms |
 | Có cap thread (fp32) | **10.9 ms** | **11.2 ms** |
-| Có cap thread (fp16) | ~7–8 ms | — |
+| Có cap thread (fp16) | **6,6 ms** | **7,0 ms** |
 
 ## Chạy
 
@@ -190,7 +194,7 @@ WebSocket close:
 |---|---|---|
 | `DEVICE` | **bắt buộc** | `cuda` hoặc `cpu`; thiếu/sai → fail-fast |
 | `UNIGAZE_MODEL` | **bắt buộc** | `unigaze_b16_joint` \| `unigaze_l16_joint` \| `unigaze_h14_joint` \| `unigaze_h14_cross_X` |
-| `INFERENCE_PRECISION` | `fp32` | `fp32` \| `fp16`; fp16 ~2.2× forward, chỉ bật sau validate |
+| `INFERENCE_PRECISION` | `fp16` | `fp32` \| `fp16`; mặc định sau A/B trên `unigaze_b16_joint`; đặt `fp32` khi đổi model/GPU hoặc chạy CPU |
 | `WEIGHTS_DIR` | `/app/weights` | Volume weights runtime |
 | `MAX_SESSIONS` | `100` | Session đồng thời |
 | `SESSION_TTL_SECONDS` | `1800` | TTL session không hoạt động |
@@ -199,6 +203,8 @@ WebSocket close:
 | `GAZE_MAX_UPLOAD_BYTES` → `MAX_UPLOAD_BYTES` | `5242880` | Ảnh calibration/import tối đa |
 | `MAX_FRAME_BYTES` | `1048576` | JPEG tối đa cho 1 frame WS |
 | `MAX_QUEUE` | `8` | Số frame chờ trong queue CPU |
+| `GPU_QUEUE` | `12` | Số frame chờ trong queue GPU |
+| `GPU_BATCH` | `8` | Số frame gộp trong một forward (cần `GPU_QUEUE ≥ GPU_BATCH`) |
 | `FRAME_MAX_AGE_MS` | `200` | Tuổi tối đa trước khi drop `stale` |
 | `INFERENCE_TIMEOUT_S` | `5` | Timeout 1 job suy luận |
 | `GAZE_FPS` | `15` | Frame/giây trình duyệt gửi; throttle = `1000/FPS × 0.85` |
@@ -213,11 +219,12 @@ Thread cap (`OMP/MKL/OPENBLAS/NUMEXPR=1`) được `entrypoint.sh` set mặc đ�
 |---|---:|---:|
 | Không cap thread | ~16 | ~1 |
 | Cap thread + pipeline 2 tầng (fp32) | ~115 | ~7–8 |
-| + fp16 | ~235 | ~15–16 |
+| + fp16 + batch 8 | ~395 (batch 8) | ~16 (CPU stage ~240 fps) |
 
-Số đo bằng `scripts/bench.py` trên RTX 3060 (container 2 CPU, ảnh 480px):
-8 phiên @15 FPS đạt ~115 response/s (fp32); 16 phiên đạt ~238 response/s
-(fp16). Chạy lại trên máy thật trước khi công bố.
+Đo trên RTX 3060 (container 2 CPU, ảnh 480px, fp16, `GPU_BATCH=8`,
+`GPU_QUEUE=12`): 8 phiên @15 FPS đạt 120 response/s, p95 ~19 ms; 16 phiên
+(2 tiến trình client × 8) đạt 240 response/s, p95 ~51 ms, 97,7% frame `ok`.
+Nút cổ chai còn lại là CPU stage (~4,1 ms/frame) chứ không phải GPU.
 Giảm `GAZE_FPS` xuống 10 sẽ tăng capacity ~1.5× (worker vẫn tính đúng gap
 threshold vì suy ra từ `GAZE_FPS`).
 
@@ -250,7 +257,9 @@ docker compose exec -T gaze python -m scripts.compare_precision \
   --dir /tmp/faces --max-mean-deg 0.05 --max-abs-deg 0.3
 ```
 
-Chỉ bật `INFERENCE_PRECISION=fp16` sau khi script precision đạt gate.
+fp16 là mặc định sau A/B trên `unigaze_b16_joint`. Khi đổi model/GPU hoặc chạy
+CPU, đặt `INFERENCE_PRECISION=fp32`; hạ `GAZE_GPU_BATCH=2` nếu cần giữ VRAM.
+Batch forward được đo trong `benchmarks/gaze/stage_latency.py` (khối `batch`).
 
 ## Đổi backbone UniGaze
 

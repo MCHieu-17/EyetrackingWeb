@@ -1,0 +1,14 @@
+query,calls,total_exec_time,mean_exec_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT course_modules.course_id, sum(content_views.on_slide_gaze_count) AS sum_1, sum(content_views.gaze_count) AS sum_2 
+FROM course_modules JOIN lessons ON lessons.module_id = course_modules.id JOIN learning_sessions ON learning_sessions.",20,464.11155700000006,23.205577849999997,80,38120,0,0
+"SELECT enrollments.course_id, count(enrollments.id) AS count_1 
+FROM enrollments 
+WHERE enrollments.course_id IN ($2::UUID, $3::UUID, $4::UUID, $5::UUID, $6::UUID, $7::UUID) AND enrollments.status != $1::VARCHAR GROUP BY enrollments.course_",20,7.965610999999999,0.39828055,80,103,0,0
+"SELECT course_modules.course_id, count(learning_sessions.id) AS count_1 
+FROM course_modules JOIN lessons ON lessons.module_id = course_modules.id JOIN learning_sessions ON learning_sessions.lesson_id = lessons.id 
+WHERE course_modules.cour",20,6.544690999999999,0.32723455,80,540,0,0
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.require_calibration, courses.created_at, courses.update",20,2.896320999999999,0.14481605,120,120,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",15,0.928002,0.0618668,0,30,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",15,0.4335359999999999,0.028902399999999998,0,15,0,0
+BEGIN,70,0.10044300000000002,0.0014348999999999996,0,0,0,0
+ROLLBACK,70,0.059801999999999994,0.0008543142857142857,0,0,0,0

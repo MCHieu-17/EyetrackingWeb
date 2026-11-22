@@ -53,10 +53,8 @@ def _human_prompt(state: ChatState) -> str:
         parts.append("Ngữ cảnh bài tập:\n" + state.assignment_context)
     if state.lms_text:
         parts.append("Dữ liệu LMS từ backend:\n" + state.lms_text)
-    parts.append(
-        "Tài liệu tham khảo:\n"
-        + (format_context(state.retrieved_docs) or "(không có tài liệu)")
-    )
+    context = format_context(state.retrieved_docs, state.query or state.question)
+    parts.append("Tài liệu tham khảo:\n" + (context or "(không có tài liệu)"))
     return "\n\n".join(parts)
 
 

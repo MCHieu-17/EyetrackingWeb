@@ -1,0 +1,308 @@
+{
+  "url": "http://127.0.0.1:8000",
+  "image": "/fixtures/face_sample.jpg",
+  "frame_bytes": 100381,
+  "scenarios": [
+    {
+      "sessions": 1,
+      "fps": 15.0,
+      "duration": 10.0,
+      "sent": 150,
+      "received": 144,
+      "responses_per_s": 14.4,
+      "fps_per_session": 14.4,
+      "drop": 6,
+      "drop_rate": 0.04,
+      "rtt_ms": {
+        "p50": 35.765,
+        "p95": 40.814,
+        "p99": 44.254,
+        "mean": 34.187,
+        "max": 45.716
+      },
+      "statuses": {
+        "ok": 144
+      },
+      "health_before": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 0,
+          "frames_inferred": 0,
+          "no_face": 0,
+          "dropped": {},
+          "drop_rate": 0.0,
+          "overload_rate": 0.0,
+          "infer_ms": {
+            "p50": null,
+            "p95": null
+          },
+          "cpu_ms": {
+            "p50": null,
+            "p95": null
+          },
+          "gpu_ms": {
+            "p50": null,
+            "p95": null
+          },
+          "uptime_s": 26.1
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      },
+      "health_after": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 151,
+          "frames_inferred": 145,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 6
+          },
+          "drop_rate": 0.0397,
+          "overload_rate": 0.0397,
+          "infer_ms": {
+            "p50": 16.57,
+            "p95": 21.78
+          },
+          "cpu_ms": {
+            "p50": 9.66,
+            "p95": 11.74
+          },
+          "gpu_ms": {
+            "p50": 6.9,
+            "p95": 8.98
+          },
+          "uptime_s": 37.1
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      }
+    },
+    {
+      "sessions": 4,
+      "fps": 15.0,
+      "duration": 10.0,
+      "sent": 600,
+      "received": 596,
+      "responses_per_s": 59.6,
+      "fps_per_session": 14.9,
+      "drop": 4,
+      "drop_rate": 0.0067,
+      "rtt_ms": {
+        "p50": 15.643,
+        "p95": 31.882,
+        "p99": 34.461,
+        "mean": 18.495,
+        "max": 37.943
+      },
+      "statuses": {
+        "ok": 596
+      },
+      "health_before": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 151,
+          "frames_inferred": 145,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 6
+          },
+          "drop_rate": 0.0397,
+          "overload_rate": 0.0397,
+          "infer_ms": {
+            "p50": 16.57,
+            "p95": 21.78
+          },
+          "cpu_ms": {
+            "p50": 9.66,
+            "p95": 11.74
+          },
+          "gpu_ms": {
+            "p50": 6.9,
+            "p95": 8.98
+          },
+          "uptime_s": 37.1
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      },
+      "health_after": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 755,
+          "frames_inferred": 745,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 10
+          },
+          "drop_rate": 0.0132,
+          "overload_rate": 0.0132,
+          "infer_ms": {
+            "p50": 8.41,
+            "p95": 9.82
+          },
+          "cpu_ms": {
+            "p50": 4.29,
+            "p95": 5.46
+          },
+          "gpu_ms": {
+            "p50": 4.11,
+            "p95": 4.6
+          },
+          "uptime_s": 48.3
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      }
+    },
+    {
+      "sessions": 8,
+      "fps": 15.0,
+      "duration": 10.0,
+      "sent": 1200,
+      "received": 1200,
+      "responses_per_s": 120.0,
+      "fps_per_session": 15.0,
+      "drop": 0,
+      "drop_rate": 0.0,
+      "rtt_ms": {
+        "p50": 15.746,
+        "p95": 18.261,
+        "p99": 20.027,
+        "mean": 15.791,
+        "max": 46.71
+      },
+      "statuses": {
+        "ok": 1200
+      },
+      "health_before": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 755,
+          "frames_inferred": 745,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 10
+          },
+          "drop_rate": 0.0132,
+          "overload_rate": 0.0132,
+          "infer_ms": {
+            "p50": 8.41,
+            "p95": 9.82
+          },
+          "cpu_ms": {
+            "p50": 4.29,
+            "p95": 5.46
+          },
+          "gpu_ms": {
+            "p50": 4.11,
+            "p95": 4.6
+          },
+          "uptime_s": 48.3
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      },
+      "health_after": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 1963,
+          "frames_inferred": 1953,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 10
+          },
+          "drop_rate": 0.0051,
+          "overload_rate": 0.0051,
+          "infer_ms": {
+            "p50": 7.95,
+            "p95": 8.79
+          },
+          "cpu_ms": {
+            "p50": 4.11,
+            "p95": 4.74
+          },
+          "gpu_ms": {
+            "p50": 3.82,
+            "p95": 4.05
+          },
+          "uptime_s": 59.6
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 -- Heatmap một slide: view + heatmap_grid + EXISTS gaze sample.
 EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS)
-SELECT cv.id, cv.heatmap_grid, cv.analysis_status, cv.analysis_version,
+SELECT cv.gaze_count, cv.heatmap_grid, cv.analysis_status,
+       cv.analysis_version,
        exists (
            SELECT 1 FROM gaze_samples gs WHERE gs.content_view_id = cv.id
        ) AS has_samples

@@ -30,11 +30,31 @@ compose exec -T --user root gaze python /bench/gaze/stage_latency.py \
   --iterations "$iterations" --warmup "$warmup" \
   --out "$(bench_path "$OUT/stage-latency.json")"
 
-log "Gaze WS load (sessions=$sessions duration=$duration)"
+calib_args=()
+if [ -n "${BENCH_GAZE_CALIBRATION:-}" ]; then
+  calib_args=(--calibration "$BENCH_GAZE_CALIBRATION")
+fi
+log "Gaze capture A/B (480/q0.78 vs 320/q0.7, 480/q0.7)"
+compose exec -T --user root gaze python -m scripts.compare_capture \
+  --dir /fixtures \
+  --baseline 480:0.78 --variants 320:0.7,480:0.7 \
+  "${calib_args[@]}" \
+  --out "$(bench_path "$OUT/capture-ab.json")" \
+  || warn "capture A/B fail — xem capture-ab.json"
+
+log "Gaze WS load baseline payload (sessions=$sessions duration=$duration)"
 compose exec -T --user root gaze python /bench/gaze/ws_load.py \
   --url http://127.0.0.1:8000 \
   --image /fixtures/face_sample.jpg \
   --sessions "$sessions" --fps 15 --duration "$duration" \
   --out "$(bench_path "$OUT/ws-load.json")"
+
+log "Gaze WS load client payload 480px/q0.78 (sessions=$sessions duration=$duration)"
+compose exec -T --user root gaze python /bench/gaze/ws_load.py \
+  --url http://127.0.0.1:8000 \
+  --image /fixtures/face_sample.jpg \
+  --width 480 --quality 0.78 \
+  --sessions "$sessions" --fps 15 --duration "$duration" \
+  --out "$(bench_path "$OUT/ws-load-client.json")"
 
 echo "$OUT"

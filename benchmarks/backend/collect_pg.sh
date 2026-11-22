@@ -23,6 +23,9 @@ psql() {
 
 if [ "$LABEL" = "reset" ]; then
   psql -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >/dev/null 2>&1
+  # Đo parse/plan prepared-statement: cần track_planning bật ở cluster bench.
+  psql -c "ALTER SYSTEM SET pg_stat_statements.track_planning = on;" >/dev/null 2>&1 || true
+  psql -c "SELECT pg_reload_conf();" >/dev/null 2>&1 || true
   psql -c "SELECT pg_stat_statements_reset();" >/dev/null
   echo "reset pg_stat_statements"
   exit 0
@@ -34,8 +37,10 @@ psql -c "\copy (
   SELECT
     left(query, 240) AS query,
     calls,
+    plans,
     total_exec_time,
     mean_exec_time,
+    total_plan_time,
     rows,
     shared_blks_hit,
     shared_blks_read,

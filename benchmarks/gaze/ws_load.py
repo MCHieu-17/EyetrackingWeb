@@ -19,6 +19,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 sys.path.insert(0, "/app")
 
 try:
@@ -163,12 +166,34 @@ def main() -> int:
     parser.add_argument("--sessions", default="1,4,8,12")
     parser.add_argument("--fps", type=float, default=15.0)
     parser.add_argument("--duration", type=float, default=30.0)
+    parser.add_argument("--width", type=int, default=0)
+    parser.add_argument("--quality", type=float, default=0.78)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     base_url = args.url.rstrip("/")
     ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
     image = Path(args.image).read_bytes()
+    if args.width > 0:
+        original = cv2.imdecode(
+            np.frombuffer(image, dtype=np.uint8), cv2.IMREAD_COLOR
+        )
+        if original is None:
+            raise SystemExit(f"Không decode được ảnh {args.image}")
+        scale = args.width / original.shape[1]
+        resized = cv2.resize(
+            original,
+            (args.width, max(1, int(round(original.shape[0] * scale)))),
+            interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
+        )
+        ok, encoded = cv2.imencode(
+            ".jpg",
+            resized,
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(round(args.quality * 100))],
+        )
+        if not ok:
+            raise SystemExit("JPEG encode failed")
+        image = encoded.tobytes()
     levels = [int(item) for item in args.sessions.split(",") if item.strip()]
     scenarios = []
     for sessions in levels:
@@ -179,6 +204,7 @@ def main() -> int:
     payload = {
         "url": base_url,
         "image": str(args.image),
+        "frame_bytes": len(image),
         "scenarios": scenarios,
     }
     target = Path(args.out)

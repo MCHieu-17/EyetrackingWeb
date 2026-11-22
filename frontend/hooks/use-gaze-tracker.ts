@@ -8,6 +8,11 @@ import {
 } from "@/lib/api/calibration";
 import { transformGazePoint } from "@/lib/calibration-geometry";
 import {
+  buildFrameBlob,
+  createFrameCapturer,
+  type FrameCapturer,
+} from "@/lib/gaze/capture";
+import {
   parseGazeFrameResponse,
   type GazeFrameResult,
 } from "@/lib/gaze/frame-protocol";
@@ -100,7 +105,6 @@ export function useGazeTracker({
   // FPS tạm thời do server gợi ý khi quá tải; hết hạn thì quay lại FPS đích.
   const adaptiveFpsRef = useRef<number | null>(null);
   const adaptiveUntilRef = useRef(0);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     onPointRef.current = onPoint;
@@ -117,6 +121,7 @@ export function useGazeTracker({
     let finishActiveWs: ((result: "retry" | "abort") => void) | null = null;
     let delayTimer = 0;
     let wakeDelay: (() => void) | null = null;
+    let capturer: FrameCapturer | null = null;
 
     const clearDelayWait = () => {
       if (delayTimer) {
@@ -168,6 +173,11 @@ export function useGazeTracker({
       }
     };
 
+    const stopCapturer = () => {
+      capturer?.dispose();
+      capturer = null;
+    };
+
     /** FPS hiện tại: tạm hạ theo gợi ý server, hết hạn thì về FPS đích. */
     const effectiveFps = () => {
       const target = fpsRef.current;
@@ -192,28 +202,6 @@ export function useGazeTracker({
         onPointRef.current(x, y, "simulated");
       }, 1800);
       setSource("simulated");
-    };
-
-    const captureFrame = async (
-      video: HTMLVideoElement,
-    ): Promise<Blob | null> => {
-      if (video.videoWidth === 0 || video.videoHeight === 0) return null;
-      const scale = Math.min(1, 480 / video.videoWidth);
-      const width = Math.round(video.videoWidth * scale);
-      const height = Math.round(video.videoHeight * scale);
-      let canvas = canvasRef.current;
-      if (!canvas) {
-        canvas = document.createElement("canvas");
-        canvasRef.current = canvas;
-      }
-      if (canvas.width !== width) canvas.width = width;
-      if (canvas.height !== height) canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) return null;
-      context.drawImage(video, 0, 0, width, height);
-      return new Promise((resolve) =>
-        canvas!.toBlob(resolve, "image/jpeg", 0.78),
-      );
     };
 
     const runWsSession = (
@@ -281,7 +269,7 @@ export function useGazeTracker({
 
             // Lấy context trước khi capture để header khớp thời điểm frame.
             const context = getContextRef.current?.() ?? null;
-            const blob = await captureFrame(video);
+            const blob = capturer ? await capturer.capture(video) : null;
             if (disposed || settled) {
               if (disposed) finish("abort");
               return;
@@ -309,19 +297,8 @@ export function useGazeTracker({
               const headerBytes = new TextEncoder().encode(
                 JSON.stringify(header),
               );
-              const jpegBytes = new Uint8Array(await blob.arrayBuffer());
-              if (disposed || settled) {
-                if (disposed) finish("abort");
-                return;
-              }
-              const frame = new Uint8Array(
-                4 + headerBytes.length + jpegBytes.length,
-              );
-              new DataView(frame.buffer).setUint32(0, headerBytes.length);
-              frame.set(headerBytes, 4);
-              frame.set(jpegBytes, 4 + headerBytes.length);
               try {
-                ws.send(frame);
+                ws.send(buildFrameBlob(headerBytes, blob));
                 sequenceState.value += 1;
               } catch {
                 finish(disposed ? "abort" : "retry");
@@ -458,6 +435,7 @@ export function useGazeTracker({
         // Sequence phải tăng liên tục trong một presentation, kể cả khi
         // WebSocket reconnect để batch không bị đảo thứ tự.
         const sequenceState = { value: 0 };
+        capturer = createFrameCapturer();
         let attempts = 0;
         while (!disposed && attempts < MAX_RECONNECTS) {
           const result = await runWsSession(
@@ -475,6 +453,7 @@ export function useGazeTracker({
           if (disposed) return;
         }
         if (!disposed) {
+          stopCapturer();
           streamCleanup?.();
           streamCleanup = null;
           setStream(null);
@@ -482,6 +461,7 @@ export function useGazeTracker({
         }
       } catch {
         if (!disposed) {
+          stopCapturer();
           streamCleanup?.();
           streamCleanup = null;
           setStream(null);
@@ -496,6 +476,7 @@ export function useGazeTracker({
       simTimer = 0;
       clearDelayWait();
       closeActiveSocket();
+      stopCapturer();
       streamCleanup?.();
       streamCleanup = null;
       setStream(null);

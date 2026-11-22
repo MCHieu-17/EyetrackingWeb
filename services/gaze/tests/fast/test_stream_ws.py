@@ -123,3 +123,33 @@ def test_throttle_drops_second_frame_in_window(client):
         ws.send_bytes(frame({"v": 2, "frameId": "third"}, b"p00"))
         third = ws.receive_json()
     assert third["frameId"] == "third"
+
+
+def test_invalid_frame_does_not_consume_throttle_window(client, monkeypatch):
+    sid = _ready_session(client)
+    monkeypatch.setattr(
+        session_api,
+        "settings",
+        replace(session_api.settings, max_frame_bytes=4),
+    )
+    with client.websocket_connect(f"/session/{sid}/stream") as ws:
+        # Frame quá MAX_FRAME_BYTES bị bỏ trước khi vào pipeline (không response).
+        ws.send_bytes(frame({"v": 2, "frameId": "bad"}, b"12345"))
+        # Không sleep: frame valid ngay sau không được bị throttle oan.
+        ws.send_bytes(frame({"v": 2, "frameId": "ok"}, b"p00"))
+        valid = ws.receive_json()
+    assert valid["frameId"] == "ok"
+    assert valid["status"] == "ok"
+
+
+def test_stream_touches_session_ttl(client):
+    sid = _ready_session(client)
+    with client.websocket_connect(f"/session/{sid}/stream") as ws:
+        session = session_api.sessions.get(sid)
+        stale = time.monotonic() - 10_000
+        session.last_active = stale
+
+        ws.send_bytes(frame({"v": 2, "frameId": "ttl"}, b"p00"))
+        assert ws.receive_json()["status"] == "ok"
+
+    assert session.last_active > stale

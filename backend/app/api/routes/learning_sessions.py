@@ -75,15 +75,17 @@ async def _published_lesson(
 async def _session_for_user(
     db: AsyncSession, session_id: str, user: User
 ) -> LearningSession:
-    session = await db.get(LearningSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
-    student_id = (
+    row = (
         await db.execute(
-            select(Enrollment.student_id).where(Enrollment.id == session.enrollment_id)
+            select(LearningSession, Enrollment.student_id)
+            .join(Enrollment, Enrollment.id == LearningSession.enrollment_id)
+            .where(LearningSession.id == session_id)
         )
-    ).scalar_one_or_none()
-    if student_id is None or student_id != user.id:
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học")
+    session, student_id = row
+    if student_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
     return session
 
@@ -251,10 +253,11 @@ async def get_session_contents(
     db: AsyncSession = Depends(get_db),
 ):
     session = await _session_for_user(db, session_id, user)
-    module = await db.get(CourseModule, (await db.get(Lesson, session.lesson_id)).module_id)
-    course = await db.get(Course, module.course_id) if module else None
-    if course is None:
+    lesson = await db.get(Lesson, session.lesson_id)
+    if lesson is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy nội dung phiên học"
         )
-    return await content.get_lesson_contents(db, course, session.lesson_id)
+    return await content.get_lesson_contents(
+        db, None, session.lesson_id, lesson=lesson
+    )

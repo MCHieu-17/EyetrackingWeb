@@ -4,14 +4,20 @@ Một structured call duy nhất (nếu cần). Nếu call lỗi, fallback về 
 để không chặn request.
 """
 
+import hashlib
+import json
 import logging
 import re
+import time
+import unicodedata
+from collections import OrderedDict
 
 from pydantic import BaseModel, Field
 
 from app.settings import (
     hyde_enabled,
     hyde_min_query_words,
+    llm_model,
     query_rewrite_enabled,
 )
 from app.workflow.history import budget_history
@@ -48,6 +54,52 @@ class QueryPrep(BaseModel):
     hypothetical_answer: str = Field(default="", max_length=4000)
 
 
+_CACHE_TTL_SECONDS = 300
+_CACHE_MAX_ENTRIES = 256
+_cache: OrderedDict[tuple, tuple[float, QueryPrep]] = OrderedDict()
+
+
+def clear_query_cache() -> None:
+    _cache.clear()
+
+
+def _cache_key(state: ChatState, need_hyde: bool) -> tuple:
+    history = json.dumps(
+        budget_history(state.history),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    question = " ".join(
+        unicodedata.normalize("NFC", state.question).lower().split()
+    )
+    return (
+        question,
+        hashlib.sha256(history.encode()).hexdigest(),
+        need_hyde,
+        llm_model(),
+    )
+
+
+def _cache_get(key: tuple) -> QueryPrep | None:
+    item = _cache.get(key)
+    if item is None:
+        return None
+    stored_at, prep = item
+    if time.monotonic() - stored_at > _CACHE_TTL_SECONDS:
+        _cache.pop(key, None)
+        return None
+    _cache.move_to_end(key)
+    return prep
+
+
+def _cache_put(key: tuple, prep: QueryPrep) -> None:
+    _cache[key] = (time.monotonic(), prep)
+    _cache.move_to_end(key)
+    while len(_cache) > _CACHE_MAX_ENTRIES:
+        _cache.popitem(last=False)
+
+
 def _needs_rewrite(state: ChatState) -> bool:
     if not state.history:
         return False
@@ -79,6 +131,11 @@ async def prepare_query(state: ChatState) -> QueryPrep:
     if not _needs_rewrite(state) and not need_hyde:
         return QueryPrep(query=state.question)
 
+    key = _cache_key(state, need_hyde)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     prompt = [
         {"role": "system", "content": QUERY_PREP_SYSTEM_PROMPT},
         {
@@ -95,13 +152,16 @@ async def prepare_query(state: ChatState) -> QueryPrep:
     try:
         if need_hyde:
             prep = await get_llm_client().structured("query", prompt, QueryPrep)
-            return QueryPrep(
+            result = QueryPrep(
                 query=(prep.query or state.question).strip(),
                 hypothetical_answer=prep.hypothetical_answer.strip(),
             )
-        # Rewrite-only: schema chỉ có `query` để model không sinh thêm HyDE.
-        prep = await get_llm_client().structured("query", prompt, RewriteOnly)
-        return QueryPrep(query=(prep.query or state.question).strip())
+        else:
+            # Rewrite-only: schema chỉ có `query` để model không sinh thêm HyDE.
+            prep = await get_llm_client().structured("query", prompt, RewriteOnly)
+            result = QueryPrep(query=(prep.query or state.question).strip())
+        _cache_put(key, result)
+        return result
     except Exception as exc:
         logger.warning("Query prep failed; using original question: %s", exc)
         return QueryPrep(query=state.question)

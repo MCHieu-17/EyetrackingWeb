@@ -22,6 +22,7 @@ import json
 import os
 import statistics
 import time
+from collections import Counter
 from pathlib import Path
 
 import httpx
@@ -236,6 +237,12 @@ async def run_level(
         wall = time.perf_counter() - started
 
     errors = [r for r in records if r.get("error")]
+    verified = [r for r in records if r.get("verified") is not None]
+    finish_reasons = Counter(
+        str(r.get("finish_reason"))
+        for r in records
+        if r.get("finish_reason") is not None
+    )
     return {
         "concurrency": concurrency,
         "requests": len(records),
@@ -243,6 +250,11 @@ async def run_level(
         "wall_s": round(wall, 3),
         "rps": round(len(records) / wall, 3) if wall else None,
         "error_rate": round(len(errors) / len(records), 4) if records else None,
+        "verified_counts": {
+            "true": sum(1 for r in verified if r["verified"] is True),
+            "false": sum(1 for r in verified if r["verified"] is False),
+        },
+        "finish_reason_counts": dict(finish_reasons),
         "ttft_total_ms": aggregate(records, "ttft_total_ms"),
         "t_prep_ms": aggregate(records, "t_prep_ms"),
         "t_retrieve_ms": aggregate(records, "t_retrieve_ms"),

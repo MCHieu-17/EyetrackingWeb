@@ -67,12 +67,14 @@ class GazeFrame:
 class FrameJob:
     """Một frame chờ suy luận, kèm future để trả về event loop."""
 
-    jpeg: bytes
+    jpeg: bytes | memoryview
     received_at: float
     loop: asyncio.AbstractEventLoop
     future: asyncio.Future
     session: Session | None = None
     header: dict | None = None
+    #: True khi caller đã timeout; CPU/GPU thread bỏ qua thay vì suy luận.
+    cancelled: bool = False
 
 
 def _percentile(values: list[float], q: float) -> float | None:
@@ -96,24 +98,49 @@ class RuntimeStats:
         self._infer_ms: deque[float] = deque(maxlen=window)
         self._cpu_ms: deque[float] = deque(maxlen=window)
         self._gpu_ms: deque[float] = deque(maxlen=window)
-        self._recent: deque[tuple[float, bool]] = deque(maxlen=512)
+        # EMA theo bucket 1 giây cho suggestedFps; tránh scan 512 entry/frame.
+        self._ema_ok = 1.0
+        self._bucket_started = time.monotonic()
+        self._bucket_ok = 0
+        self._bucket_total = 0
+        self._events = 0
 
     def count_in(self) -> None:
         """Gọi khi frame vào hệ thống (kể cả frame sau đó bị throttle)."""
         with self._lock:
             self.frames_in += 1
 
+    def _roll_bucket(self, now: float) -> None:
+        elapsed = now - self._bucket_started
+        if elapsed < 1.0:
+            return
+        if self._bucket_total:
+            rate = self._bucket_ok / self._bucket_total
+        else:
+            rate = self._ema_ok
+        alpha = min(1.0, elapsed / RECENT_WINDOW_SECONDS)
+        self._ema_ok += alpha * (rate - self._ema_ok)
+        self._bucket_started = now
+        self._bucket_ok = 0
+        self._bucket_total = 0
+
+    def _mark(self, ok: bool) -> None:
+        now = time.monotonic()
+        self._roll_bucket(now)
+        self._events += 1
+        self._bucket_total += 1
+        if ok:
+            self._bucket_ok += 1
+
     def count_drop(self, reason: str) -> None:
         with self._lock:
             self.dropped[reason] += 1
-            self._recent.append(
-                (time.monotonic(), reason not in OVERLOAD_REASONS)
-            )
+            self._mark(reason not in OVERLOAD_REASONS)
 
     def count_no_face(self) -> None:
         with self._lock:
             self.no_face += 1
-            self._recent.append((time.monotonic(), True))
+            self._mark(True)
 
     def record(self, infer_ms: float, cpu_ms: float, gpu_ms: float) -> None:
         with self._lock:
@@ -121,7 +148,7 @@ class RuntimeStats:
             self._infer_ms.append(infer_ms)
             self._cpu_ms.append(cpu_ms)
             self._gpu_ms.append(gpu_ms)
-            self._recent.append((time.monotonic(), True))
+            self._mark(True)
 
     def _rates(self) -> tuple[float, float]:
         total = self.frames_in
@@ -166,14 +193,11 @@ class RuntimeStats:
 
     def suggested_fps(self, target: int) -> int:
         """FPS gợi ý theo tỉ lệ drop gần đây (client tự giảm tải)."""
-        now = time.monotonic()
         with self._lock:
-            recent = [
-                ok for ts, ok in self._recent if now - ts <= RECENT_WINDOW_SECONDS
-            ]
-        if len(recent) < 10:
-            return target
-        drop_rate = 1.0 - (sum(recent) / len(recent))
+            self._roll_bucket(time.monotonic())
+            if self._events < 10:
+                return target
+            drop_rate = 1.0 - self._ema_ok
         if drop_rate > 0.25:
             return max(5, target // 2)
         return target
@@ -203,8 +227,10 @@ class InferenceRuntime:
         self._gpu_stage = None
 
         self._cpu_q: queue.Queue = queue.Queue(maxsize=settings.max_queue)
-        # 1 slot đủ để overlap CPU/GPU mà không tạo latency dài.
-        self._gpu_q: queue.Queue = queue.Queue(maxsize=1)
+        # Queue đủ sâu để gom batch xuyên session; mỗi session vẫn tối đa 1 frame
+        # in-flight ở tầng WS nên batch bị chặn tự nhiên theo số session.
+        self._gpu_q: queue.Queue = queue.Queue(maxsize=settings.gpu_queue)
+        self._gpu_batch = settings.gpu_batch
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._cpu_thread: threading.Thread | None = None
@@ -279,7 +305,7 @@ class InferenceRuntime:
     def new_job(
         self,
         *,
-        jpeg: bytes,
+        jpeg: bytes | memoryview,
         session: Session | None = None,
         header: dict | None = None,
     ) -> FrameJob:
@@ -310,6 +336,7 @@ class InferenceRuntime:
                 job.future, timeout=self.settings.inference_timeout_s
             )
         except asyncio.TimeoutError:
+            job.cancelled = True
             self.stats.count_drop("timeout")
             return GazeFrame("error")
 
@@ -345,6 +372,8 @@ class InferenceRuntime:
             self._process_cpu(job)
 
     def _process_cpu(self, job: FrameJob) -> None:
+        if job.cancelled:
+            return
         if self._is_stale(job):
             self._finish_drop(job, "stale")
             return
@@ -366,10 +395,12 @@ class InferenceRuntime:
             self._settle(job, GazeFrame("no_face"))
             return
 
+        if job.cancelled:
+            return
         try:
-            self._gpu_q.put(
-                (job, prepared, cpu_ms), timeout=self.settings.frame_max_age_s
-            )
+            # Không block CPU thread chờ GPU: queue đầy thì frame đã quá cũ để
+            # hữu ích, trả overloaded ngay thay vì làm cả hàng đợi già đi.
+            self._gpu_q.put_nowait((job, prepared, cpu_ms))
         except queue.Full:
             self._finish_drop(job, "overload")
 
@@ -381,39 +412,76 @@ class InferenceRuntime:
                 continue
             if item is None:
                 break
-            job, prepared, cpu_ms = item
-            self._process_gpu(job, prepared, cpu_ms)
 
-    def _process_gpu(self, job: FrameJob, prepared, cpu_ms: float) -> None:
-        if self._is_stale(job):
-            self._finish_drop(job, "stale")
+            batch = [item]
+            stop_after = False
+            while len(batch) < self._gpu_batch:
+                try:
+                    nxt = self._gpu_q.get_nowait()
+                except queue.Empty:
+                    break
+                if nxt is None:
+                    stop_after = True
+                    break
+                batch.append(nxt)
+            self._process_gpu_batch(batch)
+            if stop_after:
+                break
+
+    def _process_gpu_batch(self, batch: list[tuple]) -> None:
+        live: list[tuple[FrameJob, object, float]] = []
+        for job, prepared, cpu_ms in batch:
+            if job.cancelled:
+                continue
+            if self._is_stale(job):
+                self._finish_drop(job, "stale")
+                continue
+            live.append((job, prepared, cpu_ms))
+        if not live:
             return
 
         started = time.perf_counter()
         try:
-            pitch, yaw = self._gpu_stage.predict(prepared)
+            predictions = self._predict_batch([item[1] for item in live])
         except Exception:
             logger.exception("GPU stage lỗi")
-            self._finish_drop(job, "error")
-            return
-        gpu_ms = (time.perf_counter() - started) * 1000.0
-
-        if job.session is None:
-            result = GazeFrame("ok", pitch=pitch, yaw=yaw)
-        else:
-            try:
-                x, y = job.session.calib.predict(pitch, yaw)
-                x, y = job.session.smoother.process(
-                    [x, y], timestamp=job.received_at
-                )
-            except Exception:
-                logger.exception("Calibration/smoothing lỗi")
+            for job, _, _ in live:
                 self._finish_drop(job, "error")
-                return
-            result = GazeFrame("ok", x=x, y=y, pitch=pitch, yaw=yaw)
+            return
+        batch_ms = (time.perf_counter() - started) * 1000.0
+        if len(predictions) != len(live):
+            logger.error(
+                "GPU trả %d kết quả cho batch %d", len(predictions), len(live)
+            )
+            for job, _, _ in live:
+                self._finish_drop(job, "error")
+            return
+        gpu_ms = batch_ms / len(live)
 
-        self.stats.record(cpu_ms + gpu_ms, cpu_ms, gpu_ms)
-        self._settle(job, result)
+        for (job, _, cpu_ms), (pitch, yaw) in zip(live, predictions):
+            if job.session is None:
+                result = GazeFrame("ok", pitch=pitch, yaw=yaw)
+            else:
+                try:
+                    x, y = job.session.calib.predict(pitch, yaw)
+                    x, y = job.session.smoother.process(
+                        [x, y], timestamp=job.received_at
+                    )
+                except Exception:
+                    logger.exception("Calibration/smoothing lỗi")
+                    self._finish_drop(job, "error")
+                    continue
+                result = GazeFrame("ok", x=x, y=y, pitch=pitch, yaw=yaw)
+
+            self.stats.record(cpu_ms + gpu_ms, cpu_ms, gpu_ms)
+            self._settle(job, result)
+
+    def _predict_batch(self, prepareds: list) -> list[tuple[float, float]]:
+        fn = getattr(self._gpu_stage, "predict_batch", None)
+        if callable(fn):
+            return fn(prepareds)
+        # Stage giả/test cũ chỉ có predict đơn.
+        return [self._gpu_stage.predict(prepared) for prepared in prepareds]
 
     # ---- Helpers ----
 

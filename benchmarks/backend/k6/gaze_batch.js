@@ -28,6 +28,8 @@ const samples = Math.max(1, Math.min(2000, Number(__ENV.SAMPLES || 40)));
 const vus = Number(__ENV.VUS || Math.min(25, targets.length));
 const duration = __ENV.DURATION || '30s';
 const batchPerSecond = Number(__ENV.BATCH_PER_SECOND || 1);
+// Mô phỏng browser thật khi đo qua nginx: mỗi VU một cookie gaze_affinity.
+const affinity = __ENV.AFFINITY === '1';
 
 export const options = {
   vus,
@@ -64,15 +66,18 @@ export default function () {
   };
   sequence += samples;
 
+  const headers = {
+    Authorization: `Bearer ${student.token}`,
+    'Content-Type': 'application/json',
+    'X-Request-ID': `bench-gaze-${__VU}-${__ITER}`,
+  };
+  if (affinity) headers.Cookie = `gaze_affinity=bench-${__VU}`;
+
   const res = http.post(
     `${BASE}/api/learning-sessions/${target.session_id}/gaze-batches`,
     JSON.stringify(body),
     {
-      headers: {
-        Authorization: `Bearer ${student.token}`,
-        'Content-Type': 'application/json',
-        'X-Request-ID': `bench-gaze-${__VU}-${__ITER}`,
-      },
+      headers,
       tags: { endpoint: 'POST /api/learning-sessions/:id/gaze-batches' },
       timeout: '30s',
     },

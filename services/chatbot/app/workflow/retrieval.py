@@ -1,10 +1,10 @@
 """Truy hồi hybrid: Postgres FTS + pgvector + HyDE trong một khóa học."""
 
 import asyncio
+import re
 import threading
 
 from pgvector import Vector
-from psycopg.rows import dict_row
 
 from app.db import get_pool
 from app.settings import (
@@ -35,28 +35,53 @@ _DOC_COLUMNS = """
     d.slide_position AS slide_index
 """
 
-BM25_SQL = f"""
+# View lọc published + ready; chỉ lấy lesson id để query thẳng slides.
+COURSE_LESSONS_SQL = """
+SELECT DISTINCT lesson_id
+FROM v_chatbot_slide_documents
+WHERE course_id = %s
+"""
+
+# Vòng 1 chỉ trả id + điểm; transcript/metadata lấy sau cho top_k.
+BM25_SQL = """
 SELECT
-    {_DOC_COLUMNS},
-    ts_rank_cd(d.content_tsv, q) AS rank_score
-FROM v_chatbot_slide_documents d,
+    s.id,
+    ts_rank_cd(s.content_tsv, q) AS rank_score
+FROM slides s,
      plainto_tsquery('simple', immutable_unaccent(%s)) q
-WHERE d.course_id = %s
-  AND d.content_tsv @@ q
+WHERE s.lesson_id = ANY(%s::uuid[])
+  AND s.content_tsv @@ q
+  AND s.index_status = 'ready'
 ORDER BY rank_score DESC
 LIMIT %s
 """
 
-DENSE_SQL = f"""
+# ORDER BY <=> LIMIT trực tiếp trên slides để planner có thể dùng HNSW.
+# Threshold lọc sau LIMIT (xem _dense_rows).
+DENSE_SQL = """
 SELECT
-    {_DOC_COLUMNS},
-    1 - (d.embedding <=> %s) AS cosine
-FROM v_chatbot_slide_documents d
-WHERE d.course_id = %s
-  AND 1 - (d.embedding <=> %s) >= %s
-ORDER BY d.embedding <=> %s
+    s.id,
+    s.lesson_id,
+    1 - (s.embedding <=> %s) AS cosine
+FROM slides s
+WHERE s.embedding IS NOT NULL
+  AND s.lesson_id = ANY(%s::uuid[])
+  AND s.index_status = 'ready'
+ORDER BY s.embedding <=> %s
 LIMIT %s
 """
+
+HYDRATE_SQL = f"""
+SELECT
+    {_DOC_COLUMNS}
+FROM v_chatbot_slide_documents d
+WHERE d.course_id = %s
+  AND d.slide_id = ANY(%s::uuid[])
+"""
+
+# Budget prompt: đủ rộng cho slide thường nhưng chặn transcript cực dài.
+_CONTEXT_MAX_CHARS = 20_000
+_DOC_MAX_CHARS = 2_500
 
 
 def rrf_fuse(
@@ -79,6 +104,30 @@ def rrf_fuse(
     return result
 
 
+def _context_header(index: int, doc: dict) -> str:
+    return (
+        f"[{index}] {doc['module_title']} > "
+        f"{doc['lesson_title']} "
+        f"(slide {int(doc.get('slide_index') or 0)})"
+    )
+
+
+def _clip_text(text: str, query: str, limit: int) -> str:
+    """Cắt quanh token khớp đầu tiên để giữ đoạn có khả năng trả lời."""
+    if len(text) <= limit:
+        return text
+    lowered = text.casefold()
+    position = -1
+    for term in re.findall(r"\w{3,}", query.casefold()):
+        found = lowered.find(term)
+        if found >= 0 and (position < 0 or found < position):
+            position = found
+    if position < 0:
+        return text[:limit]
+    start = max(0, min(position - limit // 3, len(text) - limit))
+    return text[start : start + limit]
+
+
 class Retriever:
     def __init__(self):
         self.embedding = get_embedding()
@@ -89,60 +138,125 @@ class Retriever:
         self.hyde_weight = rag_hyde_weight()
         self.rrf_k = rag_rrf_k()
         self.threshold = rag_score_threshold()
+        self.ef_search = max(40, 4 * self.top_k)
+
+    @staticmethod
+    def _course_lesson_ids(conn, course_id: str) -> list:
+        rows = conn.execute(COURSE_LESSONS_SQL, (course_id,)).fetchall()
+        return [row["lesson_id"] for row in rows]
+
+    def _bm25_rows(self, conn, query: str, lesson_ids: list) -> list[dict]:
+        if not lesson_ids:
+            return []
+        rows = conn.execute(
+            BM25_SQL,
+            (query, lesson_ids, self.bm25_candidates),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _apply_retrieval_settings(self, conn) -> None:
+        # Chạm kiểu vector trước để pgvector đăng ký GUC hnsw.* trong session.
+        conn.execute("SELECT NULL::vector")
+        conn.execute(f"SET LOCAL hnsw.ef_search = {int(self.ef_search)}")
+        conn.execute("SET LOCAL hnsw.iterative_scan = 'relaxed_order'")
+
+    def _dense_rows(self, conn, vector, lesson_ids: list, limit: int) -> list[dict]:
+        if not lesson_ids:
+            return []
+        rows = conn.execute(
+            DENSE_SQL,
+            (vector, lesson_ids, vector, limit),
+        ).fetchall()
+        docs = [dict(row) for row in rows]
+        # relaxed_order có thể lệch thứ tự; sort lại trước khi lọc threshold.
+        docs.sort(key=lambda row: row["cosine"], reverse=True)
+        return [row for row in docs if row["cosine"] >= self.threshold]
+
+    def _hydrate(self, conn, course_id: str, docs: list[dict]) -> list[dict]:
+        if not docs:
+            return []
+        ids = [doc["id"] for doc in docs]
+        rows = conn.execute(HYDRATE_SQL, (course_id, ids)).fetchall()
+        by_id = {str(row["id"]): dict(row) for row in rows}
+        hydrated: list[dict] = []
+        for doc in docs:
+            full = by_id.get(str(doc["id"]))
+            if full is None:
+                continue
+            full["score"] = doc.get("score", 0.0)
+            hydrated.append(full)
+        return hydrated
+
+    def _search_bm25_and_lessons(
+        self, query: str, course_id: str
+    ) -> tuple[list, list[dict]]:
+        with get_pool().connection() as conn:
+            lesson_ids = self._course_lesson_ids(conn, course_id)
+            return lesson_ids, self._bm25_rows(conn, query, lesson_ids)
 
     def _search_bm25(self, query: str, course_id: str) -> list[dict]:
-        with get_pool().connection() as conn:
-            with conn.cursor(row_factory=dict_row) as cur:
-                cur.execute(
-                    BM25_SQL,
-                    (query, course_id, self.bm25_candidates),
-                )
-                return [dict(row) for row in cur.fetchall()]
+        return self._search_bm25_and_lessons(query, course_id)[1]
 
-    def _search_dense(
-        self, vector: Vector, course_id: str, limit: int
+    def _search_dense(self, vector: Vector, course_id: str, limit: int) -> list[dict]:
+        with get_pool().connection() as conn:
+            lesson_ids = self._course_lesson_ids(conn, course_id)
+            if not lesson_ids:
+                return []
+            with conn.transaction():
+                self._apply_retrieval_settings(conn)
+                return self._dense_rows(conn, vector, lesson_ids, limit)
+
+    def _dense_and_hydrate(
+        self,
+        query_vector: Vector,
+        hyde_vector: Vector | None,
+        course_id: str,
+        lesson_ids: list,
+        bm25: list[dict],
     ) -> list[dict]:
         with get_pool().connection() as conn:
-            with conn.cursor(row_factory=dict_row) as cur:
-                cur.execute(
-                    DENSE_SQL,
-                    (vector, course_id, vector, self.threshold, vector, limit),
+            with conn.transaction():
+                self._apply_retrieval_settings(conn)
+                dense = self._dense_rows(
+                    conn, query_vector, lesson_ids, self.dense_candidates
                 )
-                return [dict(row) for row in cur.fetchall()]
+                hyde = (
+                    self._dense_rows(
+                        conn, hyde_vector, lesson_ids, self.hyde_candidates
+                    )
+                    if hyde_vector is not None
+                    else []
+                )
+                branches: list[tuple[list[dict], float]] = [
+                    (bm25, 1.0),
+                    (dense, 1.0),
+                ]
+                if hyde_vector is not None:
+                    branches.append((hyde, self.hyde_weight))
+                fused = rrf_fuse(branches, self.rrf_k, self.top_k)
+                return self._hydrate(conn, course_id, fused)
 
     async def asearch(self, query: str, hyde: str, course_id: str) -> list[dict]:
-        query_vector, hyde_vector = await asyncio.gather(
+        bm25_task = asyncio.create_task(
+            asyncio.to_thread(self._search_bm25_and_lessons, query, course_id)
+        )
+        vectors_task = asyncio.gather(
             self.embedding.aembed_query(query),
             self.embedding.aembed_query(hyde) if hyde else _none(),
         )
-
-        tasks = [
-            asyncio.to_thread(self._search_bm25, query, course_id),
-            asyncio.to_thread(
-                self._search_dense,
-                Vector(query_vector),
-                course_id,
-                self.dense_candidates,
-            ),
-        ]
-        if hyde_vector is not None:
-            tasks.append(
-                asyncio.to_thread(
-                    self._search_dense,
-                    Vector(hyde_vector),
-                    course_id,
-                    self.hyde_candidates,
-                )
-            )
-        results = await asyncio.gather(*tasks)
-
-        branches: list[tuple[list[dict], float]] = [
-            (results[0], 1.0),
-            (results[1], 1.0),
-        ]
-        if hyde_vector is not None:
-            branches.append((results[2], self.hyde_weight))
-        return rrf_fuse(branches, self.rrf_k, self.top_k)
+        (lesson_ids, bm25), (query_vector, hyde_vector) = await asyncio.gather(
+            bm25_task, vectors_task
+        )
+        if not lesson_ids:
+            return []
+        return await asyncio.to_thread(
+            self._dense_and_hydrate,
+            Vector(query_vector),
+            Vector(hyde_vector) if hyde_vector is not None else None,
+            course_id,
+            lesson_ids,
+            bm25,
+        )
 
     def close(self):
         return
@@ -203,13 +317,27 @@ def build_citations(docs: list[dict]) -> list[dict]:
     return citations
 
 
-def format_context(docs: list[dict]) -> str:
+def format_context(docs: list[dict], query: str = "") -> str:
+    unique: list[dict] = []
+    seen: set[str] = set()
+    for doc in docs:
+        key = str(doc.get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(doc)
+    if not unique:
+        return ""
+
+    headers = [_context_header(index, doc) for index, doc in enumerate(unique, start=1)]
+    overhead = sum(len(header) + 1 for header in headers)
+    overhead += 2 * max(0, len(unique) - 1)
+    body_budget = max(1, _CONTEXT_MAX_CHARS - overhead)
+    per_doc = max(1, min(_DOC_MAX_CHARS, body_budget // len(unique)))
+
     blocks: list[str] = []
-    for index, doc in enumerate(docs, start=1):
-        header = (
-            f"[{index}] {doc['module_title']} > "
-            f"{doc['lesson_title']} "
-            f"(slide {int(doc.get('slide_index') or 0)})"
-        )
-        blocks.append(f"{header}\n{doc.get('content') or ''}")
-    return "\n\n".join(blocks)
+    for header, doc in zip(headers, unique, strict=True):
+        body = _clip_text(doc.get("content") or "", query, per_doc)
+        blocks.append(f"{header}\n{body}")
+    text = "\n\n".join(blocks)
+    return text[:_CONTEXT_MAX_CHARS]

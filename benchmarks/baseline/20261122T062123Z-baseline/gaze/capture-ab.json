@@ -1,0 +1,53 @@
+{
+  "baseline": "480:0.78",
+  "viewport": [
+    1536,
+    730
+  ],
+  "gates": {
+    "max_delta_pct": 5.0,
+    "max_px_pct": 10.0
+  },
+  "variants": {
+    "480:0.78": {
+      "width": 480,
+      "quality": 0.78,
+      "images": 1,
+      "no_face": 0,
+      "jpeg_bytes_mean": 20387,
+      "jpeg_bytes_p95": 20387,
+      "pose_delta_deg_mean": 0.0,
+      "pose_delta_pct": 0.0,
+      "px_delta_mean": 0.0,
+      "px_delta_pct": 0.0,
+      "pass": true
+    },
+    "320:0.7": {
+      "width": 320,
+      "quality": 0.7,
+      "images": 1,
+      "no_face": 0,
+      "jpeg_bytes_mean": 8328,
+      "jpeg_bytes_p95": 8328,
+      "pose_delta_deg_mean": 2.3111,
+      "pose_delta_pct": 28.0,
+      "px_delta_mean": null,
+      "px_delta_pct": null,
+      "pass": false
+    },
+    "480:0.7": {
+      "width": 480,
+      "quality": 0.7,
+      "images": 1,
+      "no_face": 0,
+      "jpeg_bytes_mean": 16571,
+      "jpeg_bytes_p95": 16571,
+      "pose_delta_deg_mean": 1.022,
+      "pose_delta_pct": 12.38,
+      "px_delta_mean": null,
+      "px_delta_pct": null,
+      "pass": false
+    }
+  },
+  "pass": false
+}

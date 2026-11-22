@@ -39,8 +39,9 @@ class Settings(BaseSettings):
     # statement_timeout cho API; worker nặng có thể override bằng env riêng.
     db_statement_timeout_ms: int = 15000
     # 0 = tắt prepared statement cache để tương thích PgBouncer transaction
-    # pooling. Đặt >0 nếu kết nối trực tiếp Postgres và cần tối ưu.
-    db_prepared_statement_cache_size: int = 0
+    # pooling. Mặc định bật khi nối trực tiếp Postgres; profile `pgbouncer`
+    # phải đặt lại 0 trong .env.
+    db_prepared_statement_cache_size: int = 64
 
     # Chatbot RAG service (internal). Backend gọi qua HTTP + token nội bộ.
     chatbot_url: str = ""
@@ -164,7 +165,9 @@ class Settings(BaseSettings):
     worker_stale_seconds: int = 600
 
     # Worker đồng bộ index RAG từ background_jobs(kind=index_slides).
-    embedding_worker_poll_seconds: float = 5.0
+    embedding_worker_poll_seconds: float = 0.5
+    # Số job index claim mỗi vòng; mỗi job là một lesson độc lập.
+    embedding_worker_concurrency: int = 2
     # Job running quá lâu (worker chết) được đưa lại pending/failed.
     embedding_worker_stale_seconds: int = 600
 

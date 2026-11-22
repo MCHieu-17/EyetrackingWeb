@@ -1,6 +1,7 @@
 """Access helpers dùng chung."""
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import can_access_course, can_manage_course
@@ -49,11 +50,18 @@ async def course_of_lesson(db: AsyncSession, lesson: Lesson) -> Course | None:
 async def get_lesson_with_course(
     db: AsyncSession, lesson_id: str
 ) -> tuple[Lesson, Course]:
-    lesson = await get_lesson_or_404(db, lesson_id)
-    course = await course_of_lesson(db, lesson)
-    if course is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy khóa học")
-    return lesson, course
+    validate_uuid(lesson_id)
+    row = (
+        await db.execute(
+            select(Lesson, Course)
+            .join(CourseModule, CourseModule.id == Lesson.module_id)
+            .join(Course, Course.id == CourseModule.course_id)
+            .where(Lesson.id == lesson_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Không tìm thấy bài học")
+    return row
 
 
 async def get_managed_lesson(

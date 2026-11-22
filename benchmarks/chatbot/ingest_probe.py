@@ -82,24 +82,23 @@ def main() -> int:
 
     ingestion = Ingestion()
     local = threading.local()
-    records: list[dict] = []
+    records: dict[str, dict] = {}
     lock = threading.Lock()
 
     def rec(slide_id: str) -> dict:
-        item = getattr(local, "item", None)
-        if item is None or item["slide_id"] != slide_id:
-            item = {"slide_id": slide_id}
-            local.item = item
-            with lock:
-                records.append(item)
-        return item
+        with lock:
+            return records.setdefault(slide_id, {"slide_id": slide_id})
 
     def timed(attr: str, slide_arg=None):
         original = getattr(ingestion, attr)
 
         def wrapper(*a, **kw):
             slide = slide_arg(a, kw) if slide_arg else None
-            item = rec(str(slide.get("slide_id"))) if slide else getattr(local, "item", None)
+            if slide:
+                item = rec(str(slide.get("slide_id")))
+                local.item = item
+            else:
+                item = getattr(local, "item", None)
             started = time.perf_counter()
             try:
                 return original(*a, **kw)
@@ -115,16 +114,20 @@ def main() -> int:
     timed("_mark", lambda a, kw: {"slide_id": a[0]})
 
     original_embed = ingestion.embedding.embed_documents
+    embed_batches: list[dict] = []
 
     def embed_wrapper(texts):
         started = time.perf_counter()
         try:
             return original_embed(texts)
         finally:
-            elapsed = round((time.perf_counter() - started) * 1000, 2)
-            current = getattr(local, "item", None)
-            if current is not None:
-                current["embedding_ms"] = elapsed
+            with lock:
+                embed_batches.append(
+                    {
+                        "size": len(texts),
+                        "ms": round((time.perf_counter() - started) * 1000, 2),
+                    }
+                )
 
     ingestion.embedding.embed_documents = embed_wrapper
 
@@ -132,7 +135,16 @@ def main() -> int:
     processed, failed, errors = ingestion.embed_slides(slide_ids)
     wall_ms = round((time.perf_counter() - started) * 1000, 2)
 
-    for item in records:
+    embedding_shares = [
+        batch["ms"] / batch["size"]
+        for batch in embed_batches
+        for _ in range(batch["size"])
+    ]
+    mean_embedding_ms = (
+        round(statistics.mean(embedding_shares), 2) if embedding_shares else None
+    )
+    for item in records.values():
+        item["embedding_ms"] = mean_embedding_ms
         item["total_ms"] = round(
             sum(
                 float(item.get(k, 0) or 0)
@@ -157,18 +169,37 @@ def main() -> int:
         "slides_per_second": round(len(slide_ids) / (wall_ms / 1000), 3) if wall_ms else None,
         "stages_ms": {
             "pdf_render": summarize(
-                [float(r["_load_image_ms"]) for r in records if "_load_image_ms" in r]
+                [
+                    float(r["_load_image_ms"])
+                    for r in records.values()
+                    if "_load_image_ms" in r
+                ]
             ),
             "vlm": summarize(
-                [float(r["_describe_image_ms"]) for r in records if "_describe_image_ms" in r]
+                [
+                    float(r["_describe_image_ms"])
+                    for r in records.values()
+                    if "_describe_image_ms" in r
+                ]
             ),
-            "embedding": summarize(
-                [float(r["embedding_ms"]) for r in records if "embedding_ms" in r]
+            "embedding": summarize(embedding_shares),
+            "db_upsert": summarize(
+                [
+                    float(r["_upsert_ms"])
+                    for r in records.values()
+                    if "_upsert_ms" in r
+                ]
             ),
-            "db_upsert": summarize([float(r["_upsert_ms"]) for r in records if "_upsert_ms" in r]),
-            "db_mark": summarize([float(r["_mark_ms"]) for r in records if "_mark_ms" in r]),
+            "db_mark": summarize(
+                [
+                    float(r["_mark_ms"])
+                    for r in records.values()
+                    if "_mark_ms" in r
+                ]
+            ),
         },
-        "slides": records,
+        "embedding_batches": embed_batches,
+        "slides": list(records.values()),
     }
     target = Path(args.out)
     target.parent.mkdir(parents=True, exist_ok=True)

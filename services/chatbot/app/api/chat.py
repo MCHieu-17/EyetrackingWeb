@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-# Giới hạn số chat xử lý đồng thời ở tầng API. Khi vượt, trả 429 thay vì để
-# hàng đợi asyncio phình vô hạn và làm tăng latency toàn bộ.
-_CHAT_MAX_CONCURRENT = int(os.getenv("CHATBOT_MAX_CONCURRENT", "20"))
+# Giới hạn số chat xử lý đồng thời ở tầng API. Mặc định khớp
+# LLM_TOTAL_CONCURRENCY để request vượt capacity nhận 429 sớm thay vì giữ slot
+# chờ provider.
+_CHAT_MAX_CONCURRENT = int(os.getenv("CHATBOT_MAX_CONCURRENT", "6"))
 _CHAT_QUEUE_TIMEOUT = float(os.getenv("CHATBOT_QUEUE_TIMEOUT", "2"))
 _chat_slots = asyncio.Semaphore(_CHAT_MAX_CONCURRENT)
 

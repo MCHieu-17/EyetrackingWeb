@@ -137,3 +137,20 @@ async def test_ingest_keeps_one_document_per_slide(client, fake_providers):
         db.fetch_one("SELECT count(*) AS n FROM v_chatbot_slide_documents")["n"]
         == 1
     )
+
+
+async def test_ingest_batches_embeddings(client, fake_providers):
+    key = f"test/{uuid.uuid4().hex}.pdf"
+    transcripts = [f"alpha page {index}" for index in range(8)]
+    make_pdf(key, transcripts)
+    seeded = db.seed_course(
+        slide_transcripts=transcripts, pdf_object_key=key, index_status="pending"
+    )
+    response = await client.post(
+        "/ingest/slides", json={"slide_ids": seeded["slide_ids"]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["processed"] == 8
+    batches = [len(batch) for batch in fake_providers.embedding.documents]
+    assert sum(batches) == 8
+    assert max(batches) >= 4

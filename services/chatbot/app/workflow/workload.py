@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 _condition = threading.Condition()
 _active_chats = 0
-_ingest = threading.Semaphore(int(os.getenv("VLM_INGEST_CONCURRENCY", "1")))
+_ingest = threading.Semaphore(int(os.getenv("VLM_INGEST_CONCURRENCY", "4")))
 
 
 def chat_started():
@@ -25,7 +25,7 @@ def chat_finished():
 
 @contextmanager
 def ingest_slot():
-    timeout = float(os.getenv("VLM_INGEST_QUEUE_TIMEOUT", "60"))
+    timeout = float(os.getenv("VLM_INGEST_QUEUE_TIMEOUT", "900"))
     end = time.monotonic() + timeout
     if not _ingest.acquire(timeout=timeout):
         raise TimeoutError("Ingest đang chờ dung lượng VLM; hãy thử lại sau.")

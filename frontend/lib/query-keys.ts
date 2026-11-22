@@ -30,6 +30,8 @@ export const queryKeys = {
     courseTree: (courseId: string) => ["teacher", "course-tree", courseId] as const,
     courseStudents: (courseId: string) =>
       ["teacher", "course-students", courseId] as const,
+    studentLessons: (courseId: string, studentId: string) =>
+      ["teacher", "student-lessons", courseId, studentId] as const,
     lessonSlides: (lessonId: string) =>
       ["teacher", "lesson-slides", lessonId] as const,
     studentDirectory: (query: string) =>

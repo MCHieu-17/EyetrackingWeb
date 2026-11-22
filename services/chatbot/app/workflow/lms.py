@@ -50,10 +50,6 @@ async def query(state, operation, target=""):
     return data
 
 
-async def check_access(state):
-    await query(state, "access")
-
-
 LMS_PATTERNS: dict[str, re.Pattern[str]] = {
     "results": re.compile(
         r"\b(điểm|kết quả|đã nộp chưa|bao nhiêu điểm|điểm số)\b", re.IGNORECASE

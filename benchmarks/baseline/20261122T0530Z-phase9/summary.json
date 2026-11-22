@@ -1,0 +1,313 @@
+{
+  "run": "20261122T0530Z-phase9",
+  "fixtures": {
+    "scale": "baseline",
+    "counts": {
+      "users": 202,
+      "courses": 6,
+      "course_modules": 21,
+      "lessons": 105,
+      "slides": 540,
+      "aois": 243,
+      "enrollments": 400,
+      "course_visits": 419,
+      "learning_sessions": 1057,
+      "content_views": 19240,
+      "view_layouts": 160,
+      "gaze_samples": 3445200,
+      "chat_sessions": 200,
+      "chat_messages": 2000,
+      "quiz_attempts": 1000,
+      "gaze_calibrations": 100,
+      "background_jobs": 100
+    },
+    "pdf_sha256": "bf4dab9a094d5494ea09fee883e69e6d66e1d29ae8be59f3e558bf59f78f8cd9"
+  },
+  "backend": {
+    "k6": [
+      {
+        "file": "add-students.summary.json",
+        "scenario": "add-students",
+        "p50": 26.6191675,
+        "p95": 29.26290985,
+        "p99": 29.56773157,
+        "avg": 23.4470789,
+        "rps": 4.444873752081914,
+        "error_rate": 0,
+        "count": 10
+      },
+      {
+        "file": "aoi_summary.summary.json",
+        "scenario": "aoi_summary",
+        "p50": 179.675851,
+        "p95": 225.88553879999998,
+        "p99": 235.98942531999998,
+        "avg": 183.60511462264157,
+        "rps": 5.103755912669326,
+        "error_rate": 0,
+        "count": 53
+      },
+      {
+        "file": "auth-me.summary.json",
+        "scenario": "auth-me",
+        "p50": 9.056041,
+        "p95": 9.93044045,
+        "p99": 10.03818982,
+        "avg": 8.041736770833332,
+        "rps": 4.780284138258728,
+        "error_rate": 0,
+        "count": 48
+      },
+      {
+        "file": "course_students.summary.json",
+        "scenario": "course_students",
+        "p50": 8.346415499999999,
+        "p95": 15.6833879,
+        "p99": 37.48415490999999,
+        "avg": 10.236424336134453,
+        "rps": 23.62434772767709,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "course_visits.summary.json",
+        "scenario": "course_visits",
+        "p50": 9.551123,
+        "p95": 19.23289675,
+        "p99": 25.101778519999996,
+        "avg": 11.411075084033614,
+        "rps": 23.514379899212038,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "enrollments.summary.json",
+        "scenario": "enrollments",
+        "p50": 4.597338,
+        "p95": 7.2828114,
+        "p99": 8.888275320000002,
+        "avg": 4.962796555102036,
+        "rps": 24.12863321424898,
+        "error_rate": 0,
+        "count": 245
+      },
+      {
+        "file": "gaze_batch.summary.json",
+        "scenario": "gaze_batch",
+        "p50": 10.540557,
+        "p95": 25.383442999999996,
+        "p99": 30.851921469999976,
+        "avg": 13.735784399999996,
+        "rps": 7.860483065340256,
+        "error_rate": 0,
+        "count": 80
+      },
+      {
+        "file": "gaze_batch_nginx.summary.json",
+        "scenario": "gaze_batch_nginx",
+        "p50": 35.964047,
+        "p95": 82.29315685,
+        "p99": 90.54759994,
+        "avg": 41.75266796190476,
+        "rps": 19.34617957901399,
+        "error_rate": 0,
+        "count": 210
+      },
+      {
+        "file": "lesson_contents.summary.json",
+        "scenario": "lesson_contents",
+        "p50": 9.582224,
+        "p95": 19.381693849999998,
+        "p99": 21.56902366,
+        "avg": 11.158442487394957,
+        "rps": 23.547872104492107,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "outline.summary.json",
+        "scenario": "outline",
+        "p50": 7.348449,
+        "p95": 12.829322599999998,
+        "p99": 14.097301119999997,
+        "avg": 8.174449074074072,
+        "rps": 23.86636925912434,
+        "error_rate": 0,
+        "count": 243
+      },
+      {
+        "file": "replay.summary.json",
+        "scenario": "replay",
+        "p50": 15.0518685,
+        "p95": 23.147738999999998,
+        "p99": 23.975944749999982,
+        "avg": 13.91476042553192,
+        "rps": 9.307304279969468,
+        "error_rate": 0,
+        "count": 94
+      },
+      {
+        "file": "samples.summary.json",
+        "scenario": "samples",
+        "p50": 17.5569745,
+        "p95": 27.3775032,
+        "p99": 46.915165019999996,
+        "avg": 18.041239176724147,
+        "rps": 22.731894127138638,
+        "error_rate": 0,
+        "count": 232
+      },
+      {
+        "file": "session_contents.summary.json",
+        "scenario": "session_contents",
+        "p50": 9.530594,
+        "p95": 17.655096399999998,
+        "p99": 18.83017108,
+        "avg": 10.710539063025205,
+        "rps": 23.59288454050641,
+        "error_rate": 0,
+        "count": 238
+      },
+      {
+        "file": "teacher_courses.summary.json",
+        "scenario": "teacher_courses",
+        "p50": 8.404921,
+        "p95": 13.18744925,
+        "p99": 20.604406549999986,
+        "avg": 9.043470541666665,
+        "rps": 9.521476949930392,
+        "error_rate": 0,
+        "count": 96
+      }
+    ],
+    "query_counts": {
+      "aoi_summary": {
+        "queries_total": 312,
+        "iterations": 20,
+        "queries_per_request": 15.6
+      },
+      "course_students": {
+        "queries_total": 181,
+        "iterations": 20,
+        "queries_per_request": 9.05
+      },
+      "course_visits": {
+        "queries_total": 173,
+        "iterations": 20,
+        "queries_per_request": 8.65
+      },
+      "enrollments": {
+        "queries_total": 77,
+        "iterations": 20,
+        "queries_per_request": 3.85
+      },
+      "outline": {
+        "queries_total": 182,
+        "iterations": 20,
+        "queries_per_request": 9.1
+      },
+      "replay": {
+        "queries_total": 155,
+        "iterations": 20,
+        "queries_per_request": 7.75
+      },
+      "samples": {
+        "queries_total": 212,
+        "iterations": 20,
+        "queries_per_request": 10.6
+      },
+      "session_contents": {
+        "queries_total": 238,
+        "iterations": 20,
+        "queries_per_request": 11.9
+      },
+      "teacher_courses": {
+        "queries_total": 179,
+        "iterations": 20,
+        "queries_per_request": 8.95
+      }
+    },
+    "auth": {
+      "user_id": "c0c55fb5-22f0-5440-af80-303648a9187b",
+      "iterations": 500,
+      "p50_ms": 0.0011190004443051293,
+      "p95_ms": 0.001217000317410566,
+      "p99_ms": 0.0020000006770715117,
+      "redis_get_calls": 0,
+      "redis_get_per_call": 0.0,
+      "memory_entries": 1
+    }
+  },
+  "gaze": {
+    "device": null,
+    "precision": null,
+    "model": null,
+    "vram_allocated_mib": null,
+    "rss_kib": null,
+    "stage_total": {},
+    "ws": []
+  },
+  "chatbot": {
+    "query_chatbot": [],
+    "query_backend": [],
+    "components": {},
+    "components_all": {},
+    "ingest": {}
+  },
+  "frontend": {
+    "bundle": {},
+    "lighthouse": {}
+  },
+  "redis": {
+    "before": {
+      "keyspace_hits": 4658,
+      "keyspace_misses": 149,
+      "hit_rate": 0.969004,
+      "used_memory_human": "1.26M",
+      "used_memory_peak_human": "2.11M",
+      "evicted_keys": 0,
+      "expired_keys": 143,
+      "total_commands_processed": 398546,
+      "instantaneous_ops_per_sec": 0,
+      "commandstats": {
+        "client|setinfo": "calls=76,usec=28,usec_per_call=0.37,rejected_calls=0,failed_calls=0",
+        "set": "calls=149,usec=669,usec_per_call=4.49,rejected_calls=0,failed_calls=0",
+        "slowlog|get": "calls=3,usec=3,usec_per_call=1.00,rejected_calls=0,failed_calls=0",
+        "del": "calls=81,usec=59,usec_per_call=0.73,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=290,usec=1092,usec_per_call=3.77,rejected_calls=0,failed_calls=0",
+        "hello": "calls=38,usec=150,usec_per_call=3.95,rejected_calls=0,failed_calls=0",
+        "info": "calls=11,usec=662,usec_per_call=60.18,rejected_calls=0,failed_calls=0",
+        "expire": "calls=30,usec=114,usec_per_call=3.80,rejected_calls=0,failed_calls=0",
+        "unlink": "calls=32481,usec=7868,usec_per_call=0.24,rejected_calls=0,failed_calls=0",
+        "ping": "calls=360870,usec=532396,usec_per_call=1.48,rejected_calls=0,failed_calls=0",
+        "mget": "calls=212,usec=2140,usec_per_call=10.09,rejected_calls=0,failed_calls=0",
+        "get": "calls=3535,usec=32431,usec_per_call=9.17,rejected_calls=0,failed_calls=0"
+      }
+    },
+    "after": {
+      "keyspace_hits": 6790,
+      "keyspace_misses": 254,
+      "hit_rate": 0.963941,
+      "used_memory_human": "1.44M",
+      "used_memory_peak_human": "2.11M",
+      "evicted_keys": 0,
+      "expired_keys": 194,
+      "total_commands_processed": 404780,
+      "instantaneous_ops_per_sec": 0,
+      "commandstats": {
+        "client|setinfo": "calls=102,usec=36,usec_per_call=0.35,rejected_calls=0,failed_calls=0",
+        "set": "calls=254,usec=1056,usec_per_call=4.16,rejected_calls=0,failed_calls=0",
+        "slowlog|get": "calls=4,usec=5,usec_per_call=1.25,rejected_calls=0,failed_calls=0",
+        "del": "calls=91,usec=73,usec_per_call=0.80,rejected_calls=0,failed_calls=0",
+        "incrby": "calls=580,usec=2233,usec_per_call=3.85,rejected_calls=0,failed_calls=0",
+        "hello": "calls=51,usec=191,usec_per_call=3.75,rejected_calls=0,failed_calls=0",
+        "info": "calls=16,usec=910,usec_per_call=56.88,rejected_calls=0,failed_calls=0",
+        "expire": "calls=60,usec=245,usec_per_call=4.08,rejected_calls=0,failed_calls=0",
+        "unlink": "calls=36491,usec=8871,usec_per_call=0.24,rejected_calls=0,failed_calls=0",
+        "ping": "calls=360957,usec=532456,usec_per_call=1.48,rejected_calls=0,failed_calls=0",
+        "mget": "calls=328,usec=3295,usec_per_call=10.05,rejected_calls=0,failed_calls=0",
+        "get": "calls=5076,usec=47609,usec_per_call=9.38,rejected_calls=0,failed_calls=0"
+      }
+    }
+  }
+}

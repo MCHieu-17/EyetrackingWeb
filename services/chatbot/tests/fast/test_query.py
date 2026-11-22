@@ -174,19 +174,14 @@ async def test_stream_event_order_and_done(client, fake_providers):
 
 
 @respx.mock
-async def test_citation_gate_retries_then_accepts(client, fake_providers, monkeypatch):
+async def test_streams_tokens_before_citation(client, fake_providers):
     seeded = db.seed_course()
     doc = _doc(seeded["course_id"], "slide-1", seeded["lesson_id"], "alpha")
     import app.workflow.pipeline as pipeline
 
     original = pipeline.get_retriever
     pipeline.get_retriever = lambda: FakeRetriever([doc])
-    monkeypatch.setattr(pipeline, "citation_gate_tokens", lambda: 5)
-    monkeypatch.setattr(pipeline, "citation_retry_max", lambda: 1)
-    fake_providers.llm.chunks_by_call = {
-        1: ["Câu trả lời không citation."],
-        2: ["Câu trả lời đã sửa [1]."],
-    }
+    fake_providers.llm.chunks = ["Phần một ", "Phần hai ", "kết luận [1]."]
     respx.post("http://backend:8001/internal/chat/lms-query").mock(
         return_value=_lms_ok(seeded["course_id"])
     )
@@ -197,27 +192,22 @@ async def test_citation_gate_retries_then_accepts(client, fake_providers, monkey
     finally:
         pipeline.get_retriever = original
     events = _events(response.text)
-    tokens = "".join(
-        data["text"] for name, data in events if name == "token"
-    )
-    assert "[1]" in tokens
+    tokens = [data["text"] for name, data in events if name == "token"]
+    assert tokens == ["Phần một ", "Phần hai ", "kết luận [1]."]
     done = events[-1][1]
     assert done["verified"] is True
-    assert fake_providers.llm.stream_calls == 2
+    assert done["finish_reason"] == "stop"
+    assert fake_providers.llm.stream_calls == 1
 
 
 @respx.mock
-async def test_citation_gate_falls_back_to_source_list(
-    client, fake_providers, monkeypatch
-):
+async def test_citation_fallback_appends_source_list(client, fake_providers):
     seeded = db.seed_course()
     doc = _doc(seeded["course_id"], "slide-1", seeded["lesson_id"], "alpha")
     import app.workflow.pipeline as pipeline
 
     original = pipeline.get_retriever
     pipeline.get_retriever = lambda: FakeRetriever([doc])
-    monkeypatch.setattr(pipeline, "citation_gate_tokens", lambda: 5)
-    monkeypatch.setattr(pipeline, "citation_retry_max", lambda: 1)
     fake_providers.llm.chunks = ["Câu trả lời không citation."]
     respx.post("http://backend:8001/internal/chat/lms-query").mock(
         return_value=_lms_ok(seeded["course_id"])
@@ -231,9 +221,41 @@ async def test_citation_gate_falls_back_to_source_list(
     events = _events(response.text)
     text = "".join(data["text"] for name, data in events if name == "token")
     assert "Nguồn tham khảo:" in text
+    assert "[1]" in text
     done = events[-1][1]
-    assert done["verified"] is False
-    assert done["finish_reason"] == "citation_failed"
+    assert done["verified"] is True
+    assert done["finish_reason"] == "citation_fallback"
+    assert fake_providers.llm.stream_calls == 1
+
+
+async def test_query_prep_cache_keys_on_question_and_history(fake_providers):
+    from app.workflow.query import clear_query_cache, prepare_query
+    from app.workflow.state import ChatState
+
+    clear_query_cache()
+    history = [
+        {"role": "student", "content": "So sánh học có giám sát và không giám sát."},
+        {"role": "assistant", "content": "Học có giám sát dùng dữ liệu có nhãn."},
+    ]
+    state = ChatState(
+        question="Còn nếu dữ liệu ít nhãn thì sao?",
+        course_id="course",
+        thread_id="thread",
+        history=history,
+    )
+    first = await prepare_query(state)
+    second = await prepare_query(state)
+    assert first == second
+    assert fake_providers.llm.structured_calls == 1
+
+    changed = ChatState(
+        question=state.question,
+        course_id=state.course_id,
+        thread_id=state.thread_id,
+        history=history[:1],
+    )
+    await prepare_query(changed)
+    assert fake_providers.llm.structured_calls == 2
 
 
 @respx.mock

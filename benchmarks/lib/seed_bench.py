@@ -410,7 +410,12 @@ class Seeder:
             if key == "core":
                 modules, lessons_per, slides_per, quiz_last = 4, 6, 6, True
             elif key == "ingest":
-                modules, lessons_per, slides_per, quiz_last = 1, 1, 20, False
+                modules, lessons_per, slides_per, quiz_last = (
+                    1,
+                    1,
+                    int(self.cfg.get("ingest_slides", 20)),
+                    False,
+                )
             else:
                 modules, lessons_per, slides_per, quiz_last = 4, 5, 5, False
             for m in range(modules):
@@ -1040,6 +1045,7 @@ async def main() -> None:
     parser.add_argument("--scale", choices=["tiny", "baseline", "stress"], default="baseline")
     parser.add_argument("--dsn", default="")
     parser.add_argument("--fixtures-dir", default="/bench/fixtures")
+    parser.add_argument("--ingest-slides", type=int, default=20)
     parser.add_argument("--out", default="")
     parser.add_argument("--allow-non-bench", action="store_true")
     args = parser.parse_args()
@@ -1057,6 +1063,7 @@ async def main() -> None:
         raise SystemExit(f"Không thấy fixture PDF: {pdf}")
 
     cfg = scale_config(args.scale)
+    cfg["ingest_slides"] = max(1, args.ingest_slides)
     conn = await asyncpg.connect(dsn)
     try:
         await conn.execute("SET synchronous_commit=off")

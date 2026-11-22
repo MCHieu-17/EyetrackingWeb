@@ -2,12 +2,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.api.access import get_viewable_course
-from app.api.deps import require_roles
+from app.api.deps import can_access_course, require_roles
 from app.core.config import settings
+from app.core.rediscache import get_json, set_json
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import Course, Enrollment, Lesson, Slide
@@ -30,22 +32,34 @@ from app.services.analytics import summary as summary_service
 
 router = APIRouter(tags=["analytics"])
 
+# Cache ngắn cho màn Trực quan hoá; roster tươi hơn nhờ invalidate khi thêm/xoá.
+_LIST_CACHE_TTL_SECONDS = 5
+_REPLAY_CACHE_TTL_SECONDS = 5
+
 
 async def _visit_with_course(
     db: AsyncSession, visit_id: str, user: User
-) -> tuple[CourseVisit, Course]:
-    visit = await db.get(CourseVisit, visit_id)
-    if visit is None:
+) -> tuple[
+    CourseVisit, Course, Enrollment, User, StudentProfile | None
+]:
+    row = (
+        await db.execute(
+            select(CourseVisit, Course, Enrollment, User, StudentProfile)
+            .join(Enrollment, Enrollment.id == CourseVisit.enrollment_id)
+            .join(Course, Course.id == Enrollment.course_id)
+            .join(User, User.id == Enrollment.student_id)
+            .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
+            .where(CourseVisit.id == visit_id)
+        )
+    ).one_or_none()
+    if row is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy ca học"
         )
-    enrollment = await db.get(Enrollment, visit.enrollment_id)
-    if enrollment is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Không tìm thấy đăng ký khóa học"
-        )
-    course = await get_viewable_course(db, enrollment.course_id, user)
-    return visit, course
+    visit, course, enrollment, student, profile = row
+    if not await can_access_course(db, course, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    return visit, course, enrollment, student, profile
 
 
 @router.get(
@@ -65,8 +79,86 @@ async def list_course_visits(
 ):
     course = await get_viewable_course(db, course_id, user)
 
-    # Lấy page ca học trước, sau đó mới aggregate theo đúng các ca trong page.
-    # Tránh GROUP BY toàn bộ learning_sessions/content_views của hệ thống.
+    cache_key = (
+        f"course:visits:{course.id}:{student_id or '-'}:"
+        f"{from_time.isoformat() if from_time else '-'}:"
+        f"{to_time.isoformat() if to_time else '-'}:"
+        f"{int(include_short)}:{limit}:{offset}"
+    )
+    cached = await get_json(cache_key)
+    if isinstance(cached, list):
+        return [CourseVisitRowOut.model_validate(item) for item in cached]
+
+    # Lấy page ca học trước, sau đó aggregate đúng các ca trong page. Session
+    # count và metrics chạy trong cùng statement với page (2 subquery 1:1).
+    base_filters = [Enrollment.course_id == course.id]
+    if student_id:
+        base_filters.append(Enrollment.student_id == student_id)
+    if from_time is not None:
+        base_filters.append(CourseVisit.started_at >= from_time)
+    if to_time is not None:
+        base_filters.append(CourseVisit.started_at <= to_time)
+
+    visit_page = (
+        select(CourseVisit.id.label("visit_id"))
+        .join(Enrollment, Enrollment.id == CourseVisit.enrollment_id)
+        .where(*base_filters)
+        .order_by(CourseVisit.started_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .cte("visit_page")
+    )
+
+    session_counts = (
+        select(
+            LearningSession.course_visit_id.label("visit_id"),
+            func.count(LearningSession.id).label("session_count"),
+        )
+        .where(
+            LearningSession.course_visit_id.in_(select(visit_page.c.visit_id))
+        )
+        .group_by(LearningSession.course_visit_id)
+        .subquery()
+    )
+
+    visit_alias = aliased(CourseVisit)
+    dwell_ok = (
+        summary_service.view_dwell_ms_expr(visit_alias)
+        >= settings.content_view_min_dwell_ms
+    )
+
+    def _metric_sum(column):
+        summed = func.sum(column)
+        if not include_short:
+            summed = summed.filter(dwell_ok)
+        return func.coalesce(summed, 0)
+
+    metric_select = (
+        select(
+            LearningSession.course_visit_id.label("visit_id"),
+            _metric_sum(ContentView.gaze_count).label("gaze_count"),
+            _metric_sum(ContentView.on_slide_gaze_count).label(
+                "on_slide_gaze_count"
+            ),
+            _metric_sum(ContentView.tracked_duration_ms).label(
+                "tracked_duration_ms"
+            ),
+        )
+        .join(ContentView, ContentView.session_id == LearningSession.id)
+    )
+    if not include_short:
+        # Dwell filter cần course_visits.ended_at; bỏ join khi không lọc.
+        metric_select = metric_select.join(
+            visit_alias, visit_alias.id == LearningSession.course_visit_id
+        )
+    metrics = (
+        metric_select.where(
+            LearningSession.course_visit_id.in_(select(visit_page.c.visit_id))
+        )
+        .group_by(LearningSession.course_visit_id)
+        .subquery()
+    )
+
     stmt = (
         select(
             CourseVisit,
@@ -74,65 +166,22 @@ async def list_course_visits(
             User.full_name,
             User.email,
             StudentProfile.student_code,
+            session_counts.c.session_count,
+            metrics.c.gaze_count,
+            metrics.c.on_slide_gaze_count,
+            metrics.c.tracked_duration_ms,
         )
+        .join(visit_page, visit_page.c.visit_id == CourseVisit.id)
         .join(Enrollment, Enrollment.id == CourseVisit.enrollment_id)
         .join(User, User.id == Enrollment.student_id)
         .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
-        .where(Enrollment.course_id == course.id)
+        .outerjoin(session_counts, session_counts.c.visit_id == CourseVisit.id)
+        .outerjoin(metrics, metrics.c.visit_id == CourseVisit.id)
         .order_by(CourseVisit.started_at.desc())
-        .offset(offset)
-        .limit(limit)
     )
-    if student_id:
-        stmt = stmt.where(Enrollment.student_id == student_id)
-    if from_time is not None:
-        stmt = stmt.where(CourseVisit.started_at >= from_time)
-    if to_time is not None:
-        stmt = stmt.where(CourseVisit.started_at <= to_time)
 
     rows = (await db.execute(stmt)).all()
-    if not rows:
-        return []
-    visit_ids = [row[0].id for row in rows]
-
-    session_counts = dict(
-        (
-            await db.execute(
-                select(
-                    LearningSession.course_visit_id,
-                    func.count(LearningSession.id),
-                )
-                .where(LearningSession.course_visit_id.in_(visit_ids))
-                .group_by(LearningSession.course_visit_id)
-            )
-        ).all()
-    )
-
-    metric_stmt = (
-        select(
-            LearningSession.course_visit_id,
-            func.coalesce(func.sum(ContentView.gaze_count), 0),
-            func.coalesce(func.sum(ContentView.on_slide_gaze_count), 0),
-            func.coalesce(func.sum(ContentView.tracked_duration_ms), 0),
-        )
-        .join(LearningSession, LearningSession.id == ContentView.session_id)
-        .join(CourseVisit, CourseVisit.id == LearningSession.course_visit_id)
-        .where(LearningSession.course_visit_id.in_(visit_ids))
-        .group_by(LearningSession.course_visit_id)
-    )
-    if not include_short:
-        metric_stmt = metric_stmt.where(
-            summary_service.view_dwell_ms_expr()
-            >= settings.content_view_min_dwell_ms
-        )
-    metric_counts = {
-        visit_id: (int(gaze_count), int(on_slide), int(dwell_ms))
-        for visit_id, gaze_count, on_slide, dwell_ms in (
-            await db.execute(metric_stmt)
-        ).all()
-    }
-
-    return [
+    out = [
         CourseVisitRowOut(
             id=visit.id,
             enrollment_id=visit.enrollment_id,
@@ -144,13 +193,29 @@ async def list_course_visits(
             ended_at=visit.ended_at.isoformat() if visit.ended_at else None,
             last_seen_at=visit.last_seen_at.isoformat(),
             status=visit.status,
-            lesson_session_count=int(session_counts.get(visit.id, 0)),
-            gaze_count=metric_counts.get(visit.id, (0, 0, 0))[0],
-            on_slide_gaze_count=metric_counts.get(visit.id, (0, 0, 0))[1],
-            tracked_duration_ms=metric_counts.get(visit.id, (0, 0, 0))[2],
+            lesson_session_count=int(session_count or 0),
+            gaze_count=int(gaze_count or 0),
+            on_slide_gaze_count=int(on_slide_gaze_count or 0),
+            tracked_duration_ms=int(tracked_duration_ms or 0),
         )
-        for visit, student_id_value, full_name, email, student_code in rows
+        for (
+            visit,
+            student_id_value,
+            full_name,
+            email,
+            student_code,
+            session_count,
+            gaze_count,
+            on_slide_gaze_count,
+            tracked_duration_ms,
+        ) in rows
     ]
+    await set_json(
+        cache_key,
+        [item.model_dump(mode="json") for item in out],
+        _LIST_CACHE_TTL_SECONDS,
+    )
+    return out
 
 
 @router.get(
@@ -186,12 +251,30 @@ async def list_visit_gaze(
     visit_id: str,
     slide_id: str | None = Query(default=None, alias="slideId"),
     aoi_label: str | None = Query(default=None, alias="aoiLabel"),
+    after_time: datetime | None = Query(default=None, alias="afterTime"),
+    after_id: int | None = Query(default=None, alias="afterId", ge=0),
     limit: int = Query(default=1000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit, _ = await _visit_with_course(db, visit_id, user)
+    visit, *_ = await _visit_with_course(db, visit_id, user)
+    if (after_time is None) != (after_id is None):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="afterTime và afterId phải đi cùng nhau",
+        )
+
+    view_stmt = (
+        select(ContentView.id)
+        .join(LearningSession, LearningSession.id == ContentView.session_id)
+        .where(LearningSession.course_visit_id == visit.id)
+    )
+    if slide_id:
+        view_stmt = view_stmt.where(ContentView.slide_id == slide_id)
+    view_ids = list((await db.execute(view_stmt)).scalars())
+    if not view_ids:
+        return []
 
     stmt = (
         select(
@@ -208,13 +291,17 @@ async def list_visit_gaze(
         .join(LearningSession, LearningSession.id == ContentView.session_id)
         .join(Lesson, Lesson.id == LearningSession.lesson_id)
         .outerjoin(Slide, Slide.id == ContentView.slide_id)
-        .where(LearningSession.course_visit_id == visit.id)
-        .order_by(GazeSample.event_time, GazeSample.sequence)
-        .offset(offset)
+        .where(GazeSample.content_view_id.in_(view_ids))
+        .order_by(GazeSample.event_time, GazeSample.id)
         .limit(limit)
     )
-    if slide_id:
-        stmt = stmt.where(ContentView.slide_id == slide_id)
+    if after_time is not None and after_id is not None:
+        stmt = stmt.where(
+            tuple_(GazeSample.event_time, GazeSample.id)
+            > (after_time, after_id)
+        )
+    elif offset:
+        stmt = stmt.offset(offset)
     if aoi_label:
         stmt = stmt.where(GazeSample.aoi_label == aoi_label)
 
@@ -259,10 +346,27 @@ async def get_visit_replay(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit, course = await _visit_with_course(db, visit_id, user)
-    return await replay_service.visit_replay(
-        db, visit, course, include_short=include_short
+    visit, course, enrollment, student, profile = await _visit_with_course(
+        db, visit_id, user
     )
+    cache_key = f"visit:replay:{visit.id}:{int(include_short)}"
+    cached = await get_json(cache_key)
+    if isinstance(cached, dict):
+        return VisitReplayOut.model_validate(cached)
+
+    out = await replay_service.visit_replay(
+        db,
+        visit,
+        course,
+        enrollment=enrollment,
+        student=student,
+        profile=profile,
+        include_short=include_short,
+    )
+    await set_json(
+        cache_key, out.model_dump(mode="json"), _REPLAY_CACHE_TTL_SECONDS
+    )
+    return out
 
 
 @router.get(
@@ -278,7 +382,7 @@ async def list_replay_samples(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit, _ = await _visit_with_course(db, visit_id, user)
+    visit, *_ = await _visit_with_course(db, visit_id, user)
     if (after_time is None) != (after_id is None):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -304,7 +408,9 @@ async def summarize_visit(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit, course = await _visit_with_course(db, visit_id, user)
+    visit, course, enrollment, *_ = await _visit_with_course(
+        db, visit_id, user
+    )
     min_dwell_ms = settings.content_view_min_dwell_ms
     rows = (
         await db.execute(
@@ -343,7 +449,6 @@ async def summarize_visit(
         tracked_duration_ms += view.tracked_duration_ms
         fixation_count += view.fixation_count
 
-    enrollment = await db.get(Enrollment, visit.enrollment_id)
     return VisitSummaryOut(
         visit_id=visit.id,
         enrollment_id=visit.enrollment_id,
@@ -397,7 +502,8 @@ async def export_visit(
     user: User = Depends(require_roles("teacher", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    visit, _ = await _visit_with_course(db, visit_id, user)
+    visit, *_ = await _visit_with_course(db, visit_id, user)
+    await db.close()
     return StreamingResponse(
         analysis.export_visit_lines(visit.id),
         media_type="application/x-ndjson",
@@ -431,6 +537,7 @@ async def export_lesson_analysis(
             status.HTTP_404_NOT_FOUND, detail="Chưa có dữ liệu phân tích"
         )
     suffix = f"-{scope}" if scope else ""
+    await db.close()
     return StreamingResponse(
         analysis.export_lines(lesson_id, scope=scope),
         media_type="application/x-ndjson",

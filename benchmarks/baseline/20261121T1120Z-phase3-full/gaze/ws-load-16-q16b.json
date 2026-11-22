@@ -1,0 +1,107 @@
+{
+  "url": "http://gaze:8000",
+  "image": "/fixtures/face_sample.jpg",
+  "scenarios": [
+    {
+      "sessions": 8,
+      "fps": 15.0,
+      "duration": 30.0,
+      "sent": 3600,
+      "received": 3482,
+      "responses_per_s": 116.07,
+      "fps_per_session": 14.51,
+      "drop": 118,
+      "drop_rate": 0.0328,
+      "rtt_ms": {
+        "p50": 101.689,
+        "p95": 139.299,
+        "p99": 147.574,
+        "mean": 99.513,
+        "max": 219.886
+      },
+      "statuses": {
+        "ok": 3482
+      },
+      "health_before": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 1,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 232,
+          "frames_inferred": 231,
+          "no_face": 0,
+          "dropped": {},
+          "drop_rate": 0.0,
+          "overload_rate": 0.0,
+          "infer_ms": {
+            "p50": 8.38,
+            "p95": 10.29
+          },
+          "cpu_ms": {
+            "p50": 4.21,
+            "p95": 5.33
+          },
+          "gpu_ms": {
+            "p50": 3.99,
+            "p95": 5.47
+          },
+          "uptime_s": 13.7
+        },
+        "sessions": {
+          "total": 8,
+          "ready": 8
+        }
+      },
+      "health_after": {
+        "status": "ok",
+        "pipeline_ready": true,
+        "device": "cuda:0",
+        "model": "unigaze_b16_joint",
+        "precision": "fp16",
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 3060",
+        "queue": {
+          "cpu": 0,
+          "gpu": 0
+        },
+        "stats": {
+          "frames_in": 7216,
+          "frames_inferred": 6984,
+          "no_face": 0,
+          "dropped": {
+            "throttle": 16,
+            "superseded": 215,
+            "stale": 1
+          },
+          "drop_rate": 0.0322,
+          "overload_rate": 0.0024,
+          "infer_ms": {
+            "p50": 8.04,
+            "p95": 9.16
+          },
+          "cpu_ms": {
+            "p50": 4.15,
+            "p95": 4.97
+          },
+          "gpu_ms": {
+            "p50": 3.88,
+            "p95": 4.24
+          },
+          "uptime_s": 44.9
+        },
+        "sessions": {
+          "total": 0,
+          "ready": 0
+        }
+      }
+    }
+  ]
+}

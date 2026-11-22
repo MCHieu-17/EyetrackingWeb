@@ -2,8 +2,18 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import (
+    REAL,
+    BigInteger,
+    DateTime,
+    Text,
+    and_,
+    bindparam,
+    func,
+    select,
+    text,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +22,7 @@ from app.core.rediscache import expire, increment
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.course import Enrollment, Slide
-from app.models.gaze import ContentView, GazeSample, LearningSession, ViewLayout
+from app.models.gaze import ContentView, LearningSession, ViewLayout
 from app.schemas.gaze import (
     GazeBatchAckOut,
     GazeBatchCreateIn,
@@ -31,6 +41,58 @@ CLOSE_GRACE = timedelta(minutes=2)
 ENTERED_AT_WINDOW = timedelta(minutes=5)
 # Dung sai thứ tự khi so enteredAt với lượt xem gần nhất.
 STALE_TOLERANCE = timedelta(milliseconds=250)
+
+# Một statement cố định cho cả batch: tránh SQLAlchemy compile 9×N bind param
+# cho mỗi request (N=40 → ~5 ms CPU) và vẫn giữ idempotent theo batch.
+_GAZE_INSERT_SQL = text(
+    """
+    WITH inserted AS (
+        INSERT INTO gaze_samples (
+            content_view_id, layout_id, client_batch_id, sequence, event_time,
+            viewport_x, viewport_y, status, quality_flags
+        )
+        SELECT
+            CAST(:view_id AS uuid),
+            CAST(:layout_id AS uuid),
+            CAST(:batch_id AS uuid),
+            v.sequence,
+            v.event_time,
+            v.viewport_x,
+            v.viewport_y,
+            v.status,
+            v.quality_flags
+        FROM unnest(
+            CAST(:sequences AS BIGINT[]),
+            CAST(:event_times AS timestamptz[]),
+            CAST(:viewport_xs AS REAL[]),
+            CAST(:viewport_ys AS REAL[]),
+            CAST(:statuses AS TEXT[]),
+            CAST(:flags AS JSONB[])
+        ) AS v(
+            sequence, event_time, viewport_x, viewport_y,
+            status, quality_flags
+        )
+        ON CONFLICT (content_view_id, client_batch_id, sequence) DO NOTHING
+        RETURNING 1
+    ),
+    marked AS (
+        UPDATE content_views
+        SET analysis_status = 'pending'
+        WHERE id = CAST(:view_id AS uuid)
+          AND analysis_status <> 'pending'
+          AND EXISTS (SELECT 1 FROM inserted)
+        RETURNING 1
+    )
+    SELECT count(*) FROM inserted
+    """
+).bindparams(
+    bindparam("sequences", type_=ARRAY(BigInteger)),
+    bindparam("event_times", type_=ARRAY(DateTime(timezone=True))),
+    bindparam("viewport_xs", type_=ARRAY(REAL)),
+    bindparam("viewport_ys", type_=ARRAY(REAL)),
+    bindparam("statuses", type_=ARRAY(Text)),
+    bindparam("flags", type_=ARRAY(JSONB)),
+)
 
 
 def _now() -> datetime:
@@ -67,10 +129,10 @@ async def _session_for_user(
     return session
 
 
-def _ensure_open(session: LearningSession) -> None:
-    if session.status == "in_progress":
+def _ensure_open(session_status: str, ended_at: datetime | None) -> None:
+    if session_status == "in_progress":
         return
-    if session.ended_at is not None and _now() - session.ended_at <= CLOSE_GRACE:
+    if ended_at is not None and _now() - ended_at <= CLOSE_GRACE:
         return
     raise HTTPException(
         status.HTTP_409_CONFLICT,
@@ -274,7 +336,7 @@ async def create_content_view(
     db: AsyncSession = Depends(get_db),
 ):
     session = await _session_for_user(db, session_id, user)
-    _ensure_open(session)
+    _ensure_open(session.status, session.ended_at)
     session_pk = session.id
 
     if body.slide_id is not None:
@@ -340,7 +402,7 @@ async def create_layout(
             status.HTTP_404_NOT_FOUND, detail="Không tìm thấy presentation"
         )
     session = await _session_for_user(db, view.session_id, user)
-    _ensure_open(session)
+    _ensure_open(session.status, session.ended_at)
 
     # Tab frontend cũ vẫn gửi layout ở hệ toạ độ calibration. Từ chối thay vì
     # lưu sai hệ toạ độ; người học chỉ cần tải lại trang để nhận bundle mới.
@@ -394,26 +456,56 @@ async def ingest_gaze_batch(
     user: User = Depends(require_roles("student")),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _session_for_user(db, session_id, user)
-    _ensure_open(session)
-    await _rate_limit(user, session.id)
-
-    view = await db.get(ContentView, body.presentation_id)
-    if view is None or view.session_id != session.id:
+    # Một round trip: session + quyền sở hữu + view + layout (nếu có).
+    stmt = (
+        select(
+            LearningSession.id,
+            LearningSession.status,
+            LearningSession.ended_at,
+            Enrollment.student_id,
+            ContentView.id.label("view_id"),
+            ContentView.session_id.label("view_session_id"),
+        )
+        .join(Enrollment, Enrollment.id == LearningSession.enrollment_id)
+        .outerjoin(ContentView, ContentView.id == body.presentation_id)
+        .where(LearningSession.id == session_id)
+    )
+    if body.layout_id is not None:
+        stmt = stmt.add_columns(ViewLayout.id.label("layout_id")).outerjoin(
+            ViewLayout,
+            and_(
+                ViewLayout.id == body.layout_id,
+                ViewLayout.content_view_id == ContentView.id,
+            ),
+        )
+    row = (await db.execute(stmt)).first()
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail="Không tìm thấy phiên học"
+        )
+    if row.student_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không có quyền")
+    _ensure_open(row.status, row.ended_at)
+    await _rate_limit(user, row.id)
+    if row.view_id is None or row.view_session_id != row.id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "batch_conflict", "message": "Presentation không thuộc phiên"},
         )
-    if body.layout_id is not None:
-        layout = await db.get(ViewLayout, body.layout_id)
-        if layout is None or layout.content_view_id != view.id:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail={"code": "batch_conflict", "message": "Layout không thuộc presentation"},
-            )
+    if body.layout_id is not None and row.layout_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "batch_conflict", "message": "Layout không thuộc presentation"},
+        )
+    view_id = row.view_id
 
     last_sequence = -1
-    rows: list[dict] = []
+    sequences: list[int] = []
+    event_times: list[datetime] = []
+    viewport_xs: list[float | None] = []
+    viewport_ys: list[float | None] = []
+    statuses: list[str] = []
+    flags: list[dict] = []
     for sample in body.samples:
         if sample.sequence < body.sequence_start or sample.sequence > body.sequence_end:
             raise HTTPException(
@@ -440,39 +532,40 @@ async def ingest_gaze_batch(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="status khác ok phải có viewportX/Y = null",
             )
-        rows.append(
-            {
-                "content_view_id": view.id,
-                "layout_id": body.layout_id,
-                "client_batch_id": body.batch_id,
-                "sequence": sample.sequence,
-                "event_time": _parse_time(sample.event_time),
-                "viewport_x": sample.viewport_x,
-                "viewport_y": sample.viewport_y,
-                "status": sample.status,
-                "quality_flags": sample.quality_flags,
-            }
-        )
+        sequences.append(sample.sequence)
+        event_times.append(_parse_time(sample.event_time))
+        viewport_xs.append(sample.viewport_x)
+        viewport_ys.append(sample.viewport_y)
+        statuses.append(sample.status)
+        flags.append(sample.quality_flags)
 
-    if not rows:
+    if not sequences:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Batch không có sample"
         )
-    stmt = (
-        pg_insert(GazeSample)
-        .values(rows)
-        .on_conflict_do_nothing(
-            index_elements=["content_view_id", "client_batch_id", "sequence"]
-        )
-        .returning(GazeSample.id)
+    stored = int(
+        (
+            await db.execute(
+                _GAZE_INSERT_SQL,
+                {
+                    "view_id": view_id,
+                    "layout_id": body.layout_id,
+                    "batch_id": str(body.batch_id),
+                    "sequences": sequences,
+                    "event_times": event_times,
+                    "viewport_xs": viewport_xs,
+                    "viewport_ys": viewport_ys,
+                    "statuses": statuses,
+                    "flags": flags,
+                },
+            )
+        ).scalar_one()
     )
-    stored = len((await db.execute(stmt)).scalars().all())
-    view.analysis_status = "pending"
     await db.commit()
     return GazeBatchAckOut(
         batch_id=str(body.batch_id),
-        received=len(rows),
+        received=len(sequences),
         stored=stored,
-        duplicate=len(rows) - stored,
+        duplicate=len(sequences) - stored,
         rejected=0,
     )
