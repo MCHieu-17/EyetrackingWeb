@@ -45,6 +45,13 @@ export function useReaderChat({
       setChatOpen(false);
       return;
     }
+    // Mở ngay khi cache đã cho phép: layout chat phải đổi trong cùng nhịp
+    // commit để snapshot AOI không bị trễ. Refetch chỉ để cập nhật nền.
+    if (chatAccess.data?.allowed === true && !chatAccess.isError) {
+      setChatOpen(true);
+      void chatAccess.refetch();
+      return;
+    }
     const result = await chatAccess.refetch();
     if (result.data?.allowed && !result.isError) setChatOpen(true);
   };

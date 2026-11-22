@@ -16,7 +16,11 @@ const StudyAssistantChatDynamic = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="hidden h-full w-[clamp(360px,28vw,480px)] shrink-0 animate-pulse rounded-[20px] border border-border/80 bg-[#fdfdfa] xl:flex" />
+      <div
+        id="assistant-panel"
+        data-aoi="chatbot"
+        className="hidden h-full w-[clamp(360px,28vw,480px)] shrink-0 animate-pulse rounded-[20px] border border-border/80 bg-[#fdfdfa] xl:flex"
+      />
     ),
   },
 );

@@ -422,12 +422,15 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     return () => window.removeEventListener("resize", onResize);
   }, [pauseAndFlushGaze, trackingAllowed]);
 
-  // Layout key đổi khi mở/đóng chat để snapshot AOI phản ánh đúng bố cục.
+  // Layout key đổi khi mở/đóng chat. Pause + flush ngay trong layout effect
+  // (trước paint, trước frame gaze kế tiếp) để sample không bị gán layout cũ.
   const layoutKey = getReaderLayoutKey(activeIsQuiz, chatOpen);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (layoutKeyRef.current === layoutKey) return;
     layoutKeyRef.current = layoutKey;
-  }, [layoutKey]);
+    pauseAndFlushGaze();
+  }, [layoutKey, pauseAndFlushGaze]);
 
   // Mỗi slide/quiz là một presentation riêng. Đổi context phải flush batch cũ
   // TRƯỚC khi vô hiệu hoá presentation, sau đó chặn mọi frame cũ bằng key +

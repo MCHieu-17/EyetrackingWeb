@@ -111,7 +111,9 @@ Quy ước:
    fullscreen ở trang calibration/reader.
 8. Resize cửa sổ tạm dừng ghi gaze ngay; `useAoiSnapshot` tạo layout mới rồi
    mới ghi tiếp. Gaze được quy đổi từ viewport lúc calibration sang viewport
-   hiện tại khi resize/move cửa sổ.
+   hiện tại khi resize/move cửa sổ. Mở/đóng chat cũng là đổi layout: reader
+   pause + flush trước khi DOM đổi và chụp snapshot ngay; skeleton chat phải
+   giữ `data-aoi="chatbot"` để layout đầu tiên đã có vùng trợ lý.
 
 Bất biến:
 

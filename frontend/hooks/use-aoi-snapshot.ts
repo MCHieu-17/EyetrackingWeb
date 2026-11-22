@@ -89,6 +89,7 @@ export function useAoiSnapshot({
   const [stateContext, setStateContext] = useState("");
   const contextRef = useRef("");
   const lastKeyRef = useRef("");
+  const lastLayoutKeyRef = useRef(layoutKey);
   const generationRef = useRef(0);
   const onBeforeRef = useRef(onBeforeSnapshot);
 
@@ -140,6 +141,11 @@ export function useAoiSnapshot({
     let inFlight = false;
     let pending = false;
     let runToken = 0;
+    // Đổi layoutKey (mở/đóng chat) phải chụp ngay ở tick kế tiếp, không chờ
+    // debounce 250ms và không để mutation của panel chat reset timer.
+    const layoutKeyChanged = lastLayoutKeyRef.current !== layoutKey;
+    lastLayoutKeyRef.current = layoutKey;
+    let immediate = layoutKeyChanged;
 
     const measure = () => {
       const rects = measureAoiRects();
@@ -157,7 +163,10 @@ export function useAoiSnapshot({
     const schedule = () => {
       if (typeof window === "undefined") return;
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => void run(), 250);
+      timer = window.setTimeout(() => {
+        immediate = false;
+        void run();
+      }, immediate ? 0 : 250);
     };
 
     const run = async () => {
