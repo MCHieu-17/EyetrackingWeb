@@ -29,12 +29,13 @@ fi
 AOI_FILES='frontend/components/(reader|student/learning-reader|quiz/inline-quiz|assistant|calibration)/|frontend/components/quiz/lazy-inline-quiz|frontend/components/teacher/aoi/student-preview|frontend/components/teacher/visualization/replay/replay-stage'
 aoi_changed="$(echo "$changed" | grep -E "$AOI_FILES" || true)"
 if [ -n "$aoi_changed" ]; then
-  layout_re='\b(-?m[trblxy]?|p[trblxy]?|gap(-[xy])?|space-[xy]|w|h|min-[wh]|max-[wh]|size|text-(xs|sm|base|lg|[0-9]xl)|leading|font-(medium|semibold|bold|normal)|rounded(-[a-z0-9]+)?|border(-[trblxy])?(-[0-9])?|flex|grid|inline|block|hidden|absolute|relative|fixed|sticky|inset|top|left|right|bottom|translate|scale)-?\[?[0-9a-z./%-]*\]?'
-  # PLAN §3.4 cho phép đổi class màu border-<màu>; chỉ so các token layout thật.
-  color_border_re='^border-(border|input|ring|primary|secondary|accent|success|warning|destructive|info|transparent|white|black|foreground|muted|card|popover|brand|\[)'
+  # So token class chính xác (không so chuỗi con) để tránh bắt nhầm class màu
+  # như text-muted-foreground hay border-primary.
+  token_re='[A-Za-z0-9_:/\[\].%!-]+'
+  layout_token_re='^(-?m[trblxy]?-[0-9.]+|-?p[trblxy]?-[0-9.]+|gap(-[xy])?-[0-9.]+|space-[xy]-[0-9.]+|(min-|max-)?[wh]-[^ ]+|size-[^ ]+|text-(xs|sm|base|lg|[0-9]xl|\[[0-9.]+(px|rem)\])|leading-[^ ]+|font-(medium|semibold|bold|normal)|rounded(-[^ ]+)?|border(-[trblxy])?(-[0-9]+)?|flex|grid|inline|block|hidden|absolute|relative|fixed|sticky|-?inset-[^ ]+|-?(top|right|bottom|left)-[^ ]+|-?translate-[^ ]+|-?scale-[^ ]+)$'
   for f in $aoi_changed; do
-    removed="$(git diff -U0 -- "$f" | grep '^-[^-]' | grep -oE "$layout_re" | grep -vE "$color_border_re" | sort)"
-    added="$(git diff -U0 -- "$f" | grep '^+[^+]' | grep -oE "$layout_re" | grep -vE "$color_border_re" | sort)"
+    removed="$(git diff -U0 -- "$f" | grep '^-[^-]' | grep -oE "$token_re" | grep -E "$layout_token_re" | sort)"
+    added="$(git diff -U0 -- "$f" | grep '^+[^+]' | grep -oE "$token_re" | grep -E "$layout_token_re" | sort)"
     if [ "$removed" != "$added" ]; then
       echo "!! $f: class layout thay đổi trong vùng AOI (chỉ được đổi màu)"
       diff <(echo "$removed") <(echo "$added") | head -10 | sed 's/^/    /'
