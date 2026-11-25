@@ -1,0 +1,204 @@
+{
+  "student.slide": [
+    {
+      "code": "chat-open-button",
+      "xMin": 0.8743,
+      "yMin": 0.02,
+      "xMax": 0.9201,
+      "yMax": 0.06
+    },
+    {
+      "code": "header",
+      "xMin": 0.0083,
+      "yMin": 0.0133,
+      "xMax": 0.9917,
+      "yMax": 0.0667
+    },
+    {
+      "code": "lesson-content",
+      "xMin": 0.1694,
+      "yMin": 0.0667,
+      "xMax": 0.9917,
+      "yMax": 0.9867
+    },
+    {
+      "code": "lesson-nav",
+      "xMin": 0.3806,
+      "yMin": 0.9167,
+      "xMax": 0.7806,
+      "yMax": 0.9722
+    },
+    {
+      "code": "outline",
+      "xMin": 0.0083,
+      "yMin": 0.0667,
+      "xMax": 0.1611,
+      "yMax": 0.9867
+    },
+    {
+      "code": "reader-root",
+      "xMin": 0,
+      "yMin": 0,
+      "xMax": 1,
+      "yMax": 1
+    },
+    {
+      "code": "slide",
+      "xMin": 0.1917,
+      "yMin": 0.1769,
+      "xMax": 0.9694,
+      "yMax": 0.8769
+    }
+  ],
+  "student.chat": [
+    {
+      "code": "chat-header",
+      "xMin": 0.7124,
+      "yMin": 0.0678,
+      "xMax": 0.991,
+      "yMax": 0.14
+    },
+    {
+      "code": "chat-input",
+      "xMin": 0.7124,
+      "yMin": 0.9111,
+      "xMax": 0.991,
+      "yMax": 0.9856
+    },
+    {
+      "code": "chat-messages",
+      "xMin": 0.7124,
+      "yMin": 0.14,
+      "xMax": 0.991,
+      "yMax": 0.9111
+    },
+    {
+      "code": "chat-open-button",
+      "xMin": 0.8743,
+      "yMin": 0.02,
+      "xMax": 0.9201,
+      "yMax": 0.06
+    },
+    {
+      "code": "chat-send",
+      "xMin": 0.9549,
+      "yMin": 0.9278,
+      "xMax": 0.9826,
+      "yMax": 0.9722
+    },
+    {
+      "code": "chatbot",
+      "xMin": 0.7117,
+      "yMin": 0.0667,
+      "xMax": 0.9917,
+      "yMax": 0.9867
+    },
+    {
+      "code": "header",
+      "xMin": 0.0083,
+      "yMin": 0.0133,
+      "xMax": 0.9917,
+      "yMax": 0.0667
+    },
+    {
+      "code": "lesson-content",
+      "xMin": 0.1694,
+      "yMin": 0.0667,
+      "xMax": 0.7033,
+      "yMax": 0.9867
+    },
+    {
+      "code": "lesson-nav",
+      "xMin": 0.2364,
+      "yMin": 0.9167,
+      "xMax": 0.6364,
+      "yMax": 0.9722
+    },
+    {
+      "code": "outline",
+      "xMin": 0.0083,
+      "yMin": 0.0667,
+      "xMax": 0.1611,
+      "yMax": 0.9867
+    },
+    {
+      "code": "reader-root",
+      "xMin": 0,
+      "yMin": 0,
+      "xMax": 1,
+      "yMax": 1
+    },
+    {
+      "code": "slide",
+      "xMin": 0.184,
+      "yMin": 0.2998,
+      "xMax": 0.6888,
+      "yMax": 0.7541
+    }
+  ],
+  "student.quiz": [
+    {
+      "code": "chat-open-button",
+      "xMin": 0.8743,
+      "yMin": 0.02,
+      "xMax": 0.9201,
+      "yMax": 0.06
+    },
+    {
+      "code": "header",
+      "xMin": 0.0083,
+      "yMin": 0.0133,
+      "xMax": 0.9917,
+      "yMax": 0.0667
+    },
+    {
+      "code": "lesson-content",
+      "xMin": 0.1694,
+      "yMin": 0.0667,
+      "xMax": 0.9917,
+      "yMax": 0.9867
+    },
+    {
+      "code": "outline",
+      "xMin": 0.0083,
+      "yMin": 0.0667,
+      "xMax": 0.1611,
+      "yMax": 0.9867
+    },
+    {
+      "code": "quiz",
+      "xMin": 0.2694,
+      "yMin": 0.1506,
+      "xMax": 0.8917,
+      "yMax": 0.9767
+    },
+    {
+      "code": "quiz-options",
+      "xMin": 0.2896,
+      "yMin": 0.3117,
+      "xMax": 0.8715,
+      "yMax": 0.8589
+    },
+    {
+      "code": "quiz-question",
+      "xMin": 0.2694,
+      "yMin": 0.1506,
+      "xMax": 0.8917,
+      "yMax": 0.9767
+    },
+    {
+      "code": "quiz-submit",
+      "xMin": 0.8153,
+      "yMin": 0.9044,
+      "xMax": 0.8715,
+      "yMax": 0.9444
+    },
+    {
+      "code": "reader-root",
+      "xMin": 0,
+      "yMin": 0,
+      "xMax": 1,
+      "yMax": 1
+    }
+  ]
+}

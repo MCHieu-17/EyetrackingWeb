@@ -1,0 +1,33 @@
+{
+  "landing": {
+    "color-contrast": 28
+  },
+  "login": {
+    "color-contrast": 6
+  },
+  "try": {
+    "color-contrast": 13
+  },
+  "student-home": {
+    "color-contrast": 6,
+    "label-content-name-mismatch": 1
+  },
+  "student-reader": {
+    "color-contrast": 7
+  },
+  "teacher-home": {
+    "color-contrast": 9,
+    "label-content-name-mismatch": 3
+  },
+  "teacher-content": {
+    "color-contrast": 4,
+    "label-content-name-mismatch": 1
+  },
+  "teacher-visualization": {
+    "color-contrast": 26
+  },
+  "admin-home": {
+    "color-contrast": 53,
+    "label-content-name-mismatch": 1
+  }
+}

@@ -265,13 +265,15 @@ def main() -> int:
                     "page": v.get("page"),
                     "form": v.get("form"),
                     "score": v.get("score"),
+                    "a11y": v.get("a11y"),
+                    "best_practices": v.get("bestPractices"),
                     "lcp": v.get("lcp"),
                     "tbt": v.get("tbt"),
                     "ttfb": v.get("ttfb"),
                 }
                 for v in lh.values()
             ],
-            ["page", "form", "score", "lcp", "tbt", "ttfb"],
+            ["page", "form", "score", "a11y", "best_practices", "lcp", "tbt", "ttfb"],
         )
         lines.append("")
     redis_before = summary["redis"].get("before") or {}

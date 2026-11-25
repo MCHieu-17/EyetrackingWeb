@@ -55,3 +55,31 @@ export async function deleteCourse(
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export type Role = "student" | "teacher" | "admin";
+
+const ROLE_EMAIL: Record<Role, string> = {
+  student: "student@school.edu.vn",
+  teacher: "teacher@school.edu.vn",
+  admin: "admin@school.edu.vn",
+};
+
+/**
+ * Đăng nhập qua API một lần cho mỗi role và cache storageState vào file
+ * gitignored. Tránh chạm rate limit login 10/phút khi spec đi qua nhiều trang.
+ */
+export async function storageStateFor(
+  request: APIRequestContext,
+  role: Role,
+): Promise<string> {
+  const file = path.join(__dirname, "..", `.auth-${role}.json`);
+  if (fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < 5 * 60_000) {
+    return file;
+  }
+  const response = await request.post("/api/auth/login", {
+    data: { email: ROLE_EMAIL[role], password: PASSWORD },
+  });
+  expect(response.ok(), `login ${role}`).toBeTruthy();
+  await request.storageState({ path: file });
+  return file;
+}

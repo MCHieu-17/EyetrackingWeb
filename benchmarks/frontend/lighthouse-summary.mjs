@@ -30,6 +30,8 @@ for (const file of files) {
   const audits = data.audits || {};
   const metrics = {
     score: data.categories?.performance?.score ?? null,
+    a11y: data.categories?.accessibility?.score ?? null,
+    bestPractices: data.categories?.['best-practices']?.score ?? null,
     lcp: audits['largest-contentful-paint']?.numericValue ?? null,
     tbt: audits['total-blocking-time']?.numericValue ?? null,
     ttfb: audits['server-response-time']?.numericValue ?? null,
@@ -52,6 +54,8 @@ for (const [key, list] of [...groups.entries()].sort()) {
     form,
     runs: list.length,
     score: median(list.map((m) => m.score)),
+    a11y: median(list.map((m) => m.a11y)),
+    bestPractices: median(list.map((m) => m.bestPractices)),
     lcp: median(list.map((m) => m.lcp)),
     tbt: median(list.map((m) => m.tbt)),
     ttfb: median(list.map((m) => m.ttfb)),
@@ -68,12 +72,12 @@ fs.writeFileSync(out, JSON.stringify(summary, null, 2) + '\n');
 const lines = [
   '# Lighthouse summary (median)',
   '',
-  '| Page | Form | Score | LCP ms | TBT ms | TTFB ms | CLS |',
-  '|---|---|---:|---:|---:|---:|---:|',
+  '| Page | Form | Perf | A11y | Best pr. | LCP ms | TBT ms | TTFB ms | CLS |',
+  '|---|---|---:|---:|---:|---:|---:|---:|---:|',
 ];
 for (const item of Object.values(summary)) {
   const fmt = (v, digits = 1) => (v == null ? '-' : Number(v).toFixed(digits));
-  lines.push(`| ${item.page} | ${item.form} | ${fmt(item.score, 2)} | ${fmt(item.lcp)} | ${fmt(item.tbt)} | ${fmt(item.ttfb)} | ${fmt(item.cls, 3)} |`);
+  lines.push(`| ${item.page} | ${item.form} | ${fmt(item.score, 2)} | ${fmt(item.a11y, 2)} | ${fmt(item.bestPractices, 2)} | ${fmt(item.lcp)} | ${fmt(item.tbt)} | ${fmt(item.ttfb)} | ${fmt(item.cls, 3)} |`);
 }
 fs.writeFileSync(md, lines.join('\n') + '\n');
 console.log(JSON.stringify({ out, md, groups: Object.keys(summary).length }, null, 2));

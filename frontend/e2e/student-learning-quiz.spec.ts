@@ -18,7 +18,11 @@ test("student đọc slide, làm quiz và xem kết quả", async ({ page }) => 
 
   // Seed cũ có thể đang ở màn review; bắt đầu lượt mới để test idempotent.
   const retry = page.getByRole("button", { name: "Làm lại", exact: true });
-  if (await retry.isVisible().catch(() => false)) {
+  // Chờ quiz tải xong (câu hỏi đang làm HOẶC màn kết quả) rồi mới quyết định.
+  await expect(
+    page.getByRole("button", { name: "Nộp bài" }).or(retry),
+  ).toBeVisible();
+  if (await retry.isVisible()) {
     await retry.click();
     await page
       .getByRole("dialog")

@@ -18,3 +18,4 @@ fixtures/*.meta.json
 
 # Kết quả lighthouse JSON khá lớn; giữ summary + raw nếu cần.
 # (Không ignore toàn bộ JSON vì summary.json là artifact chính.)
+baseline/*/frontend/screenshots/*.png

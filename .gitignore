@@ -61,6 +61,7 @@ frontend/out/
 frontend/build/
 frontend/test-results/
 frontend/e2e/.fixtures.json
+frontend/e2e/.auth-*.json
 frontend/playwright-report/
 frontend/blob-report/
 

@@ -41,6 +41,8 @@ pages=(
   "teacher|teacher|/teacher"
   "teacher_workspace|teacher|/teacher/courses/${CORE_COURSE_ID}?tab=content"
   "student_reader|student|/student/courses/${CORE_COURSE_ID}"
+  "teacher_analytics|teacher|/teacher/courses/${CORE_COURSE_ID}?tab=visualization"
+  "admin|admin|/admin"
 )
 
 run_one() {
@@ -61,7 +63,7 @@ run_one() {
   lighthouse "$url" \
     --quiet \
     --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu" \
-    --only-categories=performance \
+    --only-categories=performance,accessibility,best-practices \
     --throttling-method=simulate \
     "${form_args[@]}" \
     "${extra[@]}" \

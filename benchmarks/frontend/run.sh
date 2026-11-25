@@ -36,6 +36,12 @@ log "Gaze capture client (worker vs main thread)"
     --out "$OUT/gaze-capture.json"
 ) || warn "gaze capture benchmark fail — xem gaze-capture.json"
 
+log "Screenshots UI (light/dark × desktop/mobile)"
+node "$ROOT_DIR/benchmarks/frontend/screenshots.mjs" \
+  --base "${BENCH_BASE_URL:-http://127.0.0.1:3100}" \
+  --fixtures "$FIXTURES" --tokens "$TOKENS" \
+  --out "$OUT/screenshots" || warn "screenshots fail — xem screenshots/index.json"
+
 if command -v lighthouse >/dev/null 2>&1; then
   "$ROOT_DIR/benchmarks/frontend/lighthouse.sh" "$RUN_DIR" "$FIXTURES" "$TOKENS"
 else
