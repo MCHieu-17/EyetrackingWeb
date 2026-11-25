@@ -16,10 +16,10 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 
         <Link
           href="/"
-          aria-label="Về trang chủ GazeEdu"
+          aria-label="Về trang chủ Fovea"
           className="relative w-fit rounded-md outline-none transition-opacity hover:opacity-75 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-4 focus-visible:ring-offset-[#fdfdfa]"
         >
-          <BrandLogo priority className="h-8 w-auto grayscale" />
+          <BrandLogo className="h-9" />
         </Link>
 
         <div className="relative max-w-xl">
@@ -31,7 +31,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
             Hiểu cách người học tập trung.
           </h1>
           <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#606060]">
-            GazeEdu kết hợp webcam và eye-tracking để mang lại trải nghiệm học tập cá nhân
+            Fovea kết hợp webcam và eye-tracking để mang lại trải nghiệm học tập cá nhân
             hóa cùng phân tích trực quan cho giảng viên.
           </p>
           <ul className="mt-9 grid gap-2.5">
@@ -53,7 +53,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="relative flex items-center justify-between border-t border-[#dddddd] pt-5 text-[11px] text-[#777777]">
-          <p>© {new Date().getFullYear()} GazeEdu</p>
+          <p>© {new Date().getFullYear()} Fovea</p>
           <p className="flex items-center gap-2">
             <Icon name="ri-shield-check-line" className="size-3.5 text-black" />
             Dữ liệu gaze được xử lý bảo mật
@@ -66,10 +66,10 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           <div className="mb-10 flex items-center justify-between border-b border-[#e8e8e8] pb-5 lg:hidden">
             <Link
               href="/"
-              aria-label="Về trang chủ GazeEdu"
+              aria-label="Về trang chủ Fovea"
               className="rounded-md outline-none transition-opacity hover:opacity-75 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-4"
             >
-              <BrandLogo priority className="h-7 w-auto grayscale" />
+              <BrandLogo className="h-8" />
             </Link>
             <span className="rounded-full border border-[#dfe9dc] bg-[#e8f1e6] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#536650]">
               Đăng nhập

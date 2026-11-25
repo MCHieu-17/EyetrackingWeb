@@ -157,7 +157,7 @@ interface ProfileBase {
   phone: string | null;        // users.phone
   avatarUrl: string | null;    // users.avatar_url
   createdAt: string;           // users.created_at
-  hasPassword: boolean;        // false = đăng nhập bằng Outlook + OTP, không có mật khẩu GazeEdu
+  hasPassword: boolean;        // false = đăng nhập bằng Outlook + OTP, không có mật khẩu Fovea
 }
 
 interface StudentProfile extends ProfileBase {

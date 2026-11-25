@@ -1,32 +1,63 @@
-import type { Metadata } from "next";
-import { Geist, Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Be_Vietnam_Pro, Inter, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
+import { ThemeSync } from "@/components/theme/theme-sync";
 import { cn } from "@/lib/utils";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-sans" });
-const geist = Geist({ subsets: ["latin"], variable: "--font-heading" });
+// Source Sans 3 gần với font nhận diện của NEU (Source Sans Pro); Be Vietnam
+// Pro cho tiêu đề, dấu tiếng Việt đẹp ở cỡ lớn.
+const sourceSans = Source_Sans_3({
+  subsets: ["latin", "vietnamese"],
+  variable: "--font-sans",
+  display: "swap",
+});
+const beVietnam = Be_Vietnam_Pro({
+  subsets: ["latin", "vietnamese"],
+  weight: ["600", "700"],
+  variable: "--font-heading",
+  display: "swap",
+});
+
+// Khung reader (trang thu gaze + bản xem trước AOI) giữ font Inter cũ: kích
+// thước chữ quyết định box của các [data-aoi] dạng nút/thanh, nên giữ nguyên
+// để AOI giao diện so sánh được giữa dữ liệu trước và sau redesign.
+// preload=false: chỉ tải khi trang có reader.
+const readerFont = Inter({
+  subsets: ["latin", "vietnamese"],
+  variable: "--font-reader",
+  preload: false,
+});
 
 export const metadata: Metadata = {
-  title: "GazeEdu – Webcam Eye Tracking for Learning Analytics",
+  title: "Fovea – Học tập với Eye Tracking qua webcam",
   description:
-    "Nền tảng học tập sử dụng webcam eye-tracking để phân tích hành vi quan sát trên từng trang tài liệu.",
+    "Fovea: nền tảng học trực tuyến dùng webcam eye-tracking để hiểu cách người học quan sát từng trang tài liệu.",
   icons: {
-    icon: [
-      { url: "/brand/gazeedu-icon.svg", type: "image/svg+xml" },
-      { url: "/brand/gazeedu-favicon.png", type: "image/png" },
-    ],
+    icon: [{ url: "/brand/fovea-icon.svg", type: "image/svg+xml" }],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f7fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#07111f" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="vi"
-      className={cn(inter.variable, geist.variable, "h-full")}
+      className={cn(sourceSans.variable, beVietnam.variable, readerFont.variable, "h-full")}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full bg-background font-sans text-foreground antialiased">
+        <ThemeSync />
         <Providers>{children}</Providers>
       </body>
     </html>

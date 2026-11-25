@@ -84,7 +84,11 @@ try {
         const entry = { name, theme, form, route, file, ok: true };
         try {
           await page.goto(`${BASE}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
-          await page.waitForTimeout(600);
+          // Chờ skeleton/spinner tải dữ liệu biến mất (tối đa 8s) để ảnh có nội dung thật.
+          await page
+            .waitForFunction(() => !document.querySelector(".animate-pulse, .animate-spin"), null, { timeout: 8_000 })
+            .catch(() => {});
+          await page.waitForTimeout(400);
           await page.screenshot({ path: path.join(OUT, file), fullPage: true });
         } catch (err) {
           entry.ok = false;

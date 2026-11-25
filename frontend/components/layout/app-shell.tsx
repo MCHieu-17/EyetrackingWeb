@@ -33,16 +33,17 @@ export function AppShell({
       : title;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f6f2]">
+    <div className="flex min-h-screen flex-col bg-background">
       <Topbar role={role} user={isLoading ? null : user} />
 
       <main className={cn("flex-1 px-4 pb-4 sm:px-6", contentClassName)}>
-        <div className="premium-canvas mx-auto min-h-[calc(100vh-84px)] w-full max-w-[1440px] rounded-t-[28px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
+        <div className="premium-canvas mx-auto min-h-[calc(100vh-80px)] w-full max-w-[1440px] rounded-t-[28px] border border-b-0 border-border px-5 py-7 shadow-sm sm:px-8 lg:px-10 lg:py-9">
           {(displayTitle || actions) && (
             <div className="mb-8">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                 {displayTitle && (
                   <div className="space-y-2">
+                    <span aria-hidden className="block h-1 w-10 rounded-full bg-brand-red" />
                     <h1 className="font-display text-balance text-3xl leading-tight text-foreground sm:text-[2.35rem]">
                       {displayTitle}
                     </h1>

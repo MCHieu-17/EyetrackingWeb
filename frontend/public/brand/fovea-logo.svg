@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 48" role="img" aria-labelledby="t">
+  <title id="t">Fovea</title>
+  <rect width="48" height="48" rx="12" fill="#084C90"/>
+  <path d="M6 24c4.8-7.2 10.8-10.8 18-10.8S37.2 16.8 42 24c-4.8 7.2-10.8 10.8-18 10.8S10.8 31.2 6 24Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="24" cy="24" r="7.2" fill="none" stroke="#fff" stroke-width="2.6" opacity=".55"/>
+  <circle cx="24" cy="24" r="3.8" fill="#E8394F"/>
+  <text x="60" y="33.5" font-family="'Be Vietnam Pro','Segoe UI',Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="-0.6" fill="#084C90">Fovea</text>
+</svg>

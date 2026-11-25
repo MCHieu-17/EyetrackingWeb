@@ -16,6 +16,12 @@ mkdir -p "$OUT"
 command -v lighthouse >/dev/null 2>&1 || die "Thiếu lighthouse CLI"
 command -v jq >/dev/null 2>&1 || die "Thiếu jq"
 
+# Lighthouse cần Chrome; nếu máy không có, dùng Chromium của Playwright.
+if [ -z "${CHROME_PATH:-}" ]; then
+  CHROME_PATH="$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1 || true)"
+  [ -n "$CHROME_PATH" ] && export CHROME_PATH
+fi
+
 BASE_URL="${BENCH_BASE_URL:-http://127.0.0.1:3100}"
 RUNS="${LIGHTHOUSE_RUNS:-3}"
 CORE_COURSE_ID="$(json_get "$FIXTURES" 'd["ids"]["core_course_id"]')"

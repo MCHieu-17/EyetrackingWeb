@@ -4,6 +4,33 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Thang màu NEU (static) → bg-navy-50…950, text-neu-red-600… */
+@theme {
+  --color-navy-50: #eef5fc;
+  --color-navy-100: #d8e7f7;
+  --color-navy-200: #b3cfee;
+  --color-navy-300: #82afe0;
+  --color-navy-400: #4d88cc;
+  --color-navy-500: #2668b2;
+  --color-navy-600: #0f569f;
+  --color-navy-700: #084c90;
+  --color-navy-800: #073d74;
+  --color-navy-900: #062f59;
+  --color-navy-950: #041d38;
+
+  --color-neu-red-50: #fdf1f2;
+  --color-neu-red-100: #fbdfe2;
+  --color-neu-red-200: #f5bcc3;
+  --color-neu-red-300: #ec8c98;
+  --color-neu-red-400: #de5468;
+  --color-neu-red-500: #c92b43;
+  --color-neu-red-600: #ae152d;
+  --color-neu-red-700: #92112a;
+  --color-neu-red-800: #7a1127;
+  --color-neu-red-900: #661226;
+  --color-neu-red-950: #3a0511;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -47,6 +74,15 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-brand-navy: var(--brand-navy);
+  --color-brand-red: var(--brand-red);
+  --color-brand-red-soft: var(--brand-red-soft);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-track: var(--chart-track);
+  --color-chart-grid: var(--chart-grid);
+  --color-heatmap-low: var(--heatmap-low);
+  --color-heatmap-high: var(--heatmap-high);
   --color-brand-cyan: var(--brand-cyan);
   --color-brand-cyan-soft: var(--brand-cyan-soft);
   --color-brand-dark: var(--brand-dark);
@@ -62,11 +98,11 @@
   --radius-2xl: calc(var(--radius) * 1.75);
   --radius-3xl: calc(var(--radius) * 2.25);
 
-  --shadow-xs: 0 2px 10px rgb(31 35 29 / 0.035);
-  --shadow-sm: 0 8px 24px rgb(31 35 29 / 0.045);
-  --shadow-md: 0 12px 32px rgb(31 35 29 / 0.06);
-  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.07);
-  --shadow-xl: 0 24px 60px rgb(0 0 0 / 0.09);
+  --shadow-xs: 0 1px 2px rgb(8 30 60 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(8 30 60 / 0.06), 0 4px 12px rgb(8 30 60 / 0.04);
+  --shadow-md: 0 4px 10px rgb(8 30 60 / 0.06), 0 12px 28px rgb(8 30 60 / 0.06);
+  --shadow-lg: 0 8px 20px rgb(8 30 60 / 0.08), 0 20px 44px rgb(8 30 60 / 0.08);
+  --shadow-xl: 0 16px 36px rgb(8 30 60 / 0.10), 0 32px 72px rgb(8 30 60 / 0.10);
 
   --animate-fade-in: fade-in 200ms ease-out;
   --animate-slide-up: slide-up 240ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -88,103 +124,158 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ==========================================================================
+   Fovea design tokens — màu nhận diện Đại học Kinh tế Quốc dân (neu.edu.vn):
+   navy #084C90 (chủ đạo), đỏ #AE152D (nhấn, dùng tiết chế).
+   Quy tắc: component chỉ dùng token semantic (bg-primary, text-muted-foreground,
+   bg-card, border-border...) hoặc thang navy-N / neu-red-N; không hardcode hex.
+   ========================================================================== */
 :root {
-  --brand-navy: #20221f;
-  --brand-cyan: #789472;
-  --brand-cyan-soft: #e8f1e6;
-  --brand-dark: #20221f;
+  color-scheme: light;
+
+  /* Brand */
+  --brand-navy: #084c90;
+  --brand-red: #ae152d;
+  --brand-red-soft: #fbdfe2;
+  --brand-dark: #041d38;
+  /* Alias cũ (giữ tương thích, sẽ bỏ ở task 10) */
+  --brand-cyan: #2668b2;
+  --brand-cyan-soft: #e8f0fa;
 
   /* System monospace stack (Geist Mono is no longer loaded in the root layout). */
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   /* Primary interactive */
-  --primary: #20211f;
-  --primary-hover: #343632;
-  --primary-active: #111210;
+  --primary: #084c90;
+  --primary-hover: #073d74;
+  --primary-active: #062f59;
   --primary-foreground: #ffffff;
 
-  --background: #ffffff;
-  --foreground: #222320;
+  --background: #f5f7fb;
+  --foreground: #0f1c2e;
   --surface: #ffffff;
-  --surface-foreground: #222320;
+  --surface-foreground: #0f1c2e;
   --card: #ffffff;
-  --card-foreground: #222320;
+  --card-foreground: #0f1c2e;
   --popover: #ffffff;
-  --popover-foreground: #222320;
+  --popover-foreground: #0f1c2e;
 
-  --secondary: #f7f7f4;
-  --secondary-foreground: #383a36;
-  --muted: #f7f7f4;
-  --muted-foreground: #7f817b;
-  --accent: #e8f1e6;
-  --accent-foreground: #36533a;
+  --secondary: #eef3f9;
+  --secondary-foreground: #1d3a5f;
+  --muted: #f0f3f8;
+  --muted-foreground: #556479;
+  --accent: #e8f0fa;
+  --accent-foreground: #084c90;
 
-  --border: #eeeee9;
-  --input: #e8e8e3;
-  --ring: #20211f;
+  --border: #e1e7ef;
+  --input: #d3dce8;
+  --ring: #2668b2;
 
   /* Status */
-  --destructive: #c0362c;
+  --destructive: #c0262d;
   --destructive-foreground: #ffffff;
-  --success: #1f7a4d;
+  --success: #137a4a;
   --success-foreground: #ffffff;
-  --warning: #b06a12;
+  --warning: #9a5a06;
   --warning-foreground: #ffffff;
-  --info: #2563eb;
+  --info: #0f6bc7;
   --info-foreground: #ffffff;
 
-  /* Charts */
-  --chart-1: #789472;
-  --chart-2: #b8cbb4;
-  --chart-3: #1f7a4d;
-  --chart-4: #b06a12;
-  --chart-5: #c0362c;
+  /* Charts — categorical, thứ tự cố định (đã validate CVD, skill dataviz).
+     Không dùng cho trạng thái; text cạnh mark vẫn dùng màu chữ. */
+  --chart-1: #257de0;
+  --chart-2: #f47230;
+  --chart-3: #00b894;
+  --chart-4: #f2a600;
+  --chart-5: #ee7fac;
+  --chart-6: #008a17;
+  --chart-7: #6a4ce2;
+  --chart-8: #ec4647;
+  --chart-track: #e9eef5;
+  --chart-grid: #e1e7ef;
+  /* Heatmap: một hue cam (tách khỏi navy của UI), dùng rgb(var(--heatmap) / a). */
+  --heatmap: 217 92 20;
+  --heatmap-low: #fbe7da;
+  --heatmap-high: #b4480c;
 
   --radius: 0.75rem;
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #777777;
-  --sidebar-primary: #20211f;
+  --sidebar-foreground: #556479;
+  --sidebar-primary: #084c90;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #20211f;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #ecece8;
-  --sidebar-ring: #20211f;
+  --sidebar-accent: #e8f0fa;
+  --sidebar-accent-foreground: #084c90;
+  --sidebar-border: #e1e7ef;
+  --sidebar-ring: #2668b2;
 }
 
 .dark {
-  --brand-dark: #111111;
-  --background: #151515;
-  --foreground: #f4f4f4;
-  --surface: #1d1d1d;
-  --surface-foreground: #f4f4f4;
-  --card: #1d1d1d;
-  --card-foreground: #f4f4f4;
-  --popover: #1d1d1d;
-  --popover-foreground: #f4f4f4;
-  --primary: #f4f4f4;
-  --primary-hover: #ffffff;
-  --primary-active: #dedede;
-  --primary-foreground: #161616;
-  --secondary: #292929;
-  --secondary-foreground: #f4f4f4;
-  --muted: #292929;
-  --muted-foreground: #a0a0a0;
-  --accent: #f4f4f4;
-  --accent-foreground: #161616;
-  --border: rgb(255 255 255 / 12%);
-  --input: rgb(255 255 255 / 16%);
-  --ring: #f4f4f4;
-  --destructive: #fb7185;
-  --destructive-foreground: #06182e;
-  --sidebar: #1d1d1d;
-  --sidebar-foreground: #a0a0a0;
-  --sidebar-primary: #f4f4f4;
-  --sidebar-primary-foreground: #161616;
-  --sidebar-accent: #f4f4f4;
-  --sidebar-accent-foreground: #161616;
-  --sidebar-border: rgb(255 255 255 / 12%);
-  --sidebar-ring: #f4f4f4;
+  color-scheme: dark;
+
+  --brand-navy: #8bbbf0;
+  --brand-red: #e8607a;
+  --brand-red-soft: #3a1220;
+  --brand-dark: #020c19;
+  --brand-cyan: #8bbbf0;
+  --brand-cyan-soft: #13284a;
+
+  --primary: #6ea8ea;
+  --primary-hover: #8bbbf0;
+  --primary-active: #4d88cc;
+  --primary-foreground: #04162b;
+
+  --background: #07111f;
+  --foreground: #e6edf6;
+  --surface: #0c1a2d;
+  --surface-foreground: #e6edf6;
+  --card: #0c1a2d;
+  --card-foreground: #e6edf6;
+  --popover: #0f2036;
+  --popover-foreground: #e6edf6;
+
+  --secondary: #13243a;
+  --secondary-foreground: #dce6f2;
+  --muted: #112136;
+  --muted-foreground: #96a7bd;
+  --accent: #13284a;
+  --accent-foreground: #b9d4f5;
+
+  --border: rgb(255 255 255 / 9%);
+  --input: rgb(255 255 255 / 15%);
+  --ring: #6ea8ea;
+
+  --destructive: #f2727a;
+  --destructive-foreground: #1d0306;
+  --success: #3fc27f;
+  --success-foreground: #03170c;
+  --warning: #f0b24a;
+  --warning-foreground: #1f1300;
+  --info: #5aa9f5;
+  --info-foreground: #021427;
+
+  --chart-1: #338ced;
+  --chart-2: #e76624;
+  --chart-3: #00a888;
+  --chart-4: #d28e05;
+  --chart-5: #e24d8b;
+  --chart-6: #0aac23;
+  --chart-7: #9887ef;
+  --chart-8: #eb6263;
+  --chart-track: #16273e;
+  --chart-grid: rgb(255 255 255 / 9%);
+  --heatmap: 247 135 70;
+  --heatmap-low: #2a1a12;
+  --heatmap-high: #f7a26b;
+
+  --sidebar: #0a1728;
+  --sidebar-foreground: #96a7bd;
+  --sidebar-primary: #6ea8ea;
+  --sidebar-primary-foreground: #04162b;
+  --sidebar-accent: #13284a;
+  --sidebar-accent-foreground: #b9d4f5;
+  --sidebar-border: rgb(255 255 255 / 9%);
+  --sidebar-ring: #6ea8ea;
 }
 
 @layer base {
@@ -204,6 +295,10 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  /* Hợp đồng AOI: reader giữ metrics chữ cũ (xem app/layout.tsx). */
+  [data-aoi="reader-root"] {
+    font-family: var(--font-reader), system-ui, sans-serif;
   }
   input[type="password"]::-ms-reveal,
   input[type="password"]::-ms-clear {
@@ -240,8 +335,16 @@
 }
 
 @utility premium-canvas {
-  background-color: #fdfdfa;
+  background-color: var(--surface);
   background-image:
-    radial-gradient(circle at 34% -8%, rgb(232 241 230 / 0.72) 0, rgb(244 248 241 / 0.28) 24%, transparent 46%),
-    radial-gradient(circle at 88% 7%, rgb(249 246 232 / 0.72) 0, transparent 34%);
+    radial-gradient(circle at 18% -12%, color-mix(in oklab, var(--brand-navy) 9%, transparent) 0, transparent 42%),
+    radial-gradient(circle at 92% 0%, color-mix(in oklab, var(--brand-red) 5%, transparent) 0, transparent 32%);
+}
+
+/* Theme đổi mượt; tắt khi người dùng giảm chuyển động. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition * {
+    transition: background-color 180ms ease, border-color 180ms ease, color 120ms ease !important;
+  }
 }

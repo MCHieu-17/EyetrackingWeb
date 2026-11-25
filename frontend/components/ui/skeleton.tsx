@@ -4,7 +4,7 @@ export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivEl
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-xl bg-[#f0f1ec]", className)}
+      className={cn("animate-pulse rounded-xl bg-muted", className)}
       {...props}
     />
   );

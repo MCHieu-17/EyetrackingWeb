@@ -72,6 +72,9 @@ import {
   RiUserFollowLine,
   RiUserLine,
   RiVipDiamondLine,
+  RiSunLine,
+  RiMoonClearLine,
+  RiComputerLine,
 } from "@remixicon/react";
 
 const RICON: Record<string, ComponentType<{ className?: string }>> = {
@@ -145,6 +148,9 @@ const RICON: Record<string, ComponentType<{ className?: string }>> = {
   "ri-user-follow-line": RiUserFollowLine,
   "ri-user-line": RiUserLine,
   "ri-vip-diamond-line": RiVipDiamondLine,
+  "ri-sun-line": RiSunLine,
+  "ri-moon-clear-line": RiMoonClearLine,
+  "ri-computer-line": RiComputerLine,
 };
 
 export function Icon({ name, className }: { name: string; className?: string }) {

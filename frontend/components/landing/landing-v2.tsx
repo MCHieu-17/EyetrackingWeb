@@ -53,7 +53,7 @@ function ProductIllustration() {
           <div className="ge-app-top">
             <div>
               <div className="ge-app-caption">Không gian học tập</div>
-              <div className="ge-app-sub">GazeEdu / Learning workspace</div>
+              <div className="ge-app-sub">Fovea / Learning workspace</div>
             </div>
             <div className="ge-avatar">G</div>
           </div>
@@ -213,12 +213,12 @@ export default function LandingV2() {
                 <span className="ge-emphasis">Hiểu cả quá trình học.</span>
               </h1>
               <p className="ge-lead">
-                Học trực tuyến, kết hợp theo dõi ánh nhìn qua webcam. Cùng GazeEdu khám phá cách
+                Học trực tuyến, kết hợp theo dõi ánh nhìn qua webcam. Cùng Fovea khám phá cách
                 người học tương tác với kiến thức, từ đó hiểu rõ hơn hành trình học tập.
               </p>
               <div className="ge-hero-actions">
                 <Link href="/try" className="ge-btn ge-btn-dark">
-                  Khám phá GazeEdu <Arrow />
+                  Khám phá Fovea <Arrow />
                 </Link>
                 <a href="#how-it-works" className="ge-btn ge-btn-ghost">
                   Cách hoạt động <span className="ge-arrow">→</span>
@@ -404,9 +404,9 @@ export default function LandingV2() {
               </h2>
             </div>
             <div className="ge-cta-sub">
-              <p>Bắt đầu hành trình của bạn với GazeEdu.</p>
+              <p>Bắt đầu hành trình của bạn với Fovea.</p>
               <Link className="ge-btn ge-btn-dark" href="/try">
-                Bắt đầu với GazeEdu <Arrow />
+                Bắt đầu với Fovea <Arrow />
               </Link>
             </div>
           </section>
@@ -417,7 +417,7 @@ export default function LandingV2() {
           <div className="ge-footer-top">
             <div>
               <Link className="ge-logo" href="/">
-                <BrandLogo variant="light" className="h-[28px]" />
+                <BrandLogo className="h-8" />
               </Link>
               <p className="ge-footer-note">Học tập. Quan sát. Thấu hiểu.</p>
             </div>
@@ -430,7 +430,7 @@ export default function LandingV2() {
             </nav>
           </div>
           <div className="ge-footer-bottom">
-            <span>© GazeEdu</span>
+            <span>© Fovea</span>
             <span>Học tập. Quan sát. Thấu hiểu.</span>
           </div>
         </div>

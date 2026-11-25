@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/ui/brand-logo";
 import { Icon } from "@/components/ui/icon";
 import { NAV_BY_ROLE } from "@/lib/nav";
 import { type Role } from "@/lib/api/auth";
@@ -43,17 +44,14 @@ export function Sidebar({
     });
 
   return (
-    <div className="flex h-full w-64 flex-col border border-sidebar-border bg-white text-sidebar-foreground shadow-sm">
+    <div className="flex h-full w-64 flex-col border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm">
       <Link
         href={`/${role}`}
         onClick={onNavigate}
         className="flex h-20 shrink-0 items-center gap-3 px-5"
-        aria-label="GazeEdu"
+        aria-label="Fovea"
       >
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-[#eef3eb] text-[#52654f]">
-          <Icon name="ri-eye-line" className="size-5" />
-        </span>
-        <span className="font-display whitespace-nowrap text-lg text-foreground">EyeLearning</span>
+        <BrandLogo className="h-8" />
       </Link>
 
       <nav
@@ -73,7 +71,7 @@ export function Sidebar({
       )}
 
       <p className="mt-auto px-6 pb-6 text-[11px] leading-relaxed text-muted-foreground">
-        GazeEdu · Eye-Tracking
+        Fovea · Eye-Tracking
       </p>
     </div>
   );

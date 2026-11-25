@@ -32,7 +32,7 @@ export function Topbar({
   );
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-3 bg-[#f5f6f2]/95 px-4 backdrop-blur-sm sm:px-6">
+    <header className="sticky top-0 z-30 flex h-20 items-center gap-3 bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
       <Button
         variant="ghost"
         size="icon"
@@ -43,8 +43,8 @@ export function Topbar({
         <Icon name="ri-menu-line" className="size-5" />
       </Button>
 
-      <Link href={`/${role}`} aria-label="GazeEdu" className="flex items-center">
-        <BrandLogo variant="light" className="h-6 w-auto" priority />
+      <Link href={`/${role}`} aria-label="Fovea" className="flex items-center">
+        <BrandLogo className="h-7" />
       </Link>
 
       {primaryItems.length > 0 && (
@@ -59,7 +59,7 @@ export function Topbar({
                 className={cn(
                   "flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                    ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >

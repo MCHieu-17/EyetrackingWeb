@@ -14,8 +14,8 @@ export function LandingHeader({ menuItems }: { menuItems: readonly MenuItem[] })
   return (
     <header className="ge-header">
       <div className="ge-container ge-nav">
-        <Link className="ge-logo" href="/" aria-label="GazeEdu - Trang chủ">
-          <BrandLogo variant="light" className="h-[28px]" priority />
+        <Link className="ge-logo" href="/" aria-label="Fovea - Trang chủ">
+          <BrandLogo className="h-8" />
         </Link>
         <nav className="ge-navlinks" aria-label="Điều hướng chính">
           {menuItems.map(([label, href]) => (

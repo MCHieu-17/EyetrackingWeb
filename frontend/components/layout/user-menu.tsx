@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@/components/ui/icon";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { logout, ROLE_LABEL, type AuthUser, type Role } from "@/lib/api/auth";
 import { PROFILE_HREF } from "@/lib/nav";
 import { cn, initialsOf } from "@/lib/utils";
@@ -63,6 +64,11 @@ export function UserMenu({ user, role, className }: { user: AuthUser; role: Role
             Hồ sơ của tôi
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Giao diện</span>
+          <ThemeToggle />
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem destructive disabled={pending} onSelect={handleLogout}>
           <Icon name="ri-logout-box-r-line" />

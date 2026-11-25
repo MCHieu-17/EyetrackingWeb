@@ -3,7 +3,7 @@ import { AuthLayout } from "@/components/account/auth-layout";
 import { ChangePasswordForm } from "@/components/account/change-password-form";
 
 export const metadata: Metadata = {
-  title: "Đổi mật khẩu – GazeEdu",
+  title: "Đổi mật khẩu – Fovea",
 };
 
 export default function ChangePasswordPage() {
@@ -14,7 +14,7 @@ export default function ChangePasswordPage() {
           Đổi mật khẩu
         </h1>
         <p className="text-sm text-muted-foreground">
-          Cập nhật mật khẩu cho tài khoản GazeEdu của bạn.
+          Cập nhật mật khẩu cho tài khoản Fovea của bạn.
         </p>
       </div>
       <ChangePasswordForm />

@@ -215,7 +215,7 @@ export function PreflightCheck({
       setFaceState("idle");
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
-          ? "Bạn chưa cấp quyền camera cho GazeEdu. Hãy cho phép camera trong trình duyệt rồi thử lại."
+          ? "Bạn chưa cấp quyền camera cho Fovea. Hãy cho phép camera trong trình duyệt rồi thử lại."
           : "Không thể truy cập camera. Hãy kiểm tra thiết bị và quyền của trình duyệt.",
       );
     }
