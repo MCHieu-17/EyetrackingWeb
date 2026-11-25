@@ -57,6 +57,9 @@ class Course(Base):
     show_gaze_dot: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("false")
     )
+    show_camera_preview: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("false")
+    )
     require_calibration: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("true")
     )

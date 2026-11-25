@@ -1,0 +1,17 @@
+# Chỉ dùng cho target `export` (service gaze-export): UniGaze safetensors -> ONNX.
+# Không cài vào image runtime.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+
+unigaze==0.1.3
+huggingface-hub==0.27.1
+safetensors==0.5.2
+onnx==1.17.0
+
+# Convert FaceLandmarker TFLite -> ONNX (scripts/tflite_to_onnx.py) và làm chuẩn
+# so sánh parity (MediaPipe, ai-edge-litert). mediapipe cần protobuf<5.
+mediapipe==0.10.21
+tflite==2.18.0
+ai-edge-litert==2.4.0
+protobuf<5

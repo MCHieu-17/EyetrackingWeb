@@ -1,12 +1,17 @@
-"""Tải weights (mediapipe + unigaze) vào WEIGHTS_DIR lúc khởi động container.
+"""Tải weights vào WEIGHTS_DIR cho service `gaze-export`.
 
-Chạy: entrypoint.sh gọi `python -m scripts.download_weights`; khi dev có thể
-chạy trực tiếp `python scripts/download_weights.py`.
+- mặc định: chỉ FaceLandmarker (`face_landmarker.task`) — runtime gaze không cần
+  safetensors vì landmarker và UniGaze đều chạy bằng ONNX;
+- `--unigaze`: tải thêm safetensors của UNIGAZE_MODEL để export ONNX
+  (xem scripts/export_onnx.py).
+
+Chỉ `export-entrypoint.sh` gọi script này (runtime không tải weights); khi dev
+có thể chạy trực tiếp `python scripts/download_weights.py`.
 """
 
+import argparse
 import hashlib
 import os
-import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -18,13 +23,13 @@ from app.settings import Settings  # noqa: E402
 
 WEIGHTS_DIR = str(Settings.from_env().weights_dir)
 
-MEDIAPIPE_FILE = {
-    "name": "mediapipe.tflite",
+LANDMARKER_FILE = {
+    "name": "face_landmarker.task",
     "sources": [
-        ("drive", "1SOIwZEVFdZdLA4d_4hgEqhPaz1gp1jjV"),
-        ("url", "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"),
+        ("url", "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"),
     ],
-    "min_size": 50_000,
+    "min_size": 3_000_000,
+    "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
 }
 
 # Chỉ tải đúng model được chọn trong UNIGAZE_MODEL. Kích thước lấy từ
@@ -82,24 +87,6 @@ def download_url(url, dest):
     stream_to_file(http(url), dest)
 
 
-def download_drive(file_id, dest):
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    resp = http(url)
-    ctype = resp.headers.get_content_type()
-    if ctype and ctype.startswith("text/html"):
-        html = resp.read().decode("utf-8", "replace")
-        m = re.search(r'name="confirm" value="([^"]+)"', html)
-        if not m:
-            raise RuntimeError("không lấy được token xác nhận của Google Drive")
-        params = f"confirm={m.group(1)}&id={file_id}"
-        u = re.search(r'name="uuid" value="([^"]+)"', html)
-        if u:
-            params += f"&uuid={u.group(1)}"
-        download_url(f"https://drive.google.com/uc?export=download&{params}", dest)
-    else:
-        stream_to_file(resp, dest)
-
-
 def sha256_of(path):
     digest = hashlib.sha256()
     with open(path, "rb") as f:
@@ -118,12 +105,8 @@ def ensure(name, sources, min_size, sha256=None):
         os.remove(dest)
     for kind, value in sources:
         try:
-            if kind == "drive":
-                print(f"[weights] {name}: dang tai tu Google Drive ...")
-                download_drive(value, dest)
-            else:
-                print(f"[weights] {name}: dang tai tu {value} ...")
-                download_url(value, dest)
+            print(f"[weights] {name}: dang tai tu {value} ...")
+            download_url(value, dest)
             size = os.path.getsize(dest)
             if size >= min_size and (sha256 is None or sha256_of(dest) == sha256):
                 print(f"[weights] {name}: xong ({size:,} bytes)")
@@ -161,16 +144,22 @@ def _selected_model_file(settings: Settings):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--unigaze", action="store_true")
+    args = parser.parse_args()
+
     settings = Settings.from_env()
+    selected = None
     try:
         settings.validate()  # fail-fast nếu thiếu DEVICE/UNIGAZE_MODEL
-        selected = _selected_model_file(settings)
+        if args.unigaze:
+            selected = _selected_model_file(settings)
     except (RuntimeError, ValueError) as exc:
         print(f"LOI: {exc}", file=sys.stderr)
         return 1
 
     os.makedirs(WEIGHTS_DIR, exist_ok=True)
-    files = [MEDIAPIPE_FILE]
+    files = [LANDMARKER_FILE]
     if selected is not None:
         files.append(selected)
 
@@ -179,7 +168,7 @@ def main() -> int:
         ok = ensure(**f) and ok
     if not ok:
         print(
-            "LOI: khong tai du weights. Kiem tra mang va link Google Drive.",
+            "LOI: khong tai du weights. Kiem tra mang va URL nguon.",
             file=sys.stderr,
         )
         return 1

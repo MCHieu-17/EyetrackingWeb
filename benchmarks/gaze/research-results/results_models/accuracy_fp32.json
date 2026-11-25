@@ -1,0 +1,683 @@
+{
+  "generated_at": "2026-11-24T20:25:54+07:00",
+  "device": "cuda",
+  "precisions": [
+    "fp32"
+  ],
+  "gaze_weights": [
+    "weights/unigaze_b16_joint.safetensors",
+    "weights/unigaze_l16_joint.safetensors",
+    "weights/unigaze_h14_joint.safetensors",
+    "weights/unigaze_h14_cross_X.safetensors"
+  ],
+  "data_dir": "testdata",
+  "data": {
+    "n_sessions": 1,
+    "n_targets": 100,
+    "n_frames": 800,
+    "screens": [
+      [
+        1920,
+        1080
+      ]
+    ],
+    "conditions": [
+      "frontal"
+    ],
+    "dry_run": false
+  },
+  "sessions": [
+    {
+      "session_id": "20261124_175802_frontal",
+      "condition": "frontal",
+      "created_at": "2026-11-24T18:01:45+07:00",
+      "n_targets": 100,
+      "n_frames": 800,
+      "screen_px": [
+        1920,
+        1080
+      ],
+      "pipeline_ok_pct": 100.0,
+      "dry_run": false
+    }
+  ],
+  "configs": [
+    {
+      "detector": "mediapipe",
+      "precision": "fp32",
+      "gaze_model": "unigaze_b16_joint",
+      "key": "mediapipe:fp32:unigaze_b16_joint",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · UniGaze-B16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.7680931759337322
+      },
+      "px_per_deg": 49.37671117365625,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 38.61735226275323,
+          "l1_p95": 74.09962985385984,
+          "l2_median": 29.261673108076565,
+          "l2_mean": 29.705261486667727,
+          "l2_p95": 54.35786805736972,
+          "bias_dx": 0.028863610368882176,
+          "bias_dy": -0.2827012676677259,
+          "l2_pct_median": 1.5240454743789877,
+          "err_deg_median": 0.5926209423945681,
+          "ci_l2_median": [
+            24.96230009499798,
+            33.78595354016292
+          ],
+          "ci_l1_median": [
+            32.21370545889448,
+            43.049507243221115
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 29.261673108076565,
+              "l2_p95": 54.35786805736972,
+              "l1_median": 38.61735226275323
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "mediapipe",
+      "precision": "fp32",
+      "gaze_model": "unigaze_l16_joint",
+      "key": "mediapipe:fp32:unigaze_l16_joint",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · UniGaze-L16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.6564639280619631
+      },
+      "px_per_deg": 48.813999408627645,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 30.301759604344596,
+          "l1_p95": 57.54434338959061,
+          "l2_median": 23.930942995145205,
+          "l2_mean": 24.787593343743133,
+          "l2_p95": 42.14160938747342,
+          "bias_dx": -0.049073491369274504,
+          "bias_dy": -0.2638489577197946,
+          "l2_pct_median": 1.2464032809971461,
+          "err_deg_median": 0.4902475372856977,
+          "ci_l2_median": [
+            20.969807102767234,
+            25.208774243374354
+          ],
+          "ci_l1_median": [
+            25.95612025385806,
+            33.95207293321937
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 23.930942995145205,
+              "l2_p95": 42.14160938747342,
+              "l1_median": 30.301759604344596
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "mediapipe",
+      "precision": "fp32",
+      "gaze_model": "unigaze_h14_joint",
+      "key": "mediapipe:fp32:unigaze_h14_joint",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · UniGaze-H14",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.6668317277287793
+      },
+      "px_per_deg": 50.22336279859644,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 25.93007984387654,
+          "l1_p95": 63.830730933812724,
+          "l2_median": 20.43772062699948,
+          "l2_mean": 23.27072762172181,
+          "l2_p95": 46.7355474288434,
+          "bias_dx": -0.13256170032369383,
+          "bias_dy": -0.3084964063301963,
+          "l2_pct_median": 1.0644646159895563,
+          "err_deg_median": 0.4069365229277447,
+          "ci_l2_median": [
+            17.24171781162623,
+            24.21837951221756
+          ],
+          "ci_l1_median": [
+            20.81937508709217,
+            31.85788645942847
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 20.43772062699948,
+              "l2_p95": 46.7355474288434,
+              "l1_median": 25.93007984387654
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "mediapipe",
+      "precision": "fp32",
+      "gaze_model": "unigaze_h14_cross_X",
+      "key": "mediapipe:fp32:unigaze_h14_cross_X",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · UniGaze-H14-cross",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.6387215383707173
+      },
+      "px_per_deg": 59.079773401388934,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 32.76165517012951,
+          "l1_p95": 80.63358344168617,
+          "l2_median": 26.78415806908293,
+          "l2_mean": 29.655374487194536,
+          "l2_p95": 63.97773653644243,
+          "bias_dx": 0.02061779513940479,
+          "bias_dy": -0.3788671857514012,
+          "l2_pct_median": 1.395008232764736,
+          "err_deg_median": 0.45335580228297306,
+          "ci_l2_median": [
+            22.15207665053121,
+            31.130586804569994
+          ],
+          "ci_l1_median": [
+            28.458142888940813,
+            39.77773146118409
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 26.78415806908293,
+              "l2_p95": 63.97773653644243,
+              "l1_median": 32.76165517012951
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp32",
+      "gaze_model": "unigaze_b16_joint",
+      "key": "face_alignment:fp32:unigaze_b16_joint",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · UniGaze-B16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.8385030945327009
+      },
+      "px_per_deg": 48.63096362862958,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 36.483170166285085,
+          "l1_p95": 74.49869309247025,
+          "l2_median": 28.70312826103942,
+          "l2_mean": 30.10059506471755,
+          "l2_p95": 57.76066344569689,
+          "bias_dx": -0.0874214328920732,
+          "bias_dy": -0.36180640422175075,
+          "l2_pct_median": 1.4949545969291367,
+          "err_deg_median": 0.5902233087592279,
+          "ci_l2_median": [
+            24.72995710837014,
+            33.015889575393544
+          ],
+          "ci_l1_median": [
+            31.358828603160198,
+            43.00454836489266
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 28.70312826103942,
+              "l2_p95": 57.76066344569689,
+              "l1_median": 36.483170166285085
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp32",
+      "gaze_model": "unigaze_l16_joint",
+      "key": "face_alignment:fp32:unigaze_l16_joint",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · UniGaze-L16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.7016343244105744
+      },
+      "px_per_deg": 48.25976012460196,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 33.81427335789954,
+          "l1_p95": 60.49443423894099,
+          "l2_median": 26.10992664783951,
+          "l2_mean": 25.375329721400036,
+          "l2_p95": 46.14993529704804,
+          "bias_dx": -0.046681009011416565,
+          "bias_dy": -0.3614113661726225,
+          "l2_pct_median": 1.359892012908308,
+          "err_deg_median": 0.5410289355029169,
+          "ci_l2_median": [
+            22.453433552365837,
+            27.441283300469976
+          ],
+          "ci_l1_median": [
+            27.778910230270156,
+            36.12179984248087
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 26.10992664783951,
+              "l2_p95": 46.14993529704804,
+              "l1_median": 33.81427335789954
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp32",
+      "gaze_model": "unigaze_h14_joint",
+      "key": "face_alignment:fp32:unigaze_h14_joint",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · UniGaze-H14",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.7356946501698026
+      },
+      "px_per_deg": 49.25528420902937,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 28.608006621508423,
+          "l1_p95": 61.69172340331301,
+          "l2_median": 23.29284492388399,
+          "l2_mean": 24.791493613310134,
+          "l2_p95": 50.38890276333724,
+          "bias_dx": 0.0921109931879542,
+          "bias_dy": -0.10837220910006196,
+          "l2_pct_median": 1.213169006452291,
+          "err_deg_median": 0.47290042678535593,
+          "ci_l2_median": [
+            21.357953383535868,
+            26.62291330628456
+          ],
+          "ci_l1_median": [
+            26.08593780188858,
+            33.269126284787376
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 23.29284492388399,
+              "l2_p95": 50.38890276333724,
+              "l1_median": 28.608006621508423
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp32",
+      "gaze_model": "unigaze_h14_cross_X",
+      "key": "face_alignment:fp32:unigaze_h14_cross_X",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · UniGaze-H14-cross",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.728728865286368
+      },
+      "px_per_deg": 58.93320189347635,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 30.466146501951016,
+          "l1_p95": 76.91835991955068,
+          "l2_median": 23.884348633348914,
+          "l2_mean": 27.279043164842168,
+          "l2_p95": 57.491936729190165,
+          "bias_dx": -0.09937842070790992,
+          "bias_dy": -0.16301063699598203,
+          "l2_pct_median": 1.243976491320256,
+          "err_deg_median": 0.40527831283493876,
+          "ci_l2_median": [
+            20.934990885610624,
+            28.696667292713958
+          ],
+          "ci_l1_median": [
+            25.242172514781146,
+            37.683168045525775
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 23.884348633348914,
+              "l2_p95": 57.491936729190165,
+              "l1_median": 30.466146501951016
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    }
+  ],
+  "paired": [
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-B16",
+      "b": "MediaPipe FaceMesh · UniGaze-L16",
+      "n": 100,
+      "d_l2_median": 2.8197251393912355,
+      "ci": [
+        0.8050009192390959,
+        6.1434867259686765
+      ],
+      "d_l1_median": 4.429363045244429,
+      "d_bias_dx": 0.07793710173815668,
+      "d_bias_dy": -0.018852309947931332,
+      "verdict": "MediaPipe FaceMesh · UniGaze-L16 chính xác hơn"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-B16",
+      "b": "MediaPipe FaceMesh · UniGaze-H14",
+      "n": 100,
+      "d_l2_median": 6.45534124867092,
+      "ci": [
+        1.7308364311887923,
+        10.019602327905668
+      ],
+      "d_l1_median": 8.167487794487641,
+      "d_bias_dx": 0.161425310692576,
+      "d_bias_dy": 0.025795138662470834,
+      "verdict": "MediaPipe FaceMesh · UniGaze-H14 chính xác hơn"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-B16",
+      "b": "MediaPipe FaceMesh · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": 0.367369088349335,
+      "ci": [
+        -3.2805520359708353,
+        6.273557837177432
+      ],
+      "d_l1_median": 3.159825795493731,
+      "d_bias_dx": 0.008245815229477387,
+      "d_bias_dy": 0.09616591808367474,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-B16",
+      "b": "FAN (face_alignment) · UniGaze-B16",
+      "n": 100,
+      "d_l2_median": -1.075153914969789,
+      "ci": [
+        -4.105720480428762,
+        3.984200344100645
+      ],
+      "d_l1_median": 0.2394269891186127,
+      "d_bias_dx": 0.11628504326095537,
+      "d_bias_dy": 0.07910513655402497,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-L16",
+      "b": "MediaPipe FaceMesh · UniGaze-H14",
+      "n": 100,
+      "d_l2_median": 2.3462303716997743,
+      "ci": [
+        -1.0182067710977116,
+        5.254635870519829
+      ],
+      "d_l1_median": 2.8151206521389867,
+      "d_bias_dx": 0.08348820895441932,
+      "d_bias_dy": 0.044647448610402166,
+      "verdict": "tương đương (CI chứa 0)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-L16",
+      "b": "MediaPipe FaceMesh · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": -2.3409597360875223,
+      "ci": [
+        -5.384780476761993,
+        1.9162021462451708
+      ],
+      "d_l1_median": -3.5049592238013005,
+      "d_bias_dx": -0.0696912865086793,
+      "d_bias_dy": 0.11501822803160622,
+      "verdict": "tương đương (CI chứa 0)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-L16",
+      "b": "FAN (face_alignment) · UniGaze-L16",
+      "n": 100,
+      "d_l2_median": -1.5367047767063209,
+      "ci": [
+        -5.314176525002198,
+        0.8290716861037737
+      ],
+      "d_l1_median": -1.6812941205749539,
+      "d_bias_dx": -0.0023924823578579434,
+      "d_bias_dy": 0.09756240845282818,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-H14",
+      "b": "MediaPipe FaceMesh · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": -5.627558767730372,
+      "ci": [
+        -11.641767103428794,
+        0.27594436358169894
+      ],
+      "d_l1_median": -7.183505501393853,
+      "d_bias_dx": -0.1531794954630986,
+      "d_bias_dy": 0.07037077942120419,
+      "verdict": "tương đương (CI chứa 0)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-H14",
+      "b": "FAN (face_alignment) · UniGaze-H14",
+      "n": 100,
+      "d_l2_median": -2.691234470304071,
+      "ci": [
+        -5.04512512346162,
+        0.38769644441028106
+      ],
+      "d_l1_median": -2.8475727352833573,
+      "d_bias_dx": -0.224672693511648,
+      "d_bias_dy": -0.20012419723013466,
+      "verdict": "tương đương (CI chứa 0)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · UniGaze-H14-cross",
+      "b": "FAN (face_alignment) · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": 2.9939908997072564,
+      "ci": [
+        0.347802218491875,
+        6.717079544477574
+      ],
+      "d_l1_median": 4.9078255817234435,
+      "d_bias_dx": 0.11999621584731472,
+      "d_bias_dy": -0.21585654875541904,
+      "verdict": "FAN (face_alignment) · UniGaze-H14-cross chính xác hơn"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-B16",
+      "b": "FAN (face_alignment) · UniGaze-L16",
+      "n": 100,
+      "d_l2_median": 3.210749924825909,
+      "ci": [
+        0.3861211585565272,
+        8.167633170106512
+      ],
+      "d_l1_median": 4.688339035213971,
+      "d_bias_dx": -0.040740423880656636,
+      "d_bias_dy": -0.00039503804912811803,
+      "verdict": "FAN (face_alignment) · UniGaze-L16 chính xác hơn"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-B16",
+      "b": "FAN (face_alignment) · UniGaze-H14",
+      "n": 100,
+      "d_l2_median": 5.569881459687984,
+      "ci": [
+        1.4564701932322457,
+        9.96426394398081
+      ],
+      "d_l1_median": 6.737891207274117,
+      "d_bias_dx": -0.1795324260800274,
+      "d_bias_dy": -0.2534341951216885,
+      "verdict": "FAN (face_alignment) · UniGaze-H14 chính xác hơn"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-B16",
+      "b": "FAN (face_alignment) · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": 1.2977261804529858,
+      "ci": [
+        -2.5671317194264827,
+        6.269459655715108
+      ],
+      "d_l1_median": 2.7796168542479904,
+      "d_bias_dx": 0.011956987815836727,
+      "d_bias_dy": -0.19879576722576886,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-L16",
+      "b": "FAN (face_alignment) · UniGaze-H14",
+      "n": 100,
+      "d_l2_median": -0.012432827127733859,
+      "ci": [
+        -3.9084043325617834,
+        3.509307956417987
+      ],
+      "d_l1_median": 1.4171667948847642,
+      "d_bias_dx": -0.13879200219937077,
+      "d_bias_dy": -0.2530391570725605,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-L16",
+      "b": "FAN (face_alignment) · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": -0.5334064401496128,
+      "ci": [
+        -3.9320536522632104,
+        3.9098056384395816
+      ],
+      "d_l1_median": -1.3499529528440064,
+      "d_bias_dx": 0.05269741169649336,
+      "d_bias_dy": -0.19840072917664087,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · UniGaze-H14",
+      "b": "FAN (face_alignment) · UniGaze-H14-cross",
+      "n": 100,
+      "d_l2_median": -2.034821959134442,
+      "ci": [
+        -7.585294920709371,
+        1.1716786214926227
+      ],
+      "d_l1_median": -2.51670221725265,
+      "d_bias_dx": 0.19148941389586413,
+      "d_bias_dy": 0.05463842789591965,
+      "verdict": "tương đương (CI chứa 0)"
+    }
+  ],
+  "warnings": [
+    "Chỉ có 1 phiên: chưa chấm được `cross-session`, còn `within` lạc quan hơn thực tế (cùng phiên, cùng vị trí đầu)."
+  ]
+}

@@ -23,11 +23,12 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, "/app")
+sys.path.insert(0, str(Path(__file__).resolve().parent / "tools"))
 
 try:
-    from scripts.bench import create_ready_session, encode_frame
+    from bench import create_ready_session, encode_frame
 except ImportError as exc:  # pragma: no cover
-    raise SystemExit(f"Không import được scripts.bench: {exc}") from exc
+    raise SystemExit(f"Không import được tools/bench.py: {exc}") from exc
 
 try:
     import websockets

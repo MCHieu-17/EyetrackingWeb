@@ -165,6 +165,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
   const activeQuizId = activeLesson?.quizId ?? "";
   // Cờ điểm nhìn thuộc KHÓA HỌC: bật là áp cho mọi bài giảng VÀ bài tập.
   const showGazeDot = Boolean(course?.showGazeDot);
+  // Cờ khung camera cũng thuộc khóa học; khung chỉ dùng lại luồng gaze hiện có.
+  const showCameraPreview = Boolean(course?.showCameraPreview);
   // Khóa tắt bắt buộc hiệu chỉnh -> không bật camera, không ghi gaze.
   const calibrationRequired = course?.requireCalibration !== false;
   // Viewport lúc calibration (localStorage). Dùng useSyncExternalStore để
@@ -593,7 +595,7 @@ export function ReaderContent({ courseId }: { courseId: string }) {
     };
   }, [learningSessionId, flushGaze]);
 
-  const { source: gazeSource } = useGazeTracker({
+  const { source: gazeSource, stream: gazeStream } = useGazeTracker({
     // Bài giảng: cần có slide. Bài tập: không có slide nhưng vẫn thu gaze.
     enabled: Boolean(
       activeLessonId &&
@@ -796,6 +798,8 @@ export function ReaderContent({ courseId }: { courseId: string }) {
       onCitationNavigate={handleCitationNavigate}
       gazeSource={gazeSource}
       calibrationRequired={calibrationRequired}
+      cameraPreviewStream={gazeStream}
+      showCameraPreview={showCameraPreview}
       showGazeDot={showGazeDot}
       gazeDot={gazeDot}
       displayGuard={displayGuard}

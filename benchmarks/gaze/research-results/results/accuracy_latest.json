@@ -1,0 +1,298 @@
+{
+  "generated_at": "2026-11-24T19:50:12+07:00",
+  "device": "cuda",
+  "precisions": [
+    "fp32",
+    "fp16"
+  ],
+  "data_dir": "testdata",
+  "data": {
+    "n_sessions": 1,
+    "n_targets": 100,
+    "n_frames": 800,
+    "screens": [
+      [
+        1920,
+        1080
+      ]
+    ],
+    "conditions": [
+      "frontal"
+    ],
+    "dry_run": false
+  },
+  "sessions": [
+    {
+      "session_id": "20261124_175802_frontal",
+      "condition": "frontal",
+      "created_at": "2026-11-24T18:01:45+07:00",
+      "n_targets": 100,
+      "n_frames": 800,
+      "screen_px": [
+        1920,
+        1080
+      ],
+      "pipeline_ok_pct": 100.0,
+      "dry_run": false
+    }
+  ],
+  "configs": [
+    {
+      "detector": "mediapipe",
+      "precision": "fp32",
+      "key": "mediapipe:fp32",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · fp32",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.7680931759337322
+      },
+      "px_per_deg": 49.37671117365625,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 38.61735226275323,
+          "l1_p95": 74.09962985385984,
+          "l2_median": 29.261673108076565,
+          "l2_mean": 29.705261486667727,
+          "l2_p95": 54.35786805736972,
+          "bias_dx": 0.028863610368882176,
+          "bias_dy": -0.2827012676677259,
+          "l2_pct_median": 1.5240454743789877,
+          "err_deg_median": 0.5926209423945681,
+          "ci_l2_median": [
+            24.96230009499798,
+            33.78595354016292
+          ],
+          "ci_l1_median": [
+            32.21370545889448,
+            43.049507243221115
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 29.261673108076565,
+              "l2_p95": 54.35786805736972,
+              "l1_median": 38.61735226275323
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "mediapipe",
+      "precision": "fp16",
+      "key": "mediapipe:fp16",
+      "device": "cuda",
+      "label": "MediaPipe FaceMesh · fp16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.7688709525992301
+      },
+      "px_per_deg": 49.373487767792064,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 38.36454273715748,
+          "l1_p95": 73.54952264911404,
+          "l2_median": 29.33705131302328,
+          "l2_mean": 29.722876240812155,
+          "l2_p95": 53.961303276893396,
+          "bias_dx": 0.02842027823722077,
+          "bias_dy": -0.27948190892066677,
+          "l2_pct_median": 1.5279714225532959,
+          "err_deg_median": 0.5941863262931325,
+          "ci_l2_median": [
+            24.829991208477157,
+            33.46100896435917
+          ],
+          "ci_l1_median": [
+            32.18055228324704,
+            42.476631256518374
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 29.33705131302328,
+              "l2_p95": 53.961303276893396,
+              "l1_median": 38.36454273715748
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp32",
+      "key": "face_alignment:fp32",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · fp32",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.8371919240476662
+      },
+      "px_per_deg": 48.630395012817246,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 36.49639225123435,
+          "l1_p95": 74.32762955025909,
+          "l2_median": 28.806435765587025,
+          "l2_mean": 30.14233769162372,
+          "l2_p95": 57.731804425631104,
+          "bias_dx": -0.0873164956524522,
+          "bias_dy": -0.36971582442930623,
+          "l2_pct_median": 1.500335196124324,
+          "err_deg_median": 0.5923545502353964,
+          "ci_l2_median": [
+            24.712345085560802,
+            32.99531548869561
+          ],
+          "ci_l1_median": [
+            31.36271752952691,
+            42.846336749084344
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 28.806435765587025,
+              "l2_p95": 57.731804425631104,
+              "l1_median": 36.49639225123435
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    },
+    {
+      "detector": "face_alignment",
+      "precision": "fp16",
+      "key": "face_alignment:fp16",
+      "device": "cuda",
+      "label": "FAN (face_alignment) · fp16",
+      "quality": {
+        "n_frames": 800,
+        "n_targets": 100,
+        "n_targets_usable": 100,
+        "detect_fail_pct": 0.0,
+        "gate_pct": 0.0,
+        "jitter_deg": 0.8374920230641101
+      },
+      "px_per_deg": 48.63135230334103,
+      "protocols": {
+        "within": {
+          "n": 100,
+          "l1_median": 36.365184465912535,
+          "l1_p95": 74.66214661512868,
+          "l2_median": 28.702100139119807,
+          "l2_mean": 30.112743404145345,
+          "l2_p95": 57.32202903110516,
+          "bias_dx": -0.08793048670123056,
+          "bias_dy": -0.3656031813462171,
+          "l2_pct_median": 1.49490104891249,
+          "err_deg_median": 0.5901974504037787,
+          "ci_l2_median": [
+            24.669593292808788,
+            32.757911839338306
+          ],
+          "ci_l1_median": [
+            31.224214941192933,
+            42.89699711922603
+          ],
+          "per_session": [
+            {
+              "session": "20261124_175802_frontal",
+              "n": 100,
+              "l2_median": 28.702100139119807,
+              "l2_p95": 57.32202903110516,
+              "l1_median": 36.365184465912535
+            }
+          ]
+        },
+        "cross_session": null
+      }
+    }
+  ],
+  "paired": [
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · fp32",
+      "b": "MediaPipe FaceMesh · fp16",
+      "n": 100,
+      "d_l2_median": -0.014903803032116691,
+      "ci": [
+        -0.09243687325383299,
+        0.05621652516470377
+      ],
+      "d_l1_median": -0.011111710253189244,
+      "d_bias_dx": 0.00044333213166140693,
+      "d_bias_dy": -0.0032193587470591466,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · fp32",
+      "b": "FAN (face_alignment) · fp32",
+      "n": 100,
+      "d_l2_median": -1.0793474670778487,
+      "ci": [
+        -4.302621500360812,
+        3.982411658909692
+      ],
+      "d_l1_median": 0.2198311745721213,
+      "d_bias_dx": 0.11618010602133438,
+      "d_bias_dy": 0.0870145567615802,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "MediaPipe FaceMesh · fp16",
+      "b": "FAN (face_alignment) · fp16",
+      "n": 100,
+      "d_l2_median": -0.6861251258629402,
+      "ci": [
+        -4.423958243940156,
+        3.7560955719678955
+      ],
+      "d_l1_median": 0.10981348364298071,
+      "d_bias_dx": 0.11635076493845134,
+      "d_bias_dy": 0.08612127242555076,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    },
+    {
+      "protocol": "within",
+      "a": "FAN (face_alignment) · fp32",
+      "b": "FAN (face_alignment) · fp16",
+      "n": 100,
+      "d_l2_median": -0.006976548694629159,
+      "ci": [
+        -0.08452136958704237,
+        0.0663349339434327
+      ],
+      "d_l1_median": -0.0002760755002100268,
+      "d_bias_dx": 0.0006139910487783595,
+      "d_bias_dy": -0.004112643083088727,
+      "verdict": "tương đương (|ΔL2| < 2 px)"
+    }
+  ],
+  "warnings": [
+    "Chỉ có 1 phiên: chưa chấm được `cross-session`, còn `within` lạc quan hơn thực tế (cùng phiên, cùng vị trí đầu)."
+  ]
+}

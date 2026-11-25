@@ -1,0 +1,277 @@
+{
+  "device": "cuda:0",
+  "precision": "fp16",
+  "model": "unigaze_b16_joint",
+  "gpu_name": "NVIDIA GeForce RTX 3060",
+  "runtime": "onnxruntime",
+  "max_rss_kib": 1054208,
+  "gpu_used_mib_after": 407.0,
+  "iterations": 200,
+  "warmup": 20,
+  "images": {
+    "480px": {
+      "width": 480,
+      "height": 320,
+      "jpeg_quality": 0.78,
+      "jpeg_bytes": 20387,
+      "jpeg_sha256": "9d444a43968768e14a3802594f50232cbc3e62c5e4162044ab330b3853237fc8",
+      "stages_ms": {
+        "decode": {
+          "count": 200,
+          "mean": 0.704,
+          "p50": 0.555,
+          "p95": 1.29,
+          "p99": 1.594,
+          "min": 0.433,
+          "max": 1.854
+        },
+        "landmark_detect": {
+          "count": 200,
+          "mean": 12.372,
+          "p50": 10.814,
+          "p95": 21.803,
+          "p99": 25.301,
+          "min": 7.532,
+          "max": 27.116
+        },
+        "warp_preprocess": {
+          "count": 200,
+          "mean": 1.111,
+          "p50": 1.022,
+          "p95": 1.995,
+          "p99": 2.417,
+          "min": 0.621,
+          "max": 2.492
+        },
+        "tensor_prep": {
+          "count": 200,
+          "mean": 0.002,
+          "p50": 0.002,
+          "p95": 0.004,
+          "p99": 0.005,
+          "min": 0.001,
+          "max": 0.005
+        },
+        "unigaze_forward": {
+          "count": 200,
+          "mean": 3.445,
+          "p50": 3.382,
+          "p95": 3.836,
+          "p99": 3.954,
+          "min": 3.246,
+          "max": 4.136
+        },
+        "denormalize": {
+          "count": 200,
+          "mean": 0.074,
+          "p50": 0.06,
+          "p95": 0.137,
+          "p99": 0.174,
+          "min": 0.043,
+          "max": 0.183
+        },
+        "calibration": {
+          "count": 200,
+          "mean": 0.012,
+          "p50": 0.01,
+          "p95": 0.021,
+          "p99": 0.028,
+          "min": 0.007,
+          "max": 0.028
+        },
+        "smoothing": {
+          "count": 200,
+          "mean": 0.027,
+          "p50": 0.021,
+          "p95": 0.05,
+          "p99": 0.061,
+          "min": 0.006,
+          "max": 0.066
+        },
+        "total": {
+          "count": 200,
+          "mean": 17.751,
+          "p50": 16.187,
+          "p95": 28.593,
+          "p99": 32.44,
+          "min": 11.958,
+          "max": 34.365
+        }
+      },
+      "last_prediction": {
+        "pitch": -0.139244372722761,
+        "yaw": -0.03899841508498489
+      },
+      "batch": {
+        "1": {
+          "batch": 1,
+          "p50_ms": 3.127,
+          "p95_ms": 3.173,
+          "per_item_ms": 3.127,
+          "fps": 319.8,
+          "max_delta_rad": 0.0,
+          "gpu_used_mib": 407.0
+        },
+        "2": {
+          "batch": 2,
+          "p50_ms": 6.039,
+          "p95_ms": 6.073,
+          "per_item_ms": 3.019,
+          "fps": 331.2,
+          "max_delta_rad": 0.0003427646800088548,
+          "gpu_used_mib": 407.0
+        },
+        "4": {
+          "batch": 4,
+          "p50_ms": 9.95,
+          "p95_ms": 9.972,
+          "per_item_ms": 2.487,
+          "fps": 402.0,
+          "max_delta_rad": 0.0002199432965720034,
+          "gpu_used_mib": 407.0
+        },
+        "8": {
+          "batch": 8,
+          "p50_ms": 15.981,
+          "p95_ms": 16.036,
+          "per_item_ms": 1.998,
+          "fps": 500.6,
+          "max_delta_rad": 0.0003570647913013789,
+          "gpu_used_mib": 407.0
+        }
+      }
+    },
+    "720px": {
+      "width": 720,
+      "height": 480,
+      "jpeg_quality": 0.78,
+      "jpeg_bytes": 40372,
+      "jpeg_sha256": "1266dff4505b6127eb88d0018d00cc779d16ea3ff95c4f1b5c3d311b836d78a1",
+      "stages_ms": {
+        "decode": {
+          "count": 200,
+          "mean": 1.365,
+          "p50": 1.208,
+          "p95": 2.279,
+          "p99": 3.125,
+          "min": 0.871,
+          "max": 3.228
+        },
+        "landmark_detect": {
+          "count": 200,
+          "mean": 12.453,
+          "p50": 11.515,
+          "p95": 20.367,
+          "p99": 23.163,
+          "min": 7.598,
+          "max": 25.513
+        },
+        "warp_preprocess": {
+          "count": 200,
+          "mean": 1.186,
+          "p50": 1.096,
+          "p95": 1.917,
+          "p99": 2.169,
+          "min": 0.657,
+          "max": 2.235
+        },
+        "tensor_prep": {
+          "count": 200,
+          "mean": 0.002,
+          "p50": 0.002,
+          "p95": 0.004,
+          "p99": 0.005,
+          "min": 0.001,
+          "max": 0.012
+        },
+        "unigaze_forward": {
+          "count": 200,
+          "mean": 3.384,
+          "p50": 3.351,
+          "p95": 3.749,
+          "p99": 3.858,
+          "min": 3.058,
+          "max": 3.926
+        },
+        "denormalize": {
+          "count": 200,
+          "mean": 0.074,
+          "p50": 0.065,
+          "p95": 0.131,
+          "p99": 0.158,
+          "min": 0.043,
+          "max": 0.222
+        },
+        "calibration": {
+          "count": 200,
+          "mean": 0.012,
+          "p50": 0.01,
+          "p95": 0.021,
+          "p99": 0.025,
+          "min": 0.006,
+          "max": 0.026
+        },
+        "smoothing": {
+          "count": 200,
+          "mean": 0.027,
+          "p50": 0.024,
+          "p95": 0.046,
+          "p99": 0.062,
+          "min": 0.013,
+          "max": 0.077
+        },
+        "total": {
+          "count": 200,
+          "mean": 18.508,
+          "p50": 17.536,
+          "p95": 28.05,
+          "p99": 31.287,
+          "min": 12.304,
+          "max": 33.712
+        }
+      },
+      "last_prediction": {
+        "pitch": -0.12513035767128275,
+        "yaw": -0.04016055834694343
+      },
+      "batch": {
+        "1": {
+          "batch": 1,
+          "p50_ms": 3.121,
+          "p95_ms": 3.144,
+          "per_item_ms": 3.121,
+          "fps": 320.4,
+          "max_delta_rad": 0.0,
+          "gpu_used_mib": 407.0
+        },
+        "2": {
+          "batch": 2,
+          "p50_ms": 6.06,
+          "p95_ms": 6.1,
+          "per_item_ms": 3.03,
+          "fps": 330.0,
+          "max_delta_rad": 3.0517388815148365e-05,
+          "gpu_used_mib": 407.0
+        },
+        "4": {
+          "batch": 4,
+          "p50_ms": 9.952,
+          "p95_ms": 10.006,
+          "per_item_ms": 2.488,
+          "fps": 401.9,
+          "max_delta_rad": 0.0,
+          "gpu_used_mib": 407.0
+        },
+        "8": {
+          "batch": 8,
+          "p50_ms": 16.001,
+          "p95_ms": 16.076,
+          "per_item_ms": 2.0,
+          "fps": 500.0,
+          "max_delta_rad": 3.0517388815148365e-05,
+          "gpu_used_mib": 407.0
+        }
+      }
+    }
+  }
+}

@@ -29,6 +29,32 @@ trước/sau khi tối ưu.
 | redis | `127.0.0.1:6380` |
 | gaze | không publish; chạy script qua `docker compose exec` |
 
+## Gaze: đo riêng và dữ liệu độ chính xác
+
+`benchmarks/gaze/` chứa toàn bộ công cụ đo gaze:
+
+| File | Dùng để |
+|---|---|
+| `gaze/standalone.sh` | Đo stage latency + WS load + accuracy trên MỘT container gaze, không cần cả stack bench |
+| `gaze/run.sh` | Nhóm gaze trong `run_all.sh` (stage latency, capture A/B, WS load) |
+| `gaze/stage_latency.py`, `gaze/ws_load.py` | Harness stage latency và tải WebSocket |
+| `gaze/tools/eval_offline.py` | Độ chính xác offline (L1/L2 px, split/repeat/k-fold, `--parity`) |
+| `gaze/tools/compare_capture.py`, `gaze/tools/compare_precision.py` | A/B độ phân giải/JPEG, so fp32 vs fp16 |
+| `gaze/tools/bench.py` | Benchmark HTTP + WS nhanh |
+
+- `gaze/tools/` được mount vào `/bench/gaze/tools/` và chạy bằng image gaze; mỗi
+  script tự thêm `/app` vào `sys.path` nên không cần `PYTHONPATH`.
+- Ảnh mặt dùng cho đo độ chính xác nằm ở `gaze/testdata/` — **gitignored** (dữ
+  liệu khuôn mặt thật). `standalone.sh` tự dùng thư mục này nếu có.
+- Kết quả nghiên cứu gốc (JSON thô theo cấu hình) ở `gaze/research-results/`;
+  báo cáo tương ứng ở `docs/gaze/`.
+
+```bash
+# Đo đầy đủ một image, ghi vào benchmarks/baseline/<run-id>/
+GAZE_BENCH_CPUS=2 benchmarks/gaze/standalone.sh eyelearning-gaze:local \
+  benchmarks/baseline/post-landmarker-onnx full
+```
+
 ## Lệnh nhanh
 
 ```bash

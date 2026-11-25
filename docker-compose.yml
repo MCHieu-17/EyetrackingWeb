@@ -91,7 +91,9 @@ x-backend-env: &backend-env
 
 # ============================================================
 # Stack LOCAL — build toàn bộ image từ source trên máy.
-# Không dùng GHCR, không pull_policy, không Cloudflare/Portainer.
+# Không dùng GHCR, không pull_policy, không Portainer.
+# Cloudflare Tunnel là tuỳ chọn: điền TUNNEL_TOKEN trong .env thì service
+# `cloudflared` tự chạy cùng stack, không phải mở tunnel bằng tay.
 #
 #   docker compose up -d --build    # build + chạy toàn bộ stack
 #   docker compose up -d            # chạy lại (image đã build)
@@ -509,6 +511,27 @@ services:
 
   # Gaze cần GPU (NVIDIA driver + nvidia-container-toolkit trên host).
   # Không có GPU: đặt DEVICE=cpu và bỏ `gpus: all` — chạy được nhưng rất chậm.
+  # Export UniGaze safetensors -> ONNX vào volume gaze-weights. Chạy một lần rồi
+  # Exited (0) như `migrate`; idempotent (manifest khớp sha256 thì bỏ qua). Torch
+  # chỉ có ở image này, không có trong image runtime của `gaze`.
+  gaze-export:
+    build:
+      context: ./services/gaze
+      dockerfile: Dockerfile
+      target: export
+    image: eyelearning-gaze-export:local
+    restart: "no"
+    logging: *default-logging
+    environment:
+      - DEVICE=${DEVICE:?Đặt DEVICE=cpu|cuda trong .env}
+      - UNIGAZE_MODEL=${UNIGAZE_MODEL:?Đặt UNIGAZE_MODEL=unigaze_b16_joint trong .env}
+      - OMP_NUM_THREADS=2
+      - HF_HUB_OFFLINE=${GAZE_EXPORT_HF_HUB_OFFLINE:-0}
+    volumes:
+      - gaze-weights:/app/weights
+    mem_limit: 4g
+    cpus: 2.0
+
   gaze:
     build:
       context: ./services/gaze
@@ -517,6 +540,9 @@ services:
     image: eyelearning-gaze:local
     restart: unless-stopped
     logging: *default-logging
+    depends_on:
+      gaze-export:
+        condition: service_completed_successfully
     # Mặc định 1 replica/GPU + batch nội bộ. Chạy nhiều replica chỉ khi mỗi
     # replica có GPU riêng; nginx dùng cookie gaze_affinity để sticky session.
     deploy:
@@ -540,13 +566,14 @@ services:
       - MKL_NUM_THREADS=${GAZE_OMP_NUM_THREADS:-1}
       - OPENBLAS_NUM_THREADS=${GAZE_OMP_NUM_THREADS:-1}
       - NUMEXPR_NUM_THREADS=${GAZE_OMP_NUM_THREADS:-1}
-      - HF_HUB_OFFLINE=1
       # fp16 mặc định cho model đã qua A/B; đặt fp32 để fallback.
       - INFERENCE_PRECISION=${INFERENCE_PRECISION:-fp16}
       - MAX_QUEUE=${GAZE_MAX_QUEUE:-8}
       # Queue GPU đủ sâu để gom batch xuyên session; batch 8 cần queue >= 8.
       - GPU_QUEUE=${GAZE_GPU_QUEUE:-12}
       - GPU_BATCH=${GAZE_GPU_BATCH:-8}
+      # Số thread CPU stage (decode + landmarker ONNX); mỗi thread ~1 core.
+      - CPU_WORKERS=${GAZE_CPU_WORKERS:-2}
       - FRAME_MAX_AGE_MS=${GAZE_FRAME_MAX_AGE_MS:-200}
       - INFERENCE_TIMEOUT_S=${GAZE_INFERENCE_TIMEOUT_S:-5}
       - MAX_FRAME_BYTES=${GAZE_MAX_FRAME_BYTES:-1048576}
@@ -563,7 +590,7 @@ services:
     gpus: all
     # Healthcheck gọi /ready của gaze (503 khi pipeline chưa load xong; python có
     # sẵn trong image, không dùng curl). start_period dài vì entrypoint tải
-    # weights + load mediapipe/unigaze lúc khởi động (có thể > 3 phút).
+    # weights + load landmarker/unigaze ONNX lúc khởi động (có thể > 3 phút).
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/ready').status==200 else 1)\""]
       interval: 30s
@@ -571,6 +598,8 @@ services:
       retries: 5
       start_period: 180s
     mem_limit: 3g
+    # 2 thread CPU stage (decode + landmarker ONNX ~4 ms) + GPU thread + event loop:
+    # 8 phiên @15 FPS đạt 0% drop với 2 core (benchmarks/baseline/post-landmarker-onnx).
     cpus: 2.0
 
   # Test hộp đen chatbot: image có dev deps, mount tests từ host.
@@ -695,6 +724,28 @@ services:
       nofile:
         soft: 65536
         hard: 65536
+
+  # Cloudflare Tunnel connector (tuỳ chọn). Chỉ hoạt động khi .env có
+  # TUNNEL_TOKEN; thiếu token thì container lỗi và được restart lại, web vẫn
+  # chạy bình thường.
+  # Dùng host network để giữ nguyên origin http://localhost:3000 (cổng nginx
+  # publish trên host) — không phải sửa Public Hostname trong Zero Trust.
+  # Metrics pin về loopback: mặc định cloudflared bind 0.0.0.0:20241-20245
+  # (kèm /debug/pprof), với host network sẽ lộ ra LAN nếu để mặc định.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.0
+    container_name: eyetracking-cloudflared
+    network_mode: host
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      nginx:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
 
 volumes:
   pgdata:

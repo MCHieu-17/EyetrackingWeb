@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
 import type { TeacherCourse } from "@/lib/types/domain";
 
-export type CourseFlag = "showGazeDot" | "requireCalibration";
+export type CourseFlag = "showGazeDot" | "showCameraPreview" | "requireCalibration";
 
 /**
  * Optimistic update một cờ cấp khóa trong danh sách khóa học.

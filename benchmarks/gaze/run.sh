@@ -35,7 +35,7 @@ if [ -n "${BENCH_GAZE_CALIBRATION:-}" ]; then
   calib_args=(--calibration "$BENCH_GAZE_CALIBRATION")
 fi
 log "Gaze capture A/B (480/q0.78 vs 320/q0.7, 480/q0.7)"
-compose exec -T --user root gaze python -m scripts.compare_capture \
+compose exec -T --user root gaze python /bench/gaze/tools/compare_capture.py \
   --dir /fixtures \
   --baseline 480:0.78 --variants 320:0.7,480:0.7 \
   "${calib_args[@]}" \

@@ -1,6 +1,6 @@
 """Cấu hình dùng chung cho gaze service.
 
-Gom mọi biến môi trường về một chỗ. Module này KHÔNG import torch/mediapipe/opencv
+Gom mọi biến môi trường về một chỗ. Module này KHÔNG import onnxruntime/opencv
 để script nhẹ (download_weights, test) cũng dùng được.
 
 `Settings.from_env()` chỉ đọc env; `Settings.validate()` mới fail-fast. Nhờ vậy
@@ -73,6 +73,7 @@ class Settings:
     max_queue: int = 8
     gpu_queue: int = 12
     gpu_batch: int = 8
+    cpu_workers: int = 2
     frame_max_age_ms: int = 200
     inference_timeout_s: float = 5.0
 
@@ -98,6 +99,7 @@ class Settings:
             max_queue=_env_int("MAX_QUEUE", 8),
             gpu_queue=_env_int("GPU_QUEUE", 12),
             gpu_batch=_env_int("GPU_BATCH", 8),
+            cpu_workers=_env_int("CPU_WORKERS", 2),
             frame_max_age_ms=_env_int("FRAME_MAX_AGE_MS", 200),
             inference_timeout_s=_env_float("INFERENCE_TIMEOUT_S", 5.0),
             oneeuro_beta=_env_float("ONEEURO_BETA", 0.5),
@@ -118,8 +120,18 @@ class Settings:
     def unigaze_weights_path(self) -> Path:
         return self.weights_dir / f"{self.unigaze_model}.safetensors"
 
-    def mediapipe_weights_path(self) -> Path:
-        return self.weights_dir / "mediapipe.tflite"
+    def unigaze_onnx_path(self) -> Path:
+        return self.weights_dir / f"{self.unigaze_model}.{self.precision}.onnx"
+
+    def face_landmarker_path(self) -> Path:
+        """File `.task` nguồn; chỉ service gaze-export đọc để convert sang ONNX."""
+        return self.weights_dir / "face_landmarker.task"
+
+    def face_detector_onnx_path(self) -> Path:
+        return self.weights_dir / "face_detector.onnx"
+
+    def face_landmarks_onnx_path(self) -> Path:
+        return self.weights_dir / "face_landmarks.onnx"
 
     # ---- Validate ----
 
@@ -168,6 +180,8 @@ class Settings:
             raise RuntimeError("GPU_QUEUE phải nằm trong khoảng 1..64")
         if not 1 <= self.gpu_batch <= 16:
             raise RuntimeError("GPU_BATCH phải nằm trong khoảng 1..16")
+        if not 1 <= self.cpu_workers <= 8:
+            raise RuntimeError("CPU_WORKERS phải nằm trong khoảng 1..8")
         if self.frame_max_age_ms < 1:
             raise RuntimeError("FRAME_MAX_AGE_MS phải >= 1")
         if self.inference_timeout_s <= 0:

@@ -48,14 +48,15 @@ nếu vẫn không được, phải nhờ admin mở 7844 hoặc dùng phương 
 
 ## 2. Build image
 
-Workflow `.github/workflows/release.yml` build 7 image:
+Workflow `.github/workflows/release.yml` build 8 image:
 
 | Image | Dockerfile | Target |
 |---|---|---|
 | `eyelearning-backend` | `backend/Dockerfile` | `api` |
 | `eyelearning-content-worker` | `backend/Dockerfile` | `content-worker` |
 | `eyelearning-chatbot` | `services/chatbot/Dockerfile` | mặc định |
-| `eyelearning-gaze` | `services/gaze/Dockerfile` | mặc định |
+| `eyelearning-gaze` | `services/gaze/Dockerfile` | `runtime` |
+| `eyelearning-gaze-export` | `services/gaze/Dockerfile` | `export` (chạy một lần: export UniGaze → ONNX vào volume `gaze-weights`) |
 | `eyelearning-frontend` | `frontend/Dockerfile` | mặc định |
 | `eyelearning-nginx` | `nginx/Dockerfile` | mặc định |
 | `eyelearning-migrations` | `db/Dockerfile` | mặc định |

@@ -1,0 +1,78 @@
+                                                                                                                                                                           QUERY PLAN                                                                                                                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=28.19..28.23 rows=2 width=197) (actual time=0.128..0.130 rows=20 loops=1)
+   Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, ls.tracking_consent, ls.id, ls.enrollment_id, l.id, l.title, s.id, s.title, s.page_number
+   Buffers: shared hit=233
+   ->  Incremental Sort  (cost=28.19..28.23 rows=2 width=197) (actual time=0.127..0.129 rows=20 loops=1)
+         Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, ls.tracking_consent, ls.id, ls.enrollment_id, l.id, l.title, s.id, s.title, s.page_number
+         Sort Key: gs.event_time, gs.id
+         Presorted Key: gs.event_time
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 30kB  Peak Memory: 30kB
+         Buffers: shared hit=233
+         ->  Nested Loop Left Join  (cost=1.35..28.18 rows=1 width=197) (actual time=0.033..0.099 rows=20 loops=1)
+               Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, ls.tracking_consent, ls.id, ls.enrollment_id, l.id, l.title, s.id, s.title, s.page_number
+               Inner Unique: true
+               Buffers: shared hit=224
+               ->  Nested Loop  (cost=1.08..25.67 rows=1 width=172) (actual time=0.027..0.079 rows=20 loops=1)
+                     Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, cv.slide_id, ls.tracking_consent, ls.id, ls.enrollment_id, l.id, l.title
+                     Inner Unique: true
+                     Buffers: shared hit=164
+                     ->  Nested Loop  (cost=0.94..25.31 rows=1 width=162) (actual time=0.023..0.062 rows=20 loops=1)
+                           Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, cv.slide_id, ls.tracking_consent, ls.id, ls.enrollment_id, ls.lesson_id
+                           Inner Unique: true
+                           Buffers: shared hit=124
+                           ->  Nested Loop  (cost=0.68..22.72 rows=1 width=129) (actual time=0.018..0.043 rows=20 loops=1)
+                                 Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, cv.id, cv.sequence_no, cv.session_id, cv.slide_id
+                                 Buffers: shared hit=64
+                                 ->  Index Scan using idx_gaze_samples_view_time on public.gaze_samples gs  (cost=0.41..20.22 rows=1 width=93) (actual time=0.011..0.015 rows=20 loops=1)
+                                       Output: gs.id, gs.event_time, gs.sequence, gs.client_batch_id, gs.viewport_x, gs.viewport_y, gs.slide_x, gs.slide_y, gs.aoi_label, gs.status, gs.quality_flags, gs.content_view_id
+                                       Index Cond: (gs.content_view_id = '1232cd6e-806e-5989-a36e-c6f692b0774a'::uuid)
+                                       Buffers: shared hit=4
+                                 ->  Index Scan using content_views_pkey on public.content_views cv  (cost=0.27..2.49 rows=1 width=52) (actual time=0.001..0.001 rows=1 loops=20)
+                                       Output: cv.id, cv.sequence_no, cv.session_id, cv.slide_id
+                                       Index Cond: (cv.id = '1232cd6e-806e-5989-a36e-c6f692b0774a'::uuid)
+                                       Buffers: shared hit=60
+                           ->  Index Scan using learning_sessions_pkey on public.learning_sessions ls  (cost=0.27..2.48 rows=1 width=49) (actual time=0.001..0.001 rows=1 loops=20)
+                                 Output: ls.id, ls.enrollment_id, ls.lesson_id, ls.course_visit_id, ls.quiz_attempt_id, ls.calibration_id, ls.pipeline_version, ls.viewport_width_px, ls.viewport_height_px, ls.calibration_width_px, ls.calibration_height_px, ls.device_pixel_ratio, ls.tracking_consent, ls.status, ls.started_at, ls.ended_at, ls.expires_at
+                                 Index Cond: (ls.id = cv.session_id)
+                                 Buffers: shared hit=60
+                     ->  Index Scan using lessons_pkey on public.lessons l  (cost=0.14..0.35 rows=1 width=26) (actual time=0.000..0.000 rows=1 loops=20)
+                           Output: l.id, l.module_id, l.title, l.kind, l."position", l.pdf_asset_id, l.quiz_config, l.created_at, l.updated_at
+                           Index Cond: (l.id = ls.lesson_id)
+                           Buffers: shared hit=40
+               ->  Index Scan using slides_pkey on public.slides s  (cost=0.27..2.49 rows=1 width=41) (actual time=0.001..0.001 rows=1 loops=20)
+                     Output: s.id, s.title, s.page_number
+                     Index Cond: (s.id = cv.slide_id)
+                     Buffers: shared hit=60
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: -6326064560009096017
+ Planning:
+   Buffers: shared hit=707
+ Planning Time: 1.371 ms
+ Execution Time: 0.197 ms
+(50 rows)
+
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=20.24..20.29 rows=2 width=16) (actual time=0.010..0.012 rows=20 loops=1)
+   Output: id, event_time
+   Buffers: shared hit=4
+   ->  Incremental Sort  (cost=20.24..20.29 rows=2 width=16) (actual time=0.010..0.011 rows=20 loops=1)
+         Output: id, event_time
+         Sort Key: gs.event_time, gs.id
+         Presorted Key: gs.event_time
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+         Buffers: shared hit=4
+         ->  Index Scan using idx_gaze_samples_view_time on public.gaze_samples gs  (cost=0.41..20.23 rows=1 width=16) (actual time=0.004..0.007 rows=20 loops=1)
+               Output: id, event_time
+               Index Cond: ((gs.content_view_id = '1232cd6e-806e-5989-a36e-c6f692b0774a'::uuid) AND (gs.event_time >= '1970-01-01 00:00:00+00'::timestamp with time zone))
+               Filter: (ROW(gs.event_time, gs.id) > ROW('1970-01-01 00:00:00+00'::timestamp with time zone, 0))
+               Buffers: shared hit=4
+ Settings: effective_cache_size = '3GB', work_mem = '16MB', random_page_cost = '1.1', max_parallel_workers = '4'
+ Query Identifier: 5046022111732289167
+ Planning:
+   Buffers: shared hit=9
+ Planning Time: 0.057 ms
+ Execution Time: 0.025 ms
+(20 rows)
+

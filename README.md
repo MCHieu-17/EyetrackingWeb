@@ -36,7 +36,7 @@ embedding-worker → background_jobs(index_slides)
 |---|---|
 | `frontend/` | Next.js App Router: giao diện học viên, giáo viên, admin |
 | `backend/` | FastAPI API, worker phân tích, content-worker, embedding-worker |
-| `services/gaze/` | MediaPipe + UniGaze + WebSocket calibration (mặc định cần GPU) |
+| `services/gaze/` | FaceLandmarker ONNX + UniGaze ONNX + WebSocket calibration (mặc định cần GPU); báo cáo nghiên cứu ở [`docs/gaze/`](docs/gaze/README.md) |
 | `services/chatbot/` | RAG: ingest slide, hybrid retrieval, gọi LLM/VLM qua endpoint OpenAI-compatible |
 | `db/` | Baseline PostgreSQL generation 13, 24 bảng lõi |
 | `nginx/` | Reverse proxy local |
@@ -279,7 +279,7 @@ Lần đầu, Compose sẽ:
 2. Khởi động PostgreSQL + Redis.
 3. Chạy service một lần `migrate` để áp baseline generation 12 + nâng cấp generation 13.
 4. Khởi động backend, các worker, chatbot, gaze, frontend và nginx.
-5. Gaze tải MediaPipe/UniGaze weights; chatbot tải Qwen3-Embedding weights vào
+5. `gaze-export` tải UniGaze safetensors và export ONNX (chạy một lần); gaze-export cũng convert FaceLandmarker sang ONNX; chatbot tải Qwen3-Embedding weights vào
    volume. Bước này có thể mất vài phút.
 
 ### 4.2 Theo dõi trạng thái
@@ -449,7 +449,7 @@ Học viên cần được giáo viên ghi danh vào khóa trước khi thấy k
 
 Stack production dùng image build sẵn, không build trên server:
 
-- GitHub Actions build 7 image → GHCR.
+- GitHub Actions build 8 image (thêm `gaze-export`) → GHCR.
 - Portainer chỉ pull image và chạy `deploy/portainer/docker-compose.yml`.
 - `cloudflared` nằm trong stack, nhận traffic Cloudflare Tunnel và trỏ tới
   `http://nginx:80`.

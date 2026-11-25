@@ -145,5 +145,6 @@ async def get_published_outline(
         title=course.title,
         modules=modules,
         show_gaze_dot=course.show_gaze_dot,
+        show_camera_preview=course.show_camera_preview,
         require_calibration=course.require_calibration,
     )

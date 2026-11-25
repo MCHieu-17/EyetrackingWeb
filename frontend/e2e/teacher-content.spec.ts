@@ -51,6 +51,18 @@ test("teacher tạo khóa, thêm chương/bài và thấy checklist xuất bản
     page.getByText("Đã tắt bắt buộc hiệu chỉnh."),
   ).toBeVisible();
 
+  const cameraToggle = page.getByRole("switch", {
+    name: "Hiển thị khung camera cho sinh viên trong cả khóa học",
+  });
+  await expect(cameraToggle).toBeVisible();
+  await expect(cameraToggle).not.toBeChecked();
+  await cameraToggle.click();
+  await expect(
+    page.getByText("Đã bật khung camera cho sinh viên."),
+  ).toBeVisible();
+  await cameraToggle.click();
+  await expect(page.getByText("Đã tắt khung camera.")).toBeVisible();
+
   await page.getByRole("link", { name: "Học viên" }).click();
   await page.getByRole("button", { name: /Thêm học viên/ }).first().click();
   await expect(

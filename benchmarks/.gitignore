@@ -1,3 +1,7 @@
+# Ảnh khuôn mặt thật dùng cho benchmark độ chính xác gaze: giữ trên máy, không
+# commit. Thu lại bằng tools/collect.py của repo EyetrackingResearch (xem README).
+gaze/testdata/
+
 # Token và cookie benchmark không được commit.
 baseline/**/.runtime/
 baseline/**/*.cookies

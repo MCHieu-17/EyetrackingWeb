@@ -397,11 +397,30 @@ services:
     cpus: 4.0
 
   # Gaze cần NVIDIA GPU. Host phải có driver + nvidia-container-toolkit.
+  # Export UniGaze -> ONNX vào volume gaze-weights; chạy một lần rồi Exited (0).
+  gaze-export:
+    image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-gaze-export:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: "no"
+    logging: *default-logging
+    environment:
+      DEVICE: ${DEVICE:?Đặt DEVICE=cpu|cuda trong stack.env}
+      UNIGAZE_MODEL: ${UNIGAZE_MODEL:?Đặt UNIGAZE_MODEL=unigaze_b16_joint trong stack.env}
+      OMP_NUM_THREADS: "2"
+      HF_HUB_OFFLINE: ${GAZE_EXPORT_HF_HUB_OFFLINE:-0}
+    volumes:
+      - gaze-weights:/app/weights
+    mem_limit: 4g
+    cpus: 2.0
+
   gaze:
     image: ${IMAGE_PREFIX:-ghcr.io/mchieu-17}/eyelearning-gaze:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
     logging: *default-logging
+    depends_on:
+      gaze-export:
+        condition: service_completed_successfully
     environment:
       # Quyết định model local: bắt buộc đặt trong stack.env, không dùng default.
       DEVICE: ${DEVICE:?Đặt DEVICE=cpu|cuda trong stack.env}
@@ -417,11 +436,11 @@ services:
       MKL_NUM_THREADS: ${GAZE_OMP_NUM_THREADS:-1}
       OPENBLAS_NUM_THREADS: ${GAZE_OMP_NUM_THREADS:-1}
       NUMEXPR_NUM_THREADS: ${GAZE_OMP_NUM_THREADS:-1}
-      HF_HUB_OFFLINE: "1"
       INFERENCE_PRECISION: ${INFERENCE_PRECISION:-fp16}
       MAX_QUEUE: ${GAZE_MAX_QUEUE:-8}
       GPU_QUEUE: ${GAZE_GPU_QUEUE:-12}
       GPU_BATCH: ${GAZE_GPU_BATCH:-8}
+      CPU_WORKERS: ${GAZE_CPU_WORKERS:-2}
       FRAME_MAX_AGE_MS: ${GAZE_FRAME_MAX_AGE_MS:-200}
       INFERENCE_TIMEOUT_S: ${GAZE_INFERENCE_TIMEOUT_S:-5}
       MAX_FRAME_BYTES: ${GAZE_MAX_FRAME_BYTES:-1048576}

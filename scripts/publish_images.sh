@@ -11,7 +11,7 @@
 #   IMAGE_PREFIX   mặc định ghcr.io/mchieu-17
 #   IMAGE_TAG      mặc định latest
 #   PLATFORM       mặc định linux/amd64
-#   SKIP_GAZE=1    bỏ qua image gaze (10 GB) khi chỉ cần backend/frontend
+#   SKIP_GAZE=1    bỏ qua image gaze + gaze-export khi chỉ cần backend/frontend
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -59,7 +59,8 @@ build_push chatbot ./services/chatbot ./services/chatbot/Dockerfile
 if [[ "$SKIP_GAZE" == "1" ]]; then
     log "bỏ qua gaze (SKIP_GAZE=1)"
 else
-    build_push gaze ./services/gaze ./services/gaze/Dockerfile
+    build_push gaze ./services/gaze ./services/gaze/Dockerfile runtime
+    build_push gaze-export ./services/gaze ./services/gaze/Dockerfile export
 fi
 build_push frontend ./frontend ./frontend/Dockerfile
 build_push nginx ./nginx ./nginx/Dockerfile

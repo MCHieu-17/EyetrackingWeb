@@ -11,7 +11,7 @@ Thiết kế:
   không lệch thứ tự response.
 - Frame cũ hơn `FRAME_MAX_AGE_MS` bị bỏ thay vì inference, giữ p95 bounded.
 - Queue đầy -> `InferenceOverloaded` ngay, không xếp hàng vô hạn.
-- Mọi truy cập model/MediaPipe nằm trong đúng thread của nó (không thread-safe).
+- Mọi truy cập model/ONNX session nằm trong đúng thread của nó (không thread-safe).
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ class InferenceRuntime:
 
         self._cpu_factory = cpu_stage_factory
         self._gpu_factory = gpu_stage_factory
-        self._cpu_stage = None
+        self._cpu_stages: list = []
         self._gpu_stage = None
 
         self._cpu_q: queue.Queue = queue.Queue(maxsize=settings.max_queue)
@@ -233,7 +233,7 @@ class InferenceRuntime:
         self._gpu_batch = settings.gpu_batch
         self._stop = threading.Event()
         self._ready = threading.Event()
-        self._cpu_thread: threading.Thread | None = None
+        self._cpu_threads: list[threading.Thread] = []
         self._gpu_thread: threading.Thread | None = None
 
     # ---- Vòng đời ----
@@ -250,7 +250,11 @@ class InferenceRuntime:
         gpu_factory = self._gpu_factory or (
             lambda: _make_gpu_stage(self.settings)
         )
-        self._cpu_stage = cpu_factory()
+        # Mỗi worker có stage riêng: session ONNX landmarker không dùng chung giữa
+        # các thread.
+        self._cpu_stages = [
+            cpu_factory() for _ in range(self.settings.cpu_workers)
+        ]
         self._gpu_stage = gpu_factory()
 
         self.device = str(getattr(self._gpu_stage, "device", self.settings.device))
@@ -263,16 +267,24 @@ class InferenceRuntime:
         self.gpu_name = getattr(self._gpu_stage, "gpu_name", None)
         self.gpu_available = bool(getattr(self._gpu_stage, "is_cuda", False))
 
-        _call_optional(self._cpu_stage, "warmup")
+        for stage in self._cpu_stages:
+            _call_optional(stage, "warmup")
         _call_optional(self._gpu_stage, "warmup")
 
-        self._cpu_thread = threading.Thread(
-            target=self._cpu_main, name="gaze-cpu", daemon=True
-        )
+        self._cpu_threads = [
+            threading.Thread(
+                target=self._cpu_main,
+                args=(stage,),
+                name=f"gaze-cpu-{index}",
+                daemon=True,
+            )
+            for index, stage in enumerate(self._cpu_stages)
+        ]
         self._gpu_thread = threading.Thread(
             target=self._gpu_main, name="gaze-gpu", daemon=True
         )
-        self._cpu_thread.start()
+        for thread in self._cpu_threads:
+            thread.start()
         self._gpu_thread.start()
         self._ready.set()
         logger.info(
@@ -287,12 +299,16 @@ class InferenceRuntime:
         if not self._ready.is_set():
             return
         self._stop.set()
-        for q in (self._cpu_q, self._gpu_q):
+        for _ in self._cpu_threads:
             try:
-                q.put_nowait(None)
+                self._cpu_q.put_nowait(None)
             except queue.Full:
                 pass
-        for thread in (self._cpu_thread, self._gpu_thread):
+        try:
+            self._gpu_q.put_nowait(None)
+        except queue.Full:
+            pass
+        for thread in (*self._cpu_threads, self._gpu_thread):
             if thread is not None:
                 thread.join(timeout=2.0)
         self._ready.clear()
@@ -361,7 +377,7 @@ class InferenceRuntime:
 
     # ---- Thread loops ----
 
-    def _cpu_main(self) -> None:
+    def _cpu_main(self, stage) -> None:
         while not self._stop.is_set():
             try:
                 job = self._cpu_q.get(timeout=0.2)
@@ -369,9 +385,9 @@ class InferenceRuntime:
                 continue
             if job is None:
                 break
-            self._process_cpu(job)
+            self._process_cpu(job, stage)
 
-    def _process_cpu(self, job: FrameJob) -> None:
+    def _process_cpu(self, job: FrameJob, stage) -> None:
         if job.cancelled:
             return
         if self._is_stale(job):
@@ -380,7 +396,7 @@ class InferenceRuntime:
 
         started = time.perf_counter()
         try:
-            prepared = self._cpu_stage.prepare(job.jpeg)
+            prepared = stage.prepare(job.jpeg)
         except InvalidImage:
             self._finish_drop(job, "invalid_image")
             return
@@ -507,7 +523,7 @@ class InferenceRuntime:
     def _apply_thread_caps() -> None:
         """Cap thread trước khi load model.
 
-        Container bị giới hạn CPU (vd 2 core) nhưng OpenCV/torch vẫn thấy toàn
+        Container bị giới hạn CPU (vd 2 core) nhưng OpenCV vẫn thấy toàn
         bộ core của host; oversubscription gây throttling và stall ~80ms/frame.
         """
         try:
@@ -516,13 +532,6 @@ class InferenceRuntime:
             cv2.setNumThreads(1)
         except Exception:  # test không cài cv2
             logger.debug("Không cap được OpenCV threads", exc_info=True)
-        try:
-            import torch
-
-            torch.set_num_threads(1)
-            torch.backends.cudnn.benchmark = True
-        except Exception:  # test không cài torch
-            logger.debug("Không cap được torch threads", exc_info=True)
 
 
 def _call_optional(stage, method: str) -> None:

@@ -10,6 +10,7 @@ import type { ChatCitation } from "@/lib/api/chat";
 import type { LessonItem, ModuleItem, Slide } from "@/lib/types/domain";
 import { ReaderBanners } from "./reader-banners";
 import { ReaderSlideContent } from "./reader-slide-content";
+import { CameraPreview } from "./camera-preview";
 import { isGazeDotVisible, type GazeDotPosition } from "./reader-helpers";
 
 type GazeSource = "real" | "simulated" | "off";
@@ -42,6 +43,10 @@ export interface ReaderViewProps {
   onCitationNavigate: (citation: ChatCitation) => boolean;
   gazeSource: GazeSource;
   calibrationRequired: boolean;
+  /** Luồng camera dùng chung với gaze tracker (null = không có camera). */
+  cameraPreviewStream: MediaStream | null;
+  /** Cờ cấp khóa: giáo viên bật khung xem trước camera. */
+  showCameraPreview: boolean;
   showGazeDot: boolean;
   gazeDot: GazeDotPosition | null;
   displayGuard: DisplayGuardState;
@@ -78,6 +83,8 @@ export function ReaderView({
   onCitationNavigate,
   gazeSource,
   calibrationRequired,
+  cameraPreviewStream,
+  showCameraPreview,
   showGazeDot,
   gazeDot,
   displayGuard,
@@ -149,6 +156,8 @@ export function ReaderView({
         activeLessonId={activeLessonId}
         currentSlide={currentSlide}
       />
+
+      <CameraPreview stream={cameraPreviewStream} visible={showCameraPreview} />
 
       <DisplayGuardOverlay
         blocked={displayGuard.blocked}

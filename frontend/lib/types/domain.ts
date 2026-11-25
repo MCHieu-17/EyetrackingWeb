@@ -19,6 +19,7 @@ export interface TeacherCourse {
   isOwner?: boolean;          // admin hoặc chủ khóa học (quyền quản lý); false = GV được phân công
   lessonCount?: number;       // số bài giảng (item) trong khóa
   showGazeDot?: boolean;      // cờ cấp khóa: cho SV thấy chấm điểm nhìn (mọi bài giảng + bài tập)
+  showCameraPreview?: boolean; // cờ cấp khóa: cho SV thấy khung xem trước camera
   requireCalibration?: boolean; // cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học
 }
 
@@ -138,6 +139,8 @@ export interface CourseOutline {
   modules: ModuleItem[];
   // Cờ cấp khóa: SV thấy chấm điểm nhìn ở mọi bài giảng VÀ bài tập của khóa.
   showGazeDot?: boolean;
+  // Cờ cấp khóa: SV thấy khung xem trước camera trong lúc học.
+  showCameraPreview?: boolean;
   // Cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học.
   requireCalibration?: boolean;
 }

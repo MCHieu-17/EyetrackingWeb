@@ -1,4 +1,4 @@
-"""Gaze service: ước lượng hướng nhìn (mediapipe + UniGaze) + calibration.
+"""Gaze service: ước lượng hướng nhìn (FaceLandmarker ONNX + UniGaze) + calibration.
 
 Bố cục giống backend trong repo:
     app/main.py      - FastAPI app, lifespan, /health

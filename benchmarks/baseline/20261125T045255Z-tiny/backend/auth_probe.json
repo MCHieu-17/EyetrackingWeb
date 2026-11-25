@@ -1,0 +1,10 @@
+{
+  "user_id": "c0c55fb5-22f0-5440-af80-303648a9187b",
+  "iterations": 500,
+  "p50_ms": 0.001094000253942795,
+  "p95_ms": 0.0018849996195058338,
+  "p99_ms": 0.0022059998627810273,
+  "redis_get_calls": 0,
+  "redis_get_per_call": 0.0,
+  "memory_entries": 1
+}

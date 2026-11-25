@@ -111,7 +111,8 @@ jobs:
             matrix=$(jq -c '. + [{"name":"chatbot","context":"./services/chatbot","file":"./services/chatbot/Dockerfile","target":""}]' <<<"$matrix")
           fi
           if [[ "$gaze" == true ]]; then
-            matrix=$(jq -c '. + [{"name":"gaze","context":"./services/gaze","file":"./services/gaze/Dockerfile","target":""}]' <<<"$matrix")
+            matrix=$(jq -c '. + [{"name":"gaze","context":"./services/gaze","file":"./services/gaze/Dockerfile","target":"runtime"}]' <<<"$matrix")
+            matrix=$(jq -c '. + [{"name":"gaze-export","context":"./services/gaze","file":"./services/gaze/Dockerfile","target":"export"}]' <<<"$matrix")
           fi
           if [[ "$frontend" == true ]]; then
             matrix=$(jq -c '. + [{"name":"frontend","context":"./frontend","file":"./frontend/Dockerfile","target":""}]' <<<"$matrix")
@@ -147,7 +148,7 @@ jobs:
 
       # Gaze image ~10 GB; runner mặc định có thể hết disk.
       - name: Free disk space (gaze)
-        if: matrix.name == 'gaze'
+        if: matrix.name == 'gaze' || matrix.name == 'gaze-export'
         shell: bash
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL

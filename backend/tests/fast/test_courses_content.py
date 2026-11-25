@@ -31,6 +31,7 @@ async def test_create_course_contract(client):
     assert body["status"] == "draft"
     assert body["isOwner"] is True
     assert body["showGazeDot"] is False
+    assert body["showCameraPreview"] is False
     assert body["requireCalibration"] is False
     assert body["lessonCount"] == 0
     assert body["students"] == 0
@@ -124,6 +125,20 @@ async def test_update_course_and_flags(client, client_factory):
     )
     assert calibration.status_code == 200
     assert calibration.json() == {"ok": True, "requireCalibration": False}
+
+    camera = await teacher_client.patch(
+        f"/teacher/courses/{ids['course_id']}/camera-preview",
+        json={"showCameraPreview": True},
+    )
+    assert camera.status_code == 200
+    assert camera.json() == {"ok": True, "showCameraPreview": True}
+
+    # PATCH metadata cũng nhận cờ camera và trả lại giá trị mới.
+    metadata = await teacher_client.patch(
+        f"/teacher/courses/{ids['course_id']}", json={"showCameraPreview": False}
+    )
+    assert metadata.status_code == 200
+    assert metadata.json()["showCameraPreview"] is False
 
     # Học viên đã enroll thấy cache bị xoá qua API enrollments.
     student_client = await client_factory()
@@ -318,6 +333,7 @@ async def test_outline_visibility_and_enrollment_cache(client_factory):
     assert outline.status_code == 200
     assert outline.json()["title"] == "Test Course"
     assert outline.json()["requireCalibration"] is False
+    assert outline.json()["showCameraPreview"] is False
 
     other_student = await create_user(email="s-other@example.com")
     other_client = await client_factory()
@@ -340,3 +356,13 @@ async def test_outline_visibility_and_enrollment_cache(client_factory):
     )
     assert added.status_code == 201
     assert (await other_client.get(draft_url)).status_code == 404
+
+    # Bật khung camera phải bump updated_at -> cache outline cũ bị bỏ qua.
+    toggled = await teacher_client.patch(
+        f"/teacher/courses/{ids['course_id']}/camera-preview",
+        json={"showCameraPreview": True},
+    )
+    assert toggled.status_code == 200
+    refreshed = await anonymous_enrolled.get(f"/api/courses/{ids['course_id']}")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["showCameraPreview"] is True

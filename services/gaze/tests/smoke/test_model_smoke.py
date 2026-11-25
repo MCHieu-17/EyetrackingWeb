@@ -1,4 +1,4 @@
-"""Smoke thật: MediaPipe + UniGaze trên một ảnh mặt mẫu."""
+"""Smoke thật: FaceLandmarker + UniGaze ONNX trên một ảnh mặt mẫu."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ pytestmark = [pytest.mark.smoke, pytest.mark.gpu]
 
 
 def test_model_smoke_on_sample_image():
-    weights = session_api.settings.unigaze_weights_path()
-    mediapipe = session_api.settings.mediapipe_weights_path()
-    if not weights.is_file() or not mediapipe.is_file():
-        pytest.skip(f"thiếu weights: {weights} / {mediapipe}")
+    weights = session_api.settings.unigaze_onnx_path()
+    landmarker = session_api.settings.face_landmarker_path()
+    if not weights.is_file() or not landmarker.is_file():
+        pytest.skip(f"thiếu weights: {weights} / {landmarker}")
 
     image = Path(__file__).resolve().parents[1] / "fixtures" / "face_sample.jpg"
     assert image.is_file()
@@ -66,7 +66,7 @@ def test_model_smoke_on_sample_image():
         assert 0.0 <= result["y"] <= 1.0
 
         # Batch phải cho cùng output với single (sai khác chỉ ở mức nhiễu số).
-        prepared = session_api.runtime._cpu_stage.prepare(payload)
+        prepared = session_api.runtime._cpu_stages[0].prepare(payload)
         assert prepared is not None
         single = session_api.runtime._gpu_stage.predict(prepared)
         batched = session_api.runtime._gpu_stage.predict_batch([prepared] * 4)

@@ -1,0 +1,81 @@
+{
+  "label": "",
+  "session": "20261124_175802_frontal",
+  "condition": "frontal",
+  "model": "unigaze_b16_joint",
+  "precision": "fp16",
+  "device": "cuda:0",
+  "targets": 100,
+  "targets_usable": 100,
+  "frames_total": 800,
+  "frames_ok": 800,
+  "frames_failed": 0,
+  "fail_rate_pct": 0.0,
+  "run_seconds": 4.4,
+  "timing": {
+    "cpu_stage_ms_mean": 2.84,
+    "cpu_stage_ms_p95": 3.13,
+    "gpu_stage_ms_per_frame_mean": 2.522
+  },
+  "calib_points": 25,
+  "primary_split": {
+    "n": 75,
+    "l1_px_mean": 53.737,
+    "l2_px_mean": 42.562,
+    "l2_px_median": 42.783,
+    "l2_px_p95": 70.554,
+    "bias_px": [
+      -2.723,
+      -13.274
+    ],
+    "l2_pct_width": 2.217,
+    "px_per_deg": 48.929,
+    "l2_deg_mean": 0.87,
+    "fit_ids": [
+      "0012",
+      "0014",
+      "0016",
+      "0020",
+      "0021",
+      "0024",
+      "0027",
+      "0028",
+      "0031",
+      "0033",
+      "0036",
+      "0039",
+      "0049",
+      "0055",
+      "0058",
+      "0061",
+      "0062",
+      "0064",
+      "0066",
+      "0067",
+      "0074",
+      "0084",
+      "0085",
+      "0094",
+      "0095"
+    ]
+  },
+  "repeated_splits": {
+    "repeats": 200,
+    "l2_px_mean": 41.11,
+    "l2_px_mean_std": 1.82,
+    "l2_px_median": 38.66,
+    "l2_px_p95": 77.66,
+    "l2_deg_mean": 0.86
+  },
+  "kfold": {
+    "folds": 5,
+    "n": 100,
+    "l2_px_mean": 39.66,
+    "l2_px_median": 37.04,
+    "l2_px_p95": 76.11
+  },
+  "jitter_deg": {
+    "pitch_std_mean": 0.657,
+    "yaw_std_mean": 0.552
+  }
+}

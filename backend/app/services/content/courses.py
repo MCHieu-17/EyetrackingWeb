@@ -90,6 +90,7 @@ async def list_teacher_courses(
             is_owner=user.role == "admin" or course.owner_id == user.id,
             lesson_count=int(lesson_count),
             show_gaze_dot=course.show_gaze_dot,
+            show_camera_preview=course.show_camera_preview,
             require_calibration=course.require_calibration,
         )
         for course, lesson_count in rows
@@ -103,6 +104,7 @@ async def create_course(
     title: str,
     description: str | None,
     show_gaze_dot: bool,
+    show_camera_preview: bool,
     require_calibration: bool,
 ) -> Course:
     teacher = await db.get(TeacherProfile, user.id)
@@ -127,6 +129,7 @@ async def create_course(
         description=description,
         status="draft",
         show_gaze_dot=show_gaze_dot,
+        show_camera_preview=show_camera_preview,
         require_calibration=require_calibration,
     )
     db.add(course)
@@ -142,6 +145,7 @@ async def update_course_metadata(
     title: str | None = None,
     description: str | None = None,
     show_gaze_dot: bool | None = None,
+    show_camera_preview: bool | None = None,
     require_calibration: bool | None = None,
     status: str | None = None,
 ) -> Course:
@@ -151,6 +155,8 @@ async def update_course_metadata(
         course.description = description
     if show_gaze_dot is not None:
         course.show_gaze_dot = show_gaze_dot
+    if show_camera_preview is not None:
+        course.show_camera_preview = show_camera_preview
     if require_calibration is not None:
         course.require_calibration = require_calibration
     if status in {"draft", "published", "archived"}:

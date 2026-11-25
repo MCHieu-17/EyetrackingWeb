@@ -77,6 +77,8 @@ interface CourseWriteInput {
   status?: CourseStatus;
   /** Cờ cấp khóa: cho sinh viên thấy chấm điểm nhìn (mọi bài giảng + bài tập). */
   showGazeDot?: boolean;
+  /** Cờ cấp khóa: cho sinh viên thấy khung xem trước camera. */
+  showCameraPreview?: boolean;
   /** Cờ cấp khóa: bắt buộc hiệu chỉnh trước khi vào học. */
   requireCalibration?: boolean;
 }
@@ -122,6 +124,16 @@ export function setCourseRequireCalibration(
   return apiFetch(`/api/teacher/courses/${courseId}/require-calibration`, {
     method: "PATCH",
     body: { requireCalibration },
+  });
+}
+
+export function setCourseCameraPreview(
+  courseId: string,
+  showCameraPreview: boolean,
+): Promise<{ ok: boolean; showCameraPreview: boolean }> {
+  return apiFetch(`/api/teacher/courses/${courseId}/camera-preview`, {
+    method: "PATCH",
+    body: { showCameraPreview },
   });
 }
 

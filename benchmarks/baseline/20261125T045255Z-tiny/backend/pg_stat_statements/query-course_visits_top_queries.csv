@@ -1,0 +1,11 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.show_camera_preview, courses.require_calibration, cours",20,0,0.690831,0.034541550000000004,0,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",12,0,0.44572500000000004,0.03714375,0,0,36,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",12,0,0.31331,0.026109166666666666,0,0,12,0,0
+"WITH visit_page AS 
+(SELECT course_visits.id AS visit_id 
+FROM course_visits JOIN enrollments ON enrollments.id = course_visits.enrollment_id 
+WHERE enrollments.course_id = $1::UUID ORDER BY course_visits.started_at DESC 
+ LIMIT $2::INTEGER",1,1,0.255207,0.255207,0.742553,16,237,0,0
+BEGIN,64,0,0.11678499999999999,0.0018247656250000004,0,0,0,0,0
+ROLLBACK,64,0,0.08171400000000001,0.00127678125,0,0,0,0,0

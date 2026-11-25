@@ -1,0 +1,80 @@
+d9a7e1b1a5fa9aa9f6a7827bea04e0fa14ffbb30
+improve_perform
+ M .env.example
+ M .github/workflows/release.yml
+ M AGENTS.md
+ M README.md
+ M backend/app/api/routes/calibration.py
+ M backend/app/api/routes/courses.py
+ M backend/app/core/config.py
+ M backend/app/models/course.py
+ M backend/app/schemas/course.py
+ M backend/app/services/content/courses.py
+ M backend/app/services/content/outline.py
+ M backend/tests/conftest.py
+ M backend/tests/fast/test_courses_content.py
+ M backend/tests/fast/test_schema_contract.py
+ M benchmarks/.gitignore
+ M benchmarks/README.md
+ M benchmarks/baseline/20261122T1640Z-after-10phase/gaze/README.md
+ M benchmarks/baseline/latest
+ M benchmarks/gaze/run.sh
+ M benchmarks/gaze/stage_latency.py
+ M benchmarks/gaze/ws_load.py
+ M benchmarks/stack/docker-compose.bench.yml
+ M deploy/portainer/README.md
+ M deploy/portainer/docker-compose.yml
+ M deploy/portainer/stack.env.example
+ M docker-compose.yml
+ M frontend/components/student/learning-reader/reader-content.tsx
+ M frontend/components/student/learning-reader/reader-view.tsx
+ M frontend/components/teacher/course-settings-cache.ts
+ M frontend/components/teacher/course-settings-section.tsx
+ M frontend/e2e/teacher-content.spec.ts
+ M frontend/lib/api/teacher.ts
+ M frontend/lib/types/domain.ts
+ M scripts/publish_images.sh
+ M services/gaze/.dockerignore
+ M services/gaze/Dockerfile
+ M services/gaze/README.md
+ M services/gaze/app/__init__.py
+ M services/gaze/app/main.py
+ M services/gaze/app/services/pipeline.py
+ M services/gaze/app/services/preprocessing.py
+ M services/gaze/app/services/runtime.py
+ M services/gaze/app/settings.py
+ M services/gaze/entrypoint.sh
+D  services/gaze/requirements-torch.txt
+ M services/gaze/requirements.txt
+ D services/gaze/scripts/bench.py
+ D services/gaze/scripts/compare_capture.py
+ D services/gaze/scripts/compare_precision.py
+ M services/gaze/scripts/download_weights.py
+D  services/gaze/tests/fast/test_tensor_prep.py
+ M services/gaze/tests/fixtures/README.md
+ M services/gaze/tests/smoke/test_model_smoke.py
+?? benchmarks/baseline/20261125T045137Z-tiny/
+?? benchmarks/baseline/20261125T045212Z-tiny/
+?? benchmarks/baseline/20261125T045255Z-tiny/
+?? benchmarks/baseline/post-landmarker-onnx/
+?? benchmarks/baseline/post-onnx/
+?? benchmarks/baseline/pre-onnx/
+?? benchmarks/gaze/research-results/
+?? benchmarks/gaze/standalone.sh
+?? benchmarks/gaze/tools/
+?? db/migrations/007_reset_gaze_calibrations.sql
+?? db/migrations/008_course_camera_preview.sql
+?? docs/gaze/
+?? frontend/components/student/learning-reader/camera-preview.tsx
+?? frontend/components/teacher/camera-preview-toggle.tsx
+?? services/gaze/app/services/gaze_geometry.py
+?? services/gaze/app/services/landmarker.py
+?? services/gaze/export-entrypoint.sh
+?? services/gaze/requirements-export.txt
+?? services/gaze/scripts/export_landmarker.py
+?? services/gaze/scripts/export_onnx.py
+?? services/gaze/scripts/tflite_to_onnx.py
+?? services/gaze/tests/fast/test_gaze_geometry.py
+?? services/gaze/tests/fast/test_landmarker_math.py
+?? services/gaze/tests/fixtures/face_sample_landmarks.npz
+?? services/gaze/tests/smoke/test_landmarker_smoke.py

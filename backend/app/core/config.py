@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     cors_origins: str
     ai_http_url: str
     # Tên weights UniGaze đang dùng, chỉ để ghi metadata version calibration.
-    # Để trống giữ nhãn tương thích `ubj-linreg-v2-b16`.
+    # Để trống giữ nhãn tương thích `ubj-linreg-v3-b16`.
     unigaze_model: str = ""
 
     # Connection pool PostgreSQL. max_overflow được suy ra từ chênh lệch

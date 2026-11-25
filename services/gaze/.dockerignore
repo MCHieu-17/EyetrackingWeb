@@ -2,7 +2,7 @@
 # .dockerignore — loại file không cần thiết khỏi build context
 # ============================================================
 
-# --- Weights: tải lúc runtime (entrypoint.sh chạy scripts/download_weights.py) ---
+# --- Weights: do service gaze-export tải/convert, không đưa vào build context ---
 weights/
 *.safetensors
 *.tflite
@@ -33,3 +33,6 @@ docker-compose*.yml
 .idea/
 .vscode/
 .DS_Store
+*.task
+*.onnx
+*.onnx.json

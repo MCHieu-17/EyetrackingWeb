@@ -7,7 +7,7 @@ Tài liệu đầy đủ các endpoint: README.md cùng thư mục.
 
 Endpoint vận hành:
     GET /health  -> liveness + thống kê runtime, luôn 200 khi tiến trình sống
-    GET /ready   -> readiness, 503 khi pipeline (mediapipe + unigaze) chưa load
+    GET /ready   -> readiness, 503 khi pipeline (landmarker + unigaze) chưa load
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ logger = logging.getLogger("app.gaze")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     session_api.settings.validate()
-    session_api.runtime.start()  # load mediapipe + unigaze + warmup
+    session_api.runtime.start()  # load landmarker + unigaze + warmup
     task = asyncio.create_task(cleanup_loop())
     try:
         yield

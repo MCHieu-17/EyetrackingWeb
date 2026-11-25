@@ -132,6 +132,10 @@ Bất biến:
 - Làm lại quiz giữ lịch sử attempt; attempt `submitted` dùng `quiz_snapshot`.
 - Chat panel nhận attempt/assignment context; chế độ `hint` trước nộp,
   `review` sau nộp.
+- Camera preview: overlay nhỏ kéo được (lưu vị trí trong `localStorage`), dùng
+  chung `MediaStream` của `useGazeTracker` nên không mở thêm camera; chỉ hiện
+  khi khoá bật `showCameraPreview` và đang có stream. Overlay render ngoài
+  `ReaderFrame`/`[data-aoi]` nên không vào layout snapshot hay AOI.
 
 ## Teacher workspace
 
@@ -141,7 +145,7 @@ Bất biến:
 |---|---|
 | Nội dung | chương/bài/quiz, upload slide, thứ tự item |
 | Thông tin | tên/mô tả/publish/archive/delete |
-| Cài đặt | gaze dot, bắt buộc calibration |
+| Cài đặt | gaze dot, bắt buộc calibration, xem trước camera |
 | Học viên | ghi danh, tiến độ |
 | Vùng phân tích | AOI slide/UI, autosave |
 

@@ -23,6 +23,7 @@ from app.schemas.course import (
     CourseGazeDotIn,
     CourseOutlineOut,
     CourseRequireCalibrationIn,
+    CourseShowCameraPreviewIn,
     CourseUpdateIn,
     ModuleNodeOut,
     StudentDirectoryOut,
@@ -100,6 +101,7 @@ async def create_course(
         title=body.title,
         description=body.description,
         show_gaze_dot=body.show_gaze_dot,
+        show_camera_preview=body.show_camera_preview,
         require_calibration=body.require_calibration,
     )
     await db.commit()
@@ -117,6 +119,7 @@ async def create_course(
         is_owner=True,
         lesson_count=0,
         show_gaze_dot=course.show_gaze_dot,
+        show_camera_preview=course.show_camera_preview,
         require_calibration=course.require_calibration,
     )
 
@@ -137,6 +140,7 @@ async def update_course(
         title=data.get("title"),
         description=data.get("description"),
         show_gaze_dot=data.get("show_gaze_dot"),
+        show_camera_preview=data.get("show_camera_preview"),
         require_calibration=data.get("require_calibration"),
         status=data.get("status"),
     )
@@ -157,6 +161,7 @@ async def update_course(
         is_owner=True,
         lesson_count=0,
         show_gaze_dot=course.show_gaze_dot,
+        show_camera_preview=course.show_camera_preview,
         require_calibration=course.require_calibration,
     )
 
@@ -192,6 +197,22 @@ async def set_course_require_calibration(
     await db.commit()
     await _invalidate_enrollment_cache(db, course.id)
     return {"ok": True, "requireCalibration": course.require_calibration}
+
+
+@router.patch("/teacher/courses/{course_id}/camera-preview", response_model=dict)
+async def set_course_camera_preview(
+    course_id: str,
+    body: CourseShowCameraPreviewIn,
+    user: User = Depends(require_roles("teacher", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await get_owned_course(db, course_id, user)
+    course.show_camera_preview = body.show_camera_preview
+    # Cache outline dùng `course.updated_at` trong key; bump để sinh viên
+    # refresh là thấy cờ mới thay vì bản cache 60s.
+    course.updated_at = _now()
+    await db.commit()
+    return {"ok": True, "showCameraPreview": course.show_camera_preview}
 
 
 @router.delete("/teacher/courses/{course_id}")

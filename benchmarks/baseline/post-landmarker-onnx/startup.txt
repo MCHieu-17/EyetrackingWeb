@@ -1,0 +1,3 @@
+cold_start_to_ready_s=2.9
+1235 MiB
+1309 MiB

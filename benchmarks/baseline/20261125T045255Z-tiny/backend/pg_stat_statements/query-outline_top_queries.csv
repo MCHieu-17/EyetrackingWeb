@@ -1,0 +1,13 @@
+query,calls,plans,total_exec_time,mean_exec_time,total_plan_time,rows,shared_blks_hit,shared_blks_read,temp_blks_written
+"SELECT courses.id, courses.owner_id, courses.created_by, courses.title, courses.description, courses.thumbnail_url, courses.status, courses.published_at, courses.show_gaze_dot, courses.show_camera_preview, courses.require_calibration, cours",20,0,0.694674,0.0347337,0,20,20,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.450836,0.03220257142857143,0,0,42,0,0
+"SELECT background_jobs.id, background_jobs.lesson_id, background_jobs.kind, background_jobs.status, background_jobs.payload, background_jobs.attempts, background_jobs.max_attempts, background_jobs.error, background_jobs.created_at, backgrou",14,0,0.423106,0.030221857142857137,0,0,14,0,0
+"SELECT lessons.id, lessons.module_id, lessons.title, lessons.kind, lessons.position, lessons.pdf_asset_id, lessons.quiz_config, lessons.created_at, lessons.updated_at, coalesce(anon_1.slide_count, $1::INTEGER) AS coalesce_1, coalesce(anon_1",1,1,0.276986,0.276986,0.097195,24,38,0,0
+BEGIN,68,0,0.109375,0.0016084558823529415,0,0,0,0,0
+ROLLBACK,68,0,0.08260899999999999,0.001214838235294118,0,0,0,0,0
+"SELECT course_modules.id, course_modules.course_id, course_modules.title, course_modules.position, course_modules.created_at, course_modules.updated_at 
+FROM course_modules 
+WHERE course_modules.course_id = $1::UUID ORDER BY course_modules.",1,1,0.011464,0.011464,0.048481,4,10,0,0
+"SELECT enrollments.id 
+FROM enrollments 
+WHERE enrollments.course_id = $1::UUID AND enrollments.student_id = $2::UUID",1,1,0.009839,0.009839,0.04168,1,3,0,0

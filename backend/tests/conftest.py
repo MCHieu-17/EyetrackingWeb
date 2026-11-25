@@ -360,7 +360,7 @@ async def create_calibration(
     *,
     user_id: str,
     fingerprint: str = "test-device",
-    model_version: str = "ubj-linreg-v2-b16",
+    model_version: str = "ubj-linreg-v3-b16",
     created_at: str | None = None,
 ) -> str:
     calibration_id = new_uuid()

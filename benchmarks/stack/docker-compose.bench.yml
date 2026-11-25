@@ -162,3 +162,9 @@ services:
     container_name: bench-nginx
     ports: !override
       - "127.0.0.1:3100:80"
+
+  # Stack local tự bật Cloudflare Tunnel khi .env có TUNNEL_TOKEN. Benchmark
+  # không cần tunnel, và container_name cố định của connector sẽ đụng stack dev
+  # đang chạy cùng lúc -> đẩy service vào profile không bao giờ bật.
+  cloudflared:
+    profiles: ["bench-disabled"]

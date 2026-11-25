@@ -64,6 +64,17 @@ async def test_generation_and_legacy_objects_removed():
                 )
             ).scalars()
         )
+        course_columns = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'courses'"
+                    )
+                )
+            ).scalars()
+        )
 
     assert generation == "13"
     assert "email_otps" in tables
@@ -73,6 +84,7 @@ async def test_generation_and_legacy_objects_removed():
     assert "original_viewport_y" not in gaze_columns
     assert "coordinate_space" not in layout_columns
     assert "visible_rect" not in layout_columns
+    assert "show_camera_preview" in course_columns
 
 
 async def test_internal_metrics_currently_public(client):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Đo latency từng stage của gaze pipeline trên một ảnh cố định.
 
-Chạy trong image gaze (có torch/mediapipe/opencv):
+Chạy trong image gaze (onnxruntime/opencv):
     docker compose ... exec -T gaze \
       python /bench/gaze/stage_latency.py --image /fixtures/face_sample.jpg \
       --iterations 200 --warmup 20 --out /bench/.../gaze/stage-latency.json
@@ -25,10 +25,16 @@ sys.path.insert(0, "/app")
 
 import cv2
 import numpy as np
-import torch
 
 from app.services.calibration import Calibration
-from app.services.pipeline import CpuStage, GpuStage, PreparedFace, decode_image
+from app.services.gaze_geometry import denormalize_gaze, expand_bbox
+from app.services.pipeline import (
+    CROP_SCALE,
+    CpuStage,
+    GpuStage,
+    PreparedFace,
+    decode_image,
+)
 from app.services.smoothing import OneEuroFilter2D
 from app.settings import Settings
 
@@ -53,9 +59,19 @@ def stats(values: list[float]) -> dict:
     }
 
 
-def maybe_sync(device: str) -> None:
-    if device.startswith("cuda") and torch.cuda.is_available():
-        torch.cuda.synchronize()
+def gpu_memory_mib() -> float | None:
+    """VRAM đang dùng (MiB, toàn GPU) qua nvidia-smi; ORT không có API peak."""
+    import subprocess
+
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            text=True,
+            timeout=5,
+        )
+        return float(out.splitlines()[0])
+    except Exception:
+        return None
 
 
 def run_image(
@@ -72,16 +88,16 @@ def run_image(
     for _ in range(warmup):
         prepared = cpu.prepare(image_bytes)
         if prepared is None:
-            raise RuntimeError("MediaPipe không detect được mặt trong ảnh fixture")
+            raise RuntimeError("FaceLandmarker không detect được mặt trong ảnh fixture")
         gpu.predict(prepared)
-    maybe_sync(str(gpu.device))
 
     stages = {
         "decode": [],
-        "mediapipe_detect": [],
+        "landmark_detect": [],
         "warp_preprocess": [],
         "tensor_prep": [],
         "unigaze_forward": [],
+        "denormalize": [],
         "calibration": [],
         "smoothing": [],
         "total": [],
@@ -96,24 +112,25 @@ def run_image(
         detection = cpu.detector.detect(rgb)
         t2 = time.perf_counter()
         if detection is None:
-            raise RuntimeError("MediaPipe không detect được mặt ở iteration")
-        (xmin, ymin, xmax, ymax), landmarks = detection
+            raise RuntimeError("FaceLandmarker không detect được mặt ở iteration")
+        bbox, landmarks = detection
+        xmin, ymin, xmax, ymax = expand_bbox(bbox, CROP_SCALE, *rgb.shape[1::-1])
         face = np.ascontiguousarray(rgb[ymin:ymax, xmin:xmax])
         landmarks_crop = landmarks - np.array([xmin, ymin], dtype=np.float32)
         warped = cpu.preprocessor.process(face, landmarks_crop)
         t3 = time.perf_counter()
         if warped is None:
             raise RuntimeError("Preprocessor trả None (head pose?)")
-        prepared = PreparedFace(warped)
+        prepared = PreparedFace(*warped)
 
         t4 = time.perf_counter()
-        tensor = gpu._to_tensor(prepared)
-        maybe_sync(str(gpu.device))
+        batch = prepared.rgb[None]
         t5 = time.perf_counter()
-        with torch.inference_mode():
-            pred = gpu.model(tensor)["pred_gaze"]
-            maybe_sync(str(gpu.device))
-            pitch, yaw = pred[0].tolist()
+        raw = gpu.session.run(None, {gpu._input: batch})[0]
+        t6a = time.perf_counter()
+        pitch, yaw = denormalize_gaze(
+            float(raw[0][0]), float(raw[0][1]), prepared.rotation
+        )
         t6 = time.perf_counter()
         x, y = calib.predict(float(pitch), float(yaw))
         t7 = time.perf_counter()
@@ -121,10 +138,11 @@ def run_image(
         t8 = time.perf_counter()
 
         stages["decode"].append((t1 - t0) * 1000)
-        stages["mediapipe_detect"].append((t2 - t1) * 1000)
+        stages["landmark_detect"].append((t2 - t1) * 1000)
         stages["warp_preprocess"].append((t3 - t2) * 1000)
         stages["tensor_prep"].append((t5 - t4) * 1000)
-        stages["unigaze_forward"].append((t6 - t5) * 1000)
+        stages["unigaze_forward"].append((t6a - t5) * 1000)
+        stages["denormalize"].append((t6 - t6a) * 1000)
         stages["calibration"].append((t7 - t6) * 1000)
         stages["smoothing"].append((t8 - t7) * 1000)
         stages["total"].append((t8 - total_start) * 1000)
@@ -154,16 +172,11 @@ def run_batches(
         batch = [prepared] * size
         for _ in range(min(warmup, 5)):
             gpu.predict_batch(batch)
-        maybe_sync(str(gpu.device))
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats()
         times: list[float] = []
         predictions = []
         for _ in range(20):
             started = time.perf_counter()
             predictions = gpu.predict_batch(batch)
-            maybe_sync(str(gpu.device))
             times.append((time.perf_counter() - started) * 1000.0)
         p50 = pct(times, 0.50)
         results[str(size)] = {
@@ -176,16 +189,7 @@ def run_batches(
                 math.hypot(pitch - single[0], yaw - single[1])
                 for pitch, yaw in predictions
             ),
-            "cuda_allocated_mib": (
-                round(torch.cuda.max_memory_allocated() / 1024**2, 1)
-                if torch.cuda.is_available()
-                else None
-            ),
-            "cuda_reserved_mib": (
-                round(torch.cuda.max_memory_reserved() / 1024**2, 1)
-                if torch.cuda.is_available()
-                else None
-            ),
+            "gpu_used_mib": gpu_memory_mib(),
         }
     return results
 
@@ -207,7 +211,6 @@ def main() -> int:
     gpu = GpuStage(settings)
     cpu.warmup()
     gpu.warmup()
-    maybe_sync(settings.device)
 
     calib = Calibration()
     xs = [[-0.4 + i * 0.04, -0.2 + (i % 5) * 0.08] for i in range(64)]
@@ -279,18 +282,9 @@ def main() -> int:
         "precision": gpu.precision,
         "model": gpu.model_name,
         "gpu_name": gpu.gpu_name,
-        "cuda_available": torch.cuda.is_available(),
+        "runtime": "onnxruntime",
         "max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-        "cuda_max_memory_allocated_mib": (
-            round(torch.cuda.max_memory_allocated() / 1024**2, 1)
-            if torch.cuda.is_available()
-            else None
-        ),
-        "cuda_max_memory_reserved_mib": (
-            round(torch.cuda.max_memory_reserved() / 1024**2, 1)
-            if torch.cuda.is_available()
-            else None
-        ),
+        "gpu_used_mib_after": gpu_memory_mib(),
         "iterations": args.iterations,
         "warmup": args.warmup,
         "images": results,

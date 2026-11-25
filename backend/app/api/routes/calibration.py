@@ -25,9 +25,9 @@ def _mapping_model_version() -> str:
     model = settings.unigaze_model.strip()
     if not model:
         # Tương thích dữ liệu calibration đã lưu trước khi có UNIGAZE_MODEL.
-        return "ubj-linreg-v2-b16"
+        return "ubj-linreg-v3-b16"
     suffix = model.removeprefix("unigaze_").removesuffix("_joint")
-    return f"ubj-linreg-v2-{suffix}"[:64]
+    return f"ubj-linreg-v3-{suffix}"[:64]
 
 
 MAPPING_MODEL_VERSION = _mapping_model_version()

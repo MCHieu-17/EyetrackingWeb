@@ -21,7 +21,7 @@
 - Mỗi gaze sample chỉ có **một** `aoi_label`: nhãn slide `SLIDE_<label>` /
   `SLIDE_NO_LABEL`, hoặc tên UI AOI / `UI_NO_LABEL`. Không lưu nhiều nhãn,
   không cộng container.
-- Migration đã áp là bất biến: thêm file `006_...sql`, không sửa
+- Migration đã áp là bất biến: thêm file `009_...sql`, không sửa
   `001`–`005`. Không dùng `Base.metadata.create_all()` thay migration.
 - Các biến model local (`DEVICE`, `UNIGAZE_MODEL`, `EMBEDDING_*`) phải đặt
   tường minh trong `.env`/`stack.env`; không thêm default trong code/compose.
@@ -36,7 +36,7 @@
 |---|---|
 | `frontend/` | Next.js 16 App Router, React 19, Tailwind 4, TanStack Query |
 | `backend/` | FastAPI, Python 3.12.8, SQLAlchemy async, Pydantic 2; API + 3 worker |
-| `services/gaze/` | MediaPipe + UniGaze, PyTorch, WebSocket; mặc định cần GPU |
+| `services/gaze/` | FaceLandmarker + UniGaze đều là ONNX (onnxruntime, không torch/mediapipe ở runtime), WebSocket; mặc định cần GPU |
 | `services/chatbot/` | FastAPI RAG: FTS + pgvector, embedding Qwen3-Embedding-0.6B trên CPU |
 | `db/` | Baseline + migrations + role SQL; `db/migrate.sh` là runner duy nhất |
 | `nginx/` | Reverse proxy local; production dùng `deploy/portainer/` |
@@ -178,6 +178,16 @@ dev/production và không dùng `next dev`.
 
 - Kết quả JSON/Markdown nằm trong `benchmarks/baseline/<run-id>/`; so sánh
   bằng `benchmarks/report/compare.py`.
+- Gaze có harness riêng trong `benchmarks/gaze/`: `standalone.sh` (một container,
+  không cần stack bench), `run.sh` (nhóm gaze của `run_all.sh`), và `tools/`
+  (`eval_offline.py`, `compare_capture.py`, `compare_precision.py`, `bench.py`).
+  Script đo **không** nằm trong image runtime; mount `benchmarks/` vào `/bench`
+  rồi chạy `python /bench/gaze/tools/<script>.py` (script tự thêm `/app` vào
+  `sys.path`).
+- Ảnh mặt cho đo độ chính xác ở `benchmarks/gaze/testdata/` là dữ liệu khuôn
+  mặt thật, **gitignored**; kết quả JSON thô của nghiên cứu gốc ở
+  `benchmarks/gaze/research-results/`. Báo cáo nghiên cứu (kiến trúc, accuracy,
+  benchmark) nằm ở `docs/gaze/`.
 - Stack benchmark dùng chung weights gaze/chatbot với dev qua external volume,
   nhưng DB/media/Redis riêng. Không seed vào DB không kết thúc bằng `_bench`.
 - Đo capacity trực tiếp backend `:8101`; nginx có `api_rl` 20 r/s/IP nên chỉ
@@ -204,7 +214,12 @@ dev/production và không dùng `next dev`.
 - `frontend/` gọi API qua `lib/api/`, không truy cập DB; PDF render bằng PDF.js.
 - `benchmarks/` là harness đo hiệu năng; không import vào app production, không
   thay đổi schema/API. Artifact nằm dưới `benchmarks/baseline/` và không chứa
-  secret (token nằm trong `.runtime/` đã gitignore).
+  secret (token nằm trong `.runtime/` đã gitignore). `benchmarks/gaze/tools/`
+  chỉ đọc code `app/*` của gaze, không bị import ngược lại.
+- `docs/gaze/` giữ báo cáo nghiên cứu gaze (kiến trúc, accuracy, benchmark);
+  không tạo lại pipeline torch hay `gaze_research/` trong repo này.
+- `services/gaze/scripts/` chỉ còn script cần trong image (export ONNX, tải
+  weights); script đo/thuộc tính năng phụ thuộc `benchmarks/`.
 
 ## 4. Mô hình dữ liệu
 
@@ -237,7 +252,7 @@ chat_sessions → chat_messages
 | 3 | | `email_otps` | `code_hash` HMAC-SHA256; `consumed_at`/`invalidated_at`; partial unique một challenge active/email |
 | 4 | | `student_profiles` | 1:1 `user_id`, `student_code` unique |
 | 5 | | `teacher_profiles` | 1:1 `user_id`, `teacher_code` unique |
-| 6 | Khóa học | `courses` | `owner_id`, `created_by`, status draft/published/archived, `show_gaze_dot`, `require_calibration` |
+| 6 | Khóa học | `courses` | `owner_id`, `created_by`, status draft/published/archived, `show_gaze_dot`, `show_camera_preview`, `require_calibration` |
 | 7 | | `course_teachers` | PK `(course_id, teacher_id)`; chỉ được xem, không sở hữu |
 | 8 | | `enrollments` | Unique `(course_id, student_id)`; status active/completed/dropped |
 | 9 | | `course_visits` | “Ca học”; status active/ended/expired; `visit_key` unique theo enrollment; `last_seen_at` |
@@ -501,8 +516,11 @@ resend 60 giây; email khớp domain + pattern cấu hình.
   nâng generation 13; `003_aoi_single_label.sql` bỏ `aoi_codes` /
   `aoi_suggestions`; `004_content_view_aoi_stats.sql` thêm `aoi_stats`;
   `005_current_viewport_only.sql` bỏ hệ toạ độ cũ;
-  `006_gaze_sample_indexes.sql` thay btree `event_time` bằng BRIN.
-- Thay đổi schema mới phải là `007_...sql`; không sửa migration đã áp.
+  `006_gaze_sample_indexes.sql` thay btree `event_time` bằng BRIN;
+  `007_reset_gaze_calibrations.sql` xoá calibration cũ khi đổi pipeline gaze
+  (không đổi schema); `008_course_camera_preview.sql` thêm
+  `courses.show_camera_preview` (mặc định `false`, không đổi generation).
+- Thay đổi schema mới phải là `009_...sql`; không sửa migration đã áp.
   `db/migrate.sh` giữ advisory lock, ghi checksum, fail nếu file đã áp bị đổi
   hoặc DB có bảng public mà chưa có `schema_migrations`.
 - Không chạy `psql -f` từng file migration; dùng `docker compose run --rm migrate`
@@ -537,8 +555,8 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 - Local: `docker compose up -d --build`; `migrate` exit 0 là bình thường.
   `docker compose down -v` xoá DB/media/weights/Redis — chỉ dùng khi thật sự
   muốn reset sạch.
-- Production: GitHub Actions build 7 image (backend, content-worker, chatbot,
-  gaze, frontend, nginx, migrations) → GHCR; Portainer chỉ pull
+- Production: GitHub Actions build 8 image (backend, content-worker, chatbot,
+  gaze, gaze-export, frontend, nginx, migrations) → GHCR; Portainer chỉ pull
   `deploy/portainer/docker-compose.yml`, không build trên server. `cloudflared`
   nằm trong stack, trỏ `http://nginx:80`.
 - Nginx production phải giữ `real_ip_header CF-Connecting-IP` và forward
@@ -567,7 +585,7 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 ## 13. Checklist cho agent trước khi kết thúc
 
 - Đọc migration/model/route liên quan; ưu tiên code hơn README nếu lệch.
-- Nếu sửa schema: thêm `006_...sql`, cập nhật model/schema/API, chạy
+- Nếu sửa schema: thêm `009_...sql`, cập nhật model/schema/API, chạy
   `./scripts/test_migrations.sh` và `./scripts/test_backend.sh`.
 - Nếu sửa cascade/FK/metrics/AOI: chạy `./scripts/test_backend.sh`; test metrics
   nằm trong `backend/tests/fast/test_metrics.py` và `test_analytics.py`, cascade

@@ -4,16 +4,21 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "@/components/ui/alert";
 import { CourseCalibrationToggle } from "@/components/teacher/calibration-toggle";
+import { CourseCameraPreviewToggle } from "@/components/teacher/camera-preview-toggle";
 import { CourseGazeDotToggle } from "@/components/teacher/gaze-dot-toggle";
 import { useTeacherCourses } from "@/hooks/use-teacher";
-import { setCourseGazeDot, setCourseRequireCalibration } from "@/lib/api/teacher";
+import {
+  setCourseCameraPreview,
+  setCourseGazeDot,
+  setCourseRequireCalibration,
+} from "@/lib/api/teacher";
 import { updateCourseFlag } from "./course-settings-cache";
 
 /**
  * Khối "Thiết lập khóa học" nằm trong tab Thông tin.
  *
- * Hai công tắc áp cho toàn khóa: bắt buộc hiệu chỉnh điểm nhìn và hiển thị
- * chấm điểm nhìn cho sinh viên.
+ * Ba công tắc áp cho toàn khóa: bắt buộc hiệu chỉnh điểm nhìn, hiển thị
+ * khung camera và hiển thị chấm điểm nhìn cho sinh viên.
  */
 export function CourseSettingsSection({
   courseId,
@@ -28,14 +33,17 @@ export function CourseSettingsSection({
 
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   const [showGazeDot, setShowGazeDot] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
   const [requireCalibration, setRequireCalibration] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [cameraBusy, setCameraBusy] = useState(false);
   const [calibrationBusy, setCalibrationBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   if (course && hydratedId !== course.id) {
     setHydratedId(course.id);
     setShowGazeDot(Boolean(course.showGazeDot));
+    setShowCameraPreview(Boolean(course.showCameraPreview));
     setRequireCalibration(course.requireCalibration !== false);
   }
 
@@ -62,6 +70,31 @@ export function CourseSettingsSection({
           },
     );
     setBusy(false);
+  };
+
+  const toggleCamera = async (value: boolean) => {
+    setShowCameraPreview(value);
+    setCameraBusy(true);
+    setMessage(null);
+    const error = await updateCourseFlag({
+      queryClient,
+      courseId,
+      field: "showCameraPreview",
+      value,
+      request: () => setCourseCameraPreview(courseId, value),
+    });
+    if (error) setShowCameraPreview(!value);
+    setMessage(
+      error
+        ? { tone: "err", text: `Không đổi được thiết lập: ${error}` }
+        : {
+            tone: "ok",
+            text: value
+              ? "Đã bật khung camera cho sinh viên."
+              : "Đã tắt khung camera.",
+          },
+    );
+    setCameraBusy(false);
   };
 
   const toggleCalibration = async (value: boolean) => {
@@ -98,6 +131,13 @@ export function CourseSettingsSection({
         disabled={!canManage}
         busy={calibrationBusy}
         onChange={(value) => void toggleCalibration(value)}
+      />
+
+      <CourseCameraPreviewToggle
+        checked={showCameraPreview}
+        disabled={!canManage}
+        busy={cameraBusy}
+        onChange={(value) => void toggleCamera(value)}
       />
 
       <CourseGazeDotToggle
