@@ -79,16 +79,16 @@ function ProductIllustration() {
                   fill="none"
                   aria-hidden="true"
                 >
-                  <path d="M0 56H170M0 33H170M0 10H170" stroke="#EEF2ED" />
+                  <path d="M0 56H170M0 33H170M0 10H170" stroke="var(--chart-grid)" />
                   <path
                     d="M2 53C17 53 17 27 31 36S48 49 60 31S82 28 95 35S117 53 131 28S153 39 168 15"
-                    stroke="#8BAE89"
+                    stroke="var(--chart-1)"
                     strokeWidth="3"
                     strokeLinecap="round"
                   />
                   <path
                     d="M2 53C17 53 17 27 31 36S48 49 60 31S82 28 95 35S117 53 131 28S153 39 168 15V70H2Z"
-                    fill="#E8F1E6"
+                    fill="var(--accent)"
                     opacity=".7"
                   />
                 </svg>
@@ -405,6 +405,7 @@ export default function LandingV2() {
             </div>
             <div className="ge-cta-sub">
               <p>Bắt đầu hành trình của bạn với Fovea.</p>
+              {/* Nền khối tối sẵn nên nút dùng nền sáng thay vì --primary. */}
               <Link className="ge-btn ge-btn-dark" href="/try">
                 Bắt đầu với Fovea <Arrow />
               </Link>
