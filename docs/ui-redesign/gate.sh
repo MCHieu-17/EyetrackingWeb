@@ -46,6 +46,19 @@ if [ -n "$hex" ]; then
   echo "-- Còn hex trong className (cảnh báo):"; echo "$hex" | head -15 | sed 's/^/  /'
 fi
 
+# Thuộc tính hành vi (handler, aria, role, asChild…) không được mất.
+attrs_re='\b(on[A-Z][a-zA-Z]+|href|disabled|aria-[a-z]+|role|id|htmlFor|type|asChild|name|value|checked|tabIndex)='
+rm_attrs="$(git diff -U0 -- frontend | grep -E '^-[^-]' | grep -oE "$attrs_re" | sort)"
+add_attrs="$(git diff -U0 -- frontend | grep -E '^\+[^+]' | grep -oE "$attrs_re" | sort)"
+missing="$(comm -23 <(echo "$rm_attrs" | uniq -c | awk '{print $2" "$1}' | sort) <(echo "$add_attrs" | uniq -c | awk '{print $2" "$1}' | sort) || true)"
+if [ -n "$(echo "$missing" | tr -d '[:space:]')" ]; then
+  echo "!! Thuộc tính hành vi bị xoá/giảm (kiểm tra tay):"; echo "$missing" | sed 's/^/    /'; fail=1
+fi
+# asChild dạng boolean (không có '=')
+rm_as=$(git diff -U0 -- frontend | grep -E '^-[^-]' | grep -oE '\basChild\b' | wc -l)
+add_as=$(git diff -U0 -- frontend | grep -E '^\+[^+]' | grep -oE '\basChild\b' | wc -l)
+if [ "$rm_as" -gt "$add_as" ]; then echo "!! asChild bị mất ($rm_as → $add_as)"; fail=1; fi
+
 echo "== lint + typecheck"
 (cd frontend && npm run -s lint && npm run -s typecheck) || fail=1
 
