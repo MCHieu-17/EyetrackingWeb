@@ -36,10 +36,10 @@ export const metadata: Metadata = {
     "Eyetracking: nền tảng học trực tuyến của Đại học Kinh tế Quốc dân, dùng webcam eye-tracking để hiểu cách người học quan sát từng trang tài liệu.",
   icons: {
     icon: [
-      { url: "/brand/neu-icon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/brand/neu-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/brand/neu-emblem-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/neu-emblem-192.png", sizes: "192x192", type: "image/png" },
     ],
-    apple: [{ url: "/brand/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/brand/neu-emblem-180.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

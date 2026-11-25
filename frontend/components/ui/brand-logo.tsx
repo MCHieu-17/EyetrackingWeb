@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils";
 type BrandLogoVariant = "full" | "icon";
 
 /**
- * Lockup Eyetracking: logo chính thức của Đại học Kinh tế Quốc dân (nguồn:
- * neu.edu.vn) + wordmark. Logo gốc có nền trong suốt; trong theme tối đặt trên
- * một ô trắng nhỏ để giữ đúng màu nhận diện của trường.
+ * Lockup Eyetracking: logo NEU chính thức (nguồn: ai.neu.edu.vn) + wordmark.
+ * Logo gốc có nền trong suốt; trong theme tối đặt trên một đĩa trắng nhỏ để
+ * giữ đúng màu nhận diện của trường.
  */
 export function BrandLogo({
   variant = "full",
@@ -32,14 +32,14 @@ export function BrandLogo({
       <span
         className={cn(
           "flex h-full shrink-0 items-center justify-center",
-          plate ? "rounded-lg bg-white p-0.5" : "dark:rounded-lg dark:bg-white dark:p-0.5",
+          plate ? "rounded-full bg-white p-0.5" : "dark:rounded-full dark:bg-white dark:p-0.5",
         )}
       >
         <Image
-          src="/brand/neu-logo.webp"
+          src="/brand/neu-emblem.webp"
           alt=""
-          width={180}
-          height={180}
+          width={250}
+          height={249}
           unoptimized
           draggable={false}
           className="h-full w-auto object-contain"

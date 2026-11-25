@@ -2,7 +2,7 @@
 
 Thương hiệu **Eyetracking**, dự án của Đại học Kinh tế Quốc dân (NEU). Màu nhận diện
 (neu.edu.vn): **navy `#084C90`** chủ đạo, **đỏ `#AE152D`** nhấn (dùng tiết chế).
-Logo NEU dùng file chính thức từ neu.edu.vn (`frontend/public/brand/neu-logo.webp`).
+Logo NEU dùng file chính thức từ ai.neu.edu.vn (`frontend/public/brand/neu-emblem.webp`).
 Font: Source Sans 3 (body, gần Source Sans Pro của NEU), Be Vietnam Pro (tiêu đề).
 Có theme sáng + tối (+ theo hệ thống). Trang thu gaze luôn sáng.
 
