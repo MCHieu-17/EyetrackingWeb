@@ -49,7 +49,7 @@ function AoiBox({
   onSelect: () => void;
   onHover: () => void;
 }) {
-  const color = dimmed ? "#9ca3af" : colorFor(code);
+  const color = dimmed ? "var(--muted-foreground)" : colorFor(code);
   return (
     <div
       className={cn("pointer-events-none absolute", dimmed && "opacity-55")}
@@ -532,7 +532,7 @@ export function AoiOverlay({
       {showOverlays && tab === "ui" && renderUiBoxes()}
       {draftBox && (
         <div
-          className="pointer-events-none absolute rounded-[4px] border-2 border-dashed border-[#36533a] bg-[#36533a]/10"
+          className="pointer-events-none absolute rounded-[4px] border-2 border-dashed border-primary bg-primary/10"
           style={{
             left: draftBox.left,
             top: draftBox.top,

@@ -77,15 +77,15 @@ export function StudentPreview({
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-full border border-[#eeeee9] bg-white p-1">
+        <div className="flex rounded-full border border-border bg-card p-1">
           <button
             type="button"
             onClick={() => controller.changeMode("edit")}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
               controller.mode === "edit"
-                ? "bg-black text-white"
-                : "text-black/60 hover:text-black",
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon name="ri-cursor-line" className="size-3.5" />
@@ -97,8 +97,8 @@ export function StudentPreview({
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
               controller.mode === "interact"
-                ? "bg-[#36533a] text-white"
-                : "text-black/60 hover:text-black",
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon name="ri-play-circle-line" className="size-3.5" />
@@ -106,7 +106,7 @@ export function StudentPreview({
           </button>
         </div>
 
-        <p className="min-w-0 flex-1 truncate text-[11px] text-black/50">
+        <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
           {hint}
         </p>
 
@@ -114,7 +114,7 @@ export function StudentPreview({
           type="button"
           variant="outline"
           size="icon-sm"
-          className="rounded-full border-[#eeeee9] bg-white"
+          className="rounded-full border-border bg-card"
           onClick={() => controller.setShowOverlays(!controller.showOverlays)}
           aria-label={
             controller.showOverlays ? "Ẩn các vùng" : "Hiện các vùng"
@@ -130,7 +130,7 @@ export function StudentPreview({
 
       <div
         ref={containerRef}
-        className="relative min-h-0 flex-1 overflow-hidden rounded-[20px] border border-[#eeeee9] bg-[#f5f6f2] shadow-xs"
+        className="relative min-h-0 flex-1 overflow-hidden rounded-[20px] border border-border bg-background shadow-xs"
       >
         <div
           ref={shellRef}
@@ -238,8 +238,8 @@ export function StudentPreview({
                 className={cn(
                   "relative w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-white p-0.5 transition",
                   active
-                    ? "border-black"
-                    : "border-transparent hover:border-black/20",
+                    ? "border-primary"
+                    : "border-transparent hover:border-primary/30",
                 )}
                 aria-label={`Trang ${index + 1}`}
                 title={`Trang ${index + 1}`}
@@ -261,7 +261,7 @@ export function StudentPreview({
                   className={cn(
                     "absolute bottom-0.5 right-0.5 rounded px-1 text-[9px] font-semibold tabular-nums",
                     active
-                      ? "bg-black text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-white/90 text-black/60",
                   )}
                 >

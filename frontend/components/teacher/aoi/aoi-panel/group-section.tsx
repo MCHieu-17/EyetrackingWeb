@@ -21,7 +21,7 @@ export function GroupSection({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/40"
+        className="flex w-full items-center justify-between px-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
       >
         <span>
           {title} ({count})

@@ -24,7 +24,7 @@ export function UiDefinitionList({
 }) {
   if (controller.generatingUi) {
     return (
-      <div className="flex items-center gap-2 rounded-xl bg-[#f7f7f4] px-3 py-3 text-xs text-black/55">
+      <div className="flex items-center gap-2 rounded-xl bg-muted px-3 py-3 text-xs text-muted-foreground">
         <Icon name="ri-loader-4-line" className="size-4 animate-spin" />
         Đang tìm các phần của trang…
       </div>
@@ -105,7 +105,7 @@ export function UiDefinitionList({
       )}
 
       {model.uiComponents.length === 0 && model.uiCustom.length === 0 && (
-        <div className="rounded-xl border border-dashed border-black/10 bg-[#f7f7f4] px-3 py-4 text-center text-xs leading-5 text-black/50">
+        <div className="rounded-xl border border-dashed border-border bg-muted px-3 py-4 text-center text-xs leading-5 text-muted-foreground">
           Bấm vào một phần của trang để chọn vùng.
         </div>
       )}
@@ -123,16 +123,16 @@ export function UiDefinitionList({
               type="button"
               onClick={() => controller.createUiComponentAoi(component.code)}
               disabled={!controller.canManage}
-              className="flex w-full items-center gap-2 rounded-xl border border-transparent px-2.5 py-2 text-left transition-colors hover:border-black/10 hover:bg-[#f7f7f4] disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-xl border border-transparent px-2.5 py-2 text-left transition-colors hover:border-border hover:bg-muted disabled:opacity-50"
             >
               <Icon
                 name={component.icon}
-                className="size-3.5 shrink-0 text-black/40"
+                className="size-3.5 shrink-0 text-muted-foreground"
               />
-              <span className="min-w-0 flex-1 truncate text-xs text-black/65">
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                 {component.name}
               </span>
-              <Icon name="ri-add-line" className="size-3.5 text-black/35" />
+              <Icon name="ri-add-line" className="size-3.5 text-muted-foreground" />
             </button>
           ))}
         </GroupSection>

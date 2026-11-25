@@ -33,7 +33,7 @@ export function PanelActions({
             type="button"
             size="sm"
             variant="outline"
-            className="rounded-full border-black/10 bg-white"
+            className="rounded-full border-border bg-card"
             disabled={!controller.canManage || controller.mode === "interact"}
             onClick={() => onShowHint("Kéo chuột trên slide để vẽ vùng.")}
           >
@@ -46,7 +46,7 @@ export function PanelActions({
               type="button"
               size="sm"
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-full border-border bg-card"
               disabled={!controller.canManage || controller.mode === "interact"}
               onClick={() => onShowHint("Bấm vào một phần của trang để chọn vùng.")}
             >
@@ -57,7 +57,7 @@ export function PanelActions({
               type="button"
               size="sm"
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-full border-border bg-card"
               disabled={!controller.canManage || controller.mode === "interact"}
               onClick={() => onShowHint("Kéo chuột trên trang để vẽ vùng.")}
             >
@@ -69,7 +69,7 @@ export function PanelActions({
       </div>
 
       {hint && (
-        <p className="mt-2 rounded-lg bg-[#e8f1e6] px-2.5 py-1.5 text-[11px] text-[#36533a]">
+        <p className="mt-2 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] text-primary">
           {hint}
         </p>
       )}
@@ -81,7 +81,7 @@ export function PanelActions({
         {save.status === "saving" ? (
           <Icon
             name="ri-loader-4-line"
-            className="mt-0.5 size-3.5 animate-spin text-black/45"
+            className="mt-0.5 size-3.5 animate-spin text-muted-foreground"
           />
         ) : save.status === "error" ? (
           <Icon
@@ -91,14 +91,14 @@ export function PanelActions({
         ) : (
           <Icon
             name="ri-check-line"
-            className="mt-0.5 size-3.5 text-[#36533a]"
+            className="mt-0.5 size-3.5 text-primary"
           />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span
               className={cn(
-                save.status === "error" ? "text-destructive" : "text-black/50",
+                save.status === "error" ? "text-destructive" : "text-muted-foreground",
               )}
             >
               {saveLabel}

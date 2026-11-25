@@ -24,7 +24,7 @@ export function SlideDefinitionList({
 }) {
   if (!model.slideRoot && model.slideLeaves.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-black/10 bg-[#f7f7f4] px-3 py-4 text-center text-xs leading-5 text-black/50">
+      <div className="rounded-xl border border-dashed border-border bg-muted px-3 py-4 text-center text-xs leading-5 text-muted-foreground">
         Chưa có vùng nào.
         <br />
         Kéo chuột trên slide để vẽ vùng đầu tiên.
@@ -37,12 +37,12 @@ export function SlideDefinitionList({
   return (
     <>
       {slideRoot && (
-        <div className="rounded-xl border border-black/10 bg-[#f7f7f4] px-2.5 py-2">
+        <div className="rounded-xl border border-border bg-muted px-2.5 py-2">
           <div className="flex items-center gap-2">
-            <span className="size-2.5 shrink-0 rounded-full bg-black/25" />
+            <span className="size-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
             <Icon
               name="ri-slideshow-line"
-              className="size-3.5 shrink-0 text-black/45"
+              className="size-3.5 shrink-0 text-muted-foreground"
             />
             <input
               value={slideRoot.name}
@@ -51,10 +51,10 @@ export function SlideDefinitionList({
               }
               readOnly={!controller.canManage}
               aria-label="Tên slide"
-              className="w-full truncate rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs font-semibold text-black outline-none hover:border-black/10 focus:border-black/20 focus:bg-white focus:ring-2 focus:ring-[#e8f1e6]"
+              className="w-full truncate rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs font-semibold text-foreground outline-none hover:border-border focus:border-primary/30 focus:bg-card focus:ring-2 focus:ring-ring/25"
             />
           </div>
-          <p className="mt-0.5 pl-8 text-[10px] text-black/40">
+          <p className="mt-0.5 pl-8 text-[10px] text-muted-foreground">
             Toàn bộ trang — không xóa được
           </p>
         </div>

@@ -46,7 +46,7 @@ export function AoiRow({
   const [labelDraft, setLabelDraft] = useState<string | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
   const skipLabelCommitRef = useRef(false);
-  const color = inactive ? "#9ca3af" : colorFor(definition.code);
+  const color = inactive ? "var(--muted-foreground)" : colorFor(definition.code);
   const labelText = labelDraft ?? labelValue ?? "";
   const labelInputId = `aoi-label-${definition.code}`;
 
@@ -74,10 +74,10 @@ export function AoiRow({
       className={cn(
         "group rounded-xl border px-2.5 py-2 transition-colors",
         selected
-          ? "border-[#36533a]/30 bg-[#e8f1e6]"
+          ? "border-primary/30 bg-accent"
           : hovered
-            ? "border-black/10 bg-[#f7f7f4]"
-            : "border-transparent hover:border-black/10 hover:bg-[#f7f7f4]",
+            ? "border-border bg-muted"
+            : "border-transparent hover:border-border hover:bg-muted",
         inactive && "opacity-55",
       )}
     >
@@ -86,7 +86,7 @@ export function AoiRow({
           className="size-2.5 shrink-0 rounded-full"
           style={{ backgroundColor: color }}
         />
-        <Icon name={icon} className="size-3.5 shrink-0 text-black/45" />
+        <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <input
             value={definition.name}
@@ -101,25 +101,25 @@ export function AoiRow({
             }}
             readOnly={!canManage}
             aria-label="Tên vùng"
-            className="w-full truncate rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-black outline-none transition-colors hover:border-black/10 focus:border-black/20 focus:bg-white focus:ring-2 focus:ring-[#e8f1e6]"
+            className="w-full truncate rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-foreground outline-none transition-colors hover:border-border focus:border-primary/30 focus:bg-card focus:ring-2 focus:ring-ring/25"
           />
           {inactive ? (
-            <p className="truncate px-1 text-[10px] text-black/45">
+            <p className="truncate px-1 text-[10px] text-muted-foreground">
               Chưa đánh dấu{subtitle ? ` · ${subtitle}` : ""}
             </p>
           ) : subtitle ? (
-            <p className="truncate px-1 text-[10px] text-black/45">{subtitle}</p>
+            <p className="truncate px-1 text-[10px] text-muted-foreground">{subtitle}</p>
           ) : null}
           {onLabelChange && (
             <div className="mt-1" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center gap-1">
                 <label
                   htmlFor={labelInputId}
-                  className="shrink-0 text-[10px] text-black/45"
+                  className="shrink-0 text-[10px] text-muted-foreground"
                 >
                   Nhãn phân tích
                 </label>
-                <span className="shrink-0 rounded bg-black/5 px-1 py-0.5 font-mono text-[10px] text-black/55">
+                <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
                   {labelPrefix ?? ""}
                 </span>
                 <input
@@ -156,7 +156,7 @@ export function AoiRow({
                   maxLength={64}
                   placeholder="AOI_THANHCHAT"
                   aria-label="Nhãn phân tích"
-                  className="min-w-0 flex-1 rounded-md border border-black/10 bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-black outline-none transition-colors hover:border-black/20 focus:border-[#36533a]/40 focus:bg-white focus:ring-2 focus:ring-[#e8f1e6]"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-card/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground outline-none transition-colors hover:border-primary/30 focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-ring/25"
                 />
               </div>
               {labelError && (
@@ -177,7 +177,7 @@ export function AoiRow({
               event.stopPropagation();
               onRestore();
             }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-[#36533a] transition-colors hover:bg-[#e8f1e6]"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-accent"
             aria-label="Bật lại vùng"
             title="Bật lại vùng"
           >
@@ -191,7 +191,7 @@ export function AoiRow({
               event.stopPropagation();
               setConfirming(true);
             }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="Xóa vùng"
             title="Xóa vùng"
           >
@@ -205,7 +205,7 @@ export function AoiRow({
               event.stopPropagation();
               onDeactivate();
             }}
-            className="flex size-6 shrink-0 items-center justify-center rounded-full text-black/35 transition-colors hover:bg-black/5 hover:text-black/70"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-muted-foreground"
             aria-label="Bỏ đánh dấu vùng"
             title="Bỏ đánh dấu vùng"
           >
@@ -215,8 +215,8 @@ export function AoiRow({
       </div>
 
       {confirming && onDelete && (
-        <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-[11px]">
-          <span className="min-w-0 flex-1 text-black/60">Xóa vùng này?</span>
+        <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-card px-2 py-1.5 text-[11px]">
+          <span className="min-w-0 flex-1 text-muted-foreground">Xóa vùng này?</span>
           <button
             type="button"
             onClick={(event) => {
@@ -234,7 +234,7 @@ export function AoiRow({
               event.stopPropagation();
               setConfirming(false);
             }}
-            className="text-black/50"
+            className="text-muted-foreground"
           >
             Hủy
           </button>

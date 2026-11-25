@@ -24,19 +24,19 @@ export function HelpDialog({
         </DialogHeader>
         <ol className="space-y-3 px-6 pb-2 text-sm text-foreground">
           <li className="flex gap-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[10px] font-semibold text-[#36533a]">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-primary">
               1
             </span>
             Bấm vào một phần của trang để chọn vùng.
           </li>
           <li className="flex gap-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[10px] font-semibold text-[#36533a]">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-primary">
               2
             </span>
             Kéo chuột trên slide hoặc trên trang để vẽ vùng mới.
           </li>
           <li className="flex gap-2">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[10px] font-semibold text-[#36533a]">
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-primary">
               3
             </span>
             Bấm “Tương tác” để chuyển trang như học viên.

@@ -68,9 +68,9 @@ export function AoiPanel({
 
   if (controller.lessons.length === 0) {
     return (
-      <div className="rounded-[20px] border border-[#eeeee9] bg-white p-5 text-center shadow-xs">
-        <p className="text-sm font-semibold text-black">Chưa có bài giảng</p>
-        <p className="mt-1 text-xs text-black/55">
+      <div className="rounded-[20px] border border-border bg-card p-5 text-center shadow-xs">
+        <p className="text-sm font-semibold text-foreground">Chưa có bài giảng</p>
+        <p className="mt-1 text-xs text-muted-foreground">
           Thêm bài giảng và tải slide trước khi tạo vùng.
         </p>
         <Button asChild size="sm" className="mt-3 rounded-full">
@@ -84,7 +84,7 @@ export function AoiPanel({
 
   return (
     <aside className="flex min-h-0 w-[380px] shrink-0 flex-col gap-3">
-      <div className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+      <div className="rounded-[20px] border border-border bg-card p-4 shadow-xs">
         <LessonSlideSelector
           courseId={courseId}
           controller={controller}
@@ -97,7 +97,7 @@ export function AoiPanel({
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[20px] border border-[#eeeee9] bg-white p-3 shadow-xs">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-[20px] border border-border bg-card p-3 shadow-xs">
         {controller.tab === "slide" ? (
           <SlideDefinitionList
             controller={controller}

@@ -19,13 +19,13 @@ export function LessonSlideSelector({
     <>
       <div className="flex items-start gap-2">
         <label className="min-w-0 flex-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/40">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Bài giảng
           </span>
           <select
             value={controller.activeLessonId}
             onChange={(event) => controller.selectLesson(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-[#eeeee9] bg-[#fdfdfa] px-2.5 py-2 text-xs font-medium text-black outline-none focus:border-black/20 focus:ring-2 focus:ring-[#e8f1e6]"
+            className="mt-1 w-full rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-foreground outline-none focus:border-primary/30 focus:ring-2 focus:ring-ring/25"
           >
             {controller.tree.map((module) => (
               <optgroup key={module.id} label={module.title}>
@@ -69,12 +69,12 @@ export function LessonSlideSelector({
             <Icon name="ri-arrow-left-s-line" className="size-4" />
           </Button>
           <div className="min-w-0 flex-1">
-            <p className="text-center text-[11px] font-medium tabular-nums text-black/60">
+            <p className="text-center text-[11px] font-medium tabular-nums text-muted-foreground">
               Trang {controller.currentSlideIndex + 1}/{controller.slides.length}
             </p>
-            <div className="mt-1 h-1 rounded-full bg-black/10">
+            <div className="mt-1 h-1 rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-[#36533a] transition-[width]"
+                className="h-full rounded-full bg-primary transition-[width]"
                 style={{
                   width: `${
                     ((controller.currentSlideIndex + 1) /
@@ -100,18 +100,18 @@ export function LessonSlideSelector({
           </Button>
         </div>
       ) : (
-        <div className="mt-3 rounded-xl border border-dashed border-black/10 bg-[#f7f7f4] px-3 py-3 text-center text-xs text-black/50">
+        <div className="mt-3 rounded-xl border border-dashed border-border bg-muted px-3 py-3 text-center text-xs text-muted-foreground">
           Bài giảng này chưa có slide.
           <Link
             href={`/teacher/courses/${courseId}?tab=content`}
-            className="mt-1 block font-semibold text-[#36533a] underline"
+            className="mt-1 block font-semibold text-primary underline"
           >
             Mở tab Nội dung
           </Link>
         </div>
       )}
 
-      <div className="mt-3 flex rounded-full border border-[#eeeee9] bg-[#f7f7f4] p-1">
+      <div className="mt-3 flex rounded-full border border-border bg-muted p-1">
         <button
           type="button"
           onClick={() => controller.changeTab("slide")}
@@ -119,8 +119,8 @@ export function LessonSlideSelector({
           className={cn(
             "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40",
             controller.tab === "slide"
-              ? "bg-black text-white"
-              : "text-black/55 hover:text-black",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           Slide
@@ -131,8 +131,8 @@ export function LessonSlideSelector({
           className={cn(
             "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
             controller.tab === "ui"
-              ? "bg-black text-white"
-              : "text-black/55 hover:text-black",
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           Giao diện
