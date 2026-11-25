@@ -228,7 +228,7 @@ export function LessonQuizEditor({
   };
 
   if (isLoading) {
-    return <p className="text-sm text-black/55">Đang tải bài tập…</p>;
+    return <p className="text-sm text-muted-foreground">Đang tải bài tập…</p>;
   }
   if (isError) {
     return (
@@ -267,11 +267,11 @@ export function LessonQuizEditor({
       />
 
       {/* Danh sách câu hỏi + vùng sửa câu đang chọn */}
-      <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-black">Câu hỏi</h3>
+          <h3 className="text-base font-semibold text-foreground">Câu hỏi</h3>
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-medium text-black/60">
+            <span className="text-xs font-medium text-muted-foreground">
               {questions.length} câu · {totalPoints} điểm
             </span>
             {incompleteCount > 0 && (

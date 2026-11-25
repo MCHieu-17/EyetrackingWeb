@@ -6,10 +6,10 @@ import type { LessonNode } from "@/lib/types/domain";
 type Tone = "ok" | "missing" | "draft" | "muted";
 
 const TONE_CLS: Record<Tone, string> = {
-  ok: "border-[#cfe0ca] bg-[#e8f1e6] text-[#3f573c]",
+  ok: "border-success/25 bg-success/10 text-success",
   missing: "border-destructive/25 bg-destructive/8 text-destructive",
-  draft: "border-black/10 bg-black/5 text-black/60",
-  muted: "border-black/10 bg-black/5 text-black/60",
+  draft: "border-border bg-muted text-muted-foreground",
+  muted: "border-border bg-muted text-muted-foreground",
 };
 
 /** Nhãn trạng thái nội dung: đủ/thiếu tài liệu, bản nháp, số câu… */

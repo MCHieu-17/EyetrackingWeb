@@ -187,7 +187,7 @@ export function LessonEditor({
       <SlideCheckSection slides={slides} />
 
       {slidesLoading && slides.length === 0 && (
-        <p className="text-sm text-black/55">Đang tải tài liệu bài giảng…</p>
+        <p className="text-sm text-muted-foreground">Đang tải tài liệu bài giảng…</p>
       )}
 
       <ConfirmDialog

@@ -26,7 +26,7 @@ export function AddItemMenu({
           <Button
             variant="outline"
             size="sm"
-            className="rounded-full border-black/10 bg-white"
+            className="rounded-full border-border bg-card"
             disabled={busy}
           >
             <Icon name="ri-add-line" className="size-4" />
@@ -59,7 +59,7 @@ export function AddModuleButton({
   return (
     <Button
       variant="ghost"
-      className="w-full justify-start rounded-full text-black/60"
+      className="w-full justify-start rounded-full text-muted-foreground"
       onClick={onAddModule}
       disabled={busy}
     >

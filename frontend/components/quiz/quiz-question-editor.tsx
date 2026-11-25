@@ -116,10 +116,10 @@ export function QuizQuestionEditor({
   };
 
   return (
-    <div className="rounded-[18px] border border-[#eeeee9] bg-[#fdfdfa] p-4">
+    <div className="rounded-2xl border border-border bg-muted/40 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-sm font-semibold text-black">
-          <span className="flex size-6 items-center justify-center rounded-full bg-black text-[11px] font-semibold text-white tabular-nums">
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground tabular-nums">
             {index + 1}
           </span>
           Câu hỏi {index + 1}
@@ -173,7 +173,7 @@ export function QuizQuestionEditor({
       </div>
 
       {issues.length > 0 && (
-        <ul className="mb-3 space-y-1 rounded-[14px] border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-black/75">
+        <ul className="mb-3 space-y-1 rounded-xl border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-muted-foreground">
           {issues.map((issue) => (
             <li key={issue} className="flex items-center gap-1.5">
               <Icon name="ri-error-warning-line" className="size-3.5 shrink-0 text-warning" />
@@ -194,10 +194,10 @@ export function QuizQuestionEditor({
 
       <fieldset className="mt-4 space-y-2">
         <legend className="mb-1 flex w-full flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-medium text-black">
+          <span className="text-sm font-medium text-foreground">
             {question.allowMultiple ? "Tích vào các đáp án đúng" : "Chọn một đáp án đúng"}
           </span>
-          <span className="flex rounded-full bg-black/5 p-0.5">
+          <span className="flex rounded-full bg-muted p-0.5">
             <button
               type="button"
               onClick={() => setAllowMultiple(false)}
@@ -205,8 +205,8 @@ export function QuizQuestionEditor({
               className={cn(
                 "rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
                 !question.allowMultiple
-                  ? "bg-white text-black shadow-xs"
-                  : "text-black/55 hover:text-black",
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Một đáp án
@@ -218,8 +218,8 @@ export function QuizQuestionEditor({
               className={cn(
                 "rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
                 question.allowMultiple
-                  ? "bg-white text-black shadow-xs"
-                  : "text-black/55 hover:text-black",
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Nhiều đáp án
@@ -235,7 +235,7 @@ export function QuizQuestionEditor({
               key={option.id}
               className={cn(
                 "flex items-center gap-2 rounded-2xl border p-2 transition",
-                correct ? "border-[#6f8f69]/50 bg-[#e8f1e6]/60" : "border-black/10 bg-white",
+                correct ? "border-primary/50 bg-accent/60" : "border-border bg-card",
                 empty && "border-warning/40",
               )}
             >
@@ -287,8 +287,8 @@ export function QuizQuestionEditor({
         </Button>
       </fieldset>
 
-      <details className="mt-3 rounded-xl bg-black/5 px-3 py-2">
-        <summary className="cursor-pointer text-xs font-medium text-black/65">
+      <details className="mt-3 rounded-xl bg-muted px-3 py-2">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
           Giải thích &amp; điểm (nâng cao)
         </summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_110px]">

@@ -52,22 +52,22 @@ export function UploadSection({
   onRetryIndex: () => void;
 }) {
   return (
-    <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
+    <section className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-black">Tài liệu bài giảng</h3>
-          <p className="mt-1 text-sm leading-6 text-black/65">
+          <h3 className="text-base font-semibold text-foreground">Tài liệu bài giảng</h3>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {hasSlides
               ? `Đang dùng ${slideCount} trang slide. Tải tài liệu mới để tạo lại toàn bộ.`
               : "Tải PDF/PPTX/PPT/ODP lên để tạo slide cho bài giảng này."}
           </p>
-          <p className="mt-1 text-xs leading-5 text-black/55">{limitsHint}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{limitsHint}</p>
         </div>
         {canManage && (
           <Button
             type="button"
             variant="outline"
-            className="shrink-0 rounded-full border-black/10 bg-white"
+            className="shrink-0 rounded-full border-border bg-card"
             onClick={onOpenFileDialog}
             disabled={uploading}
           >
@@ -95,20 +95,20 @@ export function UploadSection({
             onDrop(event.dataTransfer.files);
           }}
           className={cn(
-            "mt-4 flex w-full flex-col items-center justify-center gap-1 rounded-[18px] border border-dashed px-4 py-6 text-center transition",
+            "mt-4 flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-6 text-center transition",
             uploading
-              ? "border-[#cfdcca] bg-[#e8f1e6]/70"
-              : "border-[#cfdcca] bg-[#e8f1e6]/55 hover:bg-[#e8f1e6]",
-            dragOver && "border-[#6f8f69] bg-[#e8f1e6]",
+              ? "border-primary/30 bg-accent/70"
+              : "border-primary/30 bg-accent/55 hover:bg-accent",
+            dragOver && "border-primary/50 bg-accent",
           )}
         >
           {upload.status === "uploading" ? (
             <>
-              <Icon name="ri-loader-4-line" className="size-6 animate-spin text-[#52704f]" />
-              <span className="mt-1 text-sm font-medium text-black">
+              <Icon name="ri-loader-4-line" className="size-6 animate-spin text-accent-foreground" />
+              <span className="mt-1 text-sm font-medium text-foreground">
                 Đang tải và xử lý “{upload.fileName}”…
               </span>
-              <span className="text-xs text-black/60">
+              <span className="text-xs text-muted-foreground">
                 PPTX/PPT/ODP được chuyển sang PDF; file nhiều trang có thể mất
                 1–2 phút. Vui lòng không đóng trang.
               </span>
@@ -116,12 +116,12 @@ export function UploadSection({
           ) : (
             <>
               <Icon name="ri-file-text-line" className="size-6 text-muted-foreground" />
-              <span className="mt-1 text-sm font-medium text-black">
+              <span className="mt-1 text-sm font-medium text-foreground">
                 {hasSlides
                   ? "Kéo tài liệu mới vào đây hoặc bấm để chọn"
                   : "Kéo PDF/PPTX/PPT/ODP vào đây hoặc bấm để chọn"}
               </span>
-              <span className="text-xs text-black/55">{limitsHint}</span>
+              <span className="text-xs text-muted-foreground">{limitsHint}</span>
             </>
           )}
         </button>

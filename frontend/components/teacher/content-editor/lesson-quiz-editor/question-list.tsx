@@ -43,7 +43,7 @@ export function QuestionList({
         ))}
       </ul>
       {questions.length === 0 && (
-        <p className="rounded-[14px] border border-dashed border-black/10 bg-[#fdfdfa] px-3 py-4 text-center text-xs text-black/55">
+        <p className="rounded-xl border border-dashed border-border bg-muted/40 px-3 py-4 text-center text-xs text-muted-foreground">
           Chưa có câu hỏi. Bấm “Thêm câu hỏi” để bắt đầu.
         </p>
       )}

@@ -46,7 +46,7 @@ export function UploadAlerts({
       {upload.status === "error" && (
         <Alert variant="destructive" className="mt-3" title="Không tải được tài liệu">
           <p>{upload.message}</p>
-          <p className="mt-1 text-xs text-black/60">
+          <p className="mt-1 text-xs text-muted-foreground">
             File “{upload.fileName}” vẫn được giữ — bạn có thể thử lại hoặc chọn file khác.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -55,7 +55,7 @@ export function UploadAlerts({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="rounded-full border-black/10 bg-white"
+                className="rounded-full border-border bg-card"
                 onClick={onRetry}
               >
                 <Icon name="ri-refresh-line" className="size-4" />
@@ -109,7 +109,7 @@ export function UploadAlerts({
               type="button"
               size="sm"
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-full border-border bg-card"
               onClick={onRetryIndex}
               disabled={reindexing}
             >

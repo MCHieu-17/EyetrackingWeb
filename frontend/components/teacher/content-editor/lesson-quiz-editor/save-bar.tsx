@@ -22,15 +22,15 @@ export function SaveBar({
   onSavePublished: () => void;
 }) {
   return (
-    <div className="sticky bottom-3 z-10 flex flex-col gap-2 rounded-[20px] border border-[#eeeee9] bg-white/95 p-3 shadow-[0_10px_30px_rgba(30,35,25,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+    <div className="sticky bottom-3 z-10 flex flex-col gap-2 rounded-2xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
       <div className="space-y-1 px-1">
-        <p className="text-xs text-black/60">
+        <p className="text-xs text-muted-foreground">
           {dirty
             ? "Chưa lưu: thay đổi sẽ mất nếu rời mục này."
             : "Mọi thay đổi đã được lưu."}
         </p>
         {status !== "published" && questionCount === 0 && (
-          <p className="text-xs text-black/55">Thêm ít nhất một câu hỏi để giao bài.</p>
+          <p className="text-xs text-muted-foreground">Thêm ít nhất một câu hỏi để giao bài.</p>
         )}
         {status !== "published" && questionCount > 0 && incompleteCount > 0 && (
           <p className="text-xs font-medium text-warning">
@@ -48,7 +48,7 @@ export function SaveBar({
         <Button
           type="button"
           variant="outline"
-          className="rounded-full border-black/10 bg-white"
+          className="rounded-full border-border bg-card"
           disabled={saving}
           onClick={onSaveDraft}
         >

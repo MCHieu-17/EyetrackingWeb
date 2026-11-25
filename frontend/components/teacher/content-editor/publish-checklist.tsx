@@ -125,21 +125,21 @@ export function PublishIssueList({
         <li
           key={issue.key}
           className={cn(
-            "flex flex-col gap-2 rounded-[16px] border p-3 sm:flex-row sm:items-center sm:justify-between",
+            "flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between",
             issue.blocking
               ? "border-destructive/25 bg-destructive/5"
               : "border-warning/30 bg-warning/8",
           )}
         >
           <div className="min-w-0">
-            <p className="text-sm font-medium text-black">{issue.item}</p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs leading-5 text-black/65">
+            <p className="text-sm font-medium text-foreground">{issue.item}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs leading-5 text-muted-foreground">
               <Icon
                 name={issue.blocking ? "ri-error-warning-line" : "ri-information-line"}
                 className={cn("size-3.5 shrink-0", issue.blocking ? "text-destructive" : "text-warning")}
               />
               {issue.label}
-              {!issue.blocking && <span className="text-black/40">· chỉ là cảnh báo</span>}
+              {!issue.blocking && <span className="text-muted-foreground">· chỉ là cảnh báo</span>}
             </p>
           </div>
           {issue.lessonId && onOpenItem && (
@@ -147,7 +147,7 @@ export function PublishIssueList({
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 self-start rounded-full border-black/10 bg-white sm:self-auto"
+              className="shrink-0 self-start rounded-full border-border bg-card sm:self-auto"
               onClick={() => onOpenItem(issue.lessonId as string)}
             >
               Mở mục này
@@ -185,7 +185,7 @@ export function PublishChecklistDialog({
         </DialogHeader>
         <div className="max-h-[55vh] overflow-y-auto px-6 pb-2">
           {report.issues.length === 0 ? (
-            <p className="flex items-center gap-2 rounded-[16px] border border-success/25 bg-success/8 p-3 text-sm text-black">
+            <p className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/8 p-3 text-sm text-foreground">
               <Icon name="ri-checkbox-circle-fill" className="size-4 text-success" />
               Tên khóa học, chương và các mục đã đầy đủ.
             </p>

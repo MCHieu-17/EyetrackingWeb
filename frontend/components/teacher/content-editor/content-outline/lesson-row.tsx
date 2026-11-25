@@ -47,10 +47,10 @@ export function LessonRow({
           onSelect(lesson.id);
         }}
         className={cn(
-          "flex cursor-pointer items-center gap-2 rounded-[18px] border px-2.5 py-2 transition",
+          "flex cursor-pointer items-center gap-2 rounded-2xl border px-2.5 py-2 transition",
           isSelected
-            ? "border-[#6f8f69] bg-[#e8f1e6]/60 shadow-xs"
-            : "border-[#eeeee9] bg-[#fdfdfa] hover:border-black/15 hover:bg-[#f6f8f4]",
+            ? "border-primary/50 bg-accent/60 shadow-xs"
+            : "border-border bg-muted/40 hover:border-primary/30 hover:bg-muted",
         )}
       >
         {canManage && <DragHandle label={`Kéo để sắp xếp ${lesson.title}`} />}
@@ -62,8 +62,8 @@ export function LessonRow({
           aria-label={`Mở ${lesson.title}`}
           title={`Mở ${lesson.title}`}
           className={cn(
-            "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-semibold tabular-nums transition hover:ring-2 hover:ring-[#6f8f69]/30 active:scale-95",
-            isQuiz ? "bg-black text-white" : "bg-[#e8f1e6] text-[#52704f]",
+            "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-semibold tabular-nums transition hover:ring-2 hover:ring-ring/30 active:scale-95",
+            isQuiz ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground",
           )}
         >
           {isQuiz ? (
@@ -93,8 +93,8 @@ export function LessonRow({
               }}
               className={cn(
                 "block w-full truncate rounded-md px-1 text-left text-sm transition-colors",
-                canManage && "hover:bg-[#e8f1e6]/55",
-                isSelected ? "font-semibold text-black" : "font-medium text-black",
+                canManage && "hover:bg-accent/55",
+                isSelected ? "font-semibold text-foreground" : "font-medium text-foreground",
               )}
               title={canManage ? "Bấm để đổi tên" : lesson.title}
             >
@@ -102,7 +102,7 @@ export function LessonRow({
             </button>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium text-black/50">
+            <span className="text-[11px] font-medium text-muted-foreground">
               {KIND_LABEL[lesson.kind] ?? "Nội dung"}
             </span>
             {itemStatus(lesson)}

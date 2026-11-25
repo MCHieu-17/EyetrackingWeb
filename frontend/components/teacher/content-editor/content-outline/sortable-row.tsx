@@ -56,7 +56,7 @@ export function DragHandle({ label }: { label: string }) {
       {...handle.listeners}
       aria-label={label}
       title="Kéo để sắp xếp"
-      className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground hover:bg-[#e8f1e6] active:cursor-grabbing"
+      className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted-foreground hover:bg-accent active:cursor-grabbing"
     >
       <Icon name="ri-draggable" className="size-4" />
     </button>

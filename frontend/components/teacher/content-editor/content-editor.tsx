@@ -326,7 +326,7 @@ export function ContentEditor({
               type="button"
               onClick={() => setChecklistOpen(true)}
               className={cn(
-                "flex w-full items-center gap-2 rounded-[16px] border px-4 py-3 text-left text-sm transition",
+                "flex w-full items-center gap-2 rounded-xl border px-4 py-3 text-left text-sm transition",
                 report.blocking
                   ? "border-destructive/25 bg-destructive/5 hover:bg-destructive/8"
                   : "border-warning/30 bg-warning/8 hover:bg-warning/12",
@@ -336,7 +336,7 @@ export function ContentEditor({
                 name={report.blocking ? "ri-error-warning-line" : "ri-information-line"}
                 className={cn("size-4 shrink-0", report.blocking ? "text-destructive" : "text-warning")}
               />
-              <span className="text-black">
+              <span className="text-foreground">
                 {report.issues.length} mục cần hoàn thiện trước khi xuất bản
                 {report.blocking ? "" : " (chỉ là cảnh báo)"} — xem danh sách
               </span>

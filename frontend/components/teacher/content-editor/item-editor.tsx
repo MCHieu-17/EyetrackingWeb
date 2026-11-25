@@ -73,7 +73,7 @@ export function ItemEditor({
           type="button"
           variant="outline"
           size="sm"
-          className="rounded-full border-black/10 bg-white lg:hidden"
+          className="rounded-full border-border bg-card lg:hidden"
           onClick={onOpenOutline}
         >
           <Icon name="ri-layout-left-line" className="size-4" />
@@ -95,7 +95,7 @@ export function ItemEditor({
           type="button"
           variant="outline"
           size="sm"
-          className="rounded-full border-black/10 bg-white"
+          className="rounded-full border-border bg-card"
           onClick={onOpenOutline}
         >
           <Icon name="ri-layout-left-line" className="size-4" />
@@ -103,10 +103,10 @@ export function ItemEditor({
         </Button>
       </div>
 
-      <header className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
-        <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-black/60">
+      <header className="rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-5">
+        <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <Icon name={isQuiz ? "ri-question-line" : "ri-book-open-line"} className="size-3.5" />
-          <span className="rounded-full border border-black/10 bg-black/5 px-2 py-0.5 font-semibold text-black/75">
+          <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-semibold text-foreground/75">
             {KIND_LABEL[lesson.kind] ?? "Nội dung"}
           </span>
           {isQuiz && lesson.quizStatus && (
@@ -137,14 +137,14 @@ export function ItemEditor({
               readOnly={!canManage}
               aria-label={isQuiz ? "Tên bài tập" : "Tên bài giảng"}
               className={cn(
-                "w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-xl font-semibold tracking-[-0.02em] text-black transition-colors",
+                "w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-xl font-semibold tracking-[-0.02em] text-foreground transition-colors",
                 canManage
-                  ? "hover:border-black/10 focus-visible:border-black/20 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e8f1e6]"
+                  ? "hover:border-border focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
                   : "cursor-default",
               )}
             />
           </label>
-          <span className="shrink-0 text-xs text-black/60">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {!canManage
               ? "Bạn chỉ có quyền xem"
               : savingTitle
@@ -163,7 +163,7 @@ export function ItemEditor({
             onChanged={onChanged}
           />
         ) : (
-          <p className="rounded-[20px] border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+          <p className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
             Bài tập chưa sẵn sàng — hãy tải lại trang, hoặc xóa và tạo lại bài tập này.
           </p>
         )

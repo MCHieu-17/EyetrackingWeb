@@ -45,9 +45,9 @@ export function QuizSettings({
   onInstructionsChange: (value: string) => void;
 }) {
   return (
-    <section className="space-y-3 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-6">
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-black">Thiết lập bài tập</h3>
+        <h3 className="text-base font-semibold text-foreground">Thiết lập bài tập</h3>
         <span
           className={cn(
             "rounded-full border px-2.5 py-1 text-[11px] font-semibold",
@@ -59,7 +59,7 @@ export function QuizSettings({
       </div>
 
       {status === "draft" && (
-        <p className="flex items-start gap-2 rounded-[14px] border border-warning/30 bg-warning/8 px-3 py-2 text-xs leading-5 text-black/75">
+        <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
           <Icon name="ri-information-line" className="mt-0.5 size-3.5 shrink-0 text-warning" />
           Bài tập chưa được giao cho học viên. Bấm “Giao bài cho học viên” để xuất bản khóa học
           và đưa bài tập vào.
@@ -73,13 +73,13 @@ export function QuizSettings({
         />
       )}
 
-      <div className="flex flex-col gap-3 rounded-[16px] border border-[#dfe9dc] bg-[#e8f1e6]/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-accent/45 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h4 className="flex items-center gap-2 text-sm font-semibold text-black">
-            <Icon name="ri-refresh-line" className="size-4 text-[#52704f]" />
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Icon name="ri-refresh-line" className="size-4 text-accent-foreground" />
             Cho phép học viên làm lại
           </h4>
-          <p className="mt-1 text-xs leading-5 text-black/65">
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Bật để học viên được xoá kết quả cũ và làm lại từ đầu khi bài còn mở; đồng hồ làm bài
             chạy lại. Lưu ngay khi bật/tắt.
           </p>
@@ -92,7 +92,7 @@ export function QuizSettings({
         />
       </div>
 
-      <div className="flex items-center justify-between gap-4 rounded-[16px] border border-border p-4">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
         <div>
           <p className="text-sm font-semibold">Cho phép dùng chatbot khi làm bài</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -107,14 +107,14 @@ export function QuizSettings({
         />
       </div>
 
-      <details className="rounded-[16px] border border-black/10 bg-[#fdfdfa] p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-black">
+      <details className="rounded-xl border border-border bg-muted/40 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
           Thời lượng, hạn nộp, hướng dẫn
-          <span className="ml-2 text-xs font-normal text-black/55">
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
             {durationMinutes} phút · {dueAt ? "có hạn nộp" : "không hạn nộp"}
           </span>
         </summary>
-        <p className="mt-2 text-xs leading-5 text-black/60">
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
           Các thay đổi trong mục này chỉ được áp dụng khi bấm “Lưu bài tập nháp” hoặc “Giao bài cho
           học viên”.
         </p>
@@ -122,7 +122,7 @@ export function QuizSettings({
           <div className="space-y-1.5">
             <label
               htmlFor={`quiz-duration-${assignmentId}`}
-              className="block text-sm font-medium text-black/75"
+              className="block text-sm font-medium text-foreground/75"
             >
               Thời lượng (phút) <span className="text-destructive">*</span>
             </label>
@@ -141,7 +141,7 @@ export function QuizSettings({
           <div className="space-y-1.5">
             <label
               htmlFor={`quiz-due-${assignmentId}`}
-              className="block text-sm font-medium text-black/75"
+              className="block text-sm font-medium text-foreground/75"
             >
               Hạn nộp (tùy chọn)
             </label>
@@ -157,7 +157,7 @@ export function QuizSettings({
           <div className="space-y-1.5 sm:col-span-2">
             <label
               htmlFor={`quiz-instructions-${assignmentId}`}
-              className="block text-sm font-medium text-black/75"
+              className="block text-sm font-medium text-foreground/75"
             >
               Hướng dẫn làm bài
             </label>

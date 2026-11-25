@@ -68,22 +68,22 @@ export function NewCourseSetup({
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <div className="border-b border-black/10 pb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/45">
+      <div className="border-b border-border pb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Khóa học mới
         </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-black sm:text-4xl">
+        <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl">
           Tạo khóa học
         </h2>
-        <p className="mt-3 text-sm leading-6 text-black/60">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           Đặt tên và mô tả trước. Sau khi tạo, bạn có thể thêm chương, bài giảng PDF và bài tập
           trắc nghiệm trong cùng một màn hình — không cần hoàn tất khóa học trước.
         </p>
       </div>
 
-      <section className="space-y-5 rounded-[20px] border border-[#eeeee9] bg-white p-5 shadow-xs sm:p-7">
+      <section className="space-y-5 rounded-2xl border border-border bg-card p-5 shadow-xs sm:p-7">
         <div className="space-y-1.5">
-          <label htmlFor="new-course-title" className="block text-sm font-medium text-black">
+          <label htmlFor="new-course-title" className="block text-sm font-medium text-foreground">
             Tên khóa học <span className="text-destructive">*</span>
           </label>
           <Input
@@ -98,7 +98,7 @@ export function NewCourseSetup({
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="new-course-description" className="block text-sm font-medium text-black">
+          <label htmlFor="new-course-description" className="block text-sm font-medium text-foreground">
             Mô tả
           </label>
           <Textarea
@@ -113,11 +113,11 @@ export function NewCourseSetup({
 
         {error && <Alert variant="destructive" title={error} />}
 
-        <div className="flex flex-col-reverse gap-2 border-t border-black/5 pt-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-black/10 bg-white"
+            className="rounded-full border-border bg-card"
             onClick={onCancel}
             disabled={creating}
           >
@@ -125,7 +125,7 @@ export function NewCourseSetup({
           </Button>
           <Button
             type="button"
-            className="rounded-full bg-black px-6 text-white hover:bg-black/80"
+            className="rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary-hover"
             onClick={() => void create()}
             disabled={creating || !title.trim()}
           >

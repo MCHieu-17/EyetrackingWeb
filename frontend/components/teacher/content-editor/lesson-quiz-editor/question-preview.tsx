@@ -26,16 +26,16 @@ export function QuestionPreview({
         aria-current={active ? "true" : undefined}
         aria-label={`Câu hỏi ${index + 1}`}
         className={cn(
-          "flex w-full items-center gap-2 rounded-[14px] border px-2.5 py-2 text-left transition",
+          "flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition",
           active
-            ? "border-[#6f8f69] bg-[#e8f1e6]/60"
-            : "border-[#eeeee9] bg-[#fdfdfa] hover:border-black/15",
+            ? "border-primary/50 bg-accent/60"
+            : "border-border bg-muted/40 hover:border-primary/30",
         )}
       >
         <span
           className={cn(
             "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
-            active ? "bg-black text-white" : "bg-black/5 text-black/60",
+            active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
           )}
         >
           {index + 1}
@@ -43,7 +43,7 @@ export function QuestionPreview({
         <span
           className={cn(
             "min-w-0 flex-1 truncate text-xs",
-            question.prompt.trim() ? "text-black" : "italic text-black/45",
+            question.prompt.trim() ? "text-foreground" : "italic text-muted-foreground",
           )}
         >
           {question.prompt.trim() || "Chưa có nội dung"}
@@ -55,7 +55,7 @@ export function QuestionPreview({
             aria-label={questionIssues(question).join(" · ")}
           />
         )}
-        <span className="shrink-0 text-[11px] font-medium text-black/50 tabular-nums">
+        <span className="shrink-0 text-[11px] font-medium text-muted-foreground tabular-nums">
           {question.points}đ
         </span>
       </button>

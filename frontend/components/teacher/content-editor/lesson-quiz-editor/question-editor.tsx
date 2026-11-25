@@ -33,7 +33,7 @@ export function QuestionEditor({
 }) {
   if (!question) {
     return (
-      <p className="rounded-[18px] border border-dashed border-black/10 bg-[#fdfdfa] px-4 py-10 text-center text-sm text-black/55">
+      <p className="rounded-2xl border border-dashed border-border bg-muted/40 px-4 py-10 text-center text-sm text-muted-foreground">
         Chọn một câu hỏi ở danh sách bên trái, hoặc bấm “Thêm câu hỏi”.
       </p>
     );

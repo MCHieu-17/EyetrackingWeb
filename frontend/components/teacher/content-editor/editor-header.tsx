@@ -31,17 +31,17 @@ export function EditorHeader({
   onPublish: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-black/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="text-sm text-black/60">
+        <p className="text-sm text-muted-foreground">
           {moduleCount} chương · {totalLessons} bài giảng · {totalQuizzes} bài tập · {totalSlides} trang
-          {treeFetching && <span className="ml-2 text-black/45">· đang cập nhật…</span>}
+          {treeFetching && <span className="ml-2 text-muted-foreground">· đang cập nhật…</span>}
         </p>
       </div>
       {canManage && (
         <div className="flex flex-wrap gap-2">
           {courseStatus === "published" ? (
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#cfe0ca] bg-[#e8f1e6] px-3.5 text-xs font-semibold text-[#3f573c]">
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-success/25 bg-success/10 px-3.5 text-xs font-semibold text-success">
               <Icon name="ri-checkbox-circle-fill" className="size-4" />
               Đã xuất bản
             </span>

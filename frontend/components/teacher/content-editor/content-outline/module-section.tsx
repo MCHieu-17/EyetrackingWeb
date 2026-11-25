@@ -98,11 +98,11 @@ export function ModuleSection({
   const active = module.lessons.some((lesson) => lesson.id === selection);
 
   return (
-    <section className="overflow-hidden rounded-[20px] border border-[#eeeee9] bg-white shadow-xs">
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-2.5",
-          active && !isOpen && "bg-[#e8f1e6]/45",
+          active && !isOpen && "bg-accent/45",
         )}
       >
         <button
@@ -111,7 +111,7 @@ export function ModuleSection({
           aria-expanded={isOpen}
           aria-label={isOpen ? `Thu gọn ${module.title}` : `Mở ${module.title}`}
           title={isOpen ? "Thu gọn chương" : "Mở chương"}
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[#52704f] transition hover:bg-[#dbe8d6]"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition hover:bg-accent/70"
         >
           <Icon
             name="ri-arrow-right-s-line"
@@ -119,7 +119,7 @@ export function ModuleSection({
           />
         </button>
 
-        <span className="font-mono text-xs font-semibold tabular-nums text-black/45">
+        <span className="font-mono text-xs font-semibold tabular-nums text-muted-foreground">
           {String(moduleIndex + 1).padStart(2, "0")}
         </span>
 
@@ -139,14 +139,14 @@ export function ModuleSection({
             onClick={() =>
               canManage ? onStartRenameModule(module.id) : onToggleModule(module.id)
             }
-            className="min-w-0 flex-1 truncate rounded-md px-1 text-left text-sm font-semibold text-black transition-colors hover:bg-[#e8f1e6]/55"
+            className="min-w-0 flex-1 truncate rounded-md px-1 text-left text-sm font-semibold text-foreground transition-colors hover:bg-accent/55"
             title={canManage ? "Bấm để đổi tên chương" : module.title}
           >
             {module.title}
           </button>
         )}
 
-        <span className="shrink-0 text-[11px] font-medium text-black/45">{itemCount} mục</span>
+        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{itemCount} mục</span>
 
         {canManage && (
           <Button
@@ -165,7 +165,7 @@ export function ModuleSection({
       {isOpen && (
         <div className="space-y-2 px-2 pb-3">
           {itemCount === 0 && (
-            <p className="rounded-[18px] border border-dashed border-black/10 bg-[#fdfdfa] px-4 py-4 text-center text-sm text-black/55">
+            <p className="rounded-2xl border border-dashed border-border bg-muted/40 px-4 py-4 text-center text-sm text-muted-foreground">
               Chương này chưa có mục nào. Bấm “Thêm nội dung” để thêm bài giảng hoặc bài tập
               trắc nghiệm.
             </p>
@@ -227,11 +227,11 @@ export function ModuleSection({
             </SortableContext>
             <DragOverlay>
               {activeLesson ? (
-                <div className="flex items-center gap-3 rounded-[18px] border border-[#6f8f69] bg-white px-3 py-3 shadow-xl">
-                  <Icon name="ri-draggable" className="size-4 shrink-0 text-[#52704f]" />
+                <div className="flex items-center gap-3 rounded-2xl border border-primary/50 bg-card px-3 py-3 shadow-xl">
+                  <Icon name="ri-draggable" className="size-4 shrink-0 text-accent-foreground" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-black">{activeLesson.title}</p>
-                    <p className="mt-0.5 text-xs text-black/50">
+                    <p className="truncate text-sm font-medium text-foreground">{activeLesson.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {KIND_LABEL[activeLesson.kind] ?? "Nội dung"}
                     </p>
                   </div>

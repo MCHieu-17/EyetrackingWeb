@@ -38,7 +38,7 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
             return (
               <div
                 key={slide.id}
-                className="flex aspect-[4/3] items-center justify-center rounded-[18px] border border-[#eeeee9] bg-[#fdfdfa] text-xs font-medium tabular-nums text-black/40"
+                className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-border bg-muted/40 text-xs font-medium tabular-nums text-muted-foreground"
               >
                 {slide.orderIndex + 1}
               </div>
@@ -50,14 +50,14 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
               type="button"
               onClick={() => setPreview(index)}
               aria-label={`Xem trước trang ${slide.orderIndex + 1}`}
-              className="group relative overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white p-1 outline-none transition hover:border-black/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-black/20"
+              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-1 outline-none transition hover:border-primary/30 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
             >
               <LazyPdfPage
                 url={url}
                 pageNumber={slide.pageNumber}
                 lazy
                 alt={`Trang ${slide.orderIndex + 1}`}
-                className="aspect-[4/3] w-full overflow-hidden rounded-[14px] bg-white"
+                className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-white"
                 canvasClassName="transition group-hover:scale-[1.02]"
               />
               {slide.embeddingStatus === "none" && (
@@ -94,10 +94,10 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
           <button
             type="button"
             aria-label="Đóng xem trước"
-            className="absolute inset-0 cursor-default bg-black/75"
+            className="absolute inset-0 cursor-default bg-navy-950/40 backdrop-blur-[2px]"
             onClick={() => setPreview(null)}
           />
-          <div className="relative flex max-h-full w-full max-w-4xl flex-col rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-2xl">
+          <div className="relative flex max-h-full w-full max-w-4xl flex-col rounded-2xl border border-border bg-card p-4 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold tabular-nums text-foreground">
                 Trang {previewSlide.orderIndex + 1} / {slides.length}
@@ -117,7 +117,7 @@ export function SlidePreview({ slides }: { slides: SlideAdmin[] }) {
                   className="mt-3 h-[70dvh] w-full overflow-hidden rounded-lg bg-white"
                 />
               ) : (
-                <p className="mt-3 rounded-[18px] border border-[#eeeee9] bg-[#fdfdfa] px-3 py-8 text-center text-sm text-muted-foreground">
+                <p className="mt-3 rounded-2xl border border-border bg-muted/40 px-3 py-8 text-center text-sm text-muted-foreground">
                   Không tải được trang {previewSlide.orderIndex + 1}.
                 </p>
               );
