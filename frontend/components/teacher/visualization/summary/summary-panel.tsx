@@ -309,7 +309,7 @@ export function SummaryPanel({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Tổng hợp
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground sm:text-3xl">
+          <h2 className="mt-2 font-display text-2xl font-semibold tracking-[-0.03em] text-foreground sm:text-3xl">
             Thời lượng nhìn theo vùng
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">

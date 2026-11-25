@@ -50,7 +50,7 @@ export function SummaryCards({ totals }: { totals: AoiSummaryTotals }) {
       {cards.map((card) => (
         <div
           key={card.label}
-          className="rounded-[18px] border border-border bg-card p-4 shadow-xs"
+          className="rounded-2xl border border-border bg-card p-4 shadow-sm"
         >
           <div className="flex items-start justify-between gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -62,7 +62,7 @@ export function SummaryCards({ totals }: { totals: AoiSummaryTotals }) {
               <Icon name={card.icon} className="size-4" />
             </span>
           </div>
-          <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-foreground">
+          <p className="mt-3 font-display text-2xl font-semibold tracking-[-0.03em] text-foreground">
             {card.value}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">{card.hint}</p>
