@@ -17,7 +17,7 @@ export function StudentsToolbar({
   onClear: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[20px] border border-[#eeeee9] bg-white p-2 shadow-xs lg:flex-row lg:items-center">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-2 shadow-sm lg:flex-row lg:items-center">
       <div className="relative min-w-0 flex-1">
         <Icon
           name="ri-search-line"
@@ -27,7 +27,7 @@ export function StudentsToolbar({
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Tìm theo tên hoặc mã sinh viên"
-          className="h-11 rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] pl-10 shadow-none"
+          className="h-11 rounded-2xl border border-border bg-muted/50 pl-10 shadow-none"
           aria-label="Tìm học viên"
         />
       </div>

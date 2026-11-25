@@ -27,16 +27,16 @@ export function CourseToggle({
   ariaLabel: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[16px] border border-[#dfe9dc] bg-[#e8f1e6]/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-accent/45 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <h4 className="flex items-center gap-2 text-sm font-semibold text-black">
-          <Icon name={icon} className="size-4 text-[#52704f]" />
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Icon name={icon} className="size-4 text-accent-foreground" />
           {title}
         </h4>
-        <p className="mt-1 text-xs leading-5 text-black/70">{description}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {busy && <Icon name="ri-loader-4-line" className="size-4 animate-spin text-[#52704f]" />}
+        {busy && <Icon name="ri-loader-4-line" className="size-4 animate-spin text-accent-foreground" />}
         <Switch
           checked={checked}
           disabled={disabled || busy}

@@ -31,7 +31,7 @@ function SortButton({
       }
       className={cn(
         "inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors",
-        active ? "text-black" : "text-black/40 hover:text-black/70",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         className,
       )}
     >
@@ -61,10 +61,10 @@ export function StudentsTable({
   onRemove: (student: StudentRow) => void;
 }) {
   return (
-    <div className="divide-y divide-[#eeeee9] overflow-hidden rounded-[20px] border border-[#eeeee9] bg-white shadow-xs">
+    <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <div
         className={cn(
-          "hidden items-center gap-4 bg-[#fdfdfa] px-4 py-2.5 lg:grid lg:px-5",
+          "hidden items-center gap-4 bg-muted/60 px-4 py-2.5 lg:grid lg:px-5",
           LIST_GRID,
         )}
       >

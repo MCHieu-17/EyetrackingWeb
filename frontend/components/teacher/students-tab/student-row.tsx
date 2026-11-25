@@ -25,24 +25,31 @@ export function StudentRowItem({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 gap-3 px-4 py-4 transition-colors hover:bg-[#fdfdfa] lg:items-center lg:gap-4 lg:px-5",
+        "grid grid-cols-1 gap-3 px-4 py-4 transition-colors hover:bg-muted/60 lg:items-center lg:gap-4 lg:px-5",
         LIST_GRID,
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <Avatar className="size-10 shrink-0 bg-white">
+        <Avatar className="size-10 shrink-0 bg-card">
           {student.avatarUrl ? <AvatarImage src={student.avatarUrl} alt={student.name} /> : null}
           <AvatarFallback>{initialsOf(student.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-black">{student.name}</p>
-          <p className="mt-0.5 text-xs text-black/40">{student.code}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{student.name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{student.code}</p>
         </div>
       </div>
-      <span className="shrink-0 justify-self-start rounded-full bg-[#e8f1e6] px-2.5 py-1 text-[10px] font-medium text-[#52704f] lg:self-center">
+      <span
+        className={cn(
+          "shrink-0 justify-self-start rounded-full px-2.5 py-1 text-[10px] font-medium lg:self-center",
+          student.status === "dropped"
+            ? "bg-muted text-muted-foreground"
+            : "bg-success/10 text-success",
+        )}
+      >
         {student.status === "dropped" ? "Đã gỡ" : ENROLL_LABEL[student.status]}
       </span>
-      <span className="shrink-0 text-xs text-black/40 lg:justify-self-end lg:text-right">
+      <span className="shrink-0 text-xs text-muted-foreground lg:justify-self-end lg:text-right">
         {student.lastActive || "—"}
       </span>
       <div className="flex shrink-0 items-center gap-2 lg:justify-self-end">
@@ -50,7 +57,7 @@ export function StudentRowItem({
           type="button"
           variant="outline"
           size="sm"
-          className="flex-1 rounded-full border-black/10 bg-white lg:flex-none"
+          className="flex-1 rounded-full lg:flex-none"
           onClick={onOpen}
         >
           Chi tiết
@@ -62,7 +69,7 @@ export function StudentRowItem({
             size="icon-sm"
             onClick={onRemove}
             aria-label={`Gỡ ${student.name}`}
-            className="rounded-full border border-[#eeeee9] bg-[#fdfdfa] text-black/45 hover:text-destructive"
+            className="rounded-full border border-border bg-card text-muted-foreground hover:text-destructive"
           >
             <Icon name="ri-delete-bin-line" className="size-4" />
           </Button>

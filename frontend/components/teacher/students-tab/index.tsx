@@ -81,7 +81,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
       />
 
       {addError && (
-        <div className="flex items-center gap-3 rounded-[18px] border border-[#eeeee9] bg-white px-4 py-3 text-sm text-black shadow-xs">
+        <div className="flex items-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <Icon name="ri-error-warning-line" className="size-4" />
           <span className="flex-1">{addError}</span>
           <button type="button" onClick={() => setAddError(null)} aria-label="Đóng" className="rounded-md p-1">
@@ -113,7 +113,7 @@ export function StudentsTab({ courseId, canManage }: { courseId: string; canMana
           }
           action={
             canManage ? (
-              <Button className="rounded-full bg-black text-white hover:bg-black/80" onClick={() => setShowAdd(true)}>
+              <Button className="rounded-full" onClick={() => setShowAdd(true)}>
                 <Icon name="ri-user-add-line" className="size-4" />
                 Thêm học viên
               </Button>

@@ -123,8 +123,8 @@ export function CourseSettingsSection({
   };
 
   return (
-    <section className="space-y-3 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
-      <h3 className="text-base font-semibold text-black">Thiết lập khóa học</h3>
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      <h3 className="text-base font-semibold text-foreground">Thiết lập khóa học</h3>
 
       <CourseCalibrationToggle
         checked={requireCalibration}
@@ -148,7 +148,7 @@ export function CourseSettingsSection({
       />
 
       {!canManage && (
-        <p className="text-xs text-black/60">
+        <p className="text-xs text-muted-foreground">
           Chỉ chủ khóa học hoặc quản trị viên mới đổi được thiết lập.
         </p>
       )}

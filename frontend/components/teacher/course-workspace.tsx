@@ -112,8 +112,8 @@ function Workspace({ courseId }: { courseId: string }) {
   }
 
   return (
-    <div className="min-h-dvh bg-[#f5f6f2] text-black">
-      <header className="sticky top-0 z-30 border-b border-[#eeeee9] bg-[#f5f6f2]/90 backdrop-blur-xl">
+    <div className="min-h-dvh bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-3 px-4 py-3 sm:px-8 lg:px-12">
           <Button
             asChild
@@ -121,7 +121,7 @@ function Workspace({ courseId }: { courseId: string }) {
             size="icon"
             aria-label="Quay lại danh sách khóa học"
             title="Về danh sách khóa học"
-            className="rounded-full hover:bg-white"
+            className="rounded-full hover:bg-muted"
           >
             <Link
               href="/teacher"
@@ -134,10 +134,10 @@ function Workspace({ courseId }: { courseId: string }) {
             </Link>
           </Button>
 
-          <div className="min-w-0 flex-1 border-l border-black/10 pl-4">
-            <p className="truncate text-sm font-semibold tracking-[-0.01em] text-black">{title}</p>
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-black/60">
-              <span className="rounded-full bg-[#e8f1e6] px-2 py-0.5 font-medium text-[#52704f]">
+          <div className="min-w-0 flex-1 border-l border-border pl-4">
+            <p className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</p>
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
                 {STATUS_LABEL[status]}
               </span>
               {!isNew && course && <span className="truncate">{course.students} học viên</span>}
@@ -147,7 +147,7 @@ function Workspace({ courseId }: { courseId: string }) {
           {!isNew && (
             <nav
               aria-label="Khu vực quản lý"
-              className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto rounded-full border border-[#eeeee9] bg-white p-1 shadow-xs sm:order-none sm:mx-0 sm:w-auto"
+              className="order-last -mx-1 flex w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-muted p-1 sm:order-none sm:mx-0 sm:w-auto"
             >
               {TABS.map((item) => {
                 const active = view === item.key;
@@ -167,7 +167,7 @@ function Workspace({ courseId }: { courseId: string }) {
                     }}
                     className={cn(
                       "flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-xs font-semibold transition-colors",
-                      active ? "bg-black text-white shadow-sm" : "text-black/60 hover:text-black",
+                      active ? "bg-card text-primary shadow-xs" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {item.label}
@@ -179,7 +179,7 @@ function Workspace({ courseId }: { courseId: string }) {
         </div>
       </header>
 
-      <main className="mx-auto min-h-[calc(100dvh-73px)] w-full max-w-[1440px] rounded-t-[28px] border border-b-0 border-[#eeeee9] bg-[#fdfdfa] px-4 py-8 shadow-[0_-1px_12px_rgba(30,35,25,0.025)] sm:px-8 lg:px-12 lg:py-12">
+      <main className="mx-auto min-h-[calc(100dvh-73px)] w-full max-w-[1440px] rounded-t-[28px] border border-b-0 border-border bg-card px-4 py-8 shadow-sm sm:px-8 lg:px-12 lg:py-12">
         {isNew ? (
           <NewCourseSetup
             onCreated={(id) => router.replace(`/teacher/courses/${id}?tab=content`)}

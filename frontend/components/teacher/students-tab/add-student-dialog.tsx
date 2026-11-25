@@ -56,7 +56,7 @@ export function AddStudentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(680px,calc(100dvh-2rem))] flex-col rounded-[20px] border-[#eeeee9] bg-white shadow-2xl">
+      <DialogContent className="flex max-h-[min(680px,calc(100dvh-2rem))] flex-col rounded-2xl border-border bg-card shadow-2xl">
         <DialogHeader>
           <DialogTitle>Thêm học viên vào khóa học</DialogTitle>
           <DialogDescription>
@@ -74,7 +74,7 @@ export function AddStudentDialog({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Nhập tên hoặc mã sinh viên"
-              className="rounded-xl border border-[#eeeee9] bg-[#fdfdfa] pl-9 shadow-none"
+              className="rounded-xl border border-border bg-muted/50 pl-9 shadow-none"
               aria-label="Tìm học viên để thêm"
             />
           </div>
@@ -97,7 +97,7 @@ export function AddStudentDialog({
               {candidates.slice(0, 50).map((candidate) => (
                 <li
                   key={candidate.id}
-                  className="flex items-center gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-[#e8f1e6]/55"
+                  className="flex items-center gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-accent/55"
                 >
                   <Avatar className="size-9">
                     <AvatarFallback>{initialsOf(candidate.name)}</AvatarFallback>
@@ -106,7 +106,7 @@ export function AddStudentDialog({
                     <p className="truncate text-sm font-medium text-foreground">{candidate.name}</p>
                     <p className="text-xs text-muted-foreground">{candidate.code}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="rounded-full border-black/10" disabled={adding === candidate.id} onClick={() => add(candidate.id)}>
+                  <Button size="sm" variant="outline" className="rounded-full" disabled={adding === candidate.id} onClick={() => add(candidate.id)}>
                     {adding === candidate.id ? "Đang thêm…" : "Thêm"}
                   </Button>
                 </li>

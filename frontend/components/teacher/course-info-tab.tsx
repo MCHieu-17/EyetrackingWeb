@@ -20,9 +20,9 @@ import { PublishChecklistDialog, PublishIssueList, publishReport } from "./conte
 import { queryKeys } from "@/lib/query-keys";
 
 const STATUS_TONE: Record<CourseStatus, string> = {
-  draft: "border-black/10 bg-black/5 text-black/70",
-  published: "border-[#cfe0ca] bg-[#e8f1e6] text-[#3f573c]",
-  archived: "border-black/10 bg-black/5 text-black/55",
+  draft: "border-border bg-muted text-muted-foreground",
+  published: "border-success/20 bg-success/10 text-success",
+  archived: "border-warning/20 bg-warning/10 text-warning",
 };
 
 /**
@@ -130,14 +130,14 @@ export function CourseInfoTab({
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <span className={cnBadge(STATUS_TONE[status])}>{STATUS_LABEL[status]}</span>
-        <span className="text-sm text-black/60">
+        <span className="text-sm text-muted-foreground">
           {course.students} học viên · {course.lessonCount ?? 0} mục nội dung
         </span>
       </div>
 
-      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="space-y-1.5">
-          <label htmlFor="course-title" className="block text-sm font-medium text-black">
+          <label htmlFor="course-title" className="block text-sm font-medium text-foreground">
             Tên khóa học <span className="text-destructive">*</span>
           </label>
           <Input
@@ -150,7 +150,7 @@ export function CourseInfoTab({
           />
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="course-desc" className="block text-sm font-medium text-black">
+          <label htmlFor="course-desc" className="block text-sm font-medium text-foreground">
             Mô tả
           </label>
           <Textarea
@@ -167,7 +167,7 @@ export function CourseInfoTab({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-full"
               disabled={saving || !title.trim() || !dirty}
               onClick={() => void save()}
             >
@@ -175,7 +175,7 @@ export function CourseInfoTab({
               {saving ? "Đang lưu…" : "Lưu thay đổi"}
             </Button>
             {dirty && (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-black/60">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <span className="size-1.5 rounded-full bg-warning" />
                 Có thay đổi chưa lưu
               </span>
@@ -190,12 +190,12 @@ export function CourseInfoTab({
 
       <CourseSettingsSection courseId={courseId} canManage={canManage} />
 
-      <section className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:p-5">
-        <h3 className="text-base font-semibold text-black">Xuất bản</h3>
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <h3 className="text-base font-semibold text-foreground">Xuất bản</h3>
 
         {report.issues.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-black">
+            <p className="text-sm font-semibold text-foreground">
               {report.blocking ? "Phải sửa trước khi xuất bản" : "Cân nhắc trước khi xuất bản"}
             </p>
             <PublishIssueList issues={report.issues} onOpenItem={openItem} />
@@ -206,7 +206,7 @@ export function CourseInfoTab({
           <div className="flex flex-wrap gap-2">
             {status !== "published" && (
               <Button
-                className="rounded-full bg-black px-5 text-white hover:bg-black/80"
+                className="rounded-full px-5"
                 disabled={statusSaving}
                 onClick={requestPublish}
               >
@@ -218,7 +218,7 @@ export function CourseInfoTab({
               <>
                 <Button
                   variant="outline"
-                  className="rounded-full border-black/10 bg-white"
+                  className="rounded-full"
                   disabled={statusSaving}
                   onClick={() => void changeStatusWithFlash("draft", "Đã thu hồi khóa học về bản nháp.")}
                 >
@@ -227,7 +227,7 @@ export function CourseInfoTab({
                 </Button>
                 <Button
                   variant="ghost"
-                  className="rounded-full text-black/65"
+                  className="rounded-full text-muted-foreground"
                   disabled={statusSaving}
                   onClick={() => setConfirmArchive(true)}
                 >
@@ -239,7 +239,7 @@ export function CourseInfoTab({
             {status === "archived" && (
               <Button
                 variant="outline"
-                className="rounded-full border-black/10 bg-white"
+                className="rounded-full"
                 disabled={statusSaving}
                 onClick={() => void changeStatusWithFlash("draft", "Đã mở lại khóa học ở dạng bản nháp.")}
               >
@@ -252,8 +252,8 @@ export function CourseInfoTab({
       </section>
 
       {canManage && (
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
-          <h3 className="text-base font-semibold text-black">Xóa khóa học</h3>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
+          <h3 className="text-base font-semibold text-foreground">Xóa khóa học</h3>
           <Button
             variant="destructive"
             className="rounded-full"

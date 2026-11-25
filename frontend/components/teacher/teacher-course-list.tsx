@@ -17,8 +17,8 @@ type SortMode = "recent" | "name";
 
 const STATUS_CLS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
-  published: "bg-[#e8f1e6] text-[#52704f]",
-  archived: "bg-[#f3ede4] text-[#8a6d3b]",
+  published: "bg-success/10 text-success",
+  archived: "bg-warning/10 text-warning",
 };
 
 function CourseRow({ course }: { course: TeacherCourse }) {
@@ -27,9 +27,9 @@ function CourseRow({ course }: { course: TeacherCourse }) {
       prefetch={false}
       href={`/teacher/courses/${course.id}?tab=content`}
       aria-label={`Mở khóa ${course.title}`}
-      className="group flex flex-col gap-4 px-4 py-4 outline-none transition hover:bg-[#fafbf8] focus-visible:bg-[#fafbf8] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-5 sm:px-5"
+      className="group flex flex-col gap-4 px-4 py-4 outline-none transition hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:gap-5 sm:px-5"
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#eef3eb] text-[#52654f] transition group-hover:bg-[#e3ecdf] group-hover:text-[#3f563c]">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground transition group-hover:bg-accent/70">
         <Icon name="ri-book-open-line" className="size-5" />
       </span>
 
@@ -112,7 +112,7 @@ export function TeacherCourseList() {
     return (
       <div className="space-y-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-[104px] rounded-[20px]" />
+          <Skeleton key={index} className="h-[104px] rounded-2xl" />
         ))}
       </div>
     );
@@ -169,7 +169,7 @@ export function TeacherCourseList() {
       </div>
 
       {visible.length ? (
-        <div className="divide-y divide-border/70 overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs">
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           {visible.map((course) => (
             <CourseRow key={course.id} course={course} />
           ))}
