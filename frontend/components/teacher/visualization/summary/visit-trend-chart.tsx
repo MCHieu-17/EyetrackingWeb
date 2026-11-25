@@ -8,7 +8,7 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
   const points = visitTrend(visits);
   if (points.length === 0) {
     return (
-      <p className="px-4 py-10 text-center text-sm text-black/40">
+      <p className="px-4 py-10 text-center text-sm text-muted-foreground">
         Chưa có ca học để vẽ xu hướng.
       </p>
     );
@@ -27,12 +27,12 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-4 text-[11px] text-black/45">
+      <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#36533a]" /> Tổng ghi nhận
+          <span className="size-2 rounded-full bg-[var(--chart-1)]" /> Tổng ghi nhận
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#7f9b78]" /> Trong slide
+          <span className="size-2 rounded-full bg-[var(--chart-2)]" /> Trong slide
         </span>
         <span className="ml-auto">{points.length} ca</span>
       </div>
@@ -48,7 +48,7 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
             y1={height - pad}
             x2={width - pad}
             y2={height - pad}
-            stroke="#e3e6dd"
+            stroke="var(--chart-grid)"
             strokeWidth="1"
           />
           <line
@@ -56,13 +56,13 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
             y1={pad}
             x2={pad}
             y2={height - pad}
-            stroke="#e3e6dd"
+            stroke="var(--chart-grid)"
             strokeWidth="1"
           />
           <polyline
             points={slideLine}
             fill="none"
-            stroke="#7f9b78"
+            stroke="var(--chart-2)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -70,7 +70,7 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
           <polyline
             points={trackedLine}
             fill="none"
-            stroke="#36533a"
+            stroke="var(--chart-1)"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -81,8 +81,8 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
                 cx={x(index)}
                 cy={y(point.tracked)}
                 r="3.5"
-                fill="#36533a"
-                stroke="#fdfdfa"
+                fill="var(--chart-1)"
+                stroke="var(--card)"
                 strokeWidth="2"
               >
                 <title>
@@ -95,13 +95,13 @@ export function VisitTrendChart({ visits }: { visits: AoiSummaryVisit[] }) {
           ))}
         </svg>
       </div>
-      <div className="flex justify-between text-[10px] text-black/35">
+      <div className="flex justify-between text-[10px] text-muted-foreground">
         <span>{new Date(points[0].visit.startedAt).toLocaleDateString("vi-VN")}</span>
         <span>
           {new Date(points.at(-1)!.visit.startedAt).toLocaleDateString("vi-VN")}
         </span>
       </div>
-      <p className="text-[10px] text-black/35">
+      <p className="text-[10px] text-muted-foreground">
         Đỉnh cao nhất: {formatDuration(max)} · Đường đậm là tổng thời gian ghi
         nhận, đường nhạt là thời gian trong slide.
       </p>

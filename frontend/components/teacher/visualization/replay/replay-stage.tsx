@@ -111,15 +111,17 @@ export function ReplayStage({
   return (
     <div className="space-y-2">
       <div
-        className="relative w-full overflow-hidden rounded-[20px] border border-[#e6e8e1] bg-[#eef0ea] shadow-inner"
+        className="relative w-full overflow-hidden rounded-[20px] border border-border bg-muted shadow-inner"
         style={{ aspectRatio: `${aspect}` }}
         aria-label={`Màn hình ghi nhận của ${view.lessonTitle}, ${
           view.slideTitle || "bài tập"
         }`}
       >
+        {/* Các lớp phủ nằm trên slide/PDF: giữ màu cố định để đủ tương phản
+            ở cả hai theme (PLAN §4). */}
         {slideRect ? (
           <div
-            className="absolute overflow-hidden rounded-[6px] border border-black/10 bg-white shadow-sm"
+            className="absolute overflow-hidden rounded-[6px] border border-border bg-white shadow-sm"
             style={stageRectStyle(slideRect)}
           >
             {pdfUrl ? (
@@ -143,15 +145,15 @@ export function ReplayStage({
           </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
-            <div className="max-w-sm rounded-[16px] border border-dashed border-[#d7dbd1] bg-white/70 px-5 py-4">
+            <div className="max-w-sm rounded-[16px] border border-dashed border-border bg-card/80 px-5 py-4">
               <Icon
                 name="ri-error-warning-line"
-                className="mx-auto mb-2 size-5 text-[#a26a2b]"
+                className="mx-auto mb-2 size-5 text-warning"
               />
-              <p className="text-sm font-semibold text-black/70">
+              <p className="text-sm font-semibold text-foreground/75">
                 Thiếu layout của lượt xem
               </p>
-              <p className="mt-1 text-xs text-black/45">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Không thể dựng lại vị trí slide và vùng giao diện. Dữ liệu gaze
                 thô vẫn được giữ nguyên.
               </p>
@@ -234,7 +236,7 @@ export function ReplayStage({
             data-gaze-dot="true"
             className={cn(
               "pointer-events-none absolute z-30 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#1f2937] shadow-[0_0_0_3px_rgba(31,41,55,0.18)]",
-              currentSample?.status !== "ok" && "bg-[#b42318]",
+              currentSample?.status !== "ok" && "bg-destructive",
             )}
             style={{
               left: `${point.x * 100}%`,
@@ -283,17 +285,17 @@ export function ReplayStage({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-black/45">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#36533a]" />
+          <span className="size-2 rounded-full bg-primary" />
           Vùng slide
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#b45309]" />
+          <span className="size-2 rounded-full bg-warning" />
           Vùng giao diện
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[#7a2e1f]" />
+          <span className="size-2 rounded-full bg-destructive" />
           Chưa đánh dấu
         </span>
         {layout && (

@@ -99,13 +99,13 @@ function HeatmapSection({
   lessons: { id: string; title: string }[];
 }) {
   return (
-    <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs xl:col-span-2">
+    <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs xl:col-span-2">
       <div className="mb-3 flex items-center gap-2">
-        <Icon name="ri-fire-line" className="size-4 text-[#36533a]" />
-        <h3 className="text-sm font-semibold text-black">
+        <Icon name="ri-fire-line" className="size-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground">
           Bản đồ nhiệt theo slide
         </h3>
-        <span className="ml-auto text-[11px] text-black/40">
+        <span className="ml-auto text-[11px] text-muted-foreground">
           {lessons.length} bài giảng có slide
         </span>
       </div>
@@ -304,15 +304,15 @@ export function SummaryPanel({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-black/10 pb-5">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Tổng hợp
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-black sm:text-3xl">
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground sm:text-3xl">
             Thời lượng nhìn theo vùng
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-black/45">
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Chỉ tính các chuỗi mẫu hợp lệ liên tiếp ≤ {maxGapMs}ms. Số liệu lấy
             từ thống kê AOI đã phân tích của từng lượt xem.
           </p>
@@ -321,7 +321,7 @@ export function SummaryPanel({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-[#eeeee9] bg-white"
+            className="rounded-full border-border bg-card"
             onClick={downloadCsv}
             disabled={!data || aoiRows.length === 0}
           >
@@ -331,7 +331,7 @@ export function SummaryPanel({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-[#eeeee9] bg-white"
+            className="rounded-full border-border bg-card"
             onClick={() => void summary.refetch()}
             disabled={summary.isFetching}
           >
@@ -376,7 +376,7 @@ export function SummaryPanel({
       {data &&
         typeof data.meta.shortViewCount === "number" &&
         data.meta.shortViewCount > 0 && (
-          <p className="text-xs text-black/45">
+          <p className="text-xs text-muted-foreground">
             {onlyCounted
               ? `Đã loại ${data.meta.shortViewCount} lượt xem ngắn hơn ngưỡng.`
               : `Đang bao gồm ${data.meta.shortViewCount} lượt xem ngắn hơn ngưỡng. Bật “Chỉ tính lượt >= ngưỡng” để loại các lượt này.`}
@@ -384,7 +384,7 @@ export function SummaryPanel({
         )}
 
       {data && data.meta.staleViewCount > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#ecd2c8] bg-[#fdf6f2] px-4 py-3 text-sm text-[#7a3b2b]">
+        <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <Icon name="ri-error-warning-line" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1">
             {data.meta.staleViewCount} lượt xem chưa có thống kê AOI mới. Số
@@ -394,7 +394,7 @@ export function SummaryPanel({
             type="button"
             size="xs"
             variant="outline"
-            className="rounded-full border-[#e3c6ba] bg-white"
+            className="rounded-full border-destructive/20 bg-card"
             onClick={() => void rebuild()}
             disabled={rebuilding}
           >
@@ -403,11 +403,11 @@ export function SummaryPanel({
         </div>
       )}
       {rebuildNote && (
-        <p className="text-xs text-black/45">{rebuildNote}</p>
+        <p className="text-xs text-muted-foreground">{rebuildNote}</p>
       )}
 
       {unlabeledShare > 0.2 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#eadfc6] bg-[#fbf7ec] px-4 py-3 text-sm text-[#7a5b20]">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           <Icon name="ri-error-warning-line" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1">
             {Math.round(unlabeledShare * 100)}% thời gian nhìn rơi ngoài vùng
@@ -417,7 +417,7 @@ export function SummaryPanel({
             asChild
             size="xs"
             variant="outline"
-            className="rounded-full border-[#e3d2a8] bg-white"
+            className="rounded-full border-warning/30 bg-card"
           >
             <a href={`/teacher/courses/${courseId}?tab=aoi`}>
               <Icon name="ri-edit-line" className="size-3.5" />
@@ -458,20 +458,20 @@ export function SummaryPanel({
           <SummaryCards totals={data.totals} />
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+            <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs">
               <div className="mb-3 flex items-center gap-2">
-                <Icon name="ri-bar-chart-line" className="size-4 text-[#36533a]" />
-                <h3 className="text-sm font-semibold text-black">
+                <Icon name="ri-bar-chart-line" className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
                   Top vùng AOI theo thời lượng
                 </h3>
               </div>
               <AoiBarChart aois={data.byAoi} totalMs={data.totals.trackedDurationMs} />
             </section>
 
-            <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+            <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs">
               <div className="mb-3 flex items-center gap-2">
-                <Icon name="ri-stack-line" className="size-4 text-[#36533a]" />
-                <h3 className="text-sm font-semibold text-black">
+                <Icon name="ri-stack-line" className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
                   Cơ cấu theo bài học
                 </h3>
               </div>
@@ -479,10 +479,10 @@ export function SummaryPanel({
             </section>
 
             {scope === "cohort" && data.byStudent.length > 1 && (
-              <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+              <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs">
                 <div className="mb-3 flex items-center gap-2">
-                  <Icon name="ri-group-line" className="size-4 text-[#36533a]" />
-                  <h3 className="text-sm font-semibold text-black">
+                  <Icon name="ri-group-line" className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">
                     So sánh học viên
                   </h3>
                 </div>
@@ -494,10 +494,10 @@ export function SummaryPanel({
             )}
 
             {data.byVisit.length > 1 && (
-              <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+              <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs">
                 <div className="mb-3 flex items-center gap-2">
-                  <Icon name="ri-history-line" className="size-4 text-[#36533a]" />
-                  <h3 className="text-sm font-semibold text-black">
+                  <Icon name="ri-history-line" className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">
                     Xu hướng theo ca học
                   </h3>
                 </div>
@@ -511,10 +511,10 @@ export function SummaryPanel({
               lessons={heatmapLessons}
             />
 
-            <section className="rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs xl:col-span-2">
+            <section className="rounded-[20px] border border-border bg-card p-4 shadow-xs xl:col-span-2">
               <div className="mb-3 flex items-center gap-2">
-                <Icon name="ri-table-line" className="size-4 text-[#36533a]" />
-                <h3 className="text-sm font-semibold text-black">
+                <Icon name="ri-table-line" className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
                   Bảng chi tiết theo AOI
                 </h3>
               </div>

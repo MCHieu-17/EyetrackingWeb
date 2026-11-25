@@ -95,9 +95,9 @@ export function SummaryFilters({
   };
 
   return (
-    <div className="space-y-4 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs">
+    <div className="space-y-4 rounded-[20px] border border-border bg-card p-4 shadow-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap rounded-full border border-[#eeeee9] bg-[#fdfdfa] p-1">
+        <div className="flex flex-wrap rounded-full border border-border bg-muted/40 p-1">
           {(
             [
               ["visit", "Một ca · một sinh viên"],
@@ -112,15 +112,15 @@ export function SummaryFilters({
               className={cn(
                 "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
                 scope === key
-                  ? "bg-black text-white shadow-sm"
-                  : "text-black/55 hover:text-black",
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {label}
             </button>
           ))}
         </div>
-        <span className="ml-auto text-xs text-black/40">
+        <span className="ml-auto text-xs text-muted-foreground">
           {scope === "cohort" && selectedStudentIds.length > 0
             ? `${selectedStudentIds.length} học viên được chọn`
             : `${students.length} học viên có dữ liệu`}
@@ -128,15 +128,15 @@ export function SummaryFilters({
       </div>
 
       {scope === "cohort" ? (
-        <div className="rounded-[16px] border border-[#eeeee9] bg-[#fdfdfa] p-2">
+        <div className="rounded-[16px] border border-border bg-muted/40 p-2">
           <div className="flex items-center justify-between gap-2 px-2 py-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Chọn học viên
             </p>
             <button
               type="button"
               onClick={() => onSelectedStudents([])}
-              className="text-[11px] font-medium text-black/45 hover:text-black"
+              className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
             >
               Tất cả
             </button>
@@ -147,13 +147,13 @@ export function SummaryFilters({
               return (
                 <label
                   key={student.id}
-                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs text-black/65 hover:bg-white"
+                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs text-muted-foreground hover:bg-card"
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleStudent(student.id)}
-                    className="size-3.5 accent-[#36533a]"
+                    className="size-3.5 accent-[var(--primary)]"
                   />
                   <span className="min-w-0 flex-1 truncate">
                     {student.name}
@@ -167,7 +167,7 @@ export function SummaryFilters({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Học viên
             </span>
             <select
@@ -176,7 +176,7 @@ export function SummaryFilters({
                 onStudent(event.target.value);
                 onVisit("");
               }}
-              className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               {students.map((student) => (
                 <option key={student.id} value={student.id}>
@@ -188,13 +188,13 @@ export function SummaryFilters({
           </label>
           {scope === "visit" && (
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                 Ca học
               </span>
               <select
                 value={resolvedVisit}
                 onChange={(event) => onVisit(event.target.value)}
-                className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 {studentVisits.map((visit) => (
                   <option key={visit.id} value={visit.id}>
@@ -206,7 +206,7 @@ export function SummaryFilters({
             </label>
           )}
           {scope === "student" && (
-            <div className="flex items-end pb-2 text-xs text-black/45">
+            <div className="flex items-end pb-2 text-xs text-muted-foreground">
               Tính tất cả {studentVisits.length} ca của học viên này.
             </div>
           )}
@@ -214,7 +214,7 @@ export function SummaryFilters({
       )}
 
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-black/50 hover:text-black">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
           <Icon name="ri-settings-3-line" className="size-3.5" />
           Bộ lọc nâng cao
           <Icon
@@ -224,13 +224,13 @@ export function SummaryFilters({
         </summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Bài học
             </span>
             <select
               value={lessonId}
               onChange={(event) => onLesson(event.target.value)}
-              className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="">Tất cả bài</option>
               {lessons.map((lesson) => (
@@ -241,13 +241,13 @@ export function SummaryFilters({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Bề mặt
             </span>
             <select
               value={surface}
               onChange={(event) => onSurface(event.target.value as SummarySurface)}
-              className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="all">Tất cả</option>
               <option value="lesson">Bài giảng</option>
@@ -255,34 +255,34 @@ export function SummaryFilters({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Từ ngày
             </span>
             <input
               type="date"
               value={from}
               onChange={(event) => onFrom(event.target.value)}
-              className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Đến ngày
             </span>
             <input
               type="date"
               value={to}
               onChange={(event) => onTo(event.target.value)}
-              className="h-10 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="h-10 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             />
           </label>
         </div>
-        <p className="mt-2 text-[11px] text-black/40">
+        <p className="mt-2 text-[11px] text-muted-foreground">
           Mặc định 90 ngày gần nhất. Xoá “Từ ngày” và “Đến ngày” để xem toàn bộ
           lịch sử.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-xs text-black/55">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch
               checked={includeDropped}
               onCheckedChange={onIncludeDropped}
@@ -290,7 +290,7 @@ export function SummaryFilters({
             />
             Bao gồm học viên đã gỡ
           </label>
-          <label className="flex items-center gap-2 text-xs text-black/55">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Switch
               checked={onlyCounted}
               onCheckedChange={onOnlyCounted}
@@ -301,7 +301,7 @@ export function SummaryFilters({
           <button
             type="button"
             onClick={onReset}
-            className="text-xs font-semibold text-black/45 underline-offset-4 hover:text-black hover:underline"
+            className="text-xs font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             Xóa bộ lọc
           </button>

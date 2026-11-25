@@ -68,9 +68,9 @@ function TimelineBadge({
     <span
       className={cn(
         "rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none",
-        tone === "warning" && "bg-[#fbf5e7] text-[#8a6420]",
-        tone === "muted" && "bg-[#f2f4ee] text-black/45",
-        tone === "danger" && "bg-[#fdf1ec] text-[#8a3b27]",
+        tone === "warning" && "bg-warning/10 text-warning",
+        tone === "muted" && "bg-muted text-muted-foreground",
+        tone === "danger" && "bg-destructive/10 text-destructive",
       )}
     >
       {children}
@@ -107,17 +107,17 @@ export function ReplayTimeline({
     : `${shortViewCount} lượt ngắn`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-[18px] border border-[#eeeee9] bg-white shadow-xs">
-      <div className="border-b border-[#eeeee9] px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-black/35">
+    <div className="flex h-full min-h-0 flex-col rounded-[18px] border border-border bg-card shadow-xs">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Dòng thời gian
         </p>
-        <p className="mt-1 text-xs text-black/45">
+        <p className="mt-1 text-xs text-muted-foreground">
           {countLabel}
           {shortLabel && (
             <>
               {" · "}
-              <span className="text-[#8a6420]">{shortLabel}</span>
+              <span className="text-warning">{shortLabel}</span>
             </>
           )}
         </p>
@@ -128,7 +128,7 @@ export function ReplayTimeline({
             key={`${group.lessonId}-${groupIndex}`}
             className="mb-3"
           >
-            <p className="truncate px-2 py-1 text-[11px] font-semibold text-black/45">
+            <p className="truncate px-2 py-1 text-[11px] font-semibold text-muted-foreground">
               {group.title}
             </p>
             <div className="space-y-1">
@@ -144,8 +144,8 @@ export function ReplayTimeline({
                     className={cn(
                       "flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
                       active
-                        ? "bg-[#e8f1e6] text-[#2f4a2d]"
-                        : "text-black/65 hover:bg-[#f7f8f4]",
+                        ? "bg-accent text-success"
+                        : "text-muted-foreground hover:bg-muted/60",
                     )}
                   >
                     <Icon
@@ -163,12 +163,12 @@ export function ReplayTimeline({
                             (view.surface === "quiz" ? "Bài tập" : "Slide")}
                         </span>
                         {occurrence > 1 && (
-                          <span className="shrink-0 rounded-full bg-[#f2f4ee] px-1.5 py-0.5 text-[9px] font-semibold text-black/45">
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
                             Lần {occurrence}
                           </span>
                         )}
                       </span>
-                      <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-black/40">
+                      <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
                         <span>
                           {view.pageNumber ? `Trang ${view.pageNumber}` : "UI"}
                         </span>
@@ -187,7 +187,7 @@ export function ReplayTimeline({
                         )}
                         {view.analysisStatus !== "ready" &&
                           view.sampleCount > 0 && (
-                            <span className="text-[#a26a2b]">chưa phân tích</span>
+                            <span className="text-warning">chưa phân tích</span>
                           )}
                       </span>
                     </span>

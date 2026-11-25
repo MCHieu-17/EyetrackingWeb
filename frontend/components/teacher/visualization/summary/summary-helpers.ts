@@ -44,8 +44,8 @@ export function topAois(aois: AoiSummaryAoi[], limit = 12): ChartAoi[] {
 }
 
 export function aoiColor(aoi: AoiSummaryAoi): string {
-  if (aoi.isUnlabeled) return "#a34a32";
-  if ("isOther" in aoi && aoi.isOther) return "#9ca3af";
+  if (aoi.isUnlabeled) return "var(--chart-8)";
+  if ("isOther" in aoi && aoi.isOther) return "var(--muted-foreground)";
   return colorFor(aoi.label);
 }
 
@@ -88,7 +88,7 @@ export function compositionForAois(
       name: "Khác",
       durationMs: other,
       percent: percent(other, durationMs),
-      color: "#9ca3af",
+      color: "var(--muted-foreground)",
     });
   }
   return segments.filter((segment) => segment.durationMs > 0);

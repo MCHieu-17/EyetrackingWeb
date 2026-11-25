@@ -38,12 +38,12 @@ export function ReplayControls({
   onNextView: () => void;
 }) {
   return (
-    <div className="space-y-3 rounded-[18px] border border-[#eeeee9] bg-white p-3 shadow-xs">
+    <div className="space-y-3 rounded-[18px] border border-border bg-card p-3 shadow-xs">
       <div className="flex items-center gap-3">
         <Button
           type="button"
           size="icon"
-          className="size-10 rounded-full bg-black text-white hover:bg-black/80"
+          className="size-10 rounded-full bg-primary text-primary-foreground hover:bg-primary-hover"
           onClick={onTogglePlay}
           disabled={duration <= 0}
           aria-label={playing ? "Tạm dừng" : "Phát"}
@@ -54,7 +54,7 @@ export function ReplayControls({
           type="button"
           variant="outline"
           size="icon-sm"
-          className="rounded-full border-[#eeeee9] bg-white"
+          className="rounded-full border-border bg-card"
           onClick={onPreviousView}
           disabled={viewIndex <= 0}
           aria-label="View trước"
@@ -65,14 +65,14 @@ export function ReplayControls({
           type="button"
           variant="outline"
           size="icon-sm"
-          className="rounded-full border-[#eeeee9] bg-white"
+          className="rounded-full border-border bg-card"
           onClick={onNextView}
           disabled={viewIndex >= viewCount - 1}
           aria-label="View kế tiếp"
         >
           <Icon name="ri-arrow-right-s-line" className="size-4" />
         </Button>
-        <span className="ml-1 shrink-0 text-xs tabular-nums text-black/55">
+        <span className="ml-1 shrink-0 text-xs tabular-nums text-muted-foreground">
           {formatDuration(timeMs)} / {formatDuration(duration)}
         </span>
         <input
@@ -82,15 +82,15 @@ export function ReplayControls({
           step={100}
           value={Math.min(duration, timeMs)}
           onChange={(event) => onSeek(Number(event.target.value))}
-          className="min-w-0 flex-1 accent-[#36533a]"
+          className="min-w-0 flex-1 accent-[var(--primary)]"
           aria-label="Tua thời gian trong lượt xem"
         />
-        <label className="flex shrink-0 items-center gap-1.5 text-xs text-black/55">
+        <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
           <span className="sr-only">Tốc độ phát</span>
           <select
             value={speed}
             onChange={(event) => onSpeed(Number(event.target.value) as PlaybackSpeed)}
-            className="h-8 rounded-full border border-[#eeeee9] bg-[#fdfdfa] px-2 text-xs font-semibold text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-8 rounded-full border border-border bg-muted/40 px-2 text-xs font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label="Tốc độ phát"
           >
             {speeds.map((value) => (
@@ -101,7 +101,7 @@ export function ReplayControls({
           </select>
         </label>
       </div>
-      <div className="flex flex-wrap items-center gap-4 text-xs text-black/55">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <label className="flex items-center gap-2">
           <Switch
             checked={autoAdvance}

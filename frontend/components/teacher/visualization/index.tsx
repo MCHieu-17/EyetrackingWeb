@@ -48,15 +48,15 @@ export function VisualizationTab({ courseId }: { courseId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-full border border-[#eeeee9] bg-white p-1 shadow-xs">
+        <div className="flex rounded-full border border-border bg-card p-1 shadow-xs">
           <button
             type="button"
             onClick={() => setMode("replay")}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
               mode === "replay"
-                ? "bg-black text-white shadow-sm"
-                : "text-black/60 hover:text-black",
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon name="ri-play-circle-line" className="size-3.5" />
@@ -68,15 +68,15 @@ export function VisualizationTab({ courseId }: { courseId: string }) {
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
               mode === "summary"
-                ? "bg-black text-white shadow-sm"
-                : "text-black/60 hover:text-black",
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon name="ri-bar-chart-line" className="size-3.5" />
             Tổng hợp
           </button>
         </div>
-        <p className="text-xs text-black/40">
+        <p className="text-xs text-muted-foreground">
           {mode === "replay"
             ? "Phát lại điểm nhìn và kiểm tra vùng AOI đang sáng."
             : "Thống kê thời lượng nhìn theo AOI, bài học, học viên và ca."}
@@ -95,7 +95,7 @@ export function VisualizationTab({ courseId }: { courseId: string }) {
           <Skeleton className="h-[360px] rounded-[20px]" />
         </div>
       ) : tree.isError ? (
-        <div className="rounded-[18px] border border-[#ecd2c8] bg-[#fdf6f2] px-4 py-3 text-sm text-[#7a3b2b]">
+        <div className="rounded-[18px] border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           Không tải được cấu trúc khóa học để lọc bài giảng.
         </div>
       ) : (
@@ -108,7 +108,7 @@ export function VisualizationTab({ courseId }: { courseId: string }) {
       )}
 
       {mode === "summary" && lessons.length === 0 && !tree.isLoading && (
-        <p className="text-xs text-black/40">
+        <p className="text-xs text-muted-foreground">
           Khóa học chưa có bài học; một số bộ lọc sẽ trống.
         </p>
       )}

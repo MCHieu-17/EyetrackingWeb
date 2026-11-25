@@ -63,7 +63,7 @@ export function HeatmapCard({
 
   if (lessons.length === 0) {
     return (
-      <div className="rounded-[18px] border border-dashed border-[#eeeee9] px-4 py-10 text-center text-sm text-black/40">
+      <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
         Khóa học chưa có bài giảng để xem heatmap.
       </div>
     );
@@ -81,7 +81,7 @@ export function HeatmapCard({
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_150px]">
         <label className="block">
-          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-black/35">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Bài giảng
           </span>
           <select
@@ -89,7 +89,7 @@ export function HeatmapCard({
             onChange={(event) =>
               setSelection({ lessonId: event.target.value, slideId: "" })
             }
-            className="h-9 w-full rounded-xl border border-[#eeeee9] bg-[#fdfdfa] px-2.5 text-xs text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-9 w-full rounded-xl border border-border bg-muted/40 px-2.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {lessons.map((lesson) => (
               <option key={lesson.id} value={lesson.id}>
@@ -99,7 +99,7 @@ export function HeatmapCard({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-black/35">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Slide
           </span>
           <select
@@ -110,7 +110,7 @@ export function HeatmapCard({
                 slideId: event.target.value,
               }))
             }
-            className="h-9 w-full rounded-xl border border-[#eeeee9] bg-[#fdfdfa] px-2.5 text-xs text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-9 w-full rounded-xl border border-border bg-muted/40 px-2.5 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             disabled={slides.length === 0}
           >
             {slides.map((item) => (
@@ -121,7 +121,7 @@ export function HeatmapCard({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-black/35">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Độ đậm
           </span>
           <input
@@ -131,17 +131,17 @@ export function HeatmapCard({
             step={0.05}
             value={opacity}
             onChange={(event) => setOpacity(Number(event.target.value))}
-            className="h-9 w-full accent-[#36533a]"
+            className="h-9 w-full accent-[var(--primary)]"
             aria-label="Độ đậm heatmap"
           />
         </label>
       </div>
 
       {slidesQuery.isLoading || heatmap.isLoading ? (
-        <Skeleton className="aspect-video w-full rounded-[16px]" />
+        <Skeleton className="aspect-video w-full rounded-2xl" />
       ) : (
         <div
-          className="relative w-full overflow-hidden rounded-[16px] border border-[#e6e8e1] bg-[#eef0ea]"
+          className="relative w-full overflow-hidden rounded-2xl border border-border bg-muted"
           style={{ aspectRatio: pageAspect ?? 16 / 9 }}
         >
           {pdfUrl ? (
@@ -156,7 +156,7 @@ export function HeatmapCard({
               }
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-black/40">
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
               <div className="text-center">
                 <Icon name="ri-image-line" className="mx-auto mb-2 size-5" />
                 Chưa có PDF cho slide này
@@ -184,7 +184,7 @@ export function HeatmapCard({
                       style={{
                         backgroundColor:
                           alpha > 0
-                            ? `rgba(180, 83, 9, ${Math.max(0.08, alpha)})`
+                            ? `rgb(var(--heatmap) / ${Math.max(0.08, alpha)})`
                             : "transparent",
                       }}
                       title={value > 0 ? `${value} mẫu` : undefined}
@@ -196,28 +196,28 @@ export function HeatmapCard({
           )}
 
           {max === 0 && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/55">
-              <div className="rounded-[16px] border border-dashed border-[#d7dbd1] bg-white/85 px-5 py-4 text-center">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/55">
+              <div className="rounded-2xl border border-dashed border-border bg-card/90 px-5 py-4 text-center">
                 <Icon
                   name={needsReanalysis ? "ri-refresh-line" : "ri-fire-line"}
-                  className="mx-auto mb-2 size-5 text-[#a26a2b]"
+                  className="mx-auto mb-2 size-5 text-warning"
                 />
                 {needsReanalysis ? (
                   <>
-                    <p className="text-sm font-semibold text-black/65">
+                    <p className="text-sm font-semibold text-foreground/75">
                       Dữ liệu gaze cần phân tích lại
                     </p>
-                    <p className="mt-1 text-xs text-black/40">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {staleViewCount} lượt xem chưa được phân tích lại. Bấm
                       “Phân tích lại” để cập nhật heatmap.
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-semibold text-black/65">
+                    <p className="text-sm font-semibold text-foreground/75">
                       Chưa có điểm nhìn trên slide này
                     </p>
-                    <p className="mt-1 text-xs text-black/40">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Chọn slide khác hoặc mở rộng phạm vi thống kê.
                     </p>
                   </>
@@ -229,16 +229,16 @@ export function HeatmapCard({
       )}
 
       {max > 0 && staleViewCount > 0 && (
-        <p className="text-xs text-[#8a5a1f]">
+        <p className="text-xs text-warning">
           {staleViewCount} lượt xem chưa được phân tích lại; heatmap có thể
           thiếu. Dùng nút “Phân tích lại” để cập nhật.
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-black/40">
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-2">
           Ít
-          <span className="h-2 w-24 rounded-full bg-gradient-to-r from-[#f6e6d7] to-[#b45309]" />
+          <span className="h-2 w-24 rounded-full bg-gradient-to-r from-heatmap-low to-heatmap-high" />
           Nhiều
         </span>
         <span>{heatmap.data?.onSlideSampleCount ?? 0} mẫu trong slide</span>
@@ -248,7 +248,7 @@ export function HeatmapCard({
         {slide && <span className="ml-auto">{slide.lessonTitle}</span>}
       </div>
       {heatmap.isError && (
-        <p className="text-xs text-[#8a3b27]">Không tải được heatmap.</p>
+        <p className="text-xs text-destructive">Không tải được heatmap.</p>
       )}
     </div>
   );

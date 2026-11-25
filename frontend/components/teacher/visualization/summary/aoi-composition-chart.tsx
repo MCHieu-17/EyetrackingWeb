@@ -14,7 +14,7 @@ export function AoiCompositionChart({
   const top = topAois(byAoi, 6).filter((item) => !item.isOther);
   if (lessons.length === 0) {
     return (
-      <p className="px-4 py-10 text-center text-sm text-black/40">
+      <p className="px-4 py-10 text-center text-sm text-muted-foreground">
         Chưa có dữ liệu theo bài học.
       </p>
     );
@@ -26,7 +26,7 @@ export function AoiCompositionChart({
         {top.map((item) => (
           <span
             key={item.label}
-            className="inline-flex items-center gap-1.5 text-[10px] text-black/50"
+            className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"
           >
             <span
               className="size-2 rounded-full"
@@ -35,8 +35,8 @@ export function AoiCompositionChart({
             <span className="max-w-32 truncate">{item.name}</span>
           </span>
         ))}
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-black/50">
-          <span className="size-2 rounded-full bg-[#9ca3af]" />
+        <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="size-2 rounded-full bg-muted-foreground" />
           Khác
         </span>
       </div>
@@ -46,18 +46,18 @@ export function AoiCompositionChart({
           return (
             <div key={lesson.lessonId}>
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-medium text-black/65">
+                <span className="truncate text-xs font-medium text-muted-foreground">
                   {lesson.lessonTitle}
                 </span>
-                <span className="shrink-0 text-[10px] tabular-nums text-black/40">
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
                   {formatDuration(lesson.durationMs)}
                 </span>
               </div>
-              <div className="flex h-5 overflow-hidden rounded-full bg-[#f0f2ec]">
+              <div className="flex h-5 overflow-hidden rounded-full bg-chart-track">
                 {segments.map((segment) => (
                   <span
                     key={segment.label}
-                    className="h-full border-r border-white/40 last:border-0"
+                    className="h-full border-r border-background/40 last:border-0"
                     style={{
                       width: `${segment.percent}%`,
                       backgroundColor: segment.color,

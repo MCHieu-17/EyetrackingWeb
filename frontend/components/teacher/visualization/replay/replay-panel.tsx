@@ -103,9 +103,9 @@ export function ReplayPanel({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-[20px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+      <div className="grid gap-3 rounded-[20px] border border-border bg-card p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
         <label className="block">
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Học viên
           </span>
           <select
@@ -114,7 +114,7 @@ export function ReplayPanel({
               setStudentId(event.target.value);
               setVisitId("");
             }}
-            className="h-11 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-11 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {students.map((student) => (
               <option key={student.id} value={student.id}>
@@ -125,13 +125,13 @@ export function ReplayPanel({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-black/35">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Ca học
           </span>
           <select
             value={resolvedVisitId}
             onChange={(event) => setVisitId(event.target.value)}
-            className="h-11 w-full rounded-2xl border border-[#eeeee9] bg-[#fdfdfa] px-3 text-sm text-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-11 w-full rounded-2xl border border-border bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {studentVisits.map((visit) => (
               <option key={visit.id} value={visit.id}>

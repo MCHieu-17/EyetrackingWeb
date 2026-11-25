@@ -15,7 +15,7 @@ export function StudentCompareChart({
   const top = topAois(byAoi, 6).filter((item) => !item.isOther);
   if (students.length === 0) {
     return (
-      <p className="px-4 py-10 text-center text-sm text-black/40">
+      <p className="px-4 py-10 text-center text-sm text-muted-foreground">
         Chưa có dữ liệu học viên.
       </p>
     );
@@ -28,7 +28,7 @@ export function StudentCompareChart({
         return (
           <div key={student.studentId}>
             <div className="mb-1 flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-black/65">
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
                 {student.studentName}
                 {student.studentCode ? ` · ${student.studentCode}` : ""}
               </span>
@@ -37,15 +37,15 @@ export function StudentCompareChart({
                   Đã gỡ
                 </Badge>
               )}
-              <span className="shrink-0 text-[10px] tabular-nums text-black/40">
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
                 {formatDuration(student.durationMs)}
               </span>
             </div>
-            <div className="flex h-5 overflow-hidden rounded-full bg-[#f0f2ec]">
+            <div className="flex h-5 overflow-hidden rounded-full bg-chart-track">
               {segments.map((segment) => (
                 <span
                   key={segment.label}
-                  className="h-full border-r border-white/40 last:border-0"
+                  className="h-full border-r border-background/40 last:border-0"
                   style={{
                     width: `${segment.percent}%`,
                     backgroundColor: segment.color,
@@ -58,7 +58,7 @@ export function StudentCompareChart({
         );
       })}
       {students.length > 12 && (
-        <p className="text-center text-[11px] text-black/40">
+        <p className="text-center text-[11px] text-muted-foreground">
           Đang hiển thị 12/{students.length} học viên có thời lượng cao nhất.
         </p>
       )}

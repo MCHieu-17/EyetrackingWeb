@@ -153,20 +153,20 @@ export function ReplayPlayer({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-black/10 pb-5">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Xem lại ca học
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-black sm:text-3xl">
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground sm:text-3xl">
             {replay.student.name}
           </h2>
-          <p className="mt-1 text-sm text-black/45">
+          <p className="mt-1 text-sm text-muted-foreground">
             {replay.student.code || replay.student.email || "—"} ·{" "}
             {formatDateTime(replay.visit.startedAt)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-black/45">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant={replay.visit.status === "ended" ? "secondary" : "success"}>
             {replay.visit.status === "ended"
               ? "Đã kết thúc"
@@ -184,18 +184,18 @@ export function ReplayPlayer({
             </>
           )}
           <span>·</span>
-          <span className="text-[#8a6420]">{shortViewCount} lượt ngắn</span>
+          <span className="text-warning">{shortViewCount} lượt ngắn</span>
           <span>·</span>
           <span>{formatDuration(replay.visit.trackedDurationMs)}</span>
           <span>·</span>
           <span>{replay.visit.gazeCount} gaze</span>
-          <div className="flex items-center gap-2 rounded-full border border-[#eeeee9] bg-white px-3 py-1.5">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
             <Switch
               checked={onlyCounted}
               onCheckedChange={setOnlyCounted}
               ariaLabel="Chỉ lượt >= ngưỡng"
             />
-            <span className="text-[11px] font-semibold text-black/55">
+            <span className="text-[11px] font-semibold text-muted-foreground">
               {"Chỉ lượt >= ngưỡng"}
             </span>
           </div>
@@ -211,7 +211,7 @@ export function ReplayPlayer({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-[#eeeee9] bg-white"
+              className="rounded-full border-border bg-card"
               onClick={() => setOnlyCounted(false)}
             >
               <Icon name="ri-filter-off-line" className="size-4" />
@@ -235,40 +235,40 @@ export function ReplayPlayer({
 
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex rounded-full border border-[#eeeee9] bg-white p-1">
+              <div className="flex rounded-full border border-border bg-card p-1">
                 <button
                   type="button"
                   onClick={() => setShowAllAois((value) => !value)}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-black/65 transition-colors hover:bg-[#f2f4ee] hover:text-black"
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   {showAllAois ? "Chỉ vùng đang nhìn" : "Hiện tất cả vùng"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowLabels((value) => !value)}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-black/65 transition-colors hover:bg-[#f2f4ee] hover:text-black"
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   {showLabels ? "Ẩn nhãn" : "Hiện nhãn"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowTrail((value) => !value)}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-black/65 transition-colors hover:bg-[#f2f4ee] hover:text-black"
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   {showTrail ? "Ẩn vệt nhìn" : "Vệt nhìn 2s"}
                 </button>
               </div>
               {pinnedLabel && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f1e6] px-3 py-1.5 text-xs font-semibold text-[#3f573c]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-success">
                   <Icon name="ri-focus-2-line" className="size-3.5" />
                   Đang ghim: {pinnedLabel}
                 </span>
               )}
-              <span className="ml-auto flex items-center gap-2 text-xs text-black/40">
+              <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                 {formatDuration(viewDwellMs(currentView))} ·{" "}
                 {currentView.sampleCount} mẫu
                 {!currentView.counted && (
-                  <span className="rounded-full bg-[#fbf5e7] px-1.5 py-0.5 text-[9px] font-semibold text-[#8a6420]">
+                  <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-[9px] font-semibold text-warning">
                     Ngắn &lt;{formatDwellThreshold(minDwellMs)}
                   </span>
                 )}
@@ -303,10 +303,10 @@ export function ReplayPlayer({
             />
 
             {samplesQuery.isLoading && (
-              <p className="text-center text-xs text-black/40">Đang tải mẫu gaze…</p>
+              <p className="text-center text-xs text-muted-foreground">Đang tải mẫu gaze…</p>
             )}
             {samplesQuery.isError && (
-              <p className="text-center text-xs text-[#8a3b27]">
+              <p className="text-center text-xs text-destructive">
                 Không tải được mẫu gaze của lượt xem này.
               </p>
             )}
