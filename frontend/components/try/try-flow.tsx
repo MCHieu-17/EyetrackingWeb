@@ -41,17 +41,17 @@ function IntroStep({ onStart }: { onStart: () => void }) {
     <main className="flex flex-1 items-center px-4 py-12 sm:px-6">
       <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <section>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f1e6] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#52704f]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-foreground">
             <Icon name="ri-eye-line" className="size-3.5" />
             Phiên trải nghiệm 2 phút
           </span>
-          <h1 className="mt-5 max-w-xl text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl sm:leading-[1.05]">
+          <h1 className="font-display mt-5 max-w-xl text-4xl text-foreground sm:text-5xl sm:leading-[1.05]">
             Xem cách ánh mắt tương tác với nội dung.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
             Không cần tài khoản. Webcam ước lượng điểm nhìn khi bạn đọc ba trang mẫu, sau đó tổng hợp kết quả ngay trên thiết bị.
           </p>
-          <Button size="lg" onClick={onStart} className="mt-8 bg-black px-6 text-white shadow-xs hover:bg-[#292a27]">
+          <Button size="lg" onClick={onStart} className="mt-8 px-6 shadow-xs">
             Bắt đầu hiệu chỉnh
             <Icon name="ri-arrow-right-line" className="size-5" />
           </Button>
@@ -61,10 +61,10 @@ function IntroStep({ onStart }: { onStart: () => void }) {
           </p>
         </section>
 
-        <ol className="rounded-[20px] border border-border/80 bg-white p-3 shadow-sm sm:p-4">
+        <ol className="rounded-[20px] border border-border/80 bg-card p-3 shadow-sm sm:p-4">
           {steps.map((s, i) => (
             <li key={s.title} className="flex items-start gap-4 rounded-2xl px-3 py-4 sm:px-4">
-              <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-[#dce8d9] bg-[#e8f1e6] text-[#52704f]">
+              <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-accent text-accent-foreground">
                 <Icon name={s.icon} className="size-4.5" />
               </span>
               <div className="min-w-0 flex-1 border-b border-border pb-4 last:border-0">
@@ -149,9 +149,9 @@ export function TryFlow() {
   const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
 
   return (
-    <div className={`flex flex-col bg-[#f5f6f2] text-foreground ${step === "view" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
+    <div className={`flex flex-col bg-background text-foreground ${step === "view" ? "h-dvh overflow-hidden" : "min-h-dvh"}`}>
       <header className="z-40 shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">
-        <div className="mx-auto flex h-12 max-w-7xl items-center justify-between rounded-full border border-border/80 bg-white px-3 shadow-xs sm:px-4">
+        <div className="mx-auto flex h-12 max-w-7xl items-center justify-between rounded-full border border-border/80 bg-card px-3 shadow-xs sm:px-4">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -165,7 +165,7 @@ export function TryFlow() {
               <span key={s.key} className="flex items-center gap-2">
                 <span
                   className={`flex size-5 items-center justify-center rounded-full text-[10px] font-semibold ${
-                    i <= stepIndex ? "bg-black text-white" : "bg-[#e8f1e6] text-[#52704f]"
+                    i <= stepIndex ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground"
                   }`}
                 >
                   {i + 1}
@@ -185,7 +185,7 @@ export function TryFlow() {
             >
               Đăng nhập
             </Link>
-            <span className="rounded-full bg-[#e8f1e6] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#52704f]">
+            <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent-foreground">
               Khách
             </span>
           </div>
@@ -195,7 +195,7 @@ export function TryFlow() {
       {step === "intro" && <IntroStep onStart={() => setStep("calibrate")} />}
 
       {step === "view" && (
-        <main className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-[#fffffb] shadow-xs sm:m-3">
+        <main className="relative m-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-border/80 bg-card shadow-xs sm:m-3">
           <div className="z-10 shrink-0 px-4 py-3 sm:px-5">
             <div className="mx-auto flex max-w-[1200px] items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -212,7 +212,7 @@ export function TryFlow() {
               </div>
               {gazeSource === "real" ? (
                 <span className="hidden items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-medium sm:flex">
-                  <span className="size-1.5 animate-pulse rounded-full bg-[#789472]" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-success" />
                   Gaze hoạt động
                 </span>
               ) : (
@@ -224,14 +224,14 @@ export function TryFlow() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 items-center overflow-auto bg-[#f9f9f5] px-3 pb-20 pt-3 sm:px-5">
+          <div className="flex min-h-0 flex-1 items-center overflow-auto bg-muted px-3 pb-20 pt-3 sm:px-5">
             <div className="mx-auto w-full max-w-[min(1040px,calc((100dvh-10rem)*16/9))]">
-              <div className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-white shadow-sm">
+              <div className="relative aspect-video overflow-hidden rounded-[18px] border border-border/80 bg-card shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={TRY_SLIDES[currentSlide].src}
                   alt={TRY_SLIDES[currentSlide].title}
-                  className="absolute inset-0 block h-full w-full bg-white object-contain"
+                  className="absolute inset-0 block h-full w-full bg-card object-contain"
                 />
               </div>
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
@@ -247,7 +247,7 @@ export function TryFlow() {
           </div>
 
           <footer className="absolute inset-x-0 bottom-3 z-20 px-3 sm:bottom-4">
-            <div className="mx-auto flex max-w-xl items-center gap-2 rounded-full border border-border/80 bg-white/95 p-1.5 shadow-md backdrop-blur-md">
+            <div className="mx-auto flex max-w-xl items-center gap-2 rounded-full border border-border/80 bg-card/95 p-1.5 shadow-md backdrop-blur-md">
               <Button
                 variant="outline"
                 size="sm"
@@ -261,7 +261,7 @@ export function TryFlow() {
                 <Progress
                   value={((currentSlide + 1) / total) * 100}
                   className="h-1 flex-1"
-                  indicatorClassName="bg-[#789472]"
+                  indicatorClassName="bg-primary"
                 />
               </div>
               {currentSlide < total - 1 ? (
@@ -290,9 +290,10 @@ export function TryFlow() {
           </footer>
 
           {gazeDot && (
-            <div className="pointer-events-none fixed inset-0 z-30">
+            <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-30">
+              {/* Overlay chấm gaze: màu cố định (không theo theme) để luôn nổi trên slide. */}
               <span
-                className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black shadow-[0_1px_5px_rgba(0,0,0,0.2)]"
+                className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black shadow-xs"
                 style={{ left: `${gazeDot.x * 100}%`, top: `${gazeDot.y * 100}%` }}
               />
             </div>
@@ -304,8 +305,8 @@ export function TryFlow() {
         <main className="flex-1 px-4 py-12 sm:px-6">
           <div className="mx-auto max-w-[1000px]">
             <div className="mx-auto max-w-xl text-center">
-              <p className="inline-flex rounded-full bg-[#e8f1e6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#52704f]">Kết quả phiên thử</p>
-              <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-foreground">
+              <p className="inline-flex rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-foreground">Kết quả phiên thử</p>
+              <h1 className="font-display mt-4 text-4xl text-foreground">
                 Kết quả điểm nhìn
               </h1>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -313,7 +314,7 @@ export function TryFlow() {
               </p>
             </div>
 
-            <div className="mt-8 grid grid-cols-1 gap-2 rounded-[20px] border border-border/80 bg-white p-2 shadow-sm sm:grid-cols-3">
+            <div className="mt-8 grid grid-cols-1 gap-2 rounded-[20px] border border-border/80 bg-card p-2 shadow-sm sm:grid-cols-3">
               {[
                 { label: "Tổng mẫu điểm nhìn", value: String(totalValid) },
                 { label: "Số trang đã xem", value: `${results.filter((r) => r.total > 0).length}/${total}` },
@@ -322,7 +323,7 @@ export function TryFlow() {
                   value: `${totalValid ? Math.round((results.reduce((s, r) => s + r.valid, 0) / Math.max(1, results.reduce((s, r) => s + r.total, 0))) * 100) : 0}%`,
                 },
               ].map((s) => (
-                <div key={s.label} className="rounded-[16px] bg-[#f5f6f2] p-5 text-center">
+                <div key={s.label} className="rounded-[16px] bg-muted p-5 text-center">
                   <p className="text-2xl font-semibold tabular-nums text-foreground">{s.value}</p>
                   <p className="mt-1 text-xs font-medium text-muted-foreground">{s.label}</p>
                 </div>
@@ -333,7 +334,7 @@ export function TryFlow() {
               {results.map((r, i) => (
                 <div
                   key={r.slide.id}
-                  className="flex flex-col gap-1 rounded-[16px] border border-border/80 bg-white px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-1 rounded-[16px] border border-border/80 bg-card px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"
                 >
                   <span className="font-semibold text-foreground">
                     Trang {i + 1} · {r.slide.title}
@@ -372,20 +373,22 @@ function GuestCalibration({ onDone }: { onDone: () => void }) {
   return (
     <>
       <CalibrationStage engine={engine} />
+      {/* Thanh điều hướng nổi trên khung hiệu chỉnh nền tối: giữ chữ trắng + nền
+          tối cố định, không theo theme. */}
       <nav
         aria-label="Điều hướng"
         className="pointer-events-none fixed inset-x-3 top-1/2 z-50 flex -translate-y-1/2 items-center justify-between sm:inset-x-5"
       >
         <Link
           href="/"
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#111210]/85 px-3 py-2 text-xs font-medium text-white/80 shadow-sm backdrop-blur-md transition hover:bg-[#292a27] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-navy-950/85 px-3 py-2 text-xs font-medium text-white/80 shadow-sm backdrop-blur-md transition hover:bg-navy-900 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           <Icon name="ri-arrow-left-s-line" className="size-4" />
           Về trang chủ
         </Link>
         <Link
           href="/account/login"
-          className="pointer-events-auto inline-flex items-center rounded-full border border-white/15 bg-[#111210]/85 px-3 py-2 text-xs font-medium text-white/80 shadow-sm backdrop-blur-md transition hover:bg-[#292a27] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="pointer-events-auto inline-flex items-center rounded-full border border-white/15 bg-navy-950/85 px-3 py-2 text-xs font-medium text-white/80 shadow-sm backdrop-blur-md transition hover:bg-navy-900 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           Đăng nhập
         </Link>

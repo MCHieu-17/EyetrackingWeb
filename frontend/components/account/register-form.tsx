@@ -15,7 +15,7 @@ export function RegisterForm({ className }: { className?: string }) {
         type="button"
         variant="outline"
         size="lg"
-        className="h-12 w-full rounded-full border-[#e8e8e3] bg-white text-[15px] font-semibold text-[#2a2a2a] shadow-none hover:bg-[#f5f6f2]"
+        className="h-12 w-full text-[15px]"
         onClick={() => setOtpOpen(true)}
       >
         <MicrosoftLogo className="size-4" />

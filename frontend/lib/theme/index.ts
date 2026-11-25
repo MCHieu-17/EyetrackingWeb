@@ -12,8 +12,8 @@ export type ThemePreference = "light" | "dark" | "system";
 export const THEME_STORAGE_KEY = "fovea-theme";
 export const THEME_EVENT = "fovea-theme-change";
 
-/** Route luôn ở theme sáng (trang thu gaze). */
-const FORCED_LIGHT = /^\/student\/courses\/[^/]+(\/calibrate)?\/?$/;
+/** Route luôn ở theme sáng (trang thu gaze: học bài, hiệu chuẩn, trải nghiệm thử). */
+const FORCED_LIGHT = /^\/(student\/courses\/[^/]+(\/calibrate)?|try)\/?$/;
 
 export function isForcedLightPath(pathname: string): boolean {
   return FORCED_LIGHT.test(pathname);

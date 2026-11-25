@@ -19,12 +19,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { requestEmailOtp, verifyEmailOtp, type OtpChallenge } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { resolveRedirect } from "@/lib/auth-redirect";
+import { cn } from "@/lib/utils";
 import { AUTH_USER_QUERY_KEY } from "@/hooks/use-stored-user";
 
 const STUDENT_EMAIL_PATTERN = /^\d{8}@st\.neu\.edu\.vn$/i;
 const EMAIL_FORMAT_ERROR =
   "Email không hợp lệ. Vui lòng nhập email sinh viên dạng 12345678@st.neu.edu.vn.";
 const GENERIC_ERROR = "Không thể xác thực email. Vui lòng thử lại.";
+
+const inputClass =
+  "h-12 rounded-xl border-input bg-card px-4 text-[15px] text-foreground shadow-xs placeholder:text-muted-foreground hover:border-primary/40 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25";
 
 const OTP_ERROR_MESSAGES: Record<string, string> = {
   email_not_allowed: EMAIL_FORMAT_ERROR,
@@ -236,8 +240,8 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md gap-0 overflow-y-auto p-0">
-        <DialogHeader className="gap-3 border-b border-[#eeeee9] p-6 pr-14 pb-4">
-          <span className="flex size-10 items-center justify-center rounded-xl border border-[#dfe9dc] bg-[#e8f1e6]">
+        <DialogHeader className="gap-3 border-b border-border p-6 pr-14 pb-4">
+          <span className="flex size-10 items-center justify-center rounded-xl border border-border bg-accent text-accent-foreground">
             <MicrosoftLogo className="size-5" />
           </span>
           <div className="space-y-1">
@@ -259,7 +263,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
         {step === "email" ? (
           <form onSubmit={handleRequest} noValidate className="space-y-4 p-6 pt-4">
             <div className="space-y-2">
-              <Label htmlFor="email-otp-email" className="text-[13px] font-semibold text-[#2a2a2a]">
+              <Label htmlFor="email-otp-email" className="text-[13px] font-semibold text-foreground">
                 Email sinh viên <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -276,7 +280,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
                 }}
                 disabled={busy}
                 aria-invalid={error ? true : undefined}
-                className="h-12 rounded-xl border-[#e8e8e3] bg-[#fdfdfa] px-4 text-[15px] text-black shadow-none placeholder:text-[#9a9a9a] hover:border-[#d7dbd2] focus-visible:border-black focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-black/10"
+                className={inputClass}
               />
               <p className="text-xs leading-5 text-muted-foreground">
                 Chỉ nhận email trường @st.neu.edu.vn. Nếu không thấy mã, hãy kiểm
@@ -287,7 +291,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2.5 rounded-xl border border-[#eadbd8] bg-[#fbf4f2] px-3.5 py-3 text-sm leading-5 text-[#8b2c25]"
+                className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-sm leading-5 text-destructive"
               >
                 <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
                 <p>{error}</p>
@@ -297,7 +301,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
             <Button
               type="submit"
               size="lg"
-              className="h-12 w-full rounded-full bg-primary text-[15px] font-semibold text-white shadow-sm hover:bg-primary-hover active:bg-primary-active"
+              className="h-12 w-full text-[15px]"
               disabled={busy}
             >
               {requesting && <Spinner />}
@@ -307,7 +311,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
         ) : (
           <form onSubmit={handleVerify} noValidate className="space-y-4 p-6 pt-4">
             <div className="space-y-2">
-              <Label htmlFor="email-otp-code" className="text-[13px] font-semibold text-[#2a2a2a]">
+              <Label htmlFor="email-otp-code" className="text-[13px] font-semibold text-foreground">
                 Mã xác nhận <span className="text-destructive">*</span>
               </Label>
               <p className="text-xs leading-5 text-muted-foreground">
@@ -331,7 +335,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
                 disabled={busy}
                 aria-invalid={error ? true : undefined}
                 aria-describedby="email-otp-code-hint"
-                className="h-14 rounded-xl border-[#e8e8e3] bg-[#fdfdfa] px-4 text-center font-mono text-2xl tracking-[0.35em] text-black shadow-none placeholder:text-[#9a9a9a] hover:border-[#d7dbd2] focus-visible:border-black focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-black/10"
+                className={cn(inputClass, "h-14 text-center font-mono text-2xl tracking-[0.35em]")}
               />
               <p id="email-otp-code-hint" className="text-xs leading-5 text-muted-foreground">
                 Nhập 6 chữ số trong email rồi bấm Xác nhận. Thư có thể mất 1–2
@@ -354,7 +358,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2.5 rounded-xl border border-[#eadbd8] bg-[#fbf4f2] px-3.5 py-3 text-sm leading-5 text-[#8b2c25]"
+                className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-sm leading-5 text-destructive"
               >
                 <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
                 <p>{error}</p>
@@ -370,7 +374,7 @@ export function EmailOtpDialog({ open, onOpenChange, mode, next }: EmailOtpDialo
             <Button
               type="submit"
               size="lg"
-              className="h-12 w-full rounded-full bg-primary text-[15px] font-semibold text-white shadow-sm hover:bg-primary-hover active:bg-primary-active"
+              className="h-12 w-full text-[15px]"
               disabled={busy || code.length !== 6}
             >
               {verifying && <Spinner />}

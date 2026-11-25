@@ -10,7 +10,8 @@ export default function ChangePasswordPage() {
   return (
     <AuthLayout>
       <div className="mb-6 space-y-1.5 text-center lg:text-left">
-        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-semibold tracking-tight text-foreground">
+        <span aria-hidden className="mx-auto block h-1 w-10 rounded-full bg-brand-red lg:mx-0" />
+        <h1 className="font-display text-2xl text-foreground">
           Đổi mật khẩu
         </h1>
         <p className="text-sm text-muted-foreground">

@@ -16,7 +16,7 @@ import { AUTH_USER_QUERY_KEY } from "@/hooks/use-stored-user";
 import { cn } from "@/lib/utils";
 
 const inputClass =
-  "h-12 rounded-xl border-[#e8e8e3] bg-[#fdfdfa] px-4 text-[15px] text-black shadow-none placeholder:text-[#9a9a9a] hover:border-[#d7dbd2] focus-visible:border-black focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-black/10";
+  "h-12 rounded-xl border-input bg-card px-4 text-[15px] text-foreground shadow-xs placeholder:text-muted-foreground hover:border-primary/40 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25";
 
 export function ChangePasswordForm({ className }: { className?: string }) {
   const router = useRouter();
@@ -90,7 +90,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
     <div className={cn("w-full", className)}>
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="current-password" className="text-[13px] font-semibold text-[#2a2a2a]">
+          <Label htmlFor="current-password" className="text-[13px] font-semibold text-foreground">
             Mật khẩu hiện tại <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -106,7 +106,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="new-password" className="text-[13px] font-semibold text-[#2a2a2a]">
+          <Label htmlFor="new-password" className="text-[13px] font-semibold text-foreground">
             Mật khẩu mới <span className="text-destructive">*</span>
           </Label>
           <div className="relative">
@@ -125,7 +125,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
               aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               aria-pressed={show}
               onClick={() => setShow((v) => !v)}
-              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#777777] transition-colors hover:bg-[#e8f1e6] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Icon name={show ? "ri-eye-off-line" : "ri-eye-line"} className="size-4" />
             </button>
@@ -133,7 +133,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirm-password" className="text-[13px] font-semibold text-[#2a2a2a]">
+          <Label htmlFor="confirm-password" className="text-[13px] font-semibold text-foreground">
             Xác nhận mật khẩu mới <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -151,7 +151,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
         {error && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 rounded-xl border border-[#eadbd8] bg-[#fbf4f2] px-3.5 py-3 text-sm leading-5 text-[#8b2c25]"
+            className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-sm leading-5 text-destructive"
           >
             <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
             <p>{error}</p>
@@ -161,7 +161,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
         <Button
           type="submit"
           size="lg"
-          className="h-12 w-full rounded-full bg-primary text-[15px] font-semibold text-white shadow-sm hover:bg-primary-hover active:bg-primary-active"
+          className="h-12 w-full text-[15px]"
           disabled={pending}
         >
           {pending && <Spinner />}
