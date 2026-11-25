@@ -59,10 +59,10 @@ export function QueryEditor({
   };
 
   return (
-    <section className="rounded-[18px] border border-[#eeeee9] bg-white shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#eeeee9] px-4 py-3">
+    <section className="rounded-[18px] border border-border bg-card shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-full bg-[#eef3eb] text-[#52654f]">
+          <span className="flex size-8 items-center justify-center rounded-full bg-accent text-accent-foreground">
             <Icon name="ri-code-line" className="size-4" />
           </span>
           <div>
@@ -82,7 +82,7 @@ export function QueryEditor({
         <div
           ref={gutterRef}
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 hidden w-10 select-none overflow-hidden border-r border-[#eeeee9] bg-[#fafaf7] py-3 text-right font-mono text-xs leading-6 text-muted-foreground sm:block"
+          className="pointer-events-none absolute inset-y-0 left-0 hidden w-10 select-none overflow-hidden border-r border-border bg-muted/40 py-3 text-right font-mono text-xs leading-6 text-muted-foreground sm:block"
         >
           {lineNumbers.map((line) => (
             <div key={line} className="pr-2">
@@ -113,7 +113,7 @@ export function QueryEditor({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-[#eeeee9] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
         <Button onClick={onRun} disabled={isRunning}>
           {isRunning ? <Spinner /> : <Icon name="ri-play-line" />}
           {isRunning ? "Đang chạy..." : "Chạy truy vấn"}

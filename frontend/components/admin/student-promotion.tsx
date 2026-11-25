@@ -29,7 +29,7 @@ export function StudentPromotion() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[18px] border border-[#eeeee9] bg-white p-2 shadow-xs">
+      <div className="rounded-[18px] border border-border bg-card p-2 shadow-xs">
         <div className="relative">
           <Icon
             name="ri-search-line"
@@ -39,7 +39,7 @@ export function StudentPromotion() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Tìm theo tên, email hoặc mã sinh viên"
-            className="h-10 rounded-full border-transparent bg-[#f5f6f2] pl-10 shadow-none focus-visible:border-border"
+            className="h-10 rounded-full border-transparent bg-muted pl-10 shadow-none focus-visible:border-border"
             aria-label="Tìm sinh viên"
           />
         </div>
@@ -83,7 +83,7 @@ export function StudentPromotion() {
           {students.map((student) => (
             <article
               key={student.id}
-              className="flex flex-col gap-3 rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+              className="flex flex-col gap-3 rounded-[18px] border border-border bg-card p-4 shadow-xs sm:flex-row sm:items-center sm:gap-4 sm:px-5"
             >
               <Avatar className="size-11">
                 {student.avatarUrl ? (

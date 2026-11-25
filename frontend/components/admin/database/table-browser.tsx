@@ -232,7 +232,7 @@ export function TableBrowser({
       </div>
 
       {selectedTable && (
-        <div className="space-y-2 rounded-[14px] border border-[#eeeee9] bg-[#fafaf7] p-3">
+        <div className="space-y-2 rounded-[14px] border border-border bg-muted/40 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold">Bộ lọc</p>
             <Button
@@ -266,7 +266,7 @@ export function TableBrowser({
                         value: "",
                       })
                     }
-                    className="h-9 rounded-full border border-border bg-white px-3 text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="h-9 rounded-full border border-border bg-card px-3 text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     {selectedTable.columns.map((column) => (
                       <option key={column.name} value={column.name}>
@@ -287,7 +287,7 @@ export function TableBrowser({
                           : filter.value,
                       });
                     }}
-                    className="h-9 rounded-full border border-border bg-white px-3 text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="h-9 rounded-full border border-border bg-card px-3 text-xs text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     {FILTER_OPERATORS.map((operator) => (
                       <option key={operator.value} value={operator.value}>
@@ -305,7 +305,7 @@ export function TableBrowser({
                         })
                       }
                       placeholder="Giá trị..."
-                      className="h-9 min-w-[160px] flex-1 rounded-full border-border bg-white shadow-none"
+                      className="h-9 min-w-[160px] flex-1 rounded-full border-border bg-card shadow-none"
                     />
                   )}
                   <Button

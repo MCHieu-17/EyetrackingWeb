@@ -51,7 +51,7 @@ export function QueryHistory({ items, onSelect, onClear }: QueryHistoryProps) {
             key={item.id}
             type="button"
             onClick={() => onSelect(item)}
-            className="w-full rounded-xl border border-[#eeeee9] bg-white p-3 text-left transition-colors hover:bg-muted/40"
+            className="w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-muted/40"
           >
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={item.ok ? "success" : "destructive"}>

@@ -53,10 +53,10 @@ export function AdminProfile() {
 
   return (
     <div className="mx-auto grid w-full max-w-4xl gap-4 md:grid-cols-[minmax(240px,0.72fr)_minmax(0,1.28fr)]">
-      <section className="rounded-[18px] border border-[#dfe9dc] bg-[#e8f1e6] p-5 text-foreground shadow-xs sm:p-6">
-        <Avatar className="size-16 border border-white">
+      <section className="rounded-[18px] border border-border bg-accent p-5 text-foreground shadow-xs sm:p-6">
+        <Avatar className="size-16 border border-border">
           {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.fullName ?? user.email} /> : null}
-          <AvatarFallback className="bg-white text-lg text-foreground">{initialsOf(user.fullName ?? user.email)}</AvatarFallback>
+          <AvatarFallback className="bg-card text-lg text-foreground">{initialsOf(user.fullName ?? user.email)}</AvatarFallback>
         </Avatar>
         <div className="mt-8 min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Hồ sơ hệ thống</p>
@@ -64,13 +64,13 @@ export function AdminProfile() {
             {user.fullName ?? user.email}
           </h1>
           <div className="mt-1.5 flex items-center gap-2">
-            <Badge className="border-white bg-white text-foreground">{ROLE_LABEL.admin}</Badge>
+            <Badge className="border-border bg-card text-foreground">{ROLE_LABEL.admin}</Badge>
           </div>
         </div>
         <p className="mt-8 text-xs leading-5 text-muted-foreground">Tài khoản có quyền quản trị và cấu hình toàn hệ thống.</p>
       </section>
 
-      <section className="rounded-[18px] border border-[#eeeee9] bg-white p-5 shadow-xs sm:p-6">
+      <section className="rounded-[18px] border border-border bg-card p-5 shadow-xs sm:p-6">
           <div className="mb-8 flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Tài khoản</p>

@@ -282,7 +282,7 @@ export function DatabaseConsole() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-[#eeeee9] bg-white px-4 py-3 text-xs text-muted-foreground shadow-xs">
+      <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-border bg-card px-4 py-3 text-xs text-muted-foreground shadow-xs">
         <span className="flex items-center gap-1.5 font-medium text-foreground">
           <Icon name="ri-lock-line" className="size-4 text-success" />
           Chế độ chỉ đọc
@@ -338,11 +338,11 @@ export function DatabaseConsole() {
             textareaRef={editorRef}
           />
 
-          <section className="rounded-[18px] border border-[#eeeee9] bg-white shadow-xs">
+          <section className="rounded-[18px] border border-border bg-card shadow-xs">
             <div
               role="tablist"
               aria-label="Khu vực kết quả"
-              className="flex flex-wrap items-center gap-1 border-b border-[#eeeee9] p-2"
+              className="flex flex-wrap items-center gap-1 border-b border-border p-2"
             >
               {tabs.map((tab) => (
                 <button

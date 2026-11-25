@@ -43,7 +43,7 @@ export function CellDialog({ cell, onOpenChange }: CellDialogProps) {
           <DialogDescription>{cell?.column.type}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-auto px-6 pb-4">
-          <pre className="whitespace-pre-wrap break-words rounded-xl bg-[#f7f7f4] p-4 font-mono text-xs text-foreground">
+          <pre className="whitespace-pre-wrap break-words rounded-xl bg-muted p-4 font-mono text-xs text-foreground">
             {text}
           </pre>
         </div>

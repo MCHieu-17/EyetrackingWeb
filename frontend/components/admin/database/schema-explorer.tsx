@@ -56,7 +56,7 @@ function SchemaGroup({
           return (
             <div
               key={key}
-              className="rounded-xl border border-transparent hover:border-[#eeeee9]"
+              className="rounded-xl border border-transparent hover:border-border"
             >
               <div className="flex items-center gap-1">
                 <button
@@ -180,11 +180,11 @@ export function SchemaExplorer({
   return (
     <section
       className={cn(
-        "flex max-h-[calc(100vh-220px)] flex-col rounded-[18px] border border-[#eeeee9] bg-white shadow-xs",
+        "flex max-h-[calc(100vh-220px)] flex-col rounded-[18px] border border-border bg-card shadow-xs",
         className,
       )}
     >
-      <div className="border-b border-[#eeeee9] p-3 pr-12">
+      <div className="border-b border-border p-3 pr-12">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Icon
@@ -212,7 +212,7 @@ export function SchemaExplorer({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Tìm bảng hoặc cột..."
-            className="h-9 rounded-full border-transparent bg-[#f5f6f2] pl-9 shadow-none focus-visible:border-border"
+            className="h-9 rounded-full border-transparent bg-muted pl-9 shadow-none focus-visible:border-border"
             aria-label="Tìm bảng hoặc cột"
           />
         </div>
@@ -263,7 +263,7 @@ export function SchemaExplorer({
         )}
       </div>
 
-      <div className="border-t border-[#eeeee9] px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
         {tables.length} bảng/view · Click để tạo SELECT
       </div>
     </section>

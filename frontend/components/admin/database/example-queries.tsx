@@ -14,10 +14,10 @@ export function ExampleQueries({ onSelect }: ExampleQueriesProps) {
       {EXAMPLE_QUERIES.map((example) => (
         <article
           key={example.id}
-          className="flex flex-col gap-2 rounded-[14px] border border-[#eeeee9] bg-white p-4"
+          className="flex flex-col gap-2 rounded-[14px] border border-border bg-card p-4"
         >
           <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-full bg-[#eef3eb] text-[#52654f]">
+            <span className="flex size-8 items-center justify-center rounded-full bg-accent text-accent-foreground">
               <Icon name="ri-code-line" className="size-4" />
             </span>
             <h3 className="text-sm font-semibold">{example.title}</h3>
@@ -25,7 +25,7 @@ export function ExampleQueries({ onSelect }: ExampleQueriesProps) {
           <p className="text-xs text-muted-foreground">
             {example.description}
           </p>
-          <pre className="line-clamp-3 whitespace-pre-wrap break-words rounded-lg bg-[#f7f7f4] p-2 font-mono text-[10px] text-muted-foreground">
+          <pre className="line-clamp-3 whitespace-pre-wrap break-words rounded-lg bg-muted p-2 font-mono text-[10px] text-muted-foreground">
             {example.sql}
           </pre>
           <Button
