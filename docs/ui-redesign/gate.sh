@@ -30,9 +30,11 @@ AOI_FILES='frontend/components/(reader|student/learning-reader|quiz/inline-quiz|
 aoi_changed="$(echo "$changed" | grep -E "$AOI_FILES" || true)"
 if [ -n "$aoi_changed" ]; then
   layout_re='\b(-?m[trblxy]?|p[trblxy]?|gap(-[xy])?|space-[xy]|w|h|min-[wh]|max-[wh]|size|text-(xs|sm|base|lg|[0-9]xl)|leading|font-(medium|semibold|bold|normal)|rounded(-[a-z0-9]+)?|border(-[trblxy])?(-[0-9])?|flex|grid|inline|block|hidden|absolute|relative|fixed|sticky|inset|top|left|right|bottom|translate|scale)-?\[?[0-9a-z./%-]*\]?'
+  # PLAN §3.4 cho phép đổi class màu border-<màu>; chỉ so các token layout thật.
+  color_border_re='^border-(border|input|ring|primary|secondary|accent|success|warning|destructive|info|transparent|white|black|foreground|muted|card|popover|brand|\[)'
   for f in $aoi_changed; do
-    removed="$(git diff -U0 -- "$f" | grep '^-[^-]' | grep -oE "$layout_re" | sort)"
-    added="$(git diff -U0 -- "$f" | grep '^+[^+]' | grep -oE "$layout_re" | sort)"
+    removed="$(git diff -U0 -- "$f" | grep '^-[^-]' | grep -oE "$layout_re" | grep -vE "$color_border_re" | sort)"
+    added="$(git diff -U0 -- "$f" | grep '^+[^+]' | grep -oE "$layout_re" | grep -vE "$color_border_re" | sort)"
     if [ "$removed" != "$added" ]; then
       echo "!! $f: class layout thay đổi trong vùng AOI (chỉ được đổi màu)"
       diff <(echo "$removed") <(echo "$added") | head -10 | sed 's/^/    /'
