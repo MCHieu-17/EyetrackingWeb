@@ -32,7 +32,9 @@ export function Switch({
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        checked ? "border-primary bg-primary" : "border-border bg-muted",
+        checked
+          ? "border-primary bg-primary"
+          : "border-input bg-input",
         className,
       )}
     >

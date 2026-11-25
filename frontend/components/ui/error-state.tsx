@@ -21,13 +21,13 @@ export function ErrorState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 rounded-[20px] border border-destructive/15 bg-white px-6 py-10 text-center shadow-xs",
+        "flex flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/20 bg-card px-6 py-10 text-center text-card-foreground shadow-xs",
         className,
       )}
       {...props}
     >
-      <div className="flex size-12 items-center justify-center rounded-full bg-destructive/12">
-        <Icon name="ri-error-warning-line" className="size-6 text-destructive" />
+      <div className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+        <Icon name="ri-error-warning-line" className="size-6" />
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">{title}</p>

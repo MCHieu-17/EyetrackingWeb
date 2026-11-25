@@ -4,14 +4,14 @@ import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
-  "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
+  "flex items-start gap-3 rounded-xl border px-4 py-3 text-sm",
   {
     variants: {
       variant: {
-        info: "border-info/25 bg-info/8 text-foreground",
-        success: "border-success/25 bg-success/8 text-foreground",
-        warning: "border-warning/30 bg-warning/10 text-foreground",
-        destructive: "border-destructive/25 bg-destructive/8 text-foreground",
+        info: "border-info/20 bg-info/10 text-foreground",
+        success: "border-success/20 bg-success/10 text-foreground",
+        warning: "border-warning/25 bg-warning/10 text-foreground",
+        destructive: "border-destructive/20 bg-destructive/10 text-foreground",
       },
     },
     defaultVariants: { variant: "info" },

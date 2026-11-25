@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export const Sheet = DialogPrimitive.Root;
 
 const sheetVariants = cva(
-  "fixed z-50 flex flex-col gap-0 border-border/80 bg-[#fdfdfa] shadow-xl transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-300",
+  "fixed z-50 flex flex-col gap-0 border-border bg-popover text-popover-foreground shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-300",
   {
     variants: {
       side: {
@@ -33,7 +33,7 @@ export const SheetContent = React.forwardRef<
   <DialogPrimitive.Portal>
     <DialogPrimitive.Overlay
       className={cn(
-        "fixed inset-0 z-50 bg-brand-dark/45 backdrop-blur-[2px]",
+        "fixed inset-0 z-50 bg-navy-950/40 backdrop-blur-[2px]",
         "data-[state=open]:animate-in data-[state=open]:fade-in-0",
         "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
       )}

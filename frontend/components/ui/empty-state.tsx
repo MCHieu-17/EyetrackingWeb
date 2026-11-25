@@ -20,13 +20,13 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 rounded-[20px] border border-dashed border-border/80 bg-white px-6 py-12 text-center shadow-xs",
+        "flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-12 text-center text-card-foreground shadow-xs",
         className,
       )}
       {...props}
     >
-      <div className="flex size-12 items-center justify-center rounded-full bg-[#e8f1e6]">
-        <Icon name={icon} className="size-6 text-accent-foreground" />
+      <div className="flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground">
+        <Icon name={icon} className="size-6" />
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">{title}</p>
