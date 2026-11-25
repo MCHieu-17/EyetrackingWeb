@@ -125,7 +125,7 @@
 }
 
 /* ==========================================================================
-   Fovea design tokens — màu nhận diện Đại học Kinh tế Quốc dân (neu.edu.vn):
+   Eyetracking design tokens — màu nhận diện Đại học Kinh tế Quốc dân (neu.edu.vn):
    navy #084C90 (chủ đạo), đỏ #AE152D (nhấn, dùng tiết chế).
    Quy tắc: component chỉ dùng token semantic (bg-primary, text-muted-foreground,
    bg-card, border-border...) hoặc thang navy-N / neu-red-N; không hardcode hex.

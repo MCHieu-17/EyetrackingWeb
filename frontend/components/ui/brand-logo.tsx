@@ -1,55 +1,61 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 type BrandLogoVariant = "full" | "icon";
 
 /**
- * Logo Fovea: con mắt cách điệu, đồng tử là điểm hội tụ (fovea) màu đỏ NEU
- * trên nền navy NEU. Wordmark dùng font heading + `currentColor` nên tự đổi
- * theo theme sáng/tối. Inline SVG: không thêm request ảnh.
+ * Lockup Eyetracking: logo chính thức của Đại học Kinh tế Quốc dân (nguồn:
+ * neu.edu.vn) + wordmark. Logo gốc có nền trong suốt; trong theme tối đặt trên
+ * một ô trắng nhỏ để giữ đúng màu nhận diện của trường.
  */
 export function BrandLogo({
   variant = "full",
   className,
+  plate = false,
+  wordmarkClassName,
 }: {
   variant?: BrandLogoVariant;
   className?: string;
+  plate?: boolean;
+  wordmarkClassName?: string;
 }) {
   const iconOnly = variant === "icon";
   return (
     <span
       role="img"
-      aria-label="Fovea"
+      aria-label="Eyetracking – Đại học Kinh tế Quốc dân"
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-2 text-brand-navy",
+        "inline-flex h-9 shrink-0 items-center gap-2 text-brand-navy dark:text-white",
         className,
       )}
     >
-      <FoveaMark className="h-full w-auto" />
+      <span
+        className={cn(
+          "flex h-full shrink-0 items-center justify-center",
+          plate ? "rounded-lg bg-white p-0.5" : "dark:rounded-lg dark:bg-white dark:p-0.5",
+        )}
+      >
+        <Image
+          src="/brand/neu-logo.webp"
+          alt=""
+          width={180}
+          height={180}
+          unoptimized
+          draggable={false}
+          className="h-full w-auto object-contain"
+        />
+      </span>
       {!iconOnly && (
         <span
           aria-hidden
-          className="font-display text-[1.32em] leading-none font-bold tracking-[-0.03em]"
+          className={cn(
+            "font-display text-[1.32em] leading-none font-bold tracking-[-0.03em]",
+            wordmarkClassName,
+          )}
         >
-          Fovea
+          Eyetracking
         </span>
       )}
     </span>
-  );
-}
-
-function FoveaMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden className={className}>
-      <rect width="48" height="48" rx="12" fill="#084C90" />
-      <path
-        d="M6 24c4.8-7.2 10.8-10.8 18-10.8S37.2 16.8 42 24c-4.8 7.2-10.8 10.8-18 10.8S10.8 31.2 6 24Z"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="3"
-        strokeLinejoin="round"
-      />
-      <circle cx="24" cy="24" r="7.2" fill="none" stroke="#fff" strokeWidth="2.6" opacity=".55" />
-      <circle cx="24" cy="24" r="3.8" fill="#E8394F" />
-    </svg>
   );
 }

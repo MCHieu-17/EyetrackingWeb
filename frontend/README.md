@@ -1,4 +1,4 @@
-# Frontend — GazeEdu / EyeLearning
+# Frontend — Eyetracking
 
 Next.js 16 App Router, React 19, TypeScript, Tailwind 4, TanStack Query.
 Yêu cầu Node **>=20.19**; Docker image dùng Node 22 LTS.

@@ -49,9 +49,9 @@ export function Sidebar({
         href={`/${role}`}
         onClick={onNavigate}
         className="flex h-20 shrink-0 items-center gap-3 px-5"
-        aria-label="Fovea"
+        aria-label="Eyetracking"
       >
-        <BrandLogo className="h-8" />
+        <BrandLogo className="h-10" />
       </Link>
 
       <nav
@@ -71,7 +71,7 @@ export function Sidebar({
       )}
 
       <p className="mt-auto px-6 pb-6 text-[11px] leading-relaxed text-muted-foreground">
-        Fovea · Eye-Tracking
+        Eyetracking · NEU
       </p>
     </div>
   );

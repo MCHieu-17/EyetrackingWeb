@@ -4,7 +4,7 @@ import { AuthLayout } from "@/components/account/auth-layout";
 import { LoginForm } from "@/components/account/login-form";
 
 export const metadata: Metadata = {
-  title: "Đăng nhập – Fovea",
+  title: "Đăng nhập – Eyetracking",
 };
 
 export default function LoginPage() {
@@ -15,7 +15,7 @@ export default function LoginPage() {
         <h1 className="font-display text-2xl text-foreground">
           Chào mừng trở lại
         </h1>
-        <p className="text-sm text-muted-foreground">Đăng nhập để tiếp tục sử dụng Fovea.</p>
+        <p className="text-sm text-muted-foreground">Đăng nhập để tiếp tục sử dụng Eyetracking.</p>
       </div>
       <LoginForm />
       <p className="mt-6 text-center text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 /**
- * Theme sáng/tối/hệ thống cho Fovea, không phụ thuộc thư viện ngoài.
+ * Theme sáng/tối/hệ thống cho Eyetracking, không phụ thuộc thư viện ngoài.
  *
  * - Lựa chọn lưu ở localStorage[THEME_STORAGE_KEY] ("light" | "dark" | "system").
  * - Script inline trong <head> (THEME_INIT_SCRIPT) gắn class `.dark` trước khi
@@ -9,8 +9,8 @@
  */
 export type ThemePreference = "light" | "dark" | "system";
 
-const THEME_STORAGE_KEY = "fovea-theme";
-export const THEME_EVENT = "fovea-theme-change";
+const THEME_STORAGE_KEY = "eyetracking-theme";
+export const THEME_EVENT = "eyetracking-theme-change";
 
 /** Route luôn ở theme sáng (trang thu gaze: học bài, hiệu chuẩn, trải nghiệm thử). */
 const FORCED_LIGHT = /^\/(student\/courses\/[^/]+(\/calibrate)?|try)\/?$/;

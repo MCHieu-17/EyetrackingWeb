@@ -4,7 +4,7 @@
 `frontend/components/account/*.tsx`, `frontend/components/try/try-flow.tsx`, `frontend/app/account/**/page.tsx`.
 
 ## Việc cần làm
-- `auth-layout.tsx`: cột trái thành panel thương hiệu **nền navy** (`bg-primary` hoặc gradient `from-navy-800 to-navy-950`), chữ `text-primary-foreground`/`text-white/75`, logo Fovea; các thẻ tính năng thành card kính mờ (`bg-white/10 border-white/15 backdrop-blur`) — đây là ngoại lệ được dùng `white/…` vì nền luôn navy. Thêm chấm/gạch `bg-brand-red` nhỏ ở eyebrow. Cột phải: `bg-card` form sạch.
+- `auth-layout.tsx`: cột trái thành panel thương hiệu **nền navy** (`bg-primary` hoặc gradient `from-navy-800 to-navy-950`), chữ `text-primary-foreground`/`text-white/75`, logo Eyetracking; các thẻ tính năng thành card kính mờ (`bg-white/10 border-white/15 backdrop-blur`) — đây là ngoại lệ được dùng `white/…` vì nền luôn navy. Thêm chấm/gạch `bg-brand-red` nhỏ ở eyebrow. Cột phải: `bg-card` form sạch.
 - Form login/register/change-password/OTP dialog: thay màu hardcode bằng token; nút "Đăng nhập" chính = Button default (navy). Nút Outlook = outline.
 - `try-flow.tsx`: thay toàn bộ hex bằng token theo PLAN §1, giữ bố cục và logic camera. Phần overlay trên video có thể giữ màu cố định (ghi comment).
 - Kiểm tra theme tối.

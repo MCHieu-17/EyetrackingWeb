@@ -4,7 +4,7 @@ import { AuthLayout } from "@/components/account/auth-layout";
 import { RegisterForm } from "@/components/account/register-form";
 
 export const metadata: Metadata = {
-  title: "Đăng ký – Fovea",
+  title: "Đăng ký – Eyetracking",
 };
 
 export default function RegisterPage() {

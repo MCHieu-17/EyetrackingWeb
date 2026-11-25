@@ -1,9 +1,9 @@
-# START — Khởi động GazeEdu / EyeLearning
+# START — Khởi động Eyetracking
 
 
 ## 1. Giới thiệu
 
-**GazeEdu / EyeLearning** là nền tảng học trực tuyến có theo dõi hướng nhìn.
+**Eyetracking** là nền tảng học trực tuyến có theo dõi hướng nhìn.
 Giáo viên soạn khóa học, bài giảng và quiz; học viên học slide PDF qua trình
 duyệt, webcam gửi dữ liệu gaze về hệ thống. Backend lưu gaze thô, worker quy
 đổi sang tọa độ slide/AOI và tính metrics để giáo viên phân tích.
@@ -211,7 +211,7 @@ SMTP_PORT=587
 SMTP_USER=your-sender@gmail.com
 SMTP_PASS=app-password
 SMTP_FROM=              # trống → dùng SMTP_USER
-SMTP_FROM_NAME=GazeEdu
+SMTP_FROM_NAME=Eyetracking
 SMTP_REPLY_TO=          # trống → dùng địa chỉ From
 SMTP_USE_SSL=false
 SMTP_STARTTLS=true

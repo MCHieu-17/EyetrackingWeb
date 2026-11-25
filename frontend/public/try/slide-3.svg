@@ -15,5 +15,5 @@
   <text x="1025" y="250" font-family="Arial, sans-serif" font-size="30" fill="#b45309" font-weight="bold" text-anchor="middle">α qua nho</text>
   <path d="M 890 320 L 960 330 L 1030 345 L 1100 365 L 1170 390" stroke="#f59e0b" stroke-width="5" fill="none" stroke-linecap="round"/>
   <text x="1025" y="535" font-family="Arial, sans-serif" font-size="22" fill="#78350f" text-anchor="middle">Hoi tu rat cham</text>
-  <text x="80" y="660" font-family="Arial, sans-serif" font-size="24" fill="#94a3b8">Trang 3 / 3 — GazeEdu Demo</text>
+  <text x="80" y="660" font-family="Arial, sans-serif" font-size="24" fill="#94a3b8">Trang 3 / 3 — Eyetracking Demo</text>
 </svg>

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         env_file=ROOT_ENV_FILE, env_file_encoding="utf-8", extra="ignore"
     )
 
-    app_name: str = "Fovea API"
+    app_name: str = "Eyetracking API"
     debug: bool = False
     # Namespace media/Redis; fallback khi chưa có app_metadata.db_instance_id.
     app_instance_id: str = "dev"
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     # Trống → dùng SMTP_USER làm địa chỉ From.
     smtp_from: str = ""
-    smtp_from_name: str = "Fovea"
+    smtp_from_name: str = "Eyetracking"
     # Trống → dùng địa chỉ From. Đặt hộp thư có người theo dõi để nhận phản hồi.
     smtp_reply_to: str = ""
     smtp_use_ssl: bool = False

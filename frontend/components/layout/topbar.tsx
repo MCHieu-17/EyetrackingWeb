@@ -32,55 +32,66 @@ export function Topbar({
   );
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-3 bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden"
-        onClick={() => setMobileOpen(true)}
-        aria-label="Mở menu"
-      >
-        <Icon name="ri-menu-line" className="size-5" />
-      </Button>
+    <header className="sticky top-0 z-30 bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6">
+      {/* Cùng max-width + padding với premium-canvas trong AppShell để logo và
+          menu tài khoản thẳng hàng với mép nội dung dashboard. */}
+      <div className="mx-auto flex h-20 w-full max-w-[1440px] items-center gap-2 px-5 sm:gap-3 sm:px-8 lg:px-10">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Mở menu"
+        >
+          <Icon name="ri-menu-line" className="size-5" />
+        </Button>
 
-      <Link href={`/${role}`} aria-label="Fovea" className="flex items-center">
-        <BrandLogo className="h-7" />
-      </Link>
+        <Link
+          href={`/${role}`}
+          aria-label="Eyetracking - Trang chủ"
+          className="flex shrink-0 items-center"
+        >
+          <BrandLogo
+            className="h-9 sm:h-10"
+            wordmarkClassName="hidden text-[1.15em] min-[360px]:inline sm:text-[1.32em]"
+          />
+        </Link>
 
-      {primaryItems.length > 0 && (
-        <nav className="ml-3 hidden items-center gap-1 lg:flex" aria-label="Điều hướng chính">
-          {primaryItems.map((item) => {
-            const active = item.match(pathname);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon name={item.icon} className="size-4" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+        {primaryItems.length > 0 && (
+          <nav className="ml-3 hidden items-center gap-1 lg:flex" aria-label="Điều hướng chính">
+            {primaryItems.map((item) => {
+              const active = item.match(pathname);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon name={item.icon} className="size-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
-      <div className="ml-auto flex items-center gap-2">
-        {user ? <UserMenu user={user} role={role} /> : <Spinner className="text-muted-foreground" />}
+        <div className="ml-auto flex items-center gap-2">
+          {user ? <UserMenu user={user} role={role} /> : <Spinner className="text-muted-foreground" />}
+        </div>
+
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="max-w-64 border-none bg-background p-0">
+            <SheetTitle className="sr-only">Điều hướng</SheetTitle>
+            <Sidebar role={role} onNavigate={() => setMobileOpen(false)} />
+          </SheetContent>
+        </Sheet>
       </div>
-
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="max-w-64 border-none bg-background p-0">
-          <SheetTitle className="sr-only">Điều hướng</SheetTitle>
-          <Sidebar role={role} onNavigate={() => setMobileOpen(false)} />
-        </SheetContent>
-      </Sheet>
     </header>
   );
 }

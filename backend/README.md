@@ -1,4 +1,4 @@
-# Backend — GazeEdu / EyeLearning
+# Backend — Eyetracking
 
 FastAPI backend cho nền tảng học trực tuyến có gaze tracking. API, worker phân
 tích, content-worker và embedding-worker dùng chung package `app`.

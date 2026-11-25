@@ -1,5 +1,5 @@
 # ============================================================
-# GazeEdu / EyeLearning — Portainer production stack
+# Eyetracking — Portainer production stack
 # ------------------------------------------------------------
 # Stack này chỉ PULL image từ registry, không build trên server.
 #
@@ -58,7 +58,7 @@ x-backend-env: &backend-env
   SMTP_USER: ${SMTP_USER:-}
   SMTP_PASS: ${SMTP_PASS:-}
   SMTP_FROM: ${SMTP_FROM:-}
-  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-GazeEdu}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Eyetracking}
   SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
   SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
   SMTP_STARTTLS: ${SMTP_STARTTLS:-true}

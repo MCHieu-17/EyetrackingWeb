@@ -30,7 +30,7 @@ export function ChangePasswordForm({ className }: { className?: string }) {
     return (
       <div className={cn("w-full", className)}>
         <Alert variant="info" title="Tài khoản đăng nhập bằng Outlook (OTP)">
-          Bạn đang đăng nhập bằng Outlook và mã OTP, nên không cần mật khẩu Fovea.
+          Bạn đang đăng nhập bằng Outlook và mã OTP, nên không cần mật khẩu Eyetracking.
           Nếu muốn dùng thêm mật khẩu, hãy liên hệ quản trị viên.
         </Alert>
       </div>

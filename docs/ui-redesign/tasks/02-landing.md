@@ -17,7 +17,7 @@
 8. Mobile 390px không tràn ngang; giữ các breakpoint hiện có.
 
 ## Giữ nguyên
-- Link/nút "Đăng nhập" (e2e dựa vào), cấu trúc section, nội dung chữ (chỉ chữ "GazeEdu" đã đổi thành "Fovea").
+- Link/nút "Đăng nhập" (e2e dựa vào), cấu trúc section, nội dung chữ (chỉ chữ "GazeEdu" đã đổi thành "Eyetracking").
 - `<BrandLogo className="h-8" />`.
 
 ## Kiểm tra trước khi báo xong

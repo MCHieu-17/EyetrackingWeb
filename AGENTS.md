@@ -1,4 +1,4 @@
-# AGENTS.md — GazeEdu / EyeLearning
+# AGENTS.md — Eyetracking (EyeLearning)
 
 > Nguồn sự thật: code hiện tại + `db/migrations/` + `scripts/`. Schema generation
 > **13**, **24 bảng lõi**, không versioning nội dung. File này đã gộp `DB.md` cũ;

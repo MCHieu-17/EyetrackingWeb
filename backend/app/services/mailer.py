@@ -24,7 +24,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("app.mailer")
 
-OTP_SUBJECT = "[Fovea] Mã xác nhận đăng nhập"
+OTP_SUBJECT = "[Eyetracking] Mã xác nhận đăng nhập"
 
 
 class EmailDeliveryError(Exception):
@@ -63,13 +63,14 @@ def _build_message(email: str, code: str) -> EmailMessage:
 
     text_body = (
         "Xin chào,\n\n"
-        f"Mã xác nhận đăng nhập Fovea của bạn là: {code}\n\n"
+        f"Mã xác nhận đăng nhập Eyetracking của bạn là: {code}\n\n"
         f"Mã có hiệu lực trong {minutes} phút và chỉ dùng được một lần.\n"
         "Nếu thư nằm trong Thư rác, hãy chọn \"Không phải thư rác\" để nhận\n"
         "các mã đăng nhập sau.\n"
         "Nếu bạn không yêu cầu đăng nhập, hãy bỏ qua email này.\n\n"
         "Trân trọng,\n"
-        "Fovea\n"
+        "Eyetracking\n"
+        "Đại học Kinh tế Quốc dân\n"
     )
     # Không chèn URL vào email OTP: thư có mã 6 số kèm link lạ thường bị
     # Microsoft 365 quarantine ở lần gửi đầu tiên từ một người gửi mới.
@@ -79,7 +80,7 @@ def _build_message(email: str, code: str) -> EmailMessage:
   <body style="margin:0;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
     <div style="max-width:480px;margin:0 auto;">
       <p style="margin:0 0 8px;">Xin chào,</p>
-      <p style="margin:0 0 16px;">Mã xác nhận đăng nhập Fovea của bạn là:</p>
+      <p style="margin:0 0 16px;">Mã xác nhận đăng nhập Eyetracking của bạn là:</p>
       <div style="font-size:32px;font-weight:700;letter-spacing:8px;text-align:center;
                   padding:16px;border:1px solid #dbeafe;border-radius:8px;color:#1d4ed8;">
         {html.escape(code)}
@@ -93,7 +94,7 @@ def _build_message(email: str, code: str) -> EmailMessage:
         qua email này.
       </p>
       <p style="margin:24px 0 0;color:#6b7280;font-size:13px;">
-        Trân trọng,<br />Fovea
+        Trân trọng,<br />Eyetracking<br />Đại học Kinh tế Quốc dân
       </p>
     </div>
   </body>

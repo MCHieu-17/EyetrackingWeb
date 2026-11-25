@@ -26,7 +26,7 @@ const tokens = JSON.parse(fs.readFileSync(arg("tokens"), "utf8"));
 const course = fixtures.ids.core_course_id;
 
 // Khóa localStorage của theme; frontend cũ bỏ qua, frontend mới đọc khóa này.
-const THEME_KEY = "fovea-theme";
+const THEME_KEY = "eyetracking-theme";
 
 const PAGES = [
   ["home", null, "/"],
