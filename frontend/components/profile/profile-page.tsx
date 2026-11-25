@@ -101,14 +101,16 @@ function ProfileForm({ data }: { data: MyProfile }) {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4">
-      <div className="rounded-[18px] border border-[#eeeee9] bg-white p-4 shadow-xs sm:flex sm:items-center sm:gap-5 sm:p-5">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex sm:items-center sm:gap-5 sm:p-5">
         <Avatar className="size-16 border border-border text-xl sm:size-18">
           {form.avatarUrl ? <AvatarImage src={form.avatarUrl} alt={form.fullName} /> : null}
-          <AvatarFallback className="text-xl">{initialsOf(form.fullName)}</AvatarFallback>
+          <AvatarFallback className="bg-primary text-xl text-primary-foreground">
+            {initialsOf(form.fullName)}
+          </AvatarFallback>
         </Avatar>
         <div className="mt-4 min-w-0 flex-1 sm:mt-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Hồ sơ cá nhân</p>
-          <h1 className="mt-1 truncate text-2xl font-bold tracking-[-0.035em] text-foreground">
+          <h1 className="mt-1 truncate font-display text-2xl font-bold tracking-[-0.035em] text-foreground">
             {form.fullName || data.fullName}
           </h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
@@ -138,13 +140,13 @@ function ProfileForm({ data }: { data: MyProfile }) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(260px,0.55fr)]">
-        <section className="overflow-hidden rounded-[18px] border border-[#eeeee9] bg-white shadow-xs">
+        <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="border-b border-border/70 px-5 py-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Thông tin có thể chỉnh sửa</p>
           </div>
           <div className="space-y-5 p-5 sm:p-6">
             {showAvatarEditor && (
-              <div id="avatar-editor" className="flex flex-col gap-4 rounded-2xl border border-[#dfe9dc] bg-[#e8f1e6] p-4 sm:flex-row sm:items-end">
+              <div id="avatar-editor" className="flex flex-col gap-4 rounded-2xl border border-border bg-accent p-4 sm:flex-row sm:items-end">
                 <Avatar className="size-14">
                   {form.avatarUrl ? <AvatarImage src={form.avatarUrl} alt="" /> : null}
                   <AvatarFallback className="text-base">{initialsOf(form.fullName)}</AvatarFallback>
@@ -229,7 +231,7 @@ function ProfileForm({ data }: { data: MyProfile }) {
           </div>
         </section>
 
-        <section className="self-start rounded-[18px] border border-[#dfe9dc] bg-[#e8f1e6] p-5 shadow-xs sm:p-6">
+        <section className="self-start rounded-2xl border border-border bg-accent p-5 shadow-sm sm:p-6">
           <div className="mb-7 flex items-center justify-between gap-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Định danh tài khoản</p>
             <span className="size-2 rounded-full bg-success" title="Tài khoản đang hoạt động" />
@@ -247,7 +249,7 @@ function ProfileForm({ data }: { data: MyProfile }) {
         </section>
       </div>
 
-      <div className="sticky bottom-3 flex flex-col-reverse gap-2 rounded-[18px] border border-[#eeeee9] bg-white/95 p-2 shadow-lg backdrop-blur sm:flex-row sm:justify-end">
+      <div className="sticky bottom-3 flex flex-col-reverse gap-2 rounded-2xl border border-border bg-card/95 p-2 shadow-lg backdrop-blur sm:flex-row sm:justify-end">
         <Button
           type="button"
           variant="outline"

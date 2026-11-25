@@ -67,46 +67,46 @@ export function DisplayGuardOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#111210]/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/95 p-4 backdrop-blur"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="display-guard-title"
       aria-describedby="display-guard-description"
       data-display-guard-overlay=""
     >
-      <div className="w-full max-w-md rounded-[24px] border border-white/10 bg-[#1b1c19] p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-7">
-        <span className="flex size-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-lg sm:p-7">
+        <span className="flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground">
           <Icon name="ri-focus-2-line" className="size-5" />
         </span>
 
         <h2
           id="display-guard-title"
-          className="mt-4 text-xl font-semibold tracking-[-0.02em] text-white"
+          className="mt-4 font-display text-xl font-semibold tracking-[-0.02em] text-foreground"
         >
           {copy.title}
         </h2>
         <p
           id="display-guard-description"
-          className="mt-2 text-sm leading-6 text-white/70"
+          className="mt-2 text-sm leading-6 text-muted-foreground"
         >
           {copy.description}
         </p>
 
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <span className="text-xs font-medium text-white/60">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted px-4 py-3">
+          <span className="text-xs font-medium text-muted-foreground">
             Zoom hiện tại
           </span>
-          <span className="text-lg font-semibold tabular-nums text-white">
+          <span className="text-lg font-semibold tabular-nums text-foreground">
             {zoomPercent}%
           </span>
         </div>
 
-        <p className="mt-3 text-xs leading-5 text-white/55">{copy.hint}</p>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{copy.hint}</p>
 
         <button
           type="button"
           onClick={onRecheck}
-          className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl bg-white px-4 text-sm font-semibold text-[#20221f] transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1b1c19]"
+          className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Kiểm tra lại
         </button>

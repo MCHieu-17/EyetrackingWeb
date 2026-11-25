@@ -16,8 +16,9 @@ export function CameraCheck({
   faceState: FaceState;
 }) {
   return (
-    <section className="min-w-0 rounded-[20px] border border-border/80 bg-white p-2 shadow-sm sm:p-3">
-      <div className="relative aspect-video overflow-hidden rounded-[16px] bg-[#111111]">
+    <section className="min-w-0 rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-sm sm:p-3">
+      {/* Khung camera: màu tối cố định, không theo theme (overlay trên video). */}
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
         <video
           ref={videoRef}
           muted
@@ -29,6 +30,7 @@ export function CameraCheck({
           )}
         />
 
+        {/* Overlay nằm trên khung video đen: giữ màu cố định, không theo theme (PLAN §4). */}
         {(cameraState === "idle" || cameraState === "error") && (
           <div className="absolute inset-0 grid place-items-center px-6 text-center">
             <div>

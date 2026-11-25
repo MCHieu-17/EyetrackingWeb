@@ -259,17 +259,17 @@ export function PreflightCheck({
       <PreflightHeader courseTitle={course?.title} />
 
       <div className="mb-7 max-w-2xl">
-        <span className="inline-flex rounded-full bg-[#e8f1e6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#52704f]">
+        <span className="inline-flex rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-foreground">
           Kiểm tra trước phiên học
         </span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
+        <h1 className="mt-4 font-display text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
           Thiết lập một vùng học ổn định.
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
           Giữ khuôn mặt trong khung, ánh sáng đều và nhìn thẳng vào màn hình để điểm nhìn được ghi nhận chính xác.
         </p>
-        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border/80 bg-white px-4 py-3.5 shadow-xs">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e8f1e6] text-[#52704f]">
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
             <Icon name="ri-information-line" className="size-4" />
           </span>
           <div className="min-w-0">

@@ -31,9 +31,9 @@ type SortState = { column: SortColumn; dir: SortDir };
 const LIST_GRID = "lg:grid-cols-[minmax(0,1fr)_200px_160px_150px_28px]";
 
 const STATUS_CLS: Record<string, string> = {
-  active: "bg-[#e8f1e6] text-[#52704f]",
+  active: "bg-success/10 text-success",
   completed: "bg-muted text-muted-foreground",
-  dropped: "bg-[#f3ede4] text-[#8a6d3b]",
+  dropped: "bg-destructive/10 text-destructive",
 };
 
 function SortButton({
@@ -80,12 +80,12 @@ function CourseRow({ item }: { item: CourseListItem }) {
       prefetch={false}
       href={item.href}
       className={cn(
-        "grid grid-cols-1 gap-3 px-4 py-4 outline-none transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 lg:items-center lg:gap-4 lg:px-5",
+        "grid grid-cols-1 gap-3 px-4 py-4 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 lg:items-center lg:gap-4 lg:px-5",
         LIST_GRID,
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#eef3eb] text-[#52654f]">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
           <Icon name="ri-book-open-line" className="size-5" />
         </span>
         <div className="flex min-w-0 items-center gap-2">
@@ -193,7 +193,7 @@ export function CourseBrowser({
     return (
       <div className="space-y-2">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-[84px] rounded-[20px]" />
+          <Skeleton key={index} className="h-[84px] rounded-2xl" />
         ))}
       </div>
     );
@@ -230,10 +230,10 @@ export function CourseBrowser({
       </div>
 
       {visible.length ? (
-        <div className="divide-y divide-border/70 overflow-hidden rounded-[20px] border border-border/80 bg-white shadow-xs">
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div
             className={cn(
-              "hidden items-center gap-4 bg-muted/40 px-4 py-2.5 lg:grid lg:px-5",
+              "hidden items-center gap-4 bg-muted/60 px-4 py-2.5 lg:grid lg:px-5",
               LIST_GRID,
             )}
           >
