@@ -1,0 +1,33 @@
+{
+  "source": {
+    "width": 640,
+    "height": 480
+  },
+  "frames": 150,
+  "fps": 15,
+  "usingWorker": true,
+  "fallback": null,
+  "worker": {
+    "p50": 8.1,
+    "p95": 9,
+    "max": 10.1,
+    "bytes_p50": 6183,
+    "bytes_p95": 7057
+  },
+  "legacy": {
+    "p50": 7.5,
+    "p95": 8.7,
+    "max": 9.9,
+    "bytes_p50": 6027,
+    "bytes_p95": 6923
+  },
+  "long_tasks_over_50ms": [],
+  "psnr_db": 99,
+  "gates": {
+    "worker_p95_ms": 10,
+    "long_tasks": 0,
+    "bytes_p95": 25600,
+    "psnr_db": 45
+  },
+  "pass": true
+}

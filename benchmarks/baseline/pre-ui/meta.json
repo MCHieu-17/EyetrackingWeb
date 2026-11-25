@@ -1,0 +1,18 @@
+{
+  "run_id": "pre-ui",
+  "created_at": "2026-11-25T06:24:25.064622+00:00",
+  "profile": "single",
+  "scale": "tiny",
+  "quick": false,
+  "git": {
+    "commit": "25c55b34b340d9370aba0b3f9b14bac2f290dfcb",
+    "branch": "improve_ui",
+    "dirty": true
+  },
+  "host": {
+    "node": "hieuserver",
+    "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+    "machine": "x86_64",
+    "cpu_count": 12
+  }
+}

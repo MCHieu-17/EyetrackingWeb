@@ -1,0 +1,514 @@
+[
+  {
+    "name": "home",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/",
+    "file": "home.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "login",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/account/login",
+    "file": "login.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "register",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/account/register",
+    "file": "register.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "try",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/try",
+    "file": "try.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_home",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/student",
+    "file": "student_home.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_profile",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/student/profile",
+    "file": "student_profile.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_prepare",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db/prepare",
+    "file": "student_prepare.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_reader",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db",
+    "file": "student_reader.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_home",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher",
+    "file": "teacher_home.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_content",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=content",
+    "file": "teacher_content.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_info",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=info",
+    "file": "teacher_info.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_students",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=students",
+    "file": "teacher_students.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_aoi",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=aoi",
+    "file": "teacher_aoi.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_visualization",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=visualization",
+    "file": "teacher_visualization.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "admin_home",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/admin",
+    "file": "admin_home.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "admin_database",
+    "theme": "light",
+    "form": "desktop",
+    "route": "/admin/database",
+    "file": "admin_database.light.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "home",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/",
+    "file": "home.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "login",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/account/login",
+    "file": "login.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "register",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/account/register",
+    "file": "register.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "try",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/try",
+    "file": "try.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_home",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/student",
+    "file": "student_home.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_profile",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/student/profile",
+    "file": "student_profile.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_prepare",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db/prepare",
+    "file": "student_prepare.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_reader",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db",
+    "file": "student_reader.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_home",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher",
+    "file": "teacher_home.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_content",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=content",
+    "file": "teacher_content.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_info",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=info",
+    "file": "teacher_info.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_students",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=students",
+    "file": "teacher_students.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_aoi",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=aoi",
+    "file": "teacher_aoi.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_visualization",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=visualization",
+    "file": "teacher_visualization.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "admin_home",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/admin",
+    "file": "admin_home.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "admin_database",
+    "theme": "light",
+    "form": "mobile",
+    "route": "/admin/database",
+    "file": "admin_database.light.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "home",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/",
+    "file": "home.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "login",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/account/login",
+    "file": "login.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "register",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/account/register",
+    "file": "register.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "try",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/try",
+    "file": "try.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_home",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/student",
+    "file": "student_home.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_profile",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/student/profile",
+    "file": "student_profile.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_prepare",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db/prepare",
+    "file": "student_prepare.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "student_reader",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db",
+    "file": "student_reader.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_home",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher",
+    "file": "teacher_home.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_content",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=content",
+    "file": "teacher_content.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_info",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=info",
+    "file": "teacher_info.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_students",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=students",
+    "file": "teacher_students.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_aoi",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=aoi",
+    "file": "teacher_aoi.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_visualization",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=visualization",
+    "file": "teacher_visualization.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "admin_home",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/admin",
+    "file": "admin_home.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "admin_database",
+    "theme": "dark",
+    "form": "desktop",
+    "route": "/admin/database",
+    "file": "admin_database.dark.desktop.png",
+    "ok": true
+  },
+  {
+    "name": "home",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/",
+    "file": "home.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "login",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/account/login",
+    "file": "login.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "register",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/account/register",
+    "file": "register.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "try",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/try",
+    "file": "try.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_home",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/student",
+    "file": "student_home.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_profile",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/student/profile",
+    "file": "student_profile.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_prepare",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db/prepare",
+    "file": "student_prepare.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "student_reader",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/student/courses/4b4754b8-cc90-5b29-b207-6ff2208928db",
+    "file": "student_reader.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_home",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher",
+    "file": "teacher_home.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_content",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=content",
+    "file": "teacher_content.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_info",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=info",
+    "file": "teacher_info.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_students",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=students",
+    "file": "teacher_students.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_aoi",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=aoi",
+    "file": "teacher_aoi.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "teacher_visualization",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/teacher/courses/4b4754b8-cc90-5b29-b207-6ff2208928db?tab=visualization",
+    "file": "teacher_visualization.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "admin_home",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/admin",
+    "file": "admin_home.dark.mobile.png",
+    "ok": true
+  },
+  {
+    "name": "admin_database",
+    "theme": "dark",
+    "form": "mobile",
+    "route": "/admin/database",
+    "file": "admin_database.dark.mobile.png",
+    "ok": true
+  }
+]
