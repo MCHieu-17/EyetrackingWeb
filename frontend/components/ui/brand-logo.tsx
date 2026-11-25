@@ -37,7 +37,7 @@ export function BrandLogo({
   );
 }
 
-export function FoveaMark({ className }: { className?: string }) {
+function FoveaMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" aria-hidden className={className}>
       <rect width="48" height="48" rx="12" fill="#084C90" />
