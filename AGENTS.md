@@ -557,15 +557,23 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 - `DB_PREPARED_STATEMENT_CACHE_SIZE` mặc định `64` khi nối trực tiếp
   PostgreSQL; profile `pgbouncer` (transaction pooling) phải đặt `0` trong
   `.env`.
-- Local: `docker compose up -d --build`; `migrate` exit 0 là bình thường.
-  `docker compose down -v` xoá DB/media/weights/Redis — chỉ dùng khi thật sự
-  muốn reset sạch.
-- Production: GitHub Actions build 8 image (backend, content-worker, chatbot,
-  gaze, gaze-export, frontend, nginx, migrations) → GHCR; Portainer chỉ pull
-  `deploy/portainer/docker-compose.yml`, không build trên server. `cloudflared`
-  nằm trong stack, trỏ `http://nginx:80`. Pin stack Portainer vào tag release
-  trùng `IMAGE_TAG`; chạy `./scripts/check_release_images.sh` trước khi deploy.
-  Thêm service/image mới phải cut tag mới, không dùng lại tag cũ.
+- Local: copy `.env.example` → `.env`, điền secret/model; `COOKIE_SECURE=false`
+  khi chạy HTTP local. `docker compose up -d --build`, chờ `migrate` exit 0,
+  rồi `./scripts/seed_dev.sh` + `./scripts/smoke.sh`. Sửa `.env` phải
+  `docker compose up -d --force-recreate <service>`; không dùng `down -v`
+  (xoá DB/media/weights/Redis) trừ khi muốn reset sạch.
+- Portainer: GitHub Actions build 8 image → GHCR; stack Repository trỏ
+  `deploy/portainer/docker-compose.yml`, Reference = tag release trùng
+  `IMAGE_TAG` (không dùng `main` với tag cũ), `IMAGE_PREFIX=ghcr.io/mchieu-17`,
+  `IMAGE_TAG=vX.Y.Z`. Sửa env trong Portainer, không chỉ `stack.env` local.
+- Trước deploy Portainer: `./scripts/check_release_images.sh
+  deploy/portainer/stack.env` phải đủ 8 image; tag `vX.Y.Z` phải được push và
+  build xong. Pre-pull đúng tag; image cũ không được dùng vì compose có
+  `pull_policy: always`.
+- Lần deploy đầu thường lâu: tải weights gaze-export (~346 MB + export ONNX),
+  embedding chatbot (~1.2 GB), migration 009 tạo index `gaze_samples`. Giữ
+  nguyên tên stack/volume (`pgdata`, `gaze-weights`, `chatbot-weights`) và
+  không interrupt `migrate`/`gaze-export`.
 - Nginx production phải giữ `real_ip_header CF-Connecting-IP` và forward
   `X-Forwarded-Proto`; nếu không rate limit/OTP sẽ tính chung IP cloudflared.
 - Không commit `deploy/portainer/stack.env`, tunnel token, backup. Hướng dẫn
@@ -592,8 +600,8 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 ## 13. Checklist cho agent trước khi kết thúc
 
 - Đọc migration/model/route liên quan; ưu tiên code hơn README nếu lệch.
-- Nếu sửa schema: thêm `009_...sql`, cập nhật model/schema/API, chạy
-  `./scripts/test_migrations.sh` và `./scripts/test_backend.sh`.
+- Nếu sửa schema: thêm `010_...sql` (sau `009`), cập nhật model/schema/API,
+  chạy `./scripts/test_migrations.sh` và `./scripts/test_backend.sh`.
 - Nếu sửa cascade/FK/metrics/AOI: chạy `./scripts/test_backend.sh`; test metrics
   nằm trong `backend/tests/fast/test_metrics.py` và `test_analytics.py`, cascade
   trong `test_courses_content.py` và `test_schema_contract.py`.
