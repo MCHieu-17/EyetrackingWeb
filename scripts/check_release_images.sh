@@ -19,10 +19,10 @@ TAG="${IMAGE_TAG:-}"
 
 usage() {
     cat <<'EOF'
-Usage: ./scripts/check_release_images.sh [options]
+Usage: ./scripts/check_release_images.sh [options] [env-file]
 
-  --env-file <path>  File env chứa IMAGE_PREFIX/IMAGE_TAG (mặc định:
-                     deploy/portainer/stack.env)
+  env-file           Vị trí file env (mặc định: deploy/portainer/stack.env)
+  --env-file <path>  File env chứa IMAGE_PREFIX/IMAGE_TAG
   --compose <path>   File compose (mặc định: deploy/portainer/docker-compose.yml)
   --prefix <ref>     Ghi đè IMAGE_PREFIX
   --tag <tag>        Ghi đè IMAGE_TAG
@@ -52,10 +52,14 @@ while [ "$#" -gt 0 ]; do
             usage
             exit 0
             ;;
-        *)
+        -*)
             printf '[check-images] tham số không hợp lệ: %s\n' "$1" >&2
             usage >&2
             exit 2
+            ;;
+        *)
+            ENV_FILE="$1"
+            shift
             ;;
     esac
 done
