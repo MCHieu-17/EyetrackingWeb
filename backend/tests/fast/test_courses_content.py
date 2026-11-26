@@ -13,6 +13,7 @@ from tests.conftest import (
     fetch_all,
     fetch_one,
     login,
+    new_uuid,
 )
 
 pytestmark = pytest.mark.fast
@@ -318,6 +319,70 @@ async def test_course_delete_cascades_content(client):
     assert await fetch_all(
         "SELECT id FROM slides WHERE lesson_id = :id", {"id": lesson_id}
     ) == []
+
+
+async def test_course_delete_cascades_gaze_layouts(client):
+    teacher = await create_user(role="teacher", email="t-delete-gaze@example.com")
+    student = await create_user(email="s-delete-gaze@example.com")
+    ids = await create_course(
+        teacher_id=teacher["id"], student_id=student["id"]
+    )
+    lesson_id = await create_lesson(module_id=ids["module_id"])
+    slide_id = await create_slide(lesson_id=lesson_id)
+
+    session_id = new_uuid()
+    view_id = new_uuid()
+    layout_id = new_uuid()
+    await execute(
+        """
+        INSERT INTO learning_sessions (id, enrollment_id, lesson_id, expires_at)
+        VALUES (:id, :enrollment, :lesson, now() + interval '1 hour')
+        """,
+        {
+            "id": session_id,
+            "enrollment": ids["enrollment_id"],
+            "lesson": lesson_id,
+        },
+    )
+    await execute(
+        """
+        INSERT INTO content_views (id, session_id, slide_id, surface, sequence_no)
+        VALUES (:id, :session, :slide, 'lesson', 0)
+        """,
+        {"id": view_id, "session": session_id, "slide": slide_id},
+    )
+    await execute(
+        "INSERT INTO view_layouts (id, content_view_id, layout_no) "
+        "VALUES (:id, :view, 0)",
+        {"id": layout_id, "view": view_id},
+    )
+    await execute(
+        """
+        INSERT INTO gaze_samples
+            (content_view_id, layout_id, client_batch_id, sequence, event_time,
+             viewport_x, viewport_y, status)
+        VALUES (:view, :layout, :batch, 0, now(), 0.5, 0.5, 'ok')
+        """,
+        {"view": view_id, "layout": layout_id, "batch": new_uuid()},
+    )
+
+    await login(client, teacher["email"])
+    response = await client.delete(f"/teacher/courses/{ids['course_id']}")
+    assert response.status_code == 200, response.text
+
+    checks = [
+        ("courses", "id", ids["course_id"]),
+        ("learning_sessions", "id", session_id),
+        ("content_views", "id", view_id),
+        ("view_layouts", "id", layout_id),
+        ("gaze_samples", "content_view_id", view_id),
+    ]
+    for table, column, value in checks:
+        row = await fetch_one(
+            f"SELECT count(*) AS n FROM {table} WHERE {column} = :value",
+            {"value": value},
+        )
+        assert row["n"] == 0, f"{table} còn dữ liệu sau khi xóa khóa học"
 
 
 async def test_outline_visibility_and_enrollment_cache(client_factory):

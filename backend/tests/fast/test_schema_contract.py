@@ -53,6 +53,17 @@ async def test_generation_and_legacy_objects_removed():
                 )
             ).scalars()
         )
+        gaze_indexes = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT indexname FROM pg_indexes "
+                        "WHERE schemaname = 'public' "
+                        "AND tablename = 'gaze_samples'"
+                    )
+                )
+            ).scalars()
+        )
         layout_columns = set(
             (
                 await conn.execute(
@@ -82,6 +93,7 @@ async def test_generation_and_legacy_objects_removed():
     assert "aoi_codes" not in tables
     assert "original_viewport_x" not in gaze_columns
     assert "original_viewport_y" not in gaze_columns
+    assert "idx_gaze_samples_layout_id" in gaze_indexes
     assert "coordinate_space" not in layout_columns
     assert "visible_rect" not in layout_columns
     assert "show_camera_preview" in course_columns

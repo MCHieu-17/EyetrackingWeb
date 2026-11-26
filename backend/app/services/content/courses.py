@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -173,12 +174,18 @@ async def delete_course(db: AsyncSession, course: Course) -> None:
 
     PostgreSQL cascade xử lý DB. File vật lý được lấy key trước rồi dọn sau
     khi transaction commit thành công.
+
+    Xoá course có thể đụng hàng triệu gaze sample; nới statement_timeout
+    riêng cho transaction này thay vì dùng mức 15 s của API.
     """
-    await db.execute(select(Course.id).where(Course.id == course.id).with_for_update())
+    course_id = course.id
+    await db.execute(text("SET LOCAL statement_timeout = '240s'"))
+    await db.execute(text("SET LOCAL lock_timeout = '30s'"))
+    await db.execute(select(Course.id).where(Course.id == course_id).with_for_update())
     asset_rows = (
         await db.execute(
             select(MediaAsset.object_key, MediaAsset.storage_backend).where(
-                MediaAsset.course_id == course.id
+                MediaAsset.course_id == course_id
             )
         )
     ).all()
@@ -186,11 +193,18 @@ async def delete_course(db: AsyncSession, course: Course) -> None:
     try:
         await db.delete(course)
         await db.flush()
-    except Exception as exc:  # noqa: BLE001
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Không thể xóa khóa học vì còn dữ liệu liên quan",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        logger.exception("Xóa khóa học %s thất bại", course_id)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Không thể xóa khóa học lúc này, vui lòng thử lại",
         ) from exc
 
     r2_keys = [key for key, backend in asset_rows if backend == "r2"]
@@ -201,9 +215,9 @@ async def delete_course(db: AsyncSession, course: Course) -> None:
         if local_keys:
             await asyncio.to_thread(media_storage.delete_keys, local_keys, "local")
     except media_storage.StorageError as exc:
-        logger.warning("Không xóa được một số tệp của khóa %s: %s", course.id, exc)
+        logger.warning("Không xóa được một số tệp của khóa %s: %s", course_id, exc)
 
-    prefix = f"instances/{settings.app_instance_id}/courses/{course.id}/"
+    prefix = f"instances/{settings.app_instance_id}/courses/{course_id}/"
     try:
         await asyncio.to_thread(media_storage.delete_prefix, prefix)
     except media_storage.StorageError:

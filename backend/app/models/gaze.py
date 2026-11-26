@@ -281,6 +281,7 @@ class GazeSample(Base):
             name="gaze_samples_viewport_y_check",
         ),
         Index("idx_gaze_samples_view_time", "content_view_id", "event_time"),
+        Index("idx_gaze_samples_layout_id", "layout_id"),
         Index(
             "idx_gaze_samples_event_time_brin",
             "event_time",
