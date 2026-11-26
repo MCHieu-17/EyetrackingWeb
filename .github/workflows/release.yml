@@ -119,7 +119,9 @@ jobs:
             matrix=$(jq -c '. + [{"name":"content-worker","context":"./backend","file":"./backend/Dockerfile","target":"content-worker"}]' <<<"$matrix")
           fi
           if [[ "$chatbot" == true ]]; then
-            matrix=$(jq -c '. + [{"name":"chatbot","context":"./services/chatbot","file":"./services/chatbot/Dockerfile","target":""}]' <<<"$matrix")
+            # Bắt buộc target=runtime: stage cuối Dockerfile là `test`
+            # (ENTRYPOINT pytest); target rỗng sẽ publish image chạy pytest.
+            matrix=$(jq -c '. + [{"name":"chatbot","context":"./services/chatbot","file":"./services/chatbot/Dockerfile","target":"runtime"}]' <<<"$matrix")
           fi
           if [[ "$gaze" == true ]]; then
             matrix=$(jq -c '. + [{"name":"gaze","context":"./services/gaze","file":"./services/gaze/Dockerfile","target":"runtime"}]' <<<"$matrix")
@@ -220,6 +222,21 @@ jobs:
           IMAGE_PREFIX: ghcr.io/${{ needs.prepare.outputs.owner }}
           IMAGE_TAG: ${{ github.ref_name }}
         run: ./scripts/check_release_images.sh
+
+      # Chặn regression: Dockerfile chatbot có stage `test` (ENTRYPOINT pytest)
+      # ở cuối, nên build thiếu `target` sẽ publish image restart liên tục.
+      - name: Verify chatbot entrypoint
+        env:
+          IMAGE_PREFIX: ghcr.io/${{ needs.prepare.outputs.owner }}
+          IMAGE_TAG: ${{ github.ref_name }}
+        run: |
+          image="$IMAGE_PREFIX/eyelearning-chatbot:$IMAGE_TAG"
+          docker pull --quiet "$image"
+          entrypoint="$(docker image inspect --format '{{json .Config.Entrypoint}}' "$image")"
+          if [ "$entrypoint" != '["/app/entrypoint.sh"]' ]; then
+            echo "chatbot entrypoint sai: $entrypoint" >&2
+            exit 1
+          fi
 
   notify:
     name: Trigger Portainer + smoke
