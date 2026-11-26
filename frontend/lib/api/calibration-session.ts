@@ -100,13 +100,6 @@ export function getStoredGazeSessionId(): string | null {
   return globalThis.localStorage?.getItem(SESSION_KEY) ?? null;
 }
 
-export function getStoredCalibration(): { calibrated: boolean; calibratedAt: string | null } {
-  return {
-    calibrated: Boolean(getStoredGazeSessionId()),
-    calibratedAt: globalThis.localStorage?.getItem(CALIBRATED_AT_KEY) ?? null,
-  };
-}
-
 export function clearStoredGazeSession(): void {
   globalThis.localStorage?.removeItem(SESSION_KEY);
   globalThis.localStorage?.removeItem(CALIBRATED_AT_KEY);

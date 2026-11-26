@@ -1,12 +1,8 @@
 // lib/api/calibration-api.ts — HTTP calls tới gaze service (/gaze/*) và
 // backend calibration (/api/calibrations). Storage nằm ở calibration-session.ts.
 
-import { buildCalibrationPoints, calibrationMargins } from "@/lib/calibration-geometry";
 import type { CalPoint } from "@/lib/calibration-geometry";
-import {
-  ensureGazeAffinityCookie,
-  storeGazeSession,
-} from "./calibration-session";
+import { ensureGazeAffinityCookie } from "./calibration-session";
 
 interface SessionCreateResult {
   ok: boolean;
@@ -82,25 +78,6 @@ export async function trainGazeSession(sessionId: string): Promise<TrainResult> 
   }
 }
 
-interface SessionStatusResult {
-  ok: boolean;
-  ready: boolean;
-  error?: string;
-}
-
-export async function getGazeSessionStatus(sessionId: string): Promise<SessionStatusResult> {
-  try {
-    const res = await fetch(`/gaze/session/${encodeURIComponent(sessionId)}`);
-    if (res.status === 404) return { ok: false, ready: false, error: "not_found" };
-    if (!res.ok) return { ok: false, ready: false, error: `http_${res.status}` };
-    const data = (await res.json().catch(() => ({}))) as { state?: string; calibrated?: boolean };
-    const ready = data.state === "ready" || data.calibrated === true;
-    return { ok: true, ready };
-  } catch {
-    return { ok: false, ready: false, error: "network_error" };
-  }
-}
-
 export function deleteGazeSession(sessionId: string): void {
   try {
     void fetch(`/gaze/session/${encodeURIComponent(sessionId)}`, { method: "DELETE" }).catch(() => {});
@@ -141,37 +118,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-/** Nạp model .ubj vào session để dùng ngay, bỏ qua bước hiệu chỉnh lại. */
-async function importGazeModel(
-  sessionId: string,
-  model: Uint8Array,
-): Promise<boolean> {
-  const form = new FormData();
-  // base64ToBytes() cấp phát đúng kích thước nên buffer == toàn bộ dữ liệu
-  form.append(
-    "model",
-    new Blob([model.buffer as ArrayBuffer], { type: "application/octet-stream" }),
-    "calibration.ubj",
-  );
-  try {
-    const res = await fetch(`/gaze/session/${encodeURIComponent(sessionId)}/import`, {
-      method: "POST",
-      body: form,
-    });
-    const data = (await res.json().catch(() => ({}))) as { status?: string };
-    return data.status === "ready";
-  } catch {
-    return false;
-  }
-}
-
 export async function saveCalibrationToBackend(params: {
   deviceFingerprint: string;
   numPoints: number;
@@ -201,92 +147,6 @@ export async function saveCalibrationToBackend(params: {
     return true;
   } catch {
     return false;
-  }
-}
-
-/** Tải model hiệu chỉnh đang active của thiết bị (nếu có). */
-async function fetchActiveCalibrationModel(
-  deviceFingerprint: string,
-): Promise<{ modelUbjBase64: string } | null> {
-  try {
-    const { apiFetch } = await import("./client");
-    const data = await apiFetch<{ modelUbjBase64: string }>(
-      "/api/calibrations/active/model",
-      { params: { deviceFingerprint } },
-    );
-    return { modelUbjBase64: data.modelUbjBase64 };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Khôi phục phiên theo dõi từ model đã lưu: tạo session mới trên gaze service
- * rồi nạp lại .ubj. Trả về false nếu không có model hoặc nạp thất bại.
- */
-export async function restoreGazeSessionFromBackend(
-  deviceFingerprint: string,
-): Promise<boolean> {
-  const stored = await fetchActiveCalibrationModel(deviceFingerprint);
-  if (!stored) return false;
-  const active = await fetchActiveCalibration(deviceFingerprint);
-  const session = await createGazeSession(
-    buildCalibrationPoints(
-      calibrationMargins(globalThis.innerWidth, globalThis.innerHeight),
-    ),
-  );
-  if (!session.ok || !session.sessionId) return false;
-  const ok = await importGazeModel(session.sessionId, base64ToBytes(stored.modelUbjBase64));
-  if (!ok) {
-    deleteGazeSession(session.sessionId);
-    return false;
-  }
-  // Giữ đúng viewport/DPR lúc calibration để phép quy đổi gaze hoạt động
-  // chính xác kể cả khi người học đang zoom/resize.
-  storeGazeSession(
-    session.sessionId,
-    active?.viewportWidthPx ?? globalThis.innerWidth,
-    active?.viewportHeightPx ?? globalThis.innerHeight,
-    active?.screenX ?? undefined,
-    active?.screenY ?? undefined,
-    active?.devicePixelRatio ?? undefined,
-  );
-  return true;
-}
-
-export async function fetchActiveCalibration(
-  deviceFingerprint: string,
-): Promise<{
-  calibrated: boolean;
-  calibratedAt: string | null;
-  viewportWidthPx: number | null;
-  viewportHeightPx: number | null;
-  devicePixelRatio: number | null;
-  screenX: number | null;
-  screenY: number | null;
-} | null> {
-  try {
-    const { apiFetch } = await import("./client");
-    const data = await apiFetch<{
-      calibrated: boolean;
-      calibratedAt: string;
-      viewportWidthPx?: number | null;
-      viewportHeightPx?: number | null;
-      devicePixelRatio?: number | null;
-      screenXPx?: number | null;
-      screenYPx?: number | null;
-    }>("/api/calibrations/active", { params: { deviceFingerprint } });
-    return {
-      calibrated: data.calibrated,
-      calibratedAt: data.calibratedAt,
-      viewportWidthPx: data.viewportWidthPx ?? null,
-      viewportHeightPx: data.viewportHeightPx ?? null,
-      devicePixelRatio: data.devicePixelRatio ?? null,
-      screenX: data.screenXPx ?? null,
-      screenY: data.screenYPx ?? null,
-    };
-  } catch {
-    return null;
   }
 }
 

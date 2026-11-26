@@ -16,9 +16,9 @@ export function CameraCheck({
   faceState: FaceState;
 }) {
   return (
-    <section className="min-w-0 rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-sm sm:p-3">
+    <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-sm sm:p-3">
       {/* Khung camera: màu tối cố định, không theo theme (overlay trên video). */}
-      <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-black lg:max-h-[calc(100dvh-18rem)]">
         <video
           ref={videoRef}
           muted
@@ -86,7 +86,7 @@ export function CameraCheck({
           </div>
         )}
       </div>
-      <div className="flex items-start gap-2 px-2 pb-1 pt-3 text-xs leading-5 text-muted-foreground">
+      <div className="mt-auto flex items-start gap-2 px-2 pb-1 pt-3 text-xs leading-5 text-muted-foreground">
         <Icon name="ri-lock-line" className="mt-0.5 size-4 shrink-0" />
         <p>Hình ảnh camera chỉ được xử lý trong phiên để ước lượng điểm nhìn và không được lưu lại.</p>
       </div>

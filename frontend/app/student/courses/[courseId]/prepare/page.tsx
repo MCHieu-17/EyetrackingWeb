@@ -10,7 +10,7 @@ export default async function PreparePage({
 }) {
   const { courseId } = await params;
   return (
-    <AppShell role="student">
+    <AppShell role="student" contentClassName="pb-0">
       <Suspense fallback={<FullPageSpinner label="Đang chuẩn bị..." />}>
         <PreflightCheck courseId={courseId} />
       </Suspense>

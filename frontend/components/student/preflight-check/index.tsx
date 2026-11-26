@@ -2,30 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  checkFace,
-  clearStoredGazeSession,
-  fetchActiveCalibration,
-  getGazeSessionStatus,
-  getStoredCalibration,
-  getStoredGazeSessionId,
-  restoreGazeSessionFromBackend,
-} from "@/lib/api/calibration";
-import { getDeviceFingerprint } from "@/lib/api/student";
-import { Icon } from "@/components/ui/icon";
+import { checkFace } from "@/lib/api/calibration";
 import { useCourseOutline } from "@/hooks/use-student";
-import { formatDateTimeVN } from "@/lib/utils";
 import { CameraCheck } from "./camera-check";
 import { NoCalibrationView } from "./no-calibration-view";
 import { PreflightHeader } from "./preflight-header";
 import { StatusPanel } from "./status-panel";
 import {
-  getCalibrationAgeDays,
   getCalibrationHref,
   getLearningHref,
   getPrimaryLabel,
   isReadyToCalibrate,
-  isReadyToLearn,
 } from "./preflight-helpers";
 import type { CameraState, FaceState } from "./preflight-types";
 
@@ -45,84 +32,12 @@ export function PreflightCheck({
   const [cameraState, setCameraState] = useState<CameraState>("idle");
   const [faceState, setFaceState] = useState<FaceState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [isCalibrated, setIsCalibrated] = useState(false);
-  const [calibratedAt, setCalibratedAt] = useState<string | null>(null);
-  const [sessionIssue, setSessionIssue] = useState<string | null>(null);
-
-  // Khóa tắt bắt buộc hiệu chỉnh -> không cần kiểm tra camera/calibration.
-  const calibrationRequired = course?.requireCalibration !== false;
 
   useEffect(() => {
-    if (!calibrationRequired) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        const stored = getStoredCalibration();
-        const sid = getStoredGazeSessionId();
-        if (!sid) {
-          const active = await fetchActiveCalibration(getDeviceFingerprint());
-          if (cancelled) return;
-          const ageDays = getCalibrationAgeDays(active?.calibratedAt);
-          setIsCalibrated(false);
-          setCalibratedAt(active?.calibrated && ageDays < 30 ? active.calibratedAt : null);
-          setSessionIssue(
-            active?.calibrated && ageDays < 30
-              ? "Thiết bị có bản ghi hiệu chỉnh gần đây, nhưng không có phiên theo dõi cục bộ đang hoạt động. Vui lòng hiệu chỉnh lại để tạo phiên mới trước khi học."
-              : "Không có phiên theo dõi cục bộ đang hoạt động. Vui lòng hiệu chỉnh điểm nhìn trước khi học.",
-          );
-          return;
-        }
-        const status = await getGazeSessionStatus(sid);
-        if (cancelled) return;
-        if (!status.ready) {
-          const fp = getDeviceFingerprint();
-          const active = await fetchActiveCalibration(fp);
-          const ageDays = getCalibrationAgeDays(active?.calibratedAt);
-          // Phiên cũ đã hết hạn trên gaze (TTL 30' hoặc service restart) nhưng
-          // DB còn model .ubj: tạo session mới rồi nạp lại model, không bắt
-          // người học hiệu chỉnh lại. Model dùng được với mọi viewport nhờ
-          // phép quy đổi toạ độ ở useGazeTracker.
-          if (active?.calibrated && ageDays < 30) {
-            const restored = await restoreGazeSessionFromBackend(fp);
-            if (cancelled) return;
-            if (restored) {
-              setIsCalibrated(true);
-              setCalibratedAt(active.calibratedAt);
-              setSessionIssue(null);
-              return;
-            }
-          }
-          if (active?.calibrated && active.calibratedAt && ageDays < 30) {
-            clearStoredGazeSession();
-            setIsCalibrated(false);
-            setCalibratedAt(active.calibratedAt);
-            setSessionIssue(
-              "Thiết bị có bản ghi hiệu chỉnh trong 30 ngày, nhưng phiên theo dõi cục bộ không còn hoạt động. Vui lòng hiệu chỉnh lại để tạo phiên mới trước khi học.",
-            );
-            return;
-          }
-          clearStoredGazeSession();
-          setIsCalibrated(false);
-          setCalibratedAt(null);
-          setSessionIssue(
-            status.error === "network_error"
-              ? "Không kết nối được dịch vụ theo dõi để kiểm tra phiên hiệu chỉnh — hãy hiệu chỉnh lại trước khi học."
-              : "Phiên hiệu chỉnh cũ đã hết hạn trên máy chủ — vui lòng hiệu chỉnh lại trước khi học.",
-          );
-          return;
-        }
-        setIsCalibrated(true);
-        setCalibratedAt(stored.calibratedAt);
-        setSessionIssue(null);
-      })();
-    }, 0);
-
     return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [calibrationRequired]);
+  }, []);
 
   const learningHref = useMemo(
     () => getLearningHref(courseId, lessonId),
@@ -133,8 +48,6 @@ export function PreflightCheck({
     () => getCalibrationHref(courseId, lessonId),
     [courseId, lessonId],
   );
-
-  const calibrationTime = calibratedAt ? formatDateTimeVN(calibratedAt) : null;
 
   const waitForVideo = useCallback(async () => {
     const video = videoRef.current;
@@ -221,15 +134,10 @@ export function PreflightCheck({
     }
   }, [captureFrame, waitForVideo]);
 
-  const readyToLearn = isReadyToLearn(cameraState, faceState, isCalibrated);
-  const readyToCalibrate = isReadyToCalibrate(cameraState, faceState, isCalibrated);
+  const readyToCalibrate = isReadyToCalibrate(cameraState, faceState);
   const checking = cameraState === "checking" || faceState === "checking";
 
   const handlePrimaryAction = () => {
-    if (readyToLearn) {
-      router.push(learningHref);
-      return;
-    }
     if (readyToCalibrate) {
       router.push(calibrationHref);
       return;
@@ -240,7 +148,6 @@ export function PreflightCheck({
   const primaryLabel = getPrimaryLabel({
     cameraState,
     faceState,
-    readyToLearn,
     readyToCalibrate,
   });
 
@@ -255,35 +162,8 @@ export function PreflightCheck({
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-6">
-      <PreflightHeader courseTitle={course?.title} />
-
-      <div className="mb-7 max-w-2xl">
-        <span className="inline-flex rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-foreground">
-          Kiểm tra trước phiên học
-        </span>
-        <h1 className="mt-4 font-display text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
-          Thiết lập một vùng học ổn định.
-        </h1>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
-          Giữ khuôn mặt trong khung, ánh sáng đều và nhìn thẳng vào màn hình để điểm nhìn được ghi nhận chính xác.
-        </p>
-        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-sm">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-            <Icon name="ri-information-line" className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Giữ hiển thị ở 100%
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Đặt zoom 100% (Ctrl+0, hoặc Cmd+0 trên Mac) và không dùng F11/toàn màn
-              hình trong lúc hiệu chỉnh và học. Nếu hiển thị thay đổi, hệ thống sẽ
-              tạm dừng ghi điểm nhìn cho đến khi bạn đưa về bình thường.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto w-full max-w-5xl">
+      <PreflightHeader courseTitle={course?.title} title="Kiểm tra camera" />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.72fr)] lg:items-stretch">
         <CameraCheck
@@ -294,15 +174,10 @@ export function PreflightCheck({
         <StatusPanel
           cameraState={cameraState}
           faceState={faceState}
-          isCalibrated={isCalibrated}
-          calibrationTime={calibrationTime}
           error={error}
-          sessionIssue={sessionIssue}
           primaryLabel={primaryLabel}
-          readyToLearn={readyToLearn}
           checking={checking}
           onPrimaryAction={handlePrimaryAction}
-          calibrationHref={calibrationHref}
         />
       </div>
     </div>

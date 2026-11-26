@@ -98,7 +98,11 @@ export function updateCourse(
 }
 
 export function deleteCourse(courseId: string): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/teacher/courses/${courseId}`, { method: "DELETE" });
+  return apiFetch(`/api/teacher/courses/${courseId}`, {
+    method: "DELETE",
+    // Cascade xoá gaze sample có thể lâu hơn timeout mặc định 30 s.
+    timeoutMs: 270_000,
+  });
 }
 
 export function publishCourse(courseId: string): Promise<{ ok: boolean }> {

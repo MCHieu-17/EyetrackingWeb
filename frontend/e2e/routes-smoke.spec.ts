@@ -83,6 +83,13 @@ for (const route of ROUTES) {
         expect(overflow, "tràn ngang trên mobile").toBeLessThanOrEqual(1);
       }
 
+      if (route.name === "student prepare" && form === "desktop") {
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollHeight - window.innerHeight,
+        );
+        expect(overflow, "trang kiểm tra camera phải gói trong 1 màn hình").toBeLessThanOrEqual(2);
+      }
+
       const real = errors.filter((e) => !IGNORED.some((re) => re.test(e)));
       expect(real, real.join("\n")).toEqual([]);
       await context.close();

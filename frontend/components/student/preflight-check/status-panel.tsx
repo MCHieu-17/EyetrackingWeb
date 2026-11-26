@@ -1,16 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { CameraState, FaceState, Tone } from "./preflight-types";
-import {
-  getCalibrationDescription,
-  getCameraStatus,
-  getFaceStatus,
-} from "./preflight-helpers";
+import { getCameraStatus, getFaceStatus } from "./preflight-helpers";
 
 function StatusRow({
   icon,
@@ -65,34 +60,24 @@ function StatusRow({
 export function StatusPanel({
   cameraState,
   faceState,
-  isCalibrated,
-  calibrationTime,
   error,
-  sessionIssue,
   primaryLabel,
-  readyToLearn,
   checking,
   onPrimaryAction,
-  calibrationHref,
 }: {
   cameraState: CameraState;
   faceState: FaceState;
-  isCalibrated: boolean;
-  calibrationTime: string | null;
   error: string | null;
-  sessionIssue: string | null;
   primaryLabel: string;
-  readyToLearn: boolean;
   checking: boolean;
   onPrimaryAction: () => void;
-  calibrationHref: string;
 }) {
   return (
     <aside className="flex flex-col rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Trạng thái</p>
-          <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-foreground">Sẵn sàng vào bài</h2>
+          <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-foreground">Kiểm tra thiết bị</h2>
         </div>
         <span className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-foreground">
           <Icon name="ri-equalizer-2-line" className="size-4" />
@@ -125,14 +110,6 @@ export function StatusPanel({
           success={faceState === "ready"}
           danger={faceState === "not-found" || faceState === "error"}
         />
-        <StatusRow
-          icon="ri-focus-2-line"
-          label="Hiệu chỉnh điểm nhìn"
-          description={getCalibrationDescription(isCalibrated, calibrationTime)}
-          status={isCalibrated ? "Phiên sẵn sàng" : "Cần hiệu chỉnh"}
-          tone={isCalibrated ? "success" : "neutral"}
-          success={isCalibrated}
-        />
       </div>
 
       {error && (
@@ -141,13 +118,7 @@ export function StatusPanel({
           <p>{error}</p>
         </div>
       )}
-      {sessionIssue && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2.5 text-xs leading-5 text-warning">
-          <Icon name="ri-error-warning-line" className="mt-0.5 size-4 shrink-0" />
-          <p>{sessionIssue}</p>
-        </div>
-      )}
-      <div className="mt-auto space-y-2 pt-6">
+      <div className="mt-auto pt-6">
         <Button
           size="lg"
           onClick={onPrimaryAction}
@@ -155,18 +126,8 @@ export function StatusPanel({
           className="w-full shadow-xs"
         >
           {checking && <Spinner />}
-          {readyToLearn && <Icon name="ri-play-circle-line" className="size-5" />}
           {primaryLabel}
         </Button>
-
-        {isCalibrated && (
-          <Button asChild variant="outline" size="lg" className="w-full">
-            <Link href={calibrationHref}>
-              <Icon name="ri-focus-2-line" />
-              Hiệu chỉnh lại điểm nhìn
-            </Link>
-          </Button>
-        )}
       </div>
     </aside>
   );
