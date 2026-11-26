@@ -27,6 +27,8 @@
   tường minh trong `.env`/`stack.env`; không thêm default trong code/compose.
 - Không commit `.env`, `deploy/portainer/stack.env`, tunnel token, backup hay
   media. Không prune volume Docker.
+- Không commit symlink (Git mode `120000`); Portainer/Docker không hỗ trợ.
+  `make check` và workflow Release chặn mọi symlink đã track.
 - Bộ test hộp đen là lưới an toàn: không xoá test hoặc nới assertion để làm
   xanh CI; hành vi cố ý đổi thì cập nhật test trong cùng thay đổi.
 
@@ -294,7 +296,8 @@ nhất khi thêm tính năng; đọc migration tương ứng trước khi sửa 
 - `schema_migrations` lưu filename + checksum SHA-256; không sửa file đã áp.
 - `gaze_samples.event_time` dùng BRIN `idx_gaze_samples_event_time_brin`
   (append-only/retention); `idx_gaze_samples_view_time` phục vụ analysis,
-  replay và export theo từng lượt xem.
+  replay và export theo từng lượt xem; `idx_gaze_samples_layout_id` phục vụ
+  FK `layout_id` khi xoá layout/course (tránh seq scan toàn bảng).
 - `slides.embedding` là `vector(1024)`; `EMBEDDING_DIM` hiện phải là `1024`.
   Đổi model/chiều embedding cần migration + reindex toàn bộ slide, không chỉ
   đổi biến môi trường.
@@ -519,8 +522,10 @@ resend 60 giây; email khớp domain + pattern cấu hình.
   `006_gaze_sample_indexes.sql` thay btree `event_time` bằng BRIN;
   `007_reset_gaze_calibrations.sql` xoá calibration cũ khi đổi pipeline gaze
   (không đổi schema); `008_course_camera_preview.sql` thêm
-  `courses.show_camera_preview` (mặc định `false`, không đổi generation).
-- Thay đổi schema mới phải là `009_...sql`; không sửa migration đã áp.
+  `courses.show_camera_preview` (mặc định `false`, không đổi generation);
+  `009_gaze_samples_layout_index.sql` thêm index cho
+  `gaze_samples.layout_id` để cascade xoá layout/course không seq scan.
+- Thay đổi schema mới phải là `010_...sql`; không sửa migration đã áp.
   `db/migrate.sh` giữ advisory lock, ghi checksum, fail nếu file đã áp bị đổi
   hoặc DB có bảng public mà chưa có `schema_migrations`.
 - Không chạy `psql -f` từng file migration; dùng `docker compose run --rm migrate`

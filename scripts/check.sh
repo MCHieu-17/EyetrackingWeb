@@ -47,6 +47,14 @@ done
 
 log() { printf '[check] %s\n' "$*"; }
 
+log "tracked symlinks"
+SYMLINKS="$(git ls-files -s | awk '$1 == "120000" {print $4}')"
+if [ -n "$SYMLINKS" ]; then
+    printf '[check] Không được commit symlink (Portainer/Docker không hỗ trợ):\n%s\n' \
+        "$SYMLINKS" >&2
+    exit 1
+fi
+
 if [ -x backend/.venv/bin/ruff ]; then
     RUFF=backend/.venv/bin/ruff
 else

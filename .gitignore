@@ -83,6 +83,9 @@ frontend/next-env.d.ts
 # Misc
 *.pem
 
+# Symlink tiện dụng local, không commit lên Git/Portainer
+/benchmarks/baseline/latest
+
 
 # AGENTS.md
 # DB.md

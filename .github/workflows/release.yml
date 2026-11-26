@@ -37,6 +37,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reject tracked symlinks
+        shell: bash
+        run: |
+          set -euo pipefail
+          symlinks="$(git ls-tree -r HEAD | awk '$1 == "120000" {print $4}')"
+          if [[ -n "$symlinks" ]]; then
+            echo "::error::Repo chứa symlink; Portainer/Docker không hỗ trợ:"
+            printf '%s\n' "$symlinks"
+            exit 1
+          fi
+
       - id: vars
         run: |
           {
