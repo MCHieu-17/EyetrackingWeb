@@ -64,16 +64,25 @@ Workflow `.github/workflows/release.yml` build 8 image:
 ### Cách 1 — GitHub Actions (khuyến nghị)
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag -a v1.3.2 -m "release v1.3.2"
+git push origin v1.3.2
 ```
 
-- Tag `v*` build **toàn bộ** image và gắn tag `v1.3.0`.
+- Tag `v*` build **toàn bộ** image và gắn tag `v1.3.2`.
 - Push `main` chỉ build image có path thay đổi, gắn `sha-...` + `latest`.
 - Có thể chạy tay workflow `Release` (build toàn bộ).
 
-Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.3.0`, phải push tag
-`v1.3.0` và chờ workflow build xong **trước khi** deploy stack.
+Nếu `deploy/portainer/stack.env` đang dùng `IMAGE_TAG=v1.3.2`, phải push tag
+`v1.3.2` và chờ workflow build xong **trước khi** deploy stack.
+
+Kiểm tra tag đã có đủ 8 image trước khi deploy:
+
+```bash
+./scripts/check_release_images.sh deploy/portainer/stack.env
+```
+
+Khi thêm service/image mới vào compose, tag release cũ sẽ thiếu image mới.
+Phải cut tag mới; không dùng lại tag cũ.
 
 Sau lần push đầu, vào GitHub → Packages:
 
@@ -87,13 +96,13 @@ Sau lần push đầu, vào GitHub → Packages:
 
 ```bash
 docker login ghcr.io
-IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.0 ./scripts/publish_images.sh
+IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.2 ./scripts/publish_images.sh
 ```
 
 Bỏ qua gaze nếu chỉ muốn build phần còn lại:
 
 ```bash
-SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.0 ./scripts/publish_images.sh
+SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.2 ./scripts/publish_images.sh
 ```
 
 ---
@@ -104,7 +113,8 @@ SKIP_GAZE=1 IMAGE_PREFIX=ghcr.io/mchieu-17 IMAGE_TAG=v1.3.0 ./scripts/publish_im
 2. Name: `eyelearning-prod` (giữ nguyên tên này giữa các lần deploy).
 3. Build method: **Repository**.
 4. Repository URL: `https://github.com/MCHieu-17/EyetrackingWeb`
-5. Branch: `main`
+5. Reference: tag release (ví dụ `v1.3.2`), **không dùng `main`** — compose và
+   image phải cùng một tag để tránh `manifest unknown`.
 6. Compose path: `deploy/portainer/docker-compose.yml`
 7. Environment variables:
    - Copy `deploy/portainer/stack.env.example`
@@ -397,6 +407,7 @@ reset/restore đúng quy trình.
 | Gaze chưa ready | GPU driver/toolkit; weights Google Drive/HF; egress |
 | GHCR `401/403` | Package private; thêm registry credential trong Portainer |
 | `pull access denied` | Sai `IMAGE_PREFIX`/`IMAGE_TAG`; image chưa build xong |
+| `manifest unknown` | Tag chưa có đủ image (thường do compose mới thêm service). Chạy `./scripts/check_release_images.sh deploy/portainer/stack.env`; cut tag mới hoặc dùng `sha-...`/`latest` đã có đủ |
 | Login không giữ phiên | `COOKIE_SECURE=true` + truy cập HTTPS; `CORS_ORIGINS` nếu frontend gọi API khác origin |
 | Upload slide lỗi | content-worker log; LibreOffice; dung lượng disk |
 | `permission denied /backups` | `backup-init` chưa chạy exit 0; xem volume `backups` |

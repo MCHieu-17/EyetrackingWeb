@@ -8,6 +8,7 @@ gốc repo.
 | Script | Mục đích |
 |---|---|
 | `check.sh` | Kiểm tra chất lượng: symlink đã track, ruff, lint, typecheck, compose config; `--full` thêm knip + build |
+| `check_release_images.sh` | Kiểm tra đủ image GHCR cho `IMAGE_TAG` trong stack.env trước khi deploy Portainer |
 | `seed_dev.sh` | Seed tài khoản dev (`admin@`, `teacher@`, `student@`) |
 | `reset_db.sh` / `reset_db.py` | Reset DB development có guard |
 | `reset_gaze_data.sh` | Xoá lịch sử gaze/visualization có guard, giữ nội dung khóa học |

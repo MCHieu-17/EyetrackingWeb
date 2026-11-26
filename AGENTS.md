@@ -563,7 +563,9 @@ resend 60 giây; email khớp domain + pattern cấu hình.
 - Production: GitHub Actions build 8 image (backend, content-worker, chatbot,
   gaze, gaze-export, frontend, nginx, migrations) → GHCR; Portainer chỉ pull
   `deploy/portainer/docker-compose.yml`, không build trên server. `cloudflared`
-  nằm trong stack, trỏ `http://nginx:80`.
+  nằm trong stack, trỏ `http://nginx:80`. Pin stack Portainer vào tag release
+  trùng `IMAGE_TAG`; chạy `./scripts/check_release_images.sh` trước khi deploy.
+  Thêm service/image mới phải cut tag mới, không dùng lại tag cũ.
 - Nginx production phải giữ `real_ip_header CF-Connecting-IP` và forward
   `X-Forwarded-Proto`; nếu không rate limit/OTP sẽ tính chung IP cloudflared.
 - Không commit `deploy/portainer/stack.env`, tunnel token, backup. Hướng dẫn

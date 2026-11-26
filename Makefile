@@ -5,10 +5,13 @@
 #   make build
 #   make up / make down / make smoke
 
-.PHONY: check check-full test-fast test-smoke build up down smoke clean
+.PHONY: check check-full check-images test-fast test-smoke build up down smoke clean
 
 check:
 	./scripts/check.sh
+
+check-images:
+	./scripts/check_release_images.sh
 
 check-full:
 	./scripts/check.sh --full
